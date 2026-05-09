@@ -1,0 +1,32 @@
+const express = require("express");
+const router = express.Router();
+const authMiddleware = require("../middleware/auth_middleware");
+const rateLimiter = require("../middleware/rate_middleware");
+const {
+  validateExpenseCategoryIdParam,
+  createExpenseCategoryManagementMiddleware,
+  updateExpenseCategoryManagementMiddleware
+} = require("../middleware/expense_category_management_middleware");
+const {
+  create,
+  getAll,
+  getById,
+  update,
+  remove
+} = require("../controllers/expense_category_management_controller");
+
+router.use(rateLimiter);
+
+router.post("/create", authMiddleware, createExpenseCategoryManagementMiddleware, create);
+router.get("/getAll", authMiddleware, getAll);
+router.get("/get/:id", authMiddleware, validateExpenseCategoryIdParam, getById);
+router.put(
+  "/update/:id",
+  authMiddleware,
+  validateExpenseCategoryIdParam,
+  updateExpenseCategoryManagementMiddleware,
+  update
+);
+router.delete("/delete/:id", authMiddleware, validateExpenseCategoryIdParam, remove);
+
+module.exports = router;

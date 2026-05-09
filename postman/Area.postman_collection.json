@@ -1,0 +1,141 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-area-api-collection",
+    "name": "Help PR — Area API",
+    "description": "CRUD and utilities for `/api/area`. Set `base_url` and `auth_token` in the active environment.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:5001" },
+    { "key": "auth_token", "value": "" },
+    { "key": "area_id", "value": "" },
+    { "key": "city_id", "value": "" },
+    { "key": "state_id", "value": "" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "Area",
+      "item": [
+        {
+          "name": "Create area",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Indiranagar\",\n  \"city_id\": \"{{city_id}}\",\n  \"is_active\": true,\n  \"pincodes\": [\"560038\", \"560008\"]\n}"
+            },
+            "url": "{{base_url}}/api/area/create",
+            "description": "Requires `name`, `city_id`, `is_active`. Optional `pincodes` (string array)."
+          }
+        },
+        {
+          "name": "Get all areas (paginated)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/area/getAll?page=1&limit=10&sort=-1"
+          },
+          "description": "Optional query params: name, city_id, state_id, is_active, pincode (append to URL)."
+        },
+        {
+          "name": "Get area by id",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/area/get/{{area_id}}"
+          }
+        },
+        {
+          "name": "Update area",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Indiranagar East\",\n  \"is_active\": true,\n  \"pincodes\": [\"560038\"]\n}"
+            },
+            "url": "{{base_url}}/api/area/update/{{area_id}}"
+          }
+        },
+        {
+          "name": "Delete area (soft)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/area/delete/{{area_id}}"
+          }
+        },
+        {
+          "name": "Import areas",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"records\": [\n    {\n      \"name\": \"Koramangala\",\n      \"city_id\": \"{{city_id}}\",\n      \"is_active\": true,\n      \"pincodes\": [\"560034\"]\n    }\n  ]\n}"
+            },
+            "url": "{{base_url}}/api/area/imports"
+          }
+        },
+        {
+          "name": "Dropdown (no auth)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/area/getDropDown"
+          },
+          "description": "Optional: `?city_id=<id>` or `?state_id=id1,id2` (comma-separated)."
+        }
+      ]
+    },
+    {
+      "name": "Export",
+      "item": [
+        {
+          "name": "Export areas (Excel)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [],
+            "body": { "mode": "raw", "raw": "" },
+            "url": "{{base_url}}/api/export/area",
+            "description": "Returns `.xlsx` (or base64 in production). Save response as file in Postman."
+          }
+        }
+      ]
+    }
+  ]
+}

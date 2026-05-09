@@ -1,0 +1,127 @@
+{
+  "info": {
+    "_postman_id": "d4e5f6a7-partner-subscription-api-collection",
+    "name": "Help PR — Partner Subscription API",
+    "description": "Manual partner ↔ plan assignments for `/api/partner-subscription`. Admin routes require a user with `type` 1 (Admin). `GET /me` requires a Partner token (`type` 2). Set `base_url`, `auth_token`, `partner_id`, `subscription_plan_id`, and `partner_subscription_id` in the environment. Ids are 24-char MongoDB ObjectIds.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:5001" },
+    { "key": "auth_token", "value": "" },
+    { "key": "partner_id", "value": "" },
+    { "key": "subscription_plan_id", "value": "" },
+    { "key": "partner_subscription_id", "value": "" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "Partner subscription",
+      "item": [
+        {
+          "name": "Create partner subscription (Admin)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"partner_id\": \"{{partner_id}}\",\n  \"subscription_plan_id\": \"{{subscription_plan_id}}\",\n  \"notes\": \"Manual assignment from Postman\"\n}"
+            },
+            "url": "{{base_url}}/api/partner-subscription/create",
+            "description": "Admin only. Requires partner_id (user with type Partner) and subscription_plan_id (active plan). Optional: started_at, expires_at (omit to auto-compute from plan duration), notes. Previous active subscriptions for that partner are cancelled."
+          }
+        },
+        {
+          "name": "Get all partner subscriptions (Admin)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/partner-subscription/getAll?page=1&limit=10&sort=-1"
+          },
+          "description": "Admin only. Optional query: partner_id, subscription_plan_id, status (active|expired|cancelled)."
+        },
+        {
+          "name": "Get partner subscription by id (Admin)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/partner-subscription/get/{{partner_subscription_id}}"
+          }
+        },
+        {
+          "name": "Update partner subscription (Admin)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"active\",\n  \"notes\": \"Updated via Postman\"\n}"
+            },
+            "url": "{{base_url}}/api/partner-subscription/update/{{partner_subscription_id}}"
+          },
+          "description": "Admin only. Optional fields: subscription_plan_id, started_at, expires_at, status, notes."
+        },
+        {
+          "name": "Delete partner subscription (Admin, soft)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/partner-subscription/delete/{{partner_subscription_id}}"
+          }
+        },
+        {
+          "name": "Import partner subscriptions (Admin)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"records\": [\n    {\n      \"partner_id\": \"{{partner_id}}\",\n      \"subscription_plan_id\": \"{{subscription_plan_id}}\",\n      \"notes\": \"Batch import row\"\n    }\n  ]\n}"
+            },
+            "url": "{{base_url}}/api/partner-subscription/imports"
+          },
+          "description": "Admin only. Each record: partner_id, subscription_plan_id; optional started_at, expires_at, notes."
+        },
+        {
+          "name": "Get my subscription (Partner)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/partner-subscription/me"
+          },
+          "description": "Partner only (`user.type` = 2). Use a Partner JWT in `auth_token` (not Admin). Returns active subscription with populated plan, or `record: null`."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Environment and secrets (never commit)
+.env
+.env.*
+!.env.example
+
+# Firebase service account (private key)
+resources/adminsdk.json
+
+# Logs and debug
+logs/
+*.log
+npm-debug.log*
+
+# Runtime / local uploads (if created)
+uploads/
+temp/
+tmp/
+
+# Test / coverage
+coverage/
+.nyc_output/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor (optional — remove these lines if your team commits shared settings)
+.idea/
+
+# Build artifacts (if you add zip/deploy scripts locally)
+*.zip
+deploy.zip

@@ -1,0 +1,111 @@
+const mongoose = require("mongoose");
+
+const validateExpenseCategoryIdParam = (req, res, next) => {
+  const { id } = req.params;
+  if (!id || String(id).trim() === "") {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: "Expense category id is required."
+    });
+  }
+  const idStr = String(id).trim();
+  if (!/^[a-fA-F0-9]{24}$/.test(idStr) || !mongoose.Types.ObjectId.isValid(idStr)) {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: "Invalid expense category id."
+    });
+  }
+  next();
+};
+
+const createExpenseCategoryManagementMiddleware = (req, res, next) => {
+  const { franchise_id, category_name, sub_category_name, description } = req.body;
+
+  if (!franchise_id || String(franchise_id).trim() === "") {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: "Franchise id is required."
+    });
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(franchise_id)) {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: "Invalid franchise id."
+    });
+  }
+
+  if (!category_name || category_name.trim() === "") {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: "Category name is required."
+    });
+  }
+
+  if (!sub_category_name || sub_category_name.trim() === "") {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: "Sub category name is required."
+    });
+  }
+
+  if (!description || description.trim() === "") {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: "Description is required."
+    });
+  }
+
+  next();
+};
+
+const updateExpenseCategoryManagementMiddleware = (req, res, next) => {
+  const { franchise_id, category_name, sub_category_name, description } = req.body;
+
+  if (franchise_id !== undefined && !mongoose.Types.ObjectId.isValid(franchise_id)) {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: "Invalid franchise id."
+    });
+  }
+
+  if (category_name !== undefined && category_name.trim() === "") {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: "Category name cannot be empty."
+    });
+  }
+
+  if (sub_category_name !== undefined && sub_category_name.trim() === "") {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: "Sub category name cannot be empty."
+    });
+  }
+
+  if (description !== undefined && description.trim() === "") {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: "Description cannot be empty."
+    });
+  }
+
+  next();
+};
+
+module.exports = {
+  validateExpenseCategoryIdParam,
+  createExpenseCategoryManagementMiddleware,
+  updateExpenseCategoryManagementMiddleware
+};

@@ -1,11 +1,29 @@
+const fs = require("fs");
+const path = require("path");
 const admin = require("firebase-admin");
-const serviceAccount = require("../../resources/adminsdk.json");
 
-admin.initializeApp({
+const serviceAccountPath = path.join(__dirname, "../../resources/adminsdk.json");
+let isFirebaseReady = false;
+
+if (fs.existsSync(serviceAccountPath)) {
+  const serviceAccount = require(serviceAccountPath);
+  admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
   });
+  isFirebaseReady = true;
+} else {
+  console.warn(
+    "Firebase service account file not found. Push notifications are disabled."
+  );
+}
 
   const sendPushNotification = async ({ deviceToken, title, body, data = {} }) => {
+    if (!isFirebaseReady) {
+      throw new Error(
+        "Firebase is not configured. Missing resources/adminsdk.json service account file."
+      );
+    }
+
     const message = {
       token: deviceToken, // FCM token from Android/iOS app
       notification: {

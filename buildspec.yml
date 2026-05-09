@@ -20,7 +20,7 @@ phases:
 
   post_build:
     commands:
-      - echo "Deploying to Lambda: ${LAMBDA_FUNCTION_NAME} (${AWS_DEFAULT_REGION})"
+      - echo "Deploying to Lambda ${LAMBDA_FUNCTION_NAME} (${AWS_DEFAULT_REGION})"
       - aws lambda update-function-code --function-name "${LAMBDA_FUNCTION_NAME}" --zip-file "fileb://deploy.zip" --region "${AWS_DEFAULT_REGION}"
       - echo "Deployment command completed."
 

@@ -1,0 +1,140 @@
+{
+  "info": {
+    "_postman_id": "b1f0b5f2-help-pr-area-franchise-subscription-user-types",
+    "name": "Help PR - Area, Franchise, Subscription, Partner Subscription + User Types",
+    "description": "Full API list from Area/Franchise/Subscription/Partner Subscription collection, plus user creation requests. Collection uses Bearer {{auth_token}}. POST /api/user/create requires a logged-in user with permission (Super Admin or Staff to create types 5/6; Admin/Employee may create partner, employee, user per backend rules).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{auth_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:5001" },
+    { "key": "auth_token", "value": "" },
+    { "key": "area_id", "value": "" },
+    { "key": "city_id", "value": "" },
+    { "key": "state_id", "value": "" },
+    { "key": "franchise_id", "value": "" },
+    { "key": "admin_id", "value": "" },
+    { "key": "partner_id", "value": "" },
+    { "key": "subscription_plan_id", "value": "" },
+    { "key": "partner_subscription_id", "value": "" },
+    { "key": "created_by_id", "value": "" },
+    { "key": "super_admin_id", "value": "" },
+    { "key": "staff_id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Area",
+      "item": [
+        { "name": "Create area", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Indiranagar\",\n  \"city_id\": \"{{city_id}}\",\n  \"is_active\": true,\n  \"pincodes\": [\"560038\", \"560008\"]\n}" }, "url": "{{base_url}}/api/area/create" } },
+        { "name": "Get all areas", "request": { "method": "GET", "url": "{{base_url}}/api/area/getAll?page=1&limit=10&sort=-1" } },
+        { "name": "Get area by id", "request": { "method": "GET", "url": "{{base_url}}/api/area/get/{{area_id}}" } },
+        { "name": "Update area", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Indiranagar East\",\n  \"is_active\": true,\n  \"pincodes\": [\"560038\"]\n}" }, "url": "{{base_url}}/api/area/update/{{area_id}}" } },
+        { "name": "Delete area", "request": { "method": "DELETE", "url": "{{base_url}}/api/area/delete/{{area_id}}" } },
+        { "name": "Import areas", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"records\": [\n    {\n      \"name\": \"Koramangala\",\n      \"city_id\": \"{{city_id}}\",\n      \"is_active\": true,\n      \"pincodes\": [\"560034\"]\n    }\n  ]\n}" }, "url": "{{base_url}}/api/area/imports" } },
+        { "name": "Area dropdown", "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{base_url}}/api/area/getDropDown" } },
+        { "name": "Export areas", "request": { "method": "POST", "url": "{{base_url}}/api/export/area" } }
+      ]
+    },
+    {
+      "name": "Franchise",
+      "item": [
+        { "name": "Create franchise", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"North Zone\",\n  \"state_id\": \"{{state_id}}\",\n  \"city_id\": \"{{city_id}}\",\n  \"area_id\": [\"{{area_id}}\"],\n  \"admin_id\": \"{{admin_id}}\",\n  \"contact\": \"+919999999999\",\n  \"is_active\": true,\n  \"description\": \"Main franchise\"\n}" }, "url": "{{base_url}}/api/franchise/create" } },
+        { "name": "Get all franchises", "request": { "method": "GET", "url": "{{base_url}}/api/franchise/getAll?page=1&limit=10&sort=-1" } },
+        { "name": "Get franchise by id", "request": { "method": "GET", "url": "{{base_url}}/api/franchise/get/{{franchise_id}}" } },
+        { "name": "Update franchise", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"North Zone East\",\n  \"is_active\": true,\n  \"contact\": \"+919988776655\"\n}" }, "url": "{{base_url}}/api/franchise/update/{{franchise_id}}" } },
+        { "name": "Delete franchise", "request": { "method": "DELETE", "url": "{{base_url}}/api/franchise/delete/{{franchise_id}}" } },
+        { "name": "Import franchises", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"records\": [\n    {\n      \"name\": \"South Hub\",\n      \"state_id\": \"{{state_id}}\",\n      \"city_id\": \"{{city_id}}\",\n      \"area_id\": [\"{{area_id}}\"],\n      \"admin_id\": \"{{admin_id}}\",\n      \"contact\": \"+918888888888\",\n      \"is_active\": true\n    }\n  ]\n}" }, "url": "{{base_url}}/api/franchise/imports" } },
+        { "name": "Franchise dropdown", "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{base_url}}/api/franchise/getDropDown" } },
+        { "name": "Export franchises", "request": { "method": "POST", "url": "{{base_url}}/api/export/franchise" } }
+      ]
+    },
+    {
+      "name": "Subscription Plan",
+      "item": [
+        { "name": "Create subscription plan", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"plan_name\": \"basic\",\n  \"plan_description\": \"Basic tier with essential features.\",\n  \"price\": 499,\n  \"duration\": 30,\n  \"duration_type\": \"days\",\n  \"priority\": 1,\n  \"is_active\": true\n}" }, "url": "{{base_url}}/api/subscription-plan/create" } },
+        { "name": "Get all subscription plans", "request": { "method": "GET", "url": "{{base_url}}/api/subscription-plan/getAll?page=1&limit=10&sort=-1" } },
+        { "name": "Get subscription plan by id", "request": { "method": "GET", "url": "{{base_url}}/api/subscription-plan/get/{{subscription_plan_id}}" } },
+        { "name": "Update subscription plan", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"plan_description\": \"Updated description\",\n  \"price\": 599,\n  \"duration\": 30,\n  \"duration_type\": \"days\",\n  \"priority\": 2,\n  \"is_active\": true\n}" }, "url": "{{base_url}}/api/subscription-plan/update/{{subscription_plan_id}}" } },
+        { "name": "Delete subscription plan", "request": { "method": "DELETE", "url": "{{base_url}}/api/subscription-plan/delete/{{subscription_plan_id}}" } },
+        { "name": "Import subscription plans", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"records\": [\n    {\n      \"plan_name\": \"silver\",\n      \"plan_description\": \"Silver tier\",\n      \"price\": 999,\n      \"duration\": 3,\n      \"duration_type\": \"months\",\n      \"priority\": 2,\n      \"is_active\": true\n    }\n  ]\n}" }, "url": "{{base_url}}/api/subscription-plan/imports" } },
+        { "name": "Subscription plan dropdown", "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{base_url}}/api/subscription-plan/getDropDown" } }
+      ]
+    },
+    {
+      "name": "Partner Subscription",
+      "item": [
+        { "name": "Create partner subscription", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"partner_id\": \"{{partner_id}}\",\n  \"subscription_plan_id\": \"{{subscription_plan_id}}\",\n  \"notes\": \"Manual assignment from Postman\"\n}" }, "url": "{{base_url}}/api/partner-subscription/create" } },
+        { "name": "Get all partner subscriptions", "request": { "method": "GET", "url": "{{base_url}}/api/partner-subscription/getAll?page=1&limit=10&sort=-1" } },
+        { "name": "Get partner subscription by id", "request": { "method": "GET", "url": "{{base_url}}/api/partner-subscription/get/{{partner_subscription_id}}" } },
+        { "name": "Update partner subscription", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"status\": \"active\",\n  \"notes\": \"Updated via Postman\"\n}" }, "url": "{{base_url}}/api/partner-subscription/update/{{partner_subscription_id}}" } },
+        { "name": "Delete partner subscription", "request": { "method": "DELETE", "url": "{{base_url}}/api/partner-subscription/delete/{{partner_subscription_id}}" } },
+        { "name": "Import partner subscriptions", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"records\": [\n    {\n      \"partner_id\": \"{{partner_id}}\",\n      \"subscription_plan_id\": \"{{subscription_plan_id}}\",\n      \"notes\": \"Batch import row\"\n    }\n  ]\n}" }, "url": "{{base_url}}/api/partner-subscription/imports" } },
+        { "name": "Get my subscription", "request": { "method": "GET", "url": "{{base_url}}/api/partner-subscription/me" } }
+      ]
+    },
+    {
+      "name": "User (New Types)",
+      "item": [
+        {
+          "name": "Create Super Admin (web)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Super Admin User\",\n  \"email\": \"superadmin@example.com\",\n  \"phone_number\": \"+919900000001\",\n  \"type\": 5,\n  \"is_from_web\": true,\n  \"created_by_id\": \"{{created_by_id}}\",\n  \"accessible_screens\": [\"dashboard\", \"users\", \"subscriptions\"]\n}"
+            },
+            "url": "{{base_url}}/api/user/create",
+            "description": "Creates Super Admin via web flow. Random password is generated and emailed."
+          }
+        },
+        {
+          "name": "Create Staff (web)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Staff User\",\n  \"email\": \"staff@example.com\",\n  \"phone_number\": \"+919900000002\",\n  \"type\": 6,\n  \"is_from_web\": true,\n  \"created_by_id\": \"{{created_by_id}}\",\n  \"accessible_screens\": [\"dashboard\", \"orders\"]\n}"
+            },
+            "url": "{{base_url}}/api/user/create",
+            "description": "Creates Staff via web flow. Random password is generated and emailed."
+          }
+        },
+        {
+          "name": "Get all users (filter Super Admin)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/user/getAll?page=1&limit=10&type=5"
+          }
+        },
+        {
+          "name": "Get all users (filter Staff)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/user/getAll?page=1&limit=10&type=6"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -51,6 +51,11 @@ const getDropDown = async (req, res) => {
     return sendServiceResult(res, result);
 };
 
+const getRelatedCatalog = async (req, res) => {
+    const result = await franchiseService.getFranchiseRelatedCatalog(req.params.franchise_id);
+    return sendServiceResult(res, result);
+};
+
 module.exports = {
     getAll,
     create,
@@ -59,4 +64,5 @@ module.exports = {
     deleteFranchise,
     importRecords,
     getDropDown,
+    getRelatedCatalog,
 };

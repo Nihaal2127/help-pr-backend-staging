@@ -77,6 +77,65 @@ const requireSuperAdminStaffFranchiseAdminEmployee = async (req, res, next) => {
 };
 
 /**
+ * GET franchise related-catalog: Super Admin, Staff (any franchise), or Admin/Employee whose
+ * franchise_id matches :franchise_id. Use after authMiddleware.
+ */
+const requireFranchiseRelatedCatalogAccess = async (req, res, next) => {
+    try {
+        const franchiseIdParam =
+            req.params.franchise_id !== undefined && req.params.franchise_id !== null
+                ? String(req.params.franchise_id).trim()
+                : '';
+        if (!franchiseIdParam || !/^[a-fA-F0-9]{24}$/.test(franchiseIdParam)) {
+            return res.status(400).json({
+                success: false,
+                status: 400,
+                message: 'franchise_id must be a valid MongoDB ObjectId.',
+            });
+        }
+
+        const user = await User.findOne({ _id: req.user.id, deleted_at: null }).select(
+            'type franchise_id'
+        );
+        if (!user) {
+            return res.status(403).json({
+                success: false,
+                status: 403,
+                message: 'Access denied.',
+            });
+        }
+
+        const t = Number(user.type);
+        if (isSuperAdminOrStaff(t)) {
+            return next();
+        }
+
+        const linked =
+            (t === USER_TYPE_ADMIN || t === USER_TYPE_EMPLOYEE) &&
+            user.franchise_id &&
+            String(user.franchise_id) === franchiseIdParam;
+
+        if (linked) {
+            return next();
+        }
+
+        return res.status(403).json({
+            success: false,
+            status: 403,
+            message:
+                'Super admin, staff, or franchise admin/employee for this franchise only.',
+        });
+    } catch (err) {
+        console.error('requireFranchiseRelatedCatalogAccess', err.message);
+        return res.status(500).json({
+            success: false,
+            status: 500,
+            message: 'Internal server error.',
+        });
+    }
+};
+
+/**
  * Loads caller from DB and requires Admin or Super Admin. Use after authMiddleware.
  */
 const requireAdmin = async (req, res, next) => {
@@ -187,6 +246,7 @@ module.exports = {
     requirePartner,
     requireSuperAdminOrStaff,
     requireSuperAdminStaffFranchiseAdminEmployee,
+    requireFranchiseRelatedCatalogAccess,
     requireBackoffice,
     USER_TYPE_ADMIN,
     USER_TYPE_SUPER_ADMIN,

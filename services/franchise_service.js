@@ -8,6 +8,7 @@ const Area = require('../models/area');
 const User = require('../models/user');
 const FranchiseCategory = require('../models/franchise_category');
 const FranchiseService = require('../models/franchise_service');
+const PartnerService = require('../models/partner_service');
 const { applyPagination, applyDropDownFilter } = require('../utils/pagination');
 const { parseBoolean } = require('../utils/parser');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
@@ -621,6 +622,244 @@ const listFranchisesForDropdown = async (query) => {
     }
 };
 
+const USER_TYPE_PARTNER = 2;
+const USER_TYPE_EMPLOYEE = 3;
+
+const USER_LIST_SELECT =
+    'name email phone_number user_id profile_url type franchise_id is_active is_blocked city_id state_id created_at';
+
+const isCatalogCategoryActive = (doc) =>
+    Boolean(
+        doc &&
+            doc.is_active === true &&
+            String(doc.approval_status || '').toLowerCase() === 'approve'
+    );
+
+const isCatalogServiceActive = (doc) =>
+    Boolean(
+        doc &&
+            doc.is_active === true &&
+            String(doc.approval_status || '').toLowerCase() === 'approve'
+    );
+
+/** Merge { category_id, is_active } from multiple franchise_category rows (first doc wins = newest when docs are newest-first). */
+const mergeFranchiseCategoryEntries = (docs) => {
+    const map = new Map();
+    for (const doc of docs) {
+        const list = doc.categories_list || [];
+        for (const row of list) {
+            if (!row) continue;
+            const cid =
+                row.category_id instanceof mongoose.Types.ObjectId
+                    ? row.category_id
+                    : row.category_id?._id || row.category_id;
+            if (!cid) continue;
+            const key = cid.toString();
+            if (map.has(key)) continue;
+            map.set(key, {
+                category_id: cid,
+                is_active: Boolean(row.is_active),
+            });
+        }
+    }
+    return [...map.values()];
+};
+
+const mergeFranchiseServiceEntries = (docs) => {
+    const map = new Map();
+    for (const doc of docs) {
+        const list = doc.services_list || [];
+        for (const row of list) {
+            if (!row) continue;
+            const sid =
+                row.service_id instanceof mongoose.Types.ObjectId
+                    ? row.service_id
+                    : row.service_id?._id || row.service_id;
+            if (!sid) continue;
+            const key = sid.toString();
+            if (map.has(key)) continue;
+            map.set(key, {
+                service_id: sid,
+                is_active: Boolean(row.is_active),
+            });
+        }
+    }
+    return [...map.values()];
+};
+
+const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
+    try {
+        const parsed = parseObjectId(franchiseIdRaw, 'franchise_id');
+        if (!parsed.ok) return fail(400, parsed.message);
+
+        const franchise = await Franchise.findOne({
+            _id: parsed.oid,
+            deleted_at: null,
+        })
+            .select('_id name')
+            .lean();
+        if (!franchise) return fail(404, 'Franchise not found.');
+
+        const [fcDocs, fsDocs, partners, employees] = await Promise.all([
+            FranchiseCategory.find({ franchise_id: parsed.oid, deleted_at: null })
+                .sort({ created_at: -1 })
+                .lean(),
+            FranchiseService.find({ franchise_id: parsed.oid, deleted_at: null })
+                .sort({ created_at: -1 })
+                .lean(),
+            User.find({
+                franchise_id: parsed.oid,
+                type: USER_TYPE_PARTNER,
+                deleted_at: null,
+            })
+                .select(USER_LIST_SELECT)
+                .sort({ name: 1 })
+                .lean(),
+            User.find({
+                franchise_id: parsed.oid,
+                type: USER_TYPE_EMPLOYEE,
+                deleted_at: null,
+            })
+                .select(USER_LIST_SELECT)
+                .sort({ name: 1 })
+                .lean(),
+        ]);
+
+        const mergedCatEntries = mergeFranchiseCategoryEntries(fcDocs);
+        const mergedSvcEntries = mergeFranchiseServiceEntries(fsDocs);
+
+        const categoryIds = mergedCatEntries.map((e) => e.category_id);
+        const serviceIds = mergedSvcEntries.map((e) => e.service_id);
+
+        const [categoryRows, serviceRows] = await Promise.all([
+            categoryIds.length === 0
+                ? []
+                : Category.find({
+                      _id: { $in: categoryIds },
+                      deleted_at: null,
+                  })
+                      .select('category_id name desc image_url is_active approval_status')
+                      .lean(),
+            serviceIds.length === 0
+                ? []
+                : Service.find({
+                      _id: { $in: serviceIds },
+                      deleted_at: null,
+                  })
+                      .select(
+                          'service_id name desc price category_id image_url is_active approval_status'
+                      )
+                      .lean(),
+        ]);
+
+        const catById = new Map(categoryRows.map((c) => [c._id.toString(), c]));
+        const svcById = new Map(serviceRows.map((s) => [s._id.toString(), s]));
+
+        const categories = mergedCatEntries
+            .map((e) => {
+                const c = catById.get(e.category_id.toString()) || null;
+                return {
+                    category_id: e.category_id,
+                    is_active: e.is_active,
+                    category: c,
+                };
+            })
+            .filter(
+                (row) =>
+                    row.is_active === true &&
+                    row.category &&
+                    isCatalogCategoryActive(row.category)
+            );
+
+        const services = mergedSvcEntries
+            .map((e) => {
+                const s = svcById.get(e.service_id.toString()) || null;
+                return {
+                    service_id: e.service_id,
+                    is_active: e.is_active,
+                    service: s,
+                };
+            })
+            .filter(
+                (row) =>
+                    row.is_active === true &&
+                    row.service &&
+                    isCatalogServiceActive(row.service)
+            );
+
+        const activeFranchiseServiceOids = services.map((r) => r.service_id);
+        const partnerIds = partners.map((p) => p._id);
+
+        let psRows = [];
+        if (partnerIds.length > 0 && activeFranchiseServiceOids.length > 0) {
+            psRows = await PartnerService.find({
+                partner_id: { $in: partnerIds },
+                service_id: { $in: activeFranchiseServiceOids },
+                deleted_at: null,
+            })
+                .select('partner_id category_id service_id is_accept_request')
+                .lean();
+        }
+
+        const serviceDetailById = new Map(
+            services.map((r) => [r.service_id.toString(), r.service])
+        );
+
+        const partnerServiceMap = new Map();
+        for (const row of psRows) {
+            const svc = serviceDetailById.get(row.service_id.toString());
+            if (!svc) continue;
+            const pid = row.partner_id.toString();
+            if (!partnerServiceMap.has(pid)) partnerServiceMap.set(pid, []);
+            partnerServiceMap.get(pid).push({
+                service_id: row.service_id,
+                category_id: row.category_id,
+                is_accept_request: Boolean(row.is_accept_request),
+                service: {
+                    _id: svc._id,
+                    service_id: svc.service_id,
+                    name: svc.name,
+                    desc: svc.desc,
+                    price: svc.price,
+                    category_id: svc.category_id,
+                    image_url: svc.image_url,
+                    is_active: svc.is_active,
+                    approval_status: svc.approval_status,
+                },
+            });
+        }
+
+        for (const [, list] of partnerServiceMap) {
+            list.sort((a, b) =>
+                String(a.service?.name || '').localeCompare(String(b.service?.name || ''), 'en', {
+                    sensitivity: 'base',
+                })
+            );
+        }
+
+        const partnersWithServices = partners.map((p) => ({
+            ...p,
+            active_services_providing: partnerServiceMap.get(p._id.toString()) || [],
+        }));
+
+        return ok(200, {
+            message: 'Franchise catalog fetched successfully.',
+            record: {
+                franchise: franchise,
+                franchise_categories: fcDocs,
+                franchise_services: fsDocs,
+                categories,
+                services,
+                partners: partnersWithServices,
+                employees,
+            },
+        });
+    } catch (err) {
+        console.error('getFranchiseRelatedCatalog', err.message);
+        return fail(500, 'Internal server error.');
+    }
+};
+
 module.exports = {
     listFranchises,
     createFranchise,
@@ -629,4 +868,5 @@ module.exports = {
     softDeleteFranchise,
     importFranchises,
     listFranchisesForDropdown,
+    getFranchiseRelatedCatalog,
 };

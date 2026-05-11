@@ -8,10 +8,11 @@ const {
     deleteFranchise,
     importRecords,
     getDropDown,
+    getRelatedCatalog,
 } = require('../controllers/franchise_controller');
 const authMiddleware = require('../middleware/auth_middleware');
 const rateLimiter = require('../middleware/rate_middleware');
-const { requireSuperAdminOrStaff } = require('../middleware/role_middleware');
+const { requireFranchiseRelatedCatalogAccess } = require('../middleware/role_middleware');
 const {
     createFranchiseMiddleware,
     updateFranchiseMiddleware,
@@ -21,6 +22,12 @@ router.use(rateLimiter);
 
 router.post('/create', authMiddleware, createFranchiseMiddleware, create);
 router.post('/imports', authMiddleware, importRecords);
+router.get(
+    '/related-catalog/:franchise_id',
+    authMiddleware,
+    requireFranchiseRelatedCatalogAccess,
+    getRelatedCatalog
+);
 router.get('/get/:id', authMiddleware, getById);
 router.get('/getAll', authMiddleware, getAll);
 router.get('/getDropDown', authMiddleware, getDropDown);

@@ -4,7 +4,6 @@ const SubscriptionPlan = require('../models/subscription_plan');
 const User = require('../models/user');
 /** Same as `user.type` in models/user.js (2 = Partner). */
 const USER_TYPE_PARTNER = 2;
-const { applyPagination } = require('../utils/pagination');
 
 const parseObjectId = (raw, fieldName = 'id') => {
     if (raw instanceof mongoose.Types.ObjectId) {
@@ -61,43 +60,219 @@ const loadActivePlan = async (planOid) => {
     });
 };
 
+const parseOptionalDateQuery = (raw, fieldLabel) => {
+    if (raw === undefined || raw === null || String(raw).trim() === '') {
+        return { ok: true, instant: null };
+    }
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) {
+        return { ok: false, message: `${fieldLabel} must be a valid date.` };
+    }
+    return { ok: true, instant: d };
+};
+
+const startOfUtcDay = (instant) => {
+    const x = new Date(instant);
+    x.setUTCHours(0, 0, 0, 0);
+    return x;
+};
+
+const endOfUtcDay = (instant) => {
+    const x = new Date(instant);
+    x.setUTCHours(23, 59, 59, 999);
+    return x;
+};
+
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const listPartnerSubscriptions = async (query) => {
     try {
         const page = parseInt(query.page, 10) || 1;
         const limit = parseInt(query.limit, 10) || 10;
-        const filter = { deleted_at: null };
+        const skip = (page - 1) * limit;
+        const match = { deleted_at: null };
 
         if (query.status && ['active', 'expired', 'cancelled'].includes(query.status)) {
-            filter.status = query.status;
+            match.status = query.status;
         }
         if (query.partner_id) {
             const p = parseObjectId(query.partner_id, 'partner_id');
             if (!p.ok) return fail(400, p.message);
-            filter.partner_id = p.oid;
+            match.partner_id = p.oid;
         }
         if (query.subscription_plan_id) {
             const p = parseObjectId(query.subscription_plan_id, 'subscription_plan_id');
             if (!p.ok) return fail(400, p.message);
-            filter.subscription_plan_id = p.oid;
+            match.subscription_plan_id = p.oid;
         }
 
-        const sort = { created_at: query.sort !== undefined ? parseInt(query.sort, 10) : -1 };
+        const fromParsed = parseOptionalDateQuery(query.from_date, 'from_date');
+        if (!fromParsed.ok) return fail(400, fromParsed.message);
+        const toParsed = parseOptionalDateQuery(query.to_date, 'to_date');
+        if (!toParsed.ok) return fail(400, toParsed.message);
 
-        const { data: rows, totalCount, totalPages, currentPage } = await applyPagination(
-            PartnerSubscription,
-            filter,
-            page,
-            limit,
-            sort,
-            {},
-            [{ path: 'partner_id', select: 'name email phone_number' }, { path: 'subscription_plan_id' }, { path: 'assigned_by_id', select: 'name email' }]
-        );
+        const fromStart = fromParsed.instant ? startOfUtcDay(fromParsed.instant) : null;
+        const toEnd = toParsed.instant ? endOfUtcDay(toParsed.instant) : null;
+
+        if (fromStart && toEnd && fromStart.getTime() > toEnd.getTime()) {
+            return fail(400, 'from_date must be on or before to_date.');
+        }
+
+        if (fromStart && toEnd) {
+            match.started_at = { $gte: fromStart, $lte: toEnd };
+        } else if (fromStart) {
+            match.started_at = { $gte: fromStart };
+        } else if (toEnd) {
+            match.started_at = { $lte: toEnd };
+        }
+
+        const rawSearch = query.search ?? query.partner_name;
+        if (rawSearch !== undefined && rawSearch !== null && String(rawSearch).trim() !== '') {
+            const pattern = escapeRegex(String(rawSearch).trim());
+            const matchedPartnerIds = await User.find({
+                type: USER_TYPE_PARTNER,
+                deleted_at: null,
+                name: { $regex: pattern, $options: 'i' },
+            }).distinct('_id');
+            if (matchedPartnerIds.length === 0) {
+                return ok(200, {
+                    message: 'Partner subscription list fetched successfully.',
+                    totalItems: 0,
+                    totalPages: 0,
+                    currentPage: page,
+                    records: [],
+                });
+            }
+            if (match.partner_id) {
+                const fixedPid = match.partner_id;
+                const matchesSearch = matchedPartnerIds.some((id) => id.equals(fixedPid));
+                if (!matchesSearch) {
+                    return ok(200, {
+                        message: 'Partner subscription list fetched successfully.',
+                        totalItems: 0,
+                        totalPages: 0,
+                        currentPage: page,
+                        records: [],
+                    });
+                }
+            } else {
+                match.partner_id = { $in: matchedPartnerIds };
+            }
+        }
+
+        const sortBy = query.sort_by != null ? String(query.sort_by).trim().toLowerCase() : '';
+        const sortOrderAsc =
+            query.sort_order !== undefined &&
+            query.sort_order !== null &&
+            (String(query.sort_order).toLowerCase() === 'asc' || String(query.sort_order) === '1');
+        const so = sortOrderAsc ? 1 : -1;
+
+        let sortStage = {};
+        switch (sortBy) {
+            case 'partner_name':
+                sortStage = { 'partnerUser.name': so, _id: so };
+                break;
+            case 'subscription_plan':
+                sortStage = { 'plan.plan_name': so, _id: so };
+                break;
+            case 'start_date':
+                sortStage = { started_at: so, _id: so };
+                break;
+            case 'end_date':
+                sortStage = { expires_at: so, _id: so };
+                break;
+            default:
+                sortStage = { created_at: query.sort !== undefined ? parseInt(query.sort, 10) : -1 };
+                break;
+        }
+
+        const userColl = User.collection.collectionName;
+        const planColl = SubscriptionPlan.collection.collectionName;
+
+        const pipeline = [
+            { $match: match },
+            {
+                $lookup: {
+                    from: userColl,
+                    localField: 'partner_id',
+                    foreignField: '_id',
+                    as: 'partnerUser',
+                },
+            },
+            { $unwind: { path: '$partnerUser', preserveNullAndEmptyArrays: false } },
+            {
+                $lookup: {
+                    from: planColl,
+                    localField: 'subscription_plan_id',
+                    foreignField: '_id',
+                    as: 'plan',
+                },
+            },
+            { $unwind: { path: '$plan', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: userColl,
+                    localField: 'assigned_by_id',
+                    foreignField: '_id',
+                    as: 'assignedByUser',
+                },
+            },
+            { $unwind: { path: '$assignedByUser', preserveNullAndEmptyArrays: true } },
+            { $sort: sortStage },
+            {
+                $facet: {
+                    data: [
+                        { $skip: skip },
+                        { $limit: limit },
+                        {
+                            $addFields: {
+                                partner_id: {
+                                    _id: '$partnerUser._id',
+                                    name: '$partnerUser.name',
+                                    email: '$partnerUser.email',
+                                    phone_number: '$partnerUser.phone_number',
+                                },
+                                subscription_plan_id: '$plan',
+                                assigned_by_id: {
+                                    $cond: [
+                                        { $ne: [{ $ifNull: ['$assignedByUser', null] }, null] },
+                                        {
+                                            _id: '$assignedByUser._id',
+                                            name: '$assignedByUser.name',
+                                            email: '$assignedByUser.email',
+                                        },
+                                        null,
+                                    ],
+                                },
+                            },
+                        },
+                        {
+                            $project: {
+                                partnerUser: 0,
+                                plan: 0,
+                                assignedByUser: 0,
+                            },
+                        },
+                    ],
+                    totalCount: [{ $count: 'totalCount' }],
+                },
+            },
+        ];
+
+        const aggResult = await PartnerSubscription.aggregate(pipeline).collation({
+            locale: 'en',
+            strength: 2,
+        });
+        const facet = aggResult[0] || { data: [], totalCount: [] };
+        const rows = facet.data || [];
+        const totalCount = facet.totalCount[0] ? facet.totalCount[0].totalCount : 0;
+        const totalPages = Math.ceil(totalCount / limit);
 
         return ok(200, {
             message: 'Partner subscription list fetched successfully.',
             totalItems: totalCount,
             totalPages,
-            currentPage,
+            currentPage: page,
             records: rows,
         });
     } catch (err) {

@@ -1,4 +1,5 @@
 const partnerSubscriptionService = require('../services/partner_subscription_service');
+const subscriptionPlanService = require('../services/subscription_plan_service');
 
 const sendServiceResult = (res, result) => {
     if (!result.ok) {
@@ -51,6 +52,11 @@ const getMine = async (req, res) => {
     return sendServiceResult(res, result);
 };
 
+const getSubscriptionPlans = async (req, res) => {
+    const result = await subscriptionPlanService.listAllSubscriptionPlans();
+    return sendServiceResult(res, result);
+};
+
 module.exports = {
     getAll,
     create,
@@ -59,4 +65,5 @@ module.exports = {
     deletePartnerSubscription,
     importRecords,
     getMine,
+    getSubscriptionPlans,
 };

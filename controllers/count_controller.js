@@ -13,6 +13,8 @@ const Franchise = require('../models/franchise');
 const Expense = require('../models/expense');
 const ExpenseCategory = require('../models/expense_category');
 const ContentManagement = require('../models/content_management');
+const SubscriptionPlan = require('../models/subscription_plan');
+const PartnerSubscription = require('../models/partner_subscription');
 const { checkObjectIdExists } = require('../validator/id_validator');
 const moment = require("moment-timezone");
 
@@ -48,7 +50,7 @@ const resolveCountType = (type) => {
         'user-management': 3,
         'financials': 4,
         'order-payment': 4,
-        'partner-management': 5,
+        'partner-management': 11,
         'partner-payment': 5,
         'franchise-management': 6,
         'expenses': 7,
@@ -326,12 +328,69 @@ const getCountData = async (req, res) => {
                 response.requested_service = 0;
             };
 
-            if (!caller.franchise_id) {
+            const collectFranchiseAreaIds = (franchiseDocs) => {
+                const seen = new Set();
+                const oids = [];
+                for (const fr of franchiseDocs || []) {
+                    if (!fr || fr.area_id == null) continue;
+                    const arr = Array.isArray(fr.area_id) ? fr.area_id : [fr.area_id];
+                    for (const item of arr) {
+                        let oid = null;
+                        if (item instanceof mongoose.Types.ObjectId) {
+                            oid = item;
+                        } else if (item && typeof item === 'object' && item._id) {
+                            oid = item._id;
+                        } else if (typeof item === 'string' && /^[a-fA-F0-9]{24}$/i.test(item.trim())) {
+                            oid = new mongoose.Types.ObjectId(item.trim());
+                        }
+                        if (!oid) continue;
+                        const k = oid.toString();
+                        if (seen.has(k)) continue;
+                        seen.add(k);
+                        oids.push(oid);
+                    }
+                }
+                return oids;
+            };
+
+            const callerType = Number(caller.type);
+            let franchiseDocs = [];
+            if (callerType === 1) {
+                franchiseDocs = await Franchise.find({
+                    deleted_at: null,
+                    admin_id: req.user.id,
+                })
+                    .select('_id area_id')
+                    .lean();
+                if (franchiseDocs.length === 0 && caller.franchise_id) {
+                    const one = await Franchise.findOne({
+                        _id: caller.franchise_id,
+                        deleted_at: null,
+                    })
+                        .select('_id area_id')
+                        .lean();
+                    if (one) franchiseDocs = [one];
+                }
+            } else if (caller.franchise_id) {
+                const one = await Franchise.findOne({
+                    _id: caller.franchise_id,
+                    deleted_at: null,
+                })
+                    .select('_id area_id')
+                    .lean();
+                if (one) franchiseDocs = [one];
+            }
+
+            if (franchiseDocs.length === 0) {
                 setMyFranchiseZeros();
             } else {
-                const fid = caller.franchise_id;
+                const franchiseIdsScope = franchiseDocs.map((f) => f._id);
 
-                const employeeFilter = { type: 3, franchise_id: fid, deleted_at: null };
+                const employeeFilter = {
+                    type: 3,
+                    franchise_id: { $in: franchiseIdsScope },
+                    deleted_at: null,
+                };
                 response.total_employee = await User.countDocuments(employeeFilter);
                 response.inactive_employee = await User.countDocuments({
                     ...employeeFilter,
@@ -342,11 +401,7 @@ const getCountData = async (req, res) => {
                     is_active: true,
                 });
 
-                const franchise = await Franchise.findOne({ _id: fid, deleted_at: null })
-                    .select('area_id')
-                    .lean();
-                const areaIds =
-                    franchise && Array.isArray(franchise.area_id) ? franchise.area_id : [];
+                const areaIds = collectFranchiseAreaIds(franchiseDocs);
                 if (areaIds.length === 0) {
                     response.total_area = 0;
                     response.inactive_area = 0;
@@ -360,12 +415,12 @@ const getCountData = async (req, res) => {
                     });
                     response.active_area = await Area.countDocuments({
                         ...areaBase,
-                        is_active: true,
+                        is_active: { $ne: false },
                     });
                 }
 
                 const franchiseUserIds = await User.find({
-                    franchise_id: fid,
+                    franchise_id: { $in: franchiseIdsScope },
                     deleted_at: null,
                 }).distinct('_id');
 
@@ -416,6 +471,23 @@ const getCountData = async (req, res) => {
                     is_request: true,
                 });
             }
+        } else if (resolvedType === 11) {
+            // Partner Management — subscription plans & partner subscriptions (dashboard cards)
+            const planBase = { deleted_at: null };
+            response.total_plans = await SubscriptionPlan.countDocuments(planBase);
+            response.active_plans = await SubscriptionPlan.countDocuments({ ...planBase, is_active: true });
+            response.inactive_plans = await SubscriptionPlan.countDocuments({ ...planBase, is_active: false });
+
+            const subBase = { deleted_at: null };
+            response.total_partner_subscriptions = await PartnerSubscription.countDocuments(subBase);
+            response.active_partner_subscriptions = await PartnerSubscription.countDocuments({
+                ...subBase,
+                status: 'active',
+            });
+            response.inactive_partner_subscriptions = await PartnerSubscription.countDocuments({
+                ...subBase,
+                status: { $ne: 'active' },
+            });
         }
         return res.status(200).json({
             success: true,

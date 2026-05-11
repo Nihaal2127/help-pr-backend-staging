@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "a1c2e3f4-5b6d-4789-a0b1-c2d3e4f50617",
-    "name": "Content + Expense + Expense Category + Area + Service + Location + Franchise APIs",
-    "description": "Includes APIs for content management (`/api/content-management`), expense category management (`/api/expense-category-management`), expense management (`/api/expense-management`), area management (`/api/area`), service management (`/api/category` and `/api/service` — including **`/create-request`**, **`/update-request/:id`**, and standard CRUD), and location management (`/api/state` and `/api/city`).\n\n**Catalogue request lifecycle (rows created via `…/create-request`):** **`is_request`** stays **`true`** and **`approval_status`** is **`pending`**. On accept (`PUT …/category|service/update/:id` with **`approval_status: \"approve\"`**) **`is_request`** becomes **`false`** and `rejection_reason` is cleared. On reject (`approval_status: \"rejected\"`) **`is_request`** remains **`true`** and **`rejection_reason`** is required.\n\n**Normal catalogue create:** **`POST /api/category/create`** sets **`requested_by: null`**, **`is_request: false`**, **`approval_status: \"approve\"`**. **`POST`/`PUT` on `…/create-request` and `…/update-request/:id`** persist **`is_request: true`** (middleware / path).\n\nUse **Login** first to set `{{token}}`, then run the requested module APIs. **Create Service** / **Create Category** tests save `{{serviceId}}` / `{{serviceCategoryId}}` on HTTP 200 when `record._id` is present. Use **Accept … Request** / **Reject … Request** requests for moderation; filter **Get All** with **`categoryApprovalStatus`** / **`serviceApprovalStatus`** (empty = omit filter).\n\n**Franchise + My Franchise mapping:** `POST /api/franchise/create` saves the franchise and creates `franchise_category` / `franchise_service` rows where **`categories_list`** / **`services_list`** are the **full catalogue** as objects `{ \"category_id\", \"is_active\" }` and `{ \"service_id\", \"is_active\" }` (only IDs in the franchise body `categories` / `services` are active). Standalone **`POST /api/franchise-category|franchise-service/create`** accepts that object shape (plain ID strings are still accepted and treated as active). **PUT** mapping updates: super admin/staff may replace lists; **franchise admin** must send the **complete** list (same IDs as stored—copy from **Get By Id**) and may only change `is_active` for IDs present on the main franchise `categories` / `services`. **POST** `{{baseUrl}}/api/getCount` with JSON `{ \"type\": \"service-management\" }` returns service/category dashboard counts (franchise admin sees franchise-scoped requested counts). Use **Login (Franchise Admin)** to set `{{tokenFranchiseAdmin}}` for admin-only mapping tests.",
+    "name": "Content + Expense + Expense Category + Area + Service + Location + Franchise + Partner Management APIs",
+    "description": "Includes APIs for content management (`/api/content-management`), expense category management (`/api/expense-category-management`), expense management (`/api/expense-management`), area management (`/api/area`), service management (`/api/category` and `/api/service` — including **`/create-request`**, **`/update-request/:id`**, and standard CRUD), and location management (`/api/state` and `/api/city`).\n\n**Catalogue request lifecycle (rows created via `…/create-request`):** **`is_request`** stays **`true`** and **`approval_status`** is **`pending`**. On accept (`PUT …/category|service/update/:id` with **`approval_status: \"approve\"`**) **`is_request`** becomes **`false`** and `rejection_reason` is cleared. On reject (`approval_status: \"rejected\"`) **`is_request`** remains **`true`** and **`rejection_reason`** is required.\n\n**Normal catalogue create:** **`POST /api/category/create`** sets **`requested_by: null`**, **`is_request: false`**, **`approval_status: \"approve\"`**. **`POST`/`PUT` on `…/create-request` and `…/update-request/:id`** persist **`is_request: true`** (middleware / path).\n\nUse **Login** first to set `{{token}}`, then run the requested module APIs. **Create Service** / **Create Category** tests save `{{serviceId}}` / `{{serviceCategoryId}}` on HTTP 200 when `record._id` is present. Use **Accept … Request** / **Reject … Request** requests for moderation; filter **Get All** with **`categoryApprovalStatus`** / **`serviceApprovalStatus`** (empty = omit filter).\n\n**Franchise + My Franchise mapping:** `POST /api/franchise/create` saves the franchise and creates `franchise_category` / `franchise_service` rows where **`categories_list`** / **`services_list`** are the **full catalogue** as objects `{ \"category_id\", \"is_active\" }` and `{ \"service_id\", \"is_active\" }` (only IDs in the franchise body `categories` / `services` are active). Initial `franchise_category` / `franchise_service` rows come from **`POST /api/franchise/create`** (this collection omits standalone **`/api/franchise-category/create`**, **`/api/franchise-service/create`**, and **delete** routes for those resources). **PUT** mapping updates: super admin/staff may replace lists; **franchise admin** must send the **complete** list (same IDs as stored—copy from **Get By Id**) and may only change `is_active` for IDs present on the main franchise `categories` / `services`. **POST** `{{baseUrl}}/api/getCount` with JSON `{ \"type\": \"service-management\" }` returns service/category dashboard counts (franchise admin sees franchise-scoped requested counts). Use **Login (Franchise Admin)** to set `{{tokenFranchiseAdmin}}` for admin-only mapping tests.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "cursor-agent"
   },
@@ -108,6 +108,563 @@
               ]
             },
             "description": "No auth. Confirms the process is up."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Location Management",
+      "item": [
+        {
+          "name": "State Management",
+          "item": [
+            {
+              "name": "Create State",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Maharashtra\",\n  \"is_active\": true\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/state/create",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "state",
+                    "create"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get All States",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/state/getAll?page={{page}}&limit={{limit}}&search={{search}}&sort_by={{sortBy}}&sort_order={{sortOrder}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "state",
+                    "getAll"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get State By ID",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/state/get/{{stateId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "state",
+                    "get",
+                    "{{stateId}}"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Update State",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Maharashtra Updated\",\n  \"is_active\": true\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/state/update/{{stateId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "state",
+                    "update",
+                    "{{stateId}}"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Delete State",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/state/delete/{{stateId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "state",
+                    "delete",
+                    "{{stateId}}"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get State Dropdown",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/state/getDropDown",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "state",
+                    "getDropDown"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "City Management",
+          "item": [
+            {
+              "name": "Create City",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Pune\",\n  \"state_id\": \"{{stateId}}\",\n  \"is_active\": true\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/city/create",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "city",
+                    "create"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get All Cities",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/city/getAll?page={{page}}&limit={{limit}}&search={{search}}&state_id={{stateId}}&sort_by={{sortBy}}&sort_order={{sortOrder}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "city",
+                    "getAll"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get City By ID",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/city/get/{{cityId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "city",
+                    "get",
+                    "{{cityId}}"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Update City",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Pune Updated\",\n  \"state_id\": \"{{stateId}}\",\n  \"is_active\": true\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/city/update/{{cityId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "city",
+                    "update",
+                    "{{cityId}}"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Delete City",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/city/delete/{{cityId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "city",
+                    "delete",
+                    "{{cityId}}"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get City Dropdown",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/city/getDropDown?state_id={{stateId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "city",
+                    "getDropDown"
+                  ],
+                  "query": [
+                    {
+                      "key": "state_id",
+                      "value": "{{stateId}}"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Area Management",
+      "item": [
+        {
+          "name": "Create Area",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Kothrud\",\n  \"city_id\": \"{{cityId}}\",\n  \"is_active\": true,\n  \"pincodes\": [\"411038\", \"411029\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/area/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "area",
+                "create"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get All Areas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/area/getAll?page={{page}}&limit={{limit}}&areaname={{areaname}}&city={{city}}&state={{state}}&pincode={{pincode}}&sort_by={{sortBy}}&sort_order={{sortOrder}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "area",
+                "getAll"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "areaname",
+                  "value": "{{areaname}}"
+                },
+                {
+                  "key": "city",
+                  "value": "{{city}}"
+                },
+                {
+                  "key": "state",
+                  "value": "{{state}}"
+                },
+                {
+                  "key": "pincode",
+                  "value": "{{pincode}}"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "{{sortBy}}"
+                },
+                {
+                  "key": "sort_order",
+                  "value": "{{sortOrder}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Area By ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/area/get/{{areaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "area",
+                "get",
+                "{{areaId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Area",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Kothrud Updated\",\n  \"city_id\": \"{{cityId}}\",\n  \"is_active\": true,\n  \"pincodes\": [\"411038\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/area/update/{{areaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "area",
+                "update",
+                "{{areaId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Area",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/area/delete/{{areaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "area",
+                "delete",
+                "{{areaId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Import Areas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"records\": [\n    {\n      \"name\": \"Baner\",\n      \"city_id\": \"{{cityId}}\",\n      \"is_active\": true,\n      \"pincodes\": [\"411045\"]\n    },\n    {\n      \"name\": \"Aundh\",\n      \"city_id\": \"{{cityId}}\",\n      \"is_active\": true,\n      \"pincodes\": [\"411007\"]\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/area/imports",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "area",
+                "imports"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Area Dropdown",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/area/getDropDown?city_id={{cityId}}&state_id={{stateId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "area",
+                "getDropDown"
+              ],
+              "query": [
+                {
+                  "key": "city_id",
+                  "value": "{{cityId}}"
+                },
+                {
+                  "key": "state_id",
+                  "value": "{{stateId}}"
+                }
+              ]
+            }
           }
         }
       ]
@@ -466,238 +1023,6 @@
       ]
     },
     {
-      "name": "Area Management",
-      "item": [
-        {
-          "name": "Create Area",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Kothrud\",\n  \"city_id\": \"{{cityId}}\",\n  \"is_active\": true,\n  \"pincodes\": [\"411038\", \"411029\"]\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/area/create",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "area",
-                "create"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get All Areas",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/area/getAll?page={{page}}&limit={{limit}}&areaname={{areaname}}&city={{city}}&state={{state}}&pincode={{pincode}}&sort_by={{sortBy}}&sort_order={{sortOrder}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "area",
-                "getAll"
-              ],
-              "query": [
-                {
-                  "key": "page",
-                  "value": "{{page}}"
-                },
-                {
-                  "key": "limit",
-                  "value": "{{limit}}"
-                },
-                {
-                  "key": "areaname",
-                  "value": "{{areaname}}"
-                },
-                {
-                  "key": "city",
-                  "value": "{{city}}"
-                },
-                {
-                  "key": "state",
-                  "value": "{{state}}"
-                },
-                {
-                  "key": "pincode",
-                  "value": "{{pincode}}"
-                },
-                {
-                  "key": "sort_by",
-                  "value": "{{sortBy}}"
-                },
-                {
-                  "key": "sort_order",
-                  "value": "{{sortOrder}}"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get Area By ID",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/area/get/{{areaId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "area",
-                "get",
-                "{{areaId}}"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Update Area",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Kothrud Updated\",\n  \"city_id\": \"{{cityId}}\",\n  \"is_active\": true,\n  \"pincodes\": [\"411038\"]\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/area/update/{{areaId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "area",
-                "update",
-                "{{areaId}}"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Delete Area",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/area/delete/{{areaId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "area",
-                "delete",
-                "{{areaId}}"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Import Areas",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"records\": [\n    {\n      \"name\": \"Baner\",\n      \"city_id\": \"{{cityId}}\",\n      \"is_active\": true,\n      \"pincodes\": [\"411045\"]\n    },\n    {\n      \"name\": \"Aundh\",\n      \"city_id\": \"{{cityId}}\",\n      \"is_active\": true,\n      \"pincodes\": [\"411007\"]\n    }\n  ]\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/area/imports",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "area",
-                "imports"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get Area Dropdown",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/area/getDropDown?city_id={{cityId}}&state_id={{stateId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "area",
-                "getDropDown"
-              ],
-              "query": [
-                {
-                  "key": "city_id",
-                  "value": "{{cityId}}"
-                },
-                {
-                  "key": "state_id",
-                  "value": "{{stateId}}"
-                }
-              ]
-            }
-          }
-        }
-      ]
-    },
-    {
       "name": "Expense Management",
       "item": [
         {
@@ -893,6 +1218,1123 @@
                   "value": "{{franchiseId}}",
                   "description": "Required to match the expense document (server filters by franchise_id)."
                 }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Franchise Category & Service Management",
+      "description": "**Beginner testing order (recommended):**\n\n**A — Prerequisites:** Run **Authentication → Login** (super admin). In **Collection variables**, set real MongoDB IDs: `stateId`, `cityId`, `areaId`, `categoryId`, `serviceId`, `franchiseAdminId` (admin user who will own the franchise). Optionally set `categoryIdAlt`, `serviceIdAlt` for multi-row mapping samples.\n\n**B — Master franchise record:** **Franchise Create** → saves `franchiseId`. Then **Franchise master** folder: **Get All** (search/filter), **Get By Id**, **Update** (change name/description/contact/categories/services as needed), **Get Dropdown** (active franchises for UI). **Imports** = bulk insert of franchise rows only (no auto `franchise_category` / `franchise_service` mapping like Create). **Delete** = soft delete last.\n\n**C — Per-franchise category & service mappings** (this collection lists **GET** + **PUT** only—no **`/franchise-category/create`**, **`/franchise-service/create`**, or **delete** requests): **Franchise Category|Service - Get All** (scripts save `franchiseCategoryMapId` / `franchiseServiceMapId`). **Get By Id** → copy the **full** `categories_list` or `services_list` before any **Update**.\n\n**D — Who can update mappings:** **Update (super admin)** = replace whole lists. **Login (Franchise Admin)** then **Update (as franchise admin)** = must send the **complete** list from Get By Id; only toggle `is_active` for IDs that exist on the franchise’s `categories` / `services` arrays (else 403).\n\n**E — Dashboard:** **getCount** with `type: service-management` — use `token` vs `tokenFranchiseAdmin` to compare global vs franchise-scoped counts.\n\n**F — Catalogue requests (optional):** **Service Management** → Create Category|Service Request → Accept|Reject.",
+      "item": [
+        {
+          "name": "Franchise Create (Auto-map Categories & Services)",
+          "description": "Super admin/staff only (`createFranchise` middleware). Creates main franchise plus `franchise_category` and `franchise_service` with **all** categories/services; only `categories` / `services` arrays here are **active** in those lists.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const id = j && j.record && (j.record._id || j.record.id);",
+                  "  if (pm.response.code === 200 && id) pm.collectionVariables.set('franchiseId', String(id));",
+                  "} catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"South Zone\",\n  \"admin_id\": \"{{franchiseAdminId}}\",\n  \"state_id\": \"{{stateId}}\",\n  \"city_id\": \"{{cityId}}\",\n  \"area_id\": [\"{{areaId}}\"],\n  \"categories\": [\"{{categoryId}}\"],\n  \"services\": [\"{{serviceId}}\"],\n  \"description\": \"Franchise created via Postman\",\n  \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/franchise/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "franchise",
+                "create"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Franchise master (list / detail / update / import / delete)",
+          "description": "Standard franchise **CRUD** under `/api/franchise`. Use **`Bearer {{token}}`** (super admin **Login**). After **Franchise Create**, `{{franchiseId}}` is set automatically. **Bulk import** (`POST …/imports`) inserts **franchise** documents only—it does **not** create `franchise_category` / `franchise_service` rows like **Franchise Create**.",
+          "item": [
+            {
+              "name": "Franchise - Get All",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/franchise/getAll?page={{page}}&limit={{limit}}&sort_by=created_at&sort_order=desc",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "franchise",
+                    "getAll"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "{{page}}"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "{{limit}}"
+                    },
+                    {
+                      "key": "sort_by",
+                      "value": "created_at",
+                      "description": "Also: name, state_name, city_name, admin_name, contact"
+                    },
+                    {
+                      "key": "sort_order",
+                      "value": "desc",
+                      "description": "asc | desc"
+                    }
+                  ]
+                },
+                "description": "Optional filters (add in Params tab): `keyword`, `search`, or `name` for name search; `state_id`, `city_id`, `admin_id` (valid ObjectIds); `is_active` true/false. Omit filters you do not need—invalid ObjectIds return **400**."
+              }
+            },
+            {
+              "name": "Franchise - Get By Id",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/franchise/get/{{franchiseId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "franchise",
+                    "get",
+                    "{{franchiseId}}"
+                  ]
+                },
+                "description": "Reads one franchise by Mongo `_id` (`{{franchiseId}}`)."
+              }
+            },
+            {
+              "name": "Franchise - Get Dropdown",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/franchise/getDropDown",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "franchise",
+                    "getDropDown"
+                  ]
+                },
+                "description": "Active franchises only; minimal fields (`_id`, `name`) for dropdowns."
+              }
+            },
+            {
+              "name": "Franchise - Update",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"South Zone Postman\",\n  \"description\": \"Updated via Postman\",\n  \"is_active\": true,\n  \"categories\": [\"{{categoryId}}\"],\n  \"services\": [\"{{serviceId}}\"]\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/franchise/update/{{franchiseId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "franchise",
+                    "update",
+                    "{{franchiseId}}"
+                  ]
+                },
+                "description": "Send only fields you want to change. **`contact`:** if present, must be non-empty string. **`categories` / `services`:** arrays of catalogue ObjectIds (updates franchise-level assignment; mapping documents may need separate **Franchise Category|Service** updates)."
+              }
+            },
+            {
+              "name": "Franchise - Bulk Import",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"records\": [\n    {\n      \"name\": \"Bulk Import Demo Franchise\",\n      \"state_id\": \"{{stateId}}\",\n      \"city_id\": \"{{cityId}}\",\n      \"area_id\": [\"{{areaId}}\"],\n      \"admin_id\": \"{{franchiseAdminId}}\",\n      \"contact\": \"9000000001\",\n      \"description\": \"Created via /imports\",\n      \"is_active\": true\n    }\n  ]\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/franchise/imports",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "franchise",
+                    "imports"
+                  ]
+                },
+                "description": "Each record needs **name**, **state_id**, **city_id**, **admin_id**. **name** must be unique per **city_id** in DB and within the batch. Change `name` if you get **409** duplicate."
+              }
+            },
+            {
+              "name": "Franchise - Delete (soft)",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/franchise/delete/{{franchiseId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "franchise",
+                    "delete",
+                    "{{franchiseId}}"
+                  ]
+                },
+                "description": "Soft-deletes the franchise. Run **after** you no longer need this `franchiseId` for mapping tests, or duplicate **Franchise Create** with another name/city."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Dashboard - Service & Category counts (getCount type 2)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"service-management\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/getCount",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getCount"
+              ]
+            },
+            "description": "Resolved type **2** → totals include `requested_category`, `requested_service`, active/inactive, etc. For franchise admin users, counts are scoped to `requested_by` users in that franchise. Use `{{tokenFranchiseAdmin}}` in Authorization to verify franchise-scoped numbers."
+          }
+        },
+        {
+          "name": "Franchise Category",
+          "item": [
+            {
+              "name": "Franchise Category - Get All",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  const rows = j.records || j.data || [];",
+                      "  if (pm.response.code === 200 && rows[0] && rows[0]._id) {",
+                      "    pm.collectionVariables.set('franchiseCategoryMapId', String(rows[0]._id));",
+                      "  }",
+                      "} catch (e) {}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/franchise-category/getAll?page={{page}}&limit={{limit}}&franchise_id={{franchiseId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "franchise-category",
+                    "getAll"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "{{page}}"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "{{limit}}"
+                    },
+                    {
+                      "key": "franchise_id",
+                      "value": "{{franchiseId}}"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Franchise Category - Get By Id",
+              "description": "Copy **`record.categories_list`** into **Update** bodies (full array required for franchise admin).",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/franchise-category/get/{{franchiseCategoryMapId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "franchise-category",
+                    "get",
+                    "{{franchiseCategoryMapId}}"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Franchise Category - Update (super admin — replace list)",
+              "description": "**Super admin/staff:** `categories_list` is an array of `{ \"category_id\", \"is_active\" }`. Replacing with a **short** list removes other categories from the mapping—usually you should call **Get By Id** first, paste the **full** `record.categories_list`, edit flags, then send here.\n\n**`active_categories` / `inactive_categories`:** only the franchise **`admin_id`** user may change these (use **Login (Franchise Admin)** if that user is the admin).",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"categories_list\": [\n    { \"category_id\": \"{{categoryId}}\", \"is_active\": true },\n    { \"category_id\": \"{{categoryIdAlt}}\", \"is_active\": false }\n  ],\n  \"active_categories\": true,\n  \"inactive_categories\": false,\n  \"order_number\": 2\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/franchise-category/update/{{franchiseCategoryMapId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "franchise-category",
+                    "update",
+                    "{{franchiseCategoryMapId}}"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Franchise Category - Update (as franchise admin)",
+              "description": "Use **`Bearer {{tokenFranchiseAdmin}}`** after **Login (Franchise Admin)**. Replace the body with the **full** `categories_list` array from **Franchise Category - Get By Id** (every `{ category_id, is_active }`). Only change `is_active` for IDs that exist on the franchise document's `categories`; other rows must keep the same `is_active` as before or the API returns **403**.",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{tokenFranchiseAdmin}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"categories_list\": [\n    { \"category_id\": \"REPLACE_WITH_ID_FROM_GET_BY_ID\", \"is_active\": true }\n  ]\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/franchise-category/update/{{franchiseCategoryMapId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "franchise-category",
+                    "update",
+                    "{{franchiseCategoryMapId}}"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Franchise Service",
+          "item": [
+            {
+              "name": "Franchise Service - Get All",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  const rows = j.records || j.data || [];",
+                      "  if (pm.response.code === 200 && rows[0] && rows[0]._id) {",
+                      "    pm.collectionVariables.set('franchiseServiceMapId', String(rows[0]._id));",
+                      "  }",
+                      "} catch (e) {}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/franchise-service/getAll?page={{page}}&limit={{limit}}&franchise_id={{franchiseId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "franchise-service",
+                    "getAll"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "{{page}}"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "{{limit}}"
+                    },
+                    {
+                      "key": "franchise_id",
+                      "value": "{{franchiseId}}"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Franchise Service - Get By Id",
+              "description": "Copy **`record.services_list`** into **Update** bodies.",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/franchise-service/get/{{franchiseServiceMapId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "franchise-service",
+                    "get",
+                    "{{franchiseServiceMapId}}"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Franchise Service - Update (super admin — replace list)",
+              "description": "**Super admin/staff:** same rules as category update—prefer pasting the **full** `services_list` from **Get By Id**. **`active_services` / `inactive_services`:** only franchise **`admin_id`** may change.",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"services_list\": [\n    { \"service_id\": \"{{serviceId}}\", \"is_active\": true },\n    { \"service_id\": \"{{serviceIdAlt}}\", \"is_active\": false }\n  ],\n  \"active_services\": true,\n  \"inactive_services\": false,\n  \"order_number\": 2\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/franchise-service/update/{{franchiseServiceMapId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "franchise-service",
+                    "update",
+                    "{{franchiseServiceMapId}}"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Franchise Service - Update (as franchise admin)",
+              "description": "Use **`Bearer {{tokenFranchiseAdmin}}`**. Paste the **full** `services_list` from **Franchise Service - Get By Id**; only toggle `is_active` for service IDs on the franchise's `services` array.",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{tokenFranchiseAdmin}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"services_list\": [\n    { \"service_id\": \"REPLACE_WITH_ID_FROM_GET_BY_ID\", \"is_active\": true }\n  ]\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/franchise-service/update/{{franchiseServiceMapId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "franchise-service",
+                    "update",
+                    "{{franchiseServiceMapId}}"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Partner Management",
+      "description": "**Suggested order:** **Login** → **Dashboard counts** → **Subscription Plan** (Get All saves `subscriptionPlanId` + `partnerSubscriptionPlanId`) → **Partner Subscription - Get Subscription Plans** (optional refresh) → **Get All** / CRUD on subscriptions.\n\nPartner Management dashboard APIs: **subscription plans**, **partner subscriptions**, and **getCount** (`type: partner-management`). Requires admin **Login** (`{{token}}`). Set **`{{partnerSubscriptionPlanId}}`** / **`{{subscriptionPlanId}}`** / **`{{partnerSubscriptionId}}`** / **`{{partnerUserId}}`** from list responses.",
+      "item": [
+        {
+          "name": "Dashboard - Partner Management counts (getCount)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"partner-management\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/getCount",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getCount"
+              ]
+            },
+            "description": "Resolved type **11** → `total_plans`, `active_plans`, `inactive_plans`, `total_partner_subscriptions`, `active_partner_subscriptions`, `inactive_partner_subscriptions`. Use admin **`{{token}}`**."
+          }
+        },
+        {
+          "name": "Subscription Plan - Get All",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const rows = j.records || [];",
+                  "  if (pm.response.code === 200 && rows[0] && rows[0]._id) {",
+                  "    pm.collectionVariables.set('subscriptionPlanId', String(rows[0]._id));",
+                  "    pm.collectionVariables.set('partnerSubscriptionPlanId', String(rows[0]._id));",
+                  "  }",
+                  "} catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/subscription-plan/getAll?page={{page}}&limit={{limit}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "subscription-plan",
+                "getAll"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "is_active",
+                  "value": "",
+                  "description": "optional true|false"
+                },
+                {
+                  "key": "plan_name",
+                  "value": ""
+                },
+                {
+                  "key": "duration_type",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Subscription Plan - Get By Id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/subscription-plan/get/{{subscriptionPlanId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "subscription-plan",
+                "get",
+                "{{subscriptionPlanId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Subscription Plan - Get Dropdown",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/subscription-plan/getDropDown",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "subscription-plan",
+                "getDropDown"
+              ],
+              "query": [
+                {
+                  "key": "duration_type",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "No auth in routes. Active plans only."
+          }
+        },
+        {
+          "name": "Subscription Plan - Create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plan_name\": \"silver\",\n  \"plan_description\": \"Test plan\",\n  \"price\": 599,\n  \"duration\": 30,\n  \"duration_type\": \"days\",\n  \"priority\": 1,\n  \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/subscription-plan/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "subscription-plan",
+                "create"
+              ]
+            },
+            "description": "`plan_name`: basic | silver | gold | platinum. `duration_type`: days | months."
+          }
+        },
+        {
+          "name": "Subscription Plan - Update",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/subscription-plan/update/{{subscriptionPlanId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "subscription-plan",
+                "update",
+                "{{subscriptionPlanId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Subscription Plan - Delete",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/subscription-plan/delete/{{subscriptionPlanId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "subscription-plan",
+                "delete",
+                "{{subscriptionPlanId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Subscription Plan - Bulk Import",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"records\": []\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/subscription-plan/imports",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "subscription-plan",
+                "imports"
+              ]
+            },
+            "description": "Array of plan rows; see API validation for required fields."
+          }
+        },
+        {
+          "name": "Partner Subscription - Get Subscription Plans",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/partner-subscription/getSubscriptionPlans",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "partner-subscription",
+                "getSubscriptionPlans"
+              ]
+            },
+            "description": "All non-deleted rows from **subscription_plans** (active + inactive). Admin only."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const rows = j.records || [];",
+                  "  if (pm.response.code === 200 && rows[0] && rows[0]._id) {",
+                  "    pm.collectionVariables.set('partnerSubscriptionPlanId', String(rows[0]._id));",
+                  "  }",
+                  "} catch (e) {}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Partner Subscription - Get All",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const rows = j.records || [];",
+                  "  if (pm.response.code === 200 && rows[0] && rows[0]._id) {",
+                  "    pm.collectionVariables.set('partnerSubscriptionId', String(rows[0]._id));",
+                  "  }",
+                  "} catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/partner-subscription/getAll?page={{page}}&limit={{limit}}&status=&partner_id=&subscription_plan_id=&from_date=&to_date=&search=&sort_by=&sort_order=desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "partner-subscription",
+                "getAll"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "active | expired | cancelled; empty = all"
+                },
+                {
+                  "key": "partner_id",
+                  "value": ""
+                },
+                {
+                  "key": "subscription_plan_id",
+                  "value": ""
+                },
+                {
+                  "key": "from_date",
+                  "value": "",
+                  "description": "ISO date; filters on started_at (UTC day start)"
+                },
+                {
+                  "key": "to_date",
+                  "value": "",
+                  "description": "ISO date; filters on started_at (UTC day end)"
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": "Partner name substring (also accepts partner_name)"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "",
+                  "description": "partner_name | subscription_plan | start_date | end_date"
+                },
+                {
+                  "key": "sort_order",
+                  "value": "desc",
+                  "description": "asc | 1 or desc | -1"
+                }
+              ]
+            },
+            "description": "Admin only. Sort on populated partner/plan fields; search matches **partner name** only."
+          }
+        },
+        {
+          "name": "Partner Subscription - Get By Id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/partner-subscription/get/{{partnerSubscriptionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "partner-subscription",
+                "get",
+                "{{partnerSubscriptionId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Partner Subscription - Create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"partner_id\": \"{{partnerUserId}}\",\n  \"subscription_plan_id\": \"{{partnerSubscriptionPlanId}}\",\n  \"notes\": \"Postman assignment\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/partner-subscription/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "partner-subscription",
+                "create"
+              ]
+            },
+            "description": "Admin only (`requireAdmin`). Cancels prior active subscription for the partner. Optional: `started_at`, `expires_at`, `status`, `notes`."
+          }
+        },
+        {
+          "name": "Partner Subscription - Update",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"active\",\n  \"notes\": \"Updated via Postman\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/partner-subscription/update/{{partnerSubscriptionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "partner-subscription",
+                "update",
+                "{{partnerSubscriptionId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Partner Subscription - Delete",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/partner-subscription/delete/{{partnerSubscriptionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "partner-subscription",
+                "delete",
+                "{{partnerSubscriptionId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Partner Subscription - Imports",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"records\": [\n    {\n      \"partner_id\": \"{{partnerUserId}}\",\n      \"subscription_plan_id\": \"{{partnerSubscriptionPlanId}}\",\n      \"notes\": \"Import row\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/partner-subscription/imports",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "partner-subscription",
+                "imports"
               ]
             }
           }
@@ -1924,736 +3366,6 @@
       ]
     },
     {
-      "name": "Location Management",
-      "item": [
-        {
-          "name": "State Management",
-          "item": [
-            {
-              "name": "Create State",
-              "request": {
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  },
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{token}}"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"name\": \"Maharashtra\",\n  \"is_active\": true\n}"
-                },
-                "url": {
-                  "raw": "{{baseUrl}}/api/state/create",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "state",
-                    "create"
-                  ]
-                }
-              }
-            },
-            {
-              "name": "Get All States",
-              "request": {
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{token}}"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/state/getAll?page={{page}}&limit={{limit}}&search={{search}}&sort_by={{sortBy}}&sort_order={{sortOrder}}",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "state",
-                    "getAll"
-                  ]
-                }
-              }
-            },
-            {
-              "name": "Get State By ID",
-              "request": {
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{token}}"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/state/get/{{stateId}}",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "state",
-                    "get",
-                    "{{stateId}}"
-                  ]
-                }
-              }
-            },
-            {
-              "name": "Update State",
-              "request": {
-                "method": "PUT",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  },
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{token}}"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"name\": \"Maharashtra Updated\",\n  \"is_active\": true\n}"
-                },
-                "url": {
-                  "raw": "{{baseUrl}}/api/state/update/{{stateId}}",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "state",
-                    "update",
-                    "{{stateId}}"
-                  ]
-                }
-              }
-            },
-            {
-              "name": "Delete State",
-              "request": {
-                "method": "DELETE",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{token}}"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/state/delete/{{stateId}}",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "state",
-                    "delete",
-                    "{{stateId}}"
-                  ]
-                }
-              }
-            },
-            {
-              "name": "Get State Dropdown",
-              "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{baseUrl}}/api/state/getDropDown",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "state",
-                    "getDropDown"
-                  ]
-                }
-              }
-            }
-          ]
-        },
-        {
-          "name": "City Management",
-          "item": [
-            {
-              "name": "Create City",
-              "request": {
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  },
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{token}}"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"name\": \"Pune\",\n  \"state_id\": \"{{stateId}}\",\n  \"is_active\": true\n}"
-                },
-                "url": {
-                  "raw": "{{baseUrl}}/api/city/create",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "city",
-                    "create"
-                  ]
-                }
-              }
-            },
-            {
-              "name": "Get All Cities",
-              "request": {
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{token}}"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/city/getAll?page={{page}}&limit={{limit}}&search={{search}}&state_id={{stateId}}&sort_by={{sortBy}}&sort_order={{sortOrder}}",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "city",
-                    "getAll"
-                  ]
-                }
-              }
-            },
-            {
-              "name": "Get City By ID",
-              "request": {
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{token}}"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/city/get/{{cityId}}",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "city",
-                    "get",
-                    "{{cityId}}"
-                  ]
-                }
-              }
-            },
-            {
-              "name": "Update City",
-              "request": {
-                "method": "PUT",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  },
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{token}}"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"name\": \"Pune Updated\",\n  \"state_id\": \"{{stateId}}\",\n  \"is_active\": true\n}"
-                },
-                "url": {
-                  "raw": "{{baseUrl}}/api/city/update/{{cityId}}",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "city",
-                    "update",
-                    "{{cityId}}"
-                  ]
-                }
-              }
-            },
-            {
-              "name": "Delete City",
-              "request": {
-                "method": "DELETE",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{token}}"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/city/delete/{{cityId}}",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "city",
-                    "delete",
-                    "{{cityId}}"
-                  ]
-                }
-              }
-            },
-            {
-              "name": "Get City Dropdown",
-              "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{baseUrl}}/api/city/getDropDown?state_id={{stateId}}",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "city",
-                    "getDropDown"
-                  ],
-                  "query": [
-                    {
-                      "key": "state_id",
-                      "value": "{{stateId}}"
-                    }
-                  ]
-                }
-              }
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "Franchise Category & Service Management",
-      "description": "**Beginner testing order (recommended):**\n\n**A — Prerequisites:** Run **Authentication → Login** (super admin). In **Collection variables**, set real MongoDB IDs: `stateId`, `cityId`, `areaId`, `categoryId`, `serviceId`, `franchiseAdminId` (admin user who will own the franchise). Optionally set `categoryIdAlt`, `serviceIdAlt` for multi-row mapping samples.\n\n**B — Master franchise record:** **Franchise Create** → saves `franchiseId`. Then **Franchise master** folder: **Get All** (search/filter), **Get By Id**, **Update** (change name/description/contact/categories/services as needed), **Get Dropdown** (active franchises for UI). **Imports** = bulk insert of franchise rows only (no auto `franchise_category` / `franchise_service` mapping like Create). **Delete** = soft delete last.\n\n**C — Per-franchise category & service mappings:** **Franchise Category|Service - Get All** (scripts save `franchiseCategoryMapId` / `franchiseServiceMapId`). **Get By Id** → copy the **full** `categories_list` or `services_list` before any **Update**.\n\n**D — Who can update mappings:** **Update (super admin)** = replace whole lists. **Login (Franchise Admin)** then **Update (as franchise admin)** = must send the **complete** list from Get By Id; only toggle `is_active` for IDs that exist on the franchise’s `categories` / `services` arrays (else 403).\n\n**E — Dashboard:** **getCount** with `type: service-management` — use `token` vs `tokenFranchiseAdmin` to compare global vs franchise-scoped counts.\n\n**F — Catalogue requests (optional):** **Service Management** → Create Category|Service Request → Accept|Reject.",
-      "item": [
-        {
-          "name": "Franchise Create (Auto-map Categories & Services)",
-          "description": "Super admin/staff only (`createFranchise` middleware). Creates main franchise plus `franchise_category` and `franchise_service` with **all** categories/services; only `categories` / `services` arrays here are **active** in those lists.",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "try {",
-                  "  const j = pm.response.json();",
-                  "  const id = j && j.record && (j.record._id || j.record.id);",
-                  "  if (pm.response.code === 200 && id) pm.collectionVariables.set('franchiseId', String(id));",
-                  "} catch (e) {}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"South Zone\",\n  \"admin_id\": \"{{franchiseAdminId}}\",\n  \"state_id\": \"{{stateId}}\",\n  \"city_id\": \"{{cityId}}\",\n  \"area_id\": [\"{{areaId}}\"],\n  \"categories\": [\"{{categoryId}}\"],\n  \"services\": [\"{{serviceId}}\"],\n  \"description\": \"Franchise created via Postman\",\n  \"is_active\": true\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/franchise/create",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "franchise", "create"]
-            }
-          }
-        },
-        {
-          "name": "Franchise master (list / detail / update / import / delete)",
-          "description": "Standard franchise **CRUD** under `/api/franchise`. Use **`Bearer {{token}}`** (super admin **Login**). After **Franchise Create**, `{{franchiseId}}` is set automatically. **Bulk import** (`POST …/imports`) inserts **franchise** documents only—it does **not** create `franchise_category` / `franchise_service` rows like **Franchise Create**.",
-          "item": [
-            {
-              "name": "Franchise - Get All",
-              "request": {
-                "method": "GET",
-                "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/franchise/getAll?page={{page}}&limit={{limit}}&sort_by=created_at&sort_order=desc",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "franchise", "getAll"],
-                  "query": [
-                    { "key": "page", "value": "{{page}}" },
-                    { "key": "limit", "value": "{{limit}}" },
-                    { "key": "sort_by", "value": "created_at", "description": "Also: name, state_name, city_name, admin_name, contact" },
-                    { "key": "sort_order", "value": "desc", "description": "asc | desc" }
-                  ]
-                },
-                "description": "Optional filters (add in Params tab): `keyword`, `search`, or `name` for name search; `state_id`, `city_id`, `admin_id` (valid ObjectIds); `is_active` true/false. Omit filters you do not need—invalid ObjectIds return **400**."
-              }
-            },
-            {
-              "name": "Franchise - Get By Id",
-              "request": {
-                "method": "GET",
-                "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/franchise/get/{{franchiseId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "franchise", "get", "{{franchiseId}}"]
-                },
-                "description": "Reads one franchise by Mongo `_id` (`{{franchiseId}}`)."
-              }
-            },
-            {
-              "name": "Franchise - Update",
-              "request": {
-                "method": "PUT",
-                "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" },
-                  { "key": "Content-Type", "value": "application/json" }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"name\": \"South Zone Postman\",\n  \"description\": \"Updated via Postman\",\n  \"is_active\": true,\n  \"categories\": [\"{{categoryId}}\"],\n  \"services\": [\"{{serviceId}}\"]\n}"
-                },
-                "url": {
-                  "raw": "{{baseUrl}}/api/franchise/update/{{franchiseId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "franchise", "update", "{{franchiseId}}"]
-                },
-                "description": "Send only fields you want to change. **`contact`:** if present, must be non-empty string. **`categories` / `services`:** arrays of catalogue ObjectIds (updates franchise-level assignment; mapping documents may need separate **Franchise Category|Service** updates)."
-              }
-            },
-            {
-              "name": "Franchise - Get Dropdown",
-              "request": {
-                "method": "GET",
-                "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/franchise/getDropDown",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "franchise", "getDropDown"]
-                },
-                "description": "Active franchises only; minimal fields (`_id`, `name`) for dropdowns."
-              }
-            },
-            {
-              "name": "Franchise - Bulk Import",
-              "request": {
-                "method": "POST",
-                "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" },
-                  { "key": "Content-Type", "value": "application/json" }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"records\": [\n    {\n      \"name\": \"Bulk Import Demo Franchise\",\n      \"state_id\": \"{{stateId}}\",\n      \"city_id\": \"{{cityId}}\",\n      \"area_id\": [\"{{areaId}}\"],\n      \"admin_id\": \"{{franchiseAdminId}}\",\n      \"contact\": \"9000000001\",\n      \"description\": \"Created via /imports\",\n      \"is_active\": true\n    }\n  ]\n}"
-                },
-                "url": {
-                  "raw": "{{baseUrl}}/api/franchise/imports",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "franchise", "imports"]
-                },
-                "description": "Each record needs **name**, **state_id**, **city_id**, **admin_id**. **name** must be unique per **city_id** in DB and within the batch. Change `name` if you get **409** duplicate."
-              }
-            },
-            {
-              "name": "Franchise - Delete (soft)",
-              "request": {
-                "method": "DELETE",
-                "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/franchise/delete/{{franchiseId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "franchise", "delete", "{{franchiseId}}"]
-                },
-                "description": "Soft-deletes the franchise. Run **after** you no longer need this `franchiseId` for mapping tests, or duplicate **Franchise Create** with another name/city."
-              }
-            }
-          ]
-        },
-        {
-          "name": "Dashboard - Service & Category counts (getCount type 2)",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"type\": \"service-management\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/getCount",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "getCount"]
-            },
-            "description": "Resolved type **2** → totals include `requested_category`, `requested_service`, active/inactive, etc. For franchise admin users, counts are scoped to `requested_by` users in that franchise. Use `{{tokenFranchiseAdmin}}` in Authorization to verify franchise-scoped numbers."
-          }
-        },
-        {
-          "name": "Franchise Category",
-          "item": [
-            {
-              "name": "Franchise Category - Create",
-              "description": "Super admin/staff only. Body uses **`{ category_id, is_active }`** entries (plain ID strings still work and default to active). Usually unnecessary after **Franchise Create** (mappings are auto-created).",
-              "request": {
-                "method": "POST",
-                "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" },
-                  { "key": "Content-Type", "value": "application/json" }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"franchise_id\": \"{{franchiseId}}\",\n  \"categories_list\": [\n    { \"category_id\": \"{{categoryId}}\", \"is_active\": true },\n    { \"category_id\": \"{{categoryIdAlt}}\", \"is_active\": false }\n  ],\n  \"order_number\": 1\n}"
-                },
-                "url": {
-                  "raw": "{{baseUrl}}/api/franchise-category/create",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "franchise-category", "create"]
-                }
-              }
-            },
-            {
-              "name": "Franchise Category - Get All",
-              "event": [
-                {
-                  "listen": "test",
-                  "script": {
-                    "type": "text/javascript",
-                    "exec": [
-                      "try {",
-                      "  const j = pm.response.json();",
-                      "  const rows = j.records || j.data || [];",
-                      "  if (pm.response.code === 200 && rows[0] && rows[0]._id) {",
-                      "    pm.collectionVariables.set('franchiseCategoryMapId', String(rows[0]._id));",
-                      "  }",
-                      "} catch (e) {}"
-                    ]
-                  }
-                }
-              ],
-              "request": {
-                "method": "GET",
-                "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/franchise-category/getAll?page={{page}}&limit={{limit}}&franchise_id={{franchiseId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "franchise-category", "getAll"],
-                  "query": [
-                    { "key": "page", "value": "{{page}}" },
-                    { "key": "limit", "value": "{{limit}}" },
-                    { "key": "franchise_id", "value": "{{franchiseId}}" }
-                  ]
-                }
-              }
-            },
-            {
-              "name": "Franchise Category - Get By Id",
-              "description": "Copy **`record.categories_list`** into **Update** bodies (full array required for franchise admin).",
-              "request": {
-                "method": "GET",
-                "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/franchise-category/get/{{franchiseCategoryMapId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "franchise-category", "get", "{{franchiseCategoryMapId}}"]
-                }
-              }
-            },
-            {
-              "name": "Franchise Category - Update (super admin — replace list)",
-              "description": "**Super admin/staff:** `categories_list` is an array of `{ \"category_id\", \"is_active\" }`. Replacing with a **short** list removes other categories from the mapping—usually you should call **Get By Id** first, paste the **full** `record.categories_list`, edit flags, then send here.\n\n**`active_categories` / `inactive_categories`:** only the franchise **`admin_id`** user may change these (use **Login (Franchise Admin)** if that user is the admin).",
-              "request": {
-                "method": "PUT",
-                "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" },
-                  { "key": "Content-Type", "value": "application/json" }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"categories_list\": [\n    { \"category_id\": \"{{categoryId}}\", \"is_active\": true },\n    { \"category_id\": \"{{categoryIdAlt}}\", \"is_active\": false }\n  ],\n  \"active_categories\": true,\n  \"inactive_categories\": false,\n  \"order_number\": 2\n}"
-                },
-                "url": {
-                  "raw": "{{baseUrl}}/api/franchise-category/update/{{franchiseCategoryMapId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "franchise-category", "update", "{{franchiseCategoryMapId}}"]
-                }
-              }
-            },
-            {
-              "name": "Franchise Category - Update (as franchise admin)",
-              "description": "Use **`Bearer {{tokenFranchiseAdmin}}`** after **Login (Franchise Admin)**. Replace the body with the **full** `categories_list` array from **Franchise Category - Get By Id** (every `{ category_id, is_active }`). Only change `is_active` for IDs that exist on the franchise document's `categories`; other rows must keep the same `is_active` as before or the API returns **403**.",
-              "request": {
-                "method": "PUT",
-                "header": [
-                  { "key": "Authorization", "value": "Bearer {{tokenFranchiseAdmin}}" },
-                  { "key": "Content-Type", "value": "application/json" }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"categories_list\": [\n    { \"category_id\": \"REPLACE_WITH_ID_FROM_GET_BY_ID\", \"is_active\": true }\n  ]\n}"
-                },
-                "url": {
-                  "raw": "{{baseUrl}}/api/franchise-category/update/{{franchiseCategoryMapId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "franchise-category", "update", "{{franchiseCategoryMapId}}"]
-                }
-              }
-            }
-          ]
-        },
-        {
-          "name": "Franchise Service",
-          "item": [
-            {
-              "name": "Franchise Service - Create",
-              "description": "Super admin/staff only. **`{ service_id, is_active }`** shape (or legacy plain service IDs). Usually unnecessary after **Franchise Create**.",
-              "request": {
-                "method": "POST",
-                "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" },
-                  { "key": "Content-Type", "value": "application/json" }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"franchise_id\": \"{{franchiseId}}\",\n  \"services_list\": [\n    { \"service_id\": \"{{serviceId}}\", \"is_active\": true },\n    { \"service_id\": \"{{serviceIdAlt}}\", \"is_active\": false }\n  ],\n  \"order_number\": 1\n}"
-                },
-                "url": {
-                  "raw": "{{baseUrl}}/api/franchise-service/create",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "franchise-service", "create"]
-                }
-              }
-            },
-            {
-              "name": "Franchise Service - Get All",
-              "event": [
-                {
-                  "listen": "test",
-                  "script": {
-                    "type": "text/javascript",
-                    "exec": [
-                      "try {",
-                      "  const j = pm.response.json();",
-                      "  const rows = j.records || j.data || [];",
-                      "  if (pm.response.code === 200 && rows[0] && rows[0]._id) {",
-                      "    pm.collectionVariables.set('franchiseServiceMapId', String(rows[0]._id));",
-                      "  }",
-                      "} catch (e) {}"
-                    ]
-                  }
-                }
-              ],
-              "request": {
-                "method": "GET",
-                "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/franchise-service/getAll?page={{page}}&limit={{limit}}&franchise_id={{franchiseId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "franchise-service", "getAll"],
-                  "query": [
-                    { "key": "page", "value": "{{page}}" },
-                    { "key": "limit", "value": "{{limit}}" },
-                    { "key": "franchise_id", "value": "{{franchiseId}}" }
-                  ]
-                }
-              }
-            },
-            {
-              "name": "Franchise Service - Get By Id",
-              "description": "Copy **`record.services_list`** into **Update** bodies.",
-              "request": {
-                "method": "GET",
-                "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/franchise-service/get/{{franchiseServiceMapId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "franchise-service", "get", "{{franchiseServiceMapId}}"]
-                }
-              }
-            },
-            {
-              "name": "Franchise Service - Update (super admin — replace list)",
-              "description": "**Super admin/staff:** same rules as category update—prefer pasting the **full** `services_list` from **Get By Id**. **`active_services` / `inactive_services`:** only franchise **`admin_id`** may change.",
-              "request": {
-                "method": "PUT",
-                "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" },
-                  { "key": "Content-Type", "value": "application/json" }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"services_list\": [\n    { \"service_id\": \"{{serviceId}}\", \"is_active\": true },\n    { \"service_id\": \"{{serviceIdAlt}}\", \"is_active\": false }\n  ],\n  \"active_services\": true,\n  \"inactive_services\": false,\n  \"order_number\": 2\n}"
-                },
-                "url": {
-                  "raw": "{{baseUrl}}/api/franchise-service/update/{{franchiseServiceMapId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "franchise-service", "update", "{{franchiseServiceMapId}}"]
-                }
-              }
-            },
-            {
-              "name": "Franchise Service - Update (as franchise admin)",
-              "description": "Use **`Bearer {{tokenFranchiseAdmin}}`**. Paste the **full** `services_list` from **Franchise Service - Get By Id**; only toggle `is_active` for service IDs on the franchise's `services` array.",
-              "request": {
-                "method": "PUT",
-                "header": [
-                  { "key": "Authorization", "value": "Bearer {{tokenFranchiseAdmin}}" },
-                  { "key": "Content-Type", "value": "application/json" }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"services_list\": [\n    { \"service_id\": \"REPLACE_WITH_ID_FROM_GET_BY_ID\", \"is_active\": true }\n  ]\n}"
-                },
-                "url": {
-                  "raw": "{{baseUrl}}/api/franchise-service/update/{{franchiseServiceMapId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "franchise-service", "update", "{{franchiseServiceMapId}}"]
-                }
-              }
-            }
-          ]
-        }
-      ]
-    },
-    {
       "name": "User Management",
       "item": [
         {
@@ -2664,26 +3376,88 @@
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "name", "value": "Test User", "type": "text" },
-                { "key": "email", "value": "test.user@example.com", "type": "text" },
-                { "key": "phone_number", "value": "+919999999999", "type": "text" },
-                { "key": "address", "value": "Hyderabad", "type": "text" },
-                { "key": "state_id", "value": "{{stateId}}", "type": "text" },
-                { "key": "city_id", "value": "{{cityId}}", "type": "text" },
-                { "key": "pincode", "value": "500001", "type": "text" },
-                { "key": "type", "value": "4", "type": "text" },
-                { "key": "registration_type", "value": "1", "type": "text" },
-                { "key": "is_from_web", "value": "false", "type": "text" },
-                { "key": "is_active", "value": "true", "type": "text" },
-                { "key": "password", "value": "Test@1234", "type": "text" },
-                { "key": "confirm_password", "value": "Test@1234", "type": "text" },
-                { "key": "image", "type": "file", "src": "" }
+                {
+                  "key": "name",
+                  "value": "Test User",
+                  "type": "text"
+                },
+                {
+                  "key": "email",
+                  "value": "test.user@example.com",
+                  "type": "text"
+                },
+                {
+                  "key": "phone_number",
+                  "value": "+919999999999",
+                  "type": "text"
+                },
+                {
+                  "key": "address",
+                  "value": "Hyderabad",
+                  "type": "text"
+                },
+                {
+                  "key": "state_id",
+                  "value": "{{stateId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "city_id",
+                  "value": "{{cityId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "pincode",
+                  "value": "500001",
+                  "type": "text"
+                },
+                {
+                  "key": "type",
+                  "value": "4",
+                  "type": "text"
+                },
+                {
+                  "key": "registration_type",
+                  "value": "1",
+                  "type": "text"
+                },
+                {
+                  "key": "is_from_web",
+                  "value": "false",
+                  "type": "text"
+                },
+                {
+                  "key": "is_active",
+                  "value": "true",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "Test@1234",
+                  "type": "text"
+                },
+                {
+                  "key": "confirm_password",
+                  "value": "Test@1234",
+                  "type": "text"
+                },
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": ""
+                }
               ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/user/create",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "user", "create"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "create"
+              ]
             }
           }
         },
@@ -2692,8 +3466,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -2701,8 +3481,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/user/changePassword",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "user", "changePassword"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "changePassword"
+              ]
             }
           }
         },
@@ -2711,21 +3497,54 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/user/getAll?page={{page}}&limit={{limit}}&type=2&keyword={{search}}&is_active={{userIsActive}}&is_blocked={{userIsBlocked}}&sort_by={{userSortBy}}&sort_order={{userSortOrder}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "user", "getAll"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "getAll"
+              ],
               "query": [
-                { "key": "page", "value": "{{page}}" },
-                { "key": "limit", "value": "{{limit}}" },
-                { "key": "type", "value": "2" },
-                { "key": "keyword", "value": "{{search}}" },
-                { "key": "is_active", "value": "{{userIsActive}}" },
-                { "key": "is_blocked", "value": "{{userIsBlocked}}" },
-                { "key": "sort_by", "value": "{{userSortBy}}" },
-                { "key": "sort_order", "value": "{{userSortOrder}}" }
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "type",
+                  "value": "2"
+                },
+                {
+                  "key": "keyword",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "is_active",
+                  "value": "{{userIsActive}}"
+                },
+                {
+                  "key": "is_blocked",
+                  "value": "{{userIsBlocked}}"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "{{userSortBy}}"
+                },
+                {
+                  "key": "sort_order",
+                  "value": "{{userSortOrder}}"
+                }
               ]
             }
           }
@@ -2735,17 +3554,38 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/user/getVerificationAll?page={{page}}&limit={{limit}}&verification_status=1&keyword={{search}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "user", "getVerificationAll"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "getVerificationAll"
+              ],
               "query": [
-                { "key": "page", "value": "{{page}}" },
-                { "key": "limit", "value": "{{limit}}" },
-                { "key": "verification_status", "value": "1" },
-                { "key": "keyword", "value": "{{search}}" }
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "verification_status",
+                  "value": "1"
+                },
+                {
+                  "key": "keyword",
+                  "value": "{{search}}"
+                }
               ]
             }
           }
@@ -2755,12 +3595,22 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/user/get/{{userId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "user", "get", "{{userId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "get",
+                "{{userId}}"
+              ]
             }
           }
         },
@@ -2769,14 +3619,26 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/user/getDropDown?type=2",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "user", "getDropDown"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "getDropDown"
+              ],
               "query": [
-                { "key": "type", "value": "2" }
+                {
+                  "key": "type",
+                  "value": "2"
+                }
               ]
             }
           }
@@ -2786,14 +3648,26 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/user/getPartnerDropDown?service_id={{serviceId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "user", "getPartnerDropDown"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "getPartnerDropDown"
+              ],
               "query": [
-                { "key": "service_id", "value": "{{serviceId}}" }
+                {
+                  "key": "service_id",
+                  "value": "{{serviceId}}"
+                }
               ]
             }
           }
@@ -2803,36 +3677,122 @@
           "request": {
             "method": "PUT",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "name", "value": "Test User Updated", "type": "text" },
-                { "key": "email", "value": "test.user.updated@example.com", "type": "text" },
-                { "key": "phone_number", "value": "+919999999998", "type": "text" },
-                { "key": "address", "value": "Hyderabad Updated", "type": "text" },
-                { "key": "state_id", "value": "{{stateId}}", "type": "text" },
-                { "key": "city_id", "value": "{{cityId}}", "type": "text" },
-                { "key": "pincode", "value": "500002", "type": "text" },
-                { "key": "add_new_address", "value": "false", "type": "text" },
-                { "key": "address_status", "value": "true", "type": "text" },
-                { "key": "contact_name", "value": "Test User Updated", "type": "text" },
-                { "key": "contact_number", "value": "+919999999998", "type": "text" },
-                { "key": "type", "value": "4", "type": "text" },
-                { "key": "registration_type", "value": "1", "type": "text" },
-                { "key": "is_from_web", "value": "false", "type": "text" },
-                { "key": "is_active", "value": "true", "type": "text" },
-                { "key": "is_blocked", "value": "false", "type": "text" },
-                { "key": "password", "value": "Updated@1234", "type": "text" },
-                { "key": "confirm_password", "value": "Updated@1234", "type": "text" },
-                { "key": "image", "type": "file", "src": "" }
+                {
+                  "key": "name",
+                  "value": "Test User Updated",
+                  "type": "text"
+                },
+                {
+                  "key": "email",
+                  "value": "test.user.updated@example.com",
+                  "type": "text"
+                },
+                {
+                  "key": "phone_number",
+                  "value": "+919999999998",
+                  "type": "text"
+                },
+                {
+                  "key": "address",
+                  "value": "Hyderabad Updated",
+                  "type": "text"
+                },
+                {
+                  "key": "state_id",
+                  "value": "{{stateId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "city_id",
+                  "value": "{{cityId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "pincode",
+                  "value": "500002",
+                  "type": "text"
+                },
+                {
+                  "key": "add_new_address",
+                  "value": "false",
+                  "type": "text"
+                },
+                {
+                  "key": "address_status",
+                  "value": "true",
+                  "type": "text"
+                },
+                {
+                  "key": "contact_name",
+                  "value": "Test User Updated",
+                  "type": "text"
+                },
+                {
+                  "key": "contact_number",
+                  "value": "+919999999998",
+                  "type": "text"
+                },
+                {
+                  "key": "type",
+                  "value": "4",
+                  "type": "text"
+                },
+                {
+                  "key": "registration_type",
+                  "value": "1",
+                  "type": "text"
+                },
+                {
+                  "key": "is_from_web",
+                  "value": "false",
+                  "type": "text"
+                },
+                {
+                  "key": "is_active",
+                  "value": "true",
+                  "type": "text"
+                },
+                {
+                  "key": "is_blocked",
+                  "value": "false",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "Updated@1234",
+                  "type": "text"
+                },
+                {
+                  "key": "confirm_password",
+                  "value": "Updated@1234",
+                  "type": "text"
+                },
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": ""
+                }
               ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/user/update/{{userId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "user", "update", "{{userId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "update",
+                "{{userId}}"
+              ]
             }
           }
         },
@@ -2841,25 +3801,67 @@
           "request": {
             "method": "PUT",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "add_new_address", "value": "true", "type": "text" },
-                { "key": "contact_name", "value": "Test User Secondary Address", "type": "text" },
-                { "key": "contact_number", "value": "+919999999997", "type": "text" },
-                { "key": "address", "value": "Hyderabad Address 2", "type": "text" },
-                { "key": "state_id", "value": "{{stateId}}", "type": "text" },
-                { "key": "city_id", "value": "{{cityId}}", "type": "text" },
-                { "key": "pincode", "value": "500003", "type": "text" },
-                { "key": "address_status", "value": "true", "type": "text" }
+                {
+                  "key": "add_new_address",
+                  "value": "true",
+                  "type": "text"
+                },
+                {
+                  "key": "contact_name",
+                  "value": "Test User Secondary Address",
+                  "type": "text"
+                },
+                {
+                  "key": "contact_number",
+                  "value": "+919999999997",
+                  "type": "text"
+                },
+                {
+                  "key": "address",
+                  "value": "Hyderabad Address 2",
+                  "type": "text"
+                },
+                {
+                  "key": "state_id",
+                  "value": "{{stateId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "city_id",
+                  "value": "{{cityId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "pincode",
+                  "value": "500003",
+                  "type": "text"
+                },
+                {
+                  "key": "address_status",
+                  "value": "true",
+                  "type": "text"
+                }
               ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/user/update/{{userId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "user", "update", "{{userId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "update",
+                "{{userId}}"
+              ]
             }
           }
         },
@@ -2868,12 +3870,22 @@
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/user/delete/{{userId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "user", "delete", "{{userId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "delete",
+                "{{userId}}"
+              ]
             }
           }
         },
@@ -2888,31 +3900,113 @@
                 "body": {
                   "mode": "formdata",
                   "formdata": [
-                    { "key": "name", "value": "{{partnerName}}", "type": "text" },
-                    { "key": "email", "value": "{{partnerEmail}}", "type": "text" },
-                    { "key": "phone_number", "value": "{{partnerPhoneNumber}}", "type": "text" },
-                    { "key": "address", "value": "{{partnerAddress}}", "type": "text" },
-                    { "key": "state_id", "value": "{{partnerStateId}}", "type": "text" },
-                    { "key": "city_id", "value": "{{partnerCityId}}", "type": "text" },
-                    { "key": "pincode", "value": "{{partnerPincode}}", "type": "text" },
-                    { "key": "type", "value": "2", "type": "text" },
-                    { "key": "registration_type", "value": "1", "type": "text" },
-                    { "key": "is_from_web", "value": "true", "type": "text" },
-                    { "key": "is_active", "value": "true", "type": "text" },
-                    { "key": "created_by_id", "value": "{{partnerCreatedById}}", "type": "text" },
-                    { "key": "password", "value": "{{partnerPassword}}", "type": "text" },
-                    { "key": "confirm_password", "value": "{{partnerPassword}}", "type": "text" },
-                    { "key": "partner_services", "value": "[{\"category_id\":\"{{partnerCategoryId}}\",\"service_id\":\"{{partnerServiceId}}\",\"description\":\"{{partnerServiceDescription}}\",\"price\":499}]", "type": "text" },
-                    { "key": "partner_documents", "value": "{\"vehicle_registration\":\"{{partnerVehicleRegistrationUrl}}\",\"police_verification_certificate\":\"{{partnerPoliceVerificationUrl}}\",\"pan_card\":\"{{partnerPanCardUrl}}\",\"driving_license\":\"{{partnerDrivingLicenseUrl}}\",\"aadhar_card\":\"{{partnerAadharCardUrl}}\"}", "type": "text" },
-                    { "key": "bank_account", "value": "{\"account_holder_name\":\"{{partnerAccountHolderName}}\",\"account_number\":\"{{partnerAccountNumber}}\",\"ifsc_code\":\"{{partnerIfscCode}}\",\"bank_name\":\"{{partnerBankName}}\",\"branch_name\":\"{{partnerBranchName}}\",\"is_primary\":true}", "type": "text" },
-                    { "key": "partner_subscription", "value": "{\"subscription_plan_id\":\"{{partnerSubscriptionPlanId}}\",\"subscription_start_date\":\"{{partnerSubscriptionStartDate}}\",\"subscription_end_date\":\"{{partnerSubscriptionEndDate}}\",\"status\":\"active\"}", "type": "text" },
-                    { "key": "image", "type": "file", "src": "" }
+                    {
+                      "key": "name",
+                      "value": "{{partnerName}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "email",
+                      "value": "{{partnerEmail}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "phone_number",
+                      "value": "{{partnerPhoneNumber}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "address",
+                      "value": "{{partnerAddress}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "state_id",
+                      "value": "{{partnerStateId}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "city_id",
+                      "value": "{{partnerCityId}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "pincode",
+                      "value": "{{partnerPincode}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "type",
+                      "value": "2",
+                      "type": "text"
+                    },
+                    {
+                      "key": "registration_type",
+                      "value": "1",
+                      "type": "text"
+                    },
+                    {
+                      "key": "is_from_web",
+                      "value": "true",
+                      "type": "text"
+                    },
+                    {
+                      "key": "is_active",
+                      "value": "true",
+                      "type": "text"
+                    },
+                    {
+                      "key": "created_by_id",
+                      "value": "{{partnerCreatedById}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{partnerPassword}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "confirm_password",
+                      "value": "{{partnerPassword}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "partner_services",
+                      "value": "[{\"category_id\":\"{{partnerCategoryId}}\",\"service_id\":\"{{partnerServiceId}}\",\"description\":\"{{partnerServiceDescription}}\",\"price\":499}]",
+                      "type": "text"
+                    },
+                    {
+                      "key": "partner_documents",
+                      "value": "{\"vehicle_registration\":\"{{partnerVehicleRegistrationUrl}}\",\"police_verification_certificate\":\"{{partnerPoliceVerificationUrl}}\",\"pan_card\":\"{{partnerPanCardUrl}}\",\"driving_license\":\"{{partnerDrivingLicenseUrl}}\",\"aadhar_card\":\"{{partnerAadharCardUrl}}\"}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "bank_account",
+                      "value": "{\"account_holder_name\":\"{{partnerAccountHolderName}}\",\"account_number\":\"{{partnerAccountNumber}}\",\"ifsc_code\":\"{{partnerIfscCode}}\",\"bank_name\":\"{{partnerBankName}}\",\"branch_name\":\"{{partnerBranchName}}\",\"is_primary\":true}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "partner_subscription",
+                      "value": "{\"subscription_plan_id\":\"{{partnerSubscriptionPlanId}}\",\"subscription_start_date\":\"{{partnerSubscriptionStartDate}}\",\"subscription_end_date\":\"{{partnerSubscriptionEndDate}}\",\"status\":\"active\"}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "image",
+                      "type": "file",
+                      "src": ""
+                    }
                   ]
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/user/create",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "user", "create"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "user",
+                    "create"
+                  ]
                 }
               }
             },
@@ -2921,20 +4015,50 @@
               "request": {
                 "method": "GET",
                 "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
                 ],
                 "url": {
                   "raw": "{{baseUrl}}/api/user/getAll?page={{partnerPage}}&limit={{partnerLimit}}&type=2&keyword={{partnerSearchName}}&sort_by={{partnerSortBy}}&sort_order={{partnerSortOrder}}&is_active={{partnerIsActive}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "user", "getAll"],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "user",
+                    "getAll"
+                  ],
                   "query": [
-                    { "key": "page", "value": "{{partnerPage}}" },
-                    { "key": "limit", "value": "{{partnerLimit}}" },
-                    { "key": "type", "value": "2" },
-                    { "key": "keyword", "value": "{{partnerSearchName}}" },
-                    { "key": "sort_by", "value": "{{partnerSortBy}}" },
-                    { "key": "sort_order", "value": "{{partnerSortOrder}}" },
-                    { "key": "is_active", "value": "{{partnerIsActive}}" }
+                    {
+                      "key": "page",
+                      "value": "{{partnerPage}}"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "{{partnerLimit}}"
+                    },
+                    {
+                      "key": "type",
+                      "value": "2"
+                    },
+                    {
+                      "key": "keyword",
+                      "value": "{{partnerSearchName}}"
+                    },
+                    {
+                      "key": "sort_by",
+                      "value": "{{partnerSortBy}}"
+                    },
+                    {
+                      "key": "sort_order",
+                      "value": "{{partnerSortOrder}}"
+                    },
+                    {
+                      "key": "is_active",
+                      "value": "{{partnerIsActive}}"
+                    }
                   ]
                 }
               }
@@ -2944,19 +4068,46 @@
               "request": {
                 "method": "GET",
                 "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
                 ],
                 "url": {
                   "raw": "{{baseUrl}}/api/user/getVerificationAll?page={{partnerPage}}&limit={{partnerLimit}}&verification_status={{partnerVerificationStatus}}&keyword={{partnerSearchName}}&sort_by={{partnerVerificationSortBy}}&sort_order={{partnerVerificationSortOrder}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "user", "getVerificationAll"],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "user",
+                    "getVerificationAll"
+                  ],
                   "query": [
-                    { "key": "page", "value": "{{partnerPage}}" },
-                    { "key": "limit", "value": "{{partnerLimit}}" },
-                    { "key": "verification_status", "value": "{{partnerVerificationStatus}}" },
-                    { "key": "keyword", "value": "{{partnerSearchName}}" },
-                    { "key": "sort_by", "value": "{{partnerVerificationSortBy}}" },
-                    { "key": "sort_order", "value": "{{partnerVerificationSortOrder}}" }
+                    {
+                      "key": "page",
+                      "value": "{{partnerPage}}"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "{{partnerLimit}}"
+                    },
+                    {
+                      "key": "verification_status",
+                      "value": "{{partnerVerificationStatus}}"
+                    },
+                    {
+                      "key": "keyword",
+                      "value": "{{partnerSearchName}}"
+                    },
+                    {
+                      "key": "sort_by",
+                      "value": "{{partnerVerificationSortBy}}"
+                    },
+                    {
+                      "key": "sort_order",
+                      "value": "{{partnerVerificationSortOrder}}"
+                    }
                   ]
                 }
               }
@@ -2966,8 +4117,14 @@
               "request": {
                 "method": "POST",
                 "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" },
-                  { "key": "Content-Type", "value": "application/json" }
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
                 ],
                 "body": {
                   "mode": "raw",
@@ -2975,8 +4132,14 @@
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/user/changePassword",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "user", "changePassword"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "user",
+                    "changePassword"
+                  ]
                 }
               }
             }
@@ -2987,28 +4150,21 @@
   ],
   "variable": [
     {
+      "key": "areaId",
+      "value": "PUT_AREA_ID_HERE"
+    },
+    {
+      "key": "areaname",
+      "value": ""
+    },
+    {
       "key": "baseUrl",
       "value": "http://localhost:5001"
     },
     {
-      "key": "token",
-      "value": "YOUR_JWT_TOKEN"
-    },
-    {
-      "key": "userId",
-      "value": "PUT_USER_ID_HERE"
-    },
-    {
-      "key": "contentId",
-      "value": "PUT_CONTENT_ID_HERE"
-    },
-    {
-      "key": "expenseCategoryId",
-      "value": "PUT_EXPENSE_CATEGORY_ID_HERE"
-    },
-    {
-      "key": "expenseId",
-      "value": "PUT_EXPENSE_ID_HERE"
+      "key": "categoryApprovalStatus",
+      "value": "",
+      "description": "`GET …/category/getAll`: empty = omit. Use `approve`, `pending`, or `rejected`."
     },
     {
       "key": "categoryId",
@@ -3020,158 +4176,9 @@
       "description": "Optional second category for franchise mapping create/update samples (must differ from categoryId)."
     },
     {
-      "key": "subcategoryId",
-      "value": "PUT_SUBCATEGORY_ID_HERE"
-    },
-    {
-      "key": "areaId",
-      "value": "PUT_AREA_ID_HERE"
-    },
-    {
-      "key": "cityId",
-      "value": "PUT_CITY_ID_HERE"
-    },
-    {
-      "key": "stateId",
-      "value": "PUT_STATE_ID_HERE"
-    },
-    {
-      "key": "franchiseAdminId",
-      "value": "PUT_FRANCHISE_ADMIN_USER_ID_HERE"
-    },
-    {
-      "key": "franchiseAdminEmail",
-      "value": "franchise.admin@example.com",
-      "description": "Login email for the franchise admin user (same account as franchiseAdminId when applicable)."
-    },
-    {
-      "key": "franchiseAdminPassword",
-      "value": "CHANGE_ME",
-      "description": "Password for Login (Franchise Admin)."
-    },
-    {
-      "key": "tokenFranchiseAdmin",
-      "value": "YOUR_FRANCHISE_ADMIN_JWT",
-      "description": "Set automatically by **Login (Franchise Admin)** test script."
-    },
-    {
-      "key": "franchiseId",
-      "value": "PUT_FRANCHISE_ID_HERE"
-    },
-    {
-      "key": "franchiseCategoryMapId",
-      "value": "PUT_FRANCHISE_CATEGORY_MAPPING_ID_HERE"
-    },
-    {
-      "key": "franchiseServiceMapId",
-      "value": "PUT_FRANCHISE_SERVICE_MAPPING_ID_HERE"
-    },
-    {
-      "key": "email",
-      "value": "admin@example.com"
-    },
-    {
-      "key": "password",
-      "value": "Admin@123"
-    },
-    {
-      "key": "deviceToken",
-      "value": "optional-fcm-or-device-token"
-    },
-    {
-      "key": "page",
-      "value": "1"
-    },
-    {
-      "key": "limit",
-      "value": "10"
-    },
-    {
-      "key": "search",
-      "value": ""
-    },
-    {
-      "key": "sort",
-      "value": "created_at"
-    },
-    {
-      "key": "sortOrder",
-      "value": "desc"
-    },
-    {
-      "key": "sortBy",
-      "value": "areaname"
-    },
-    {
-      "key": "areaname",
-      "value": ""
-    },
-    {
-      "key": "city",
-      "value": ""
-    },
-    {
-      "key": "state",
-      "value": ""
-    },
-    {
-      "key": "pincode",
-      "value": ""
-    },
-    {
-      "key": "startDate",
-      "value": ""
-    },
-    {
-      "key": "endDate",
-      "value": ""
-    },
-    {
-      "key": "serviceId",
-      "value": "PUT_SERVICE_MONGODB_ID_HERE"
-    },
-    {
-      "key": "serviceIdAlt",
-      "value": "PUT_SECOND_CATALOGUE_SERVICE_ID_HERE",
-      "description": "Optional second service ID for franchise-service mapping samples."
-    },
-    {
-      "key": "serviceCategoryId",
-      "value": "PUT_CATALOGUE_CATEGORY_OBJECT_ID_HERE"
-    },
-    {
-      "key": "serviceCityId",
-      "value": "PUT_CITY_OBJECT_ID_HERE"
-    },
-    {
-      "key": "serviceStateId",
-      "value": "PUT_STATE_OBJECT_ID_HERE"
-    },
-    {
-      "key": "serviceSearch",
-      "value": ""
-    },
-    {
-      "key": "serviceSortBy",
-      "value": "name"
-    },
-    {
-      "key": "serviceSortDir",
-      "value": "1"
-    },
-    {
-      "key": "serviceIsActive",
-      "value": "true"
-    },
-    {
-      "key": "categoryStatus",
+      "key": "categoryIsRequest",
       "value": "",
-      "description": "Optional `GET …/category/getAll` status filter: `active`, `inactive`, `requested`/`requested_categories`."
-    },
-    {
-      "key": "categorySearch",
-      "value": "",
-      "description": "Primary search for `GET …/category/getAll` (matches category and service names)."
+      "description": "Optional `GET …/category/getAll` query: empty = omit; `true` / `false` string to filter catalogue rows."
     },
     {
       "key": "categoryKeyword",
@@ -3180,6 +4187,11 @@
     {
       "key": "categoryName",
       "value": ""
+    },
+    {
+      "key": "categorySearch",
+      "value": "",
+      "description": "Primary search for `GET …/category/getAll` (matches category and service names)."
     },
     {
       "key": "categoryServices",
@@ -3194,19 +4206,235 @@
       "value": "1"
     },
     {
-      "key": "categoryIsRequest",
+      "key": "categoryStatus",
       "value": "",
-      "description": "Optional `GET …/category/getAll` query: empty = omit; `true` / `false` string to filter catalogue rows."
+      "description": "Optional `GET …/category/getAll` status filter: `active`, `inactive`, `requested`/`requested_categories`."
     },
     {
-      "key": "categoryApprovalStatus",
-      "value": "",
-      "description": "`GET …/category/getAll`: empty = omit. Use `approve`, `pending`, or `rejected`."
+      "key": "city",
+      "value": ""
     },
     {
-      "key": "serviceIsRequest",
-      "value": "",
-      "description": "Optional `GET …/service/getAll` query: empty = omit; `true` / `false` to filter."
+      "key": "cityId",
+      "value": "PUT_CITY_ID_HERE"
+    },
+    {
+      "key": "contentId",
+      "value": "PUT_CONTENT_ID_HERE"
+    },
+    {
+      "key": "deviceToken",
+      "value": "optional-fcm-or-device-token"
+    },
+    {
+      "key": "email",
+      "value": "admin@example.com"
+    },
+    {
+      "key": "endDate",
+      "value": ""
+    },
+    {
+      "key": "expenseCategoryId",
+      "value": "PUT_EXPENSE_CATEGORY_ID_HERE"
+    },
+    {
+      "key": "expenseId",
+      "value": "PUT_EXPENSE_ID_HERE"
+    },
+    {
+      "key": "franchiseAdminEmail",
+      "value": "franchise.admin@example.com",
+      "description": "Login email for the franchise admin user (same account as franchiseAdminId when applicable)."
+    },
+    {
+      "key": "franchiseAdminId",
+      "value": "PUT_FRANCHISE_ADMIN_USER_ID_HERE"
+    },
+    {
+      "key": "franchiseAdminPassword",
+      "value": "CHANGE_ME",
+      "description": "Password for Login (Franchise Admin)."
+    },
+    {
+      "key": "franchiseCategoryMapId",
+      "value": "PUT_FRANCHISE_CATEGORY_MAPPING_ID_HERE"
+    },
+    {
+      "key": "franchiseId",
+      "value": "PUT_FRANCHISE_ID_HERE"
+    },
+    {
+      "key": "franchiseServiceMapId",
+      "value": "PUT_FRANCHISE_SERVICE_MAPPING_ID_HERE"
+    },
+    {
+      "key": "limit",
+      "value": "10"
+    },
+    {
+      "key": "page",
+      "value": "1"
+    },
+    {
+      "key": "partnerAadharCardUrl",
+      "value": "https://example.com/docs/aadhar-card.jpg"
+    },
+    {
+      "key": "partnerAccountHolderName",
+      "value": "Test Partner"
+    },
+    {
+      "key": "partnerAccountNumber",
+      "value": "123456789012"
+    },
+    {
+      "key": "partnerAddress",
+      "value": "Visakhapatnam"
+    },
+    {
+      "key": "partnerBankName",
+      "value": "State Bank of India"
+    },
+    {
+      "key": "partnerBranchName",
+      "value": "Visakhapatnam Main"
+    },
+    {
+      "key": "partnerCategoryId",
+      "value": "PUT_PARTNER_CATEGORY_ID_HERE"
+    },
+    {
+      "key": "partnerCityId",
+      "value": "PUT_PARTNER_CITY_ID_HERE"
+    },
+    {
+      "key": "partnerCreatedById",
+      "value": "PUT_ADMIN_USER_ID_HERE"
+    },
+    {
+      "key": "partnerDrivingLicenseUrl",
+      "value": "https://example.com/docs/driving-license.jpg"
+    },
+    {
+      "key": "partnerEmail",
+      "value": "test.partner@example.com"
+    },
+    {
+      "key": "partnerIfscCode",
+      "value": "SBIN0001234"
+    },
+    {
+      "key": "partnerIsActive",
+      "value": ""
+    },
+    {
+      "key": "partnerLimit",
+      "value": "10"
+    },
+    {
+      "key": "partnerName",
+      "value": "Test Partner"
+    },
+    {
+      "key": "partnerNewPassword",
+      "value": "Partner@12345"
+    },
+    {
+      "key": "partnerPage",
+      "value": "1"
+    },
+    {
+      "key": "partnerPanCardUrl",
+      "value": "https://example.com/docs/pan-card.jpg"
+    },
+    {
+      "key": "partnerPassword",
+      "value": "Partner@1234"
+    },
+    {
+      "key": "partnerPhoneNumber",
+      "value": "+919888888888"
+    },
+    {
+      "key": "partnerPincode",
+      "value": "530046"
+    },
+    {
+      "key": "partnerPoliceVerificationUrl",
+      "value": "https://example.com/docs/police-verification.jpg"
+    },
+    {
+      "key": "partnerSearchName",
+      "value": ""
+    },
+    {
+      "key": "partnerServiceDescription",
+      "value": "Service offered by partner"
+    },
+    {
+      "key": "partnerServiceId",
+      "value": "PUT_PARTNER_SERVICE_ID_HERE"
+    },
+    {
+      "key": "partnerSortBy",
+      "value": "name"
+    },
+    {
+      "key": "partnerSortOrder",
+      "value": "asc"
+    },
+    {
+      "key": "partnerStateId",
+      "value": "PUT_PARTNER_STATE_ID_HERE"
+    },
+    {
+      "key": "partnerSubscriptionEndDate",
+      "value": "2026-08-08"
+    },
+    {
+      "key": "partnerSubscriptionId",
+      "value": "PUT_PARTNER_SUBSCRIPTION_ID_HERE"
+    },
+    {
+      "key": "partnerSubscriptionPlanId",
+      "value": "PUT_SUBSCRIPTION_PLAN_ID_HERE"
+    },
+    {
+      "key": "partnerSubscriptionStartDate",
+      "value": "2026-05-08"
+    },
+    {
+      "key": "partnerUserId",
+      "value": "PUT_PARTNER_USER_ID_HERE"
+    },
+    {
+      "key": "partnerVehicleRegistrationUrl",
+      "value": "https://example.com/docs/vehicle-registration.jpg"
+    },
+    {
+      "key": "partnerVerificationSortBy",
+      "value": "name"
+    },
+    {
+      "key": "partnerVerificationSortOrder",
+      "value": "asc"
+    },
+    {
+      "key": "partnerVerificationStatus",
+      "value": "1"
+    },
+    {
+      "key": "password",
+      "value": "Admin@123"
+    },
+    {
+      "key": "pincode",
+      "value": ""
+    },
+    {
+      "key": "search",
+      "value": ""
     },
     {
       "key": "serviceApprovalStatus",
@@ -3214,9 +4442,96 @@
       "description": "`GET …/service/getAll`: empty = omit. Use `approve`, `pending`, or `rejected`."
     },
     {
+      "key": "serviceCategoryId",
+      "value": "PUT_CATALOGUE_CATEGORY_OBJECT_ID_HERE"
+    },
+    {
+      "key": "serviceCityId",
+      "value": "PUT_CITY_OBJECT_ID_HERE"
+    },
+    {
+      "key": "serviceId",
+      "value": "PUT_SERVICE_MONGODB_ID_HERE"
+    },
+    {
+      "key": "serviceIdAlt",
+      "value": "PUT_SECOND_CATALOGUE_SERVICE_ID_HERE",
+      "description": "Optional second service ID for franchise-service mapping samples."
+    },
+    {
+      "key": "serviceIsActive",
+      "value": "true"
+    },
+    {
+      "key": "serviceIsRequest",
+      "value": "",
+      "description": "Optional `GET …/service/getAll` query: empty = omit; `true` / `false` to filter."
+    },
+    {
+      "key": "serviceSearch",
+      "value": ""
+    },
+    {
+      "key": "serviceSortBy",
+      "value": "name"
+    },
+    {
+      "key": "serviceSortDir",
+      "value": "1"
+    },
+    {
+      "key": "serviceStateId",
+      "value": "PUT_STATE_OBJECT_ID_HERE"
+    },
+    {
       "key": "serviceStatus",
       "value": "",
       "description": "Optional service status filter for clickable cards: `active`, `inactive`, `requested`/`requested_services`, `active_categories`, `inactive_categories`, `requested_categories`."
+    },
+    {
+      "key": "sort",
+      "value": "created_at"
+    },
+    {
+      "key": "sortBy",
+      "value": "areaname"
+    },
+    {
+      "key": "sortOrder",
+      "value": "desc"
+    },
+    {
+      "key": "startDate",
+      "value": ""
+    },
+    {
+      "key": "state",
+      "value": ""
+    },
+    {
+      "key": "stateId",
+      "value": "PUT_STATE_ID_HERE"
+    },
+    {
+      "key": "subcategoryId",
+      "value": "PUT_SUBCATEGORY_ID_HERE"
+    },
+    {
+      "key": "subscriptionPlanId",
+      "value": "PUT_SUBSCRIPTION_PLAN_ID_HERE"
+    },
+    {
+      "key": "token",
+      "value": "YOUR_JWT_TOKEN"
+    },
+    {
+      "key": "tokenFranchiseAdmin",
+      "value": "YOUR_FRANCHISE_ADMIN_JWT",
+      "description": "Set automatically by **Login (Franchise Admin)** test script."
+    },
+    {
+      "key": "userId",
+      "value": "PUT_USER_ID_HERE"
     },
     {
       "key": "userIsActive",
@@ -3233,150 +4548,6 @@
     {
       "key": "userSortOrder",
       "value": "desc"
-    },
-    {
-      "key": "partnerName",
-      "value": "Test Partner"
-    },
-    {
-      "key": "partnerEmail",
-      "value": "test.partner@example.com"
-    },
-    {
-      "key": "partnerPhoneNumber",
-      "value": "+919888888888"
-    },
-    {
-      "key": "partnerAddress",
-      "value": "Visakhapatnam"
-    },
-    {
-      "key": "partnerStateId",
-      "value": "PUT_PARTNER_STATE_ID_HERE"
-    },
-    {
-      "key": "partnerCityId",
-      "value": "PUT_PARTNER_CITY_ID_HERE"
-    },
-    {
-      "key": "partnerPincode",
-      "value": "530046"
-    },
-    {
-      "key": "partnerCreatedById",
-      "value": "PUT_ADMIN_USER_ID_HERE"
-    },
-    {
-      "key": "partnerPassword",
-      "value": "Partner@1234"
-    },
-    {
-      "key": "partnerCategoryId",
-      "value": "PUT_PARTNER_CATEGORY_ID_HERE"
-    },
-    {
-      "key": "partnerServiceId",
-      "value": "PUT_PARTNER_SERVICE_ID_HERE"
-    },
-    {
-      "key": "partnerServiceDescription",
-      "value": "Service offered by partner"
-    },
-    {
-      "key": "partnerVehicleRegistrationUrl",
-      "value": "https://example.com/docs/vehicle-registration.jpg"
-    },
-    {
-      "key": "partnerPoliceVerificationUrl",
-      "value": "https://example.com/docs/police-verification.jpg"
-    },
-    {
-      "key": "partnerPanCardUrl",
-      "value": "https://example.com/docs/pan-card.jpg"
-    },
-    {
-      "key": "partnerDrivingLicenseUrl",
-      "value": "https://example.com/docs/driving-license.jpg"
-    },
-    {
-      "key": "partnerAadharCardUrl",
-      "value": "https://example.com/docs/aadhar-card.jpg"
-    },
-    {
-      "key": "partnerAccountHolderName",
-      "value": "Test Partner"
-    },
-    {
-      "key": "partnerAccountNumber",
-      "value": "123456789012"
-    },
-    {
-      "key": "partnerIfscCode",
-      "value": "SBIN0001234"
-    },
-    {
-      "key": "partnerBankName",
-      "value": "State Bank of India"
-    },
-    {
-      "key": "partnerBranchName",
-      "value": "Visakhapatnam Main"
-    },
-    {
-      "key": "partnerSubscriptionPlanId",
-      "value": "PUT_SUBSCRIPTION_PLAN_ID_HERE"
-    },
-    {
-      "key": "partnerSubscriptionStartDate",
-      "value": "2026-05-08"
-    },
-    {
-      "key": "partnerSubscriptionEndDate",
-      "value": "2026-08-08"
-    },
-    {
-      "key": "partnerPage",
-      "value": "1"
-    },
-    {
-      "key": "partnerLimit",
-      "value": "10"
-    },
-    {
-      "key": "partnerSearchName",
-      "value": ""
-    },
-    {
-      "key": "partnerSortBy",
-      "value": "name"
-    },
-    {
-      "key": "partnerSortOrder",
-      "value": "asc"
-    },
-    {
-      "key": "partnerIsActive",
-      "value": ""
-    },
-    {
-      "key": "partnerVerificationStatus",
-      "value": "1"
-    },
-    {
-      "key": "partnerVerificationSortBy",
-      "value": "name"
-    },
-    {
-      "key": "partnerVerificationSortOrder",
-      "value": "asc"
-    },
-    {
-      "key": "partnerUserId",
-      "value": "PUT_PARTNER_USER_ID_HERE"
-    },
-    {
-      "key": "partnerNewPassword",
-      "value": "Partner@12345"
     }
   ]
 }

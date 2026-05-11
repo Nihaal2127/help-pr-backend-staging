@@ -54,6 +54,8 @@ const resolveCountType = (type) => {
         'expenses': 7,
         'settings-expense-categories': 8,
         'content-management': 9,
+        'my-franchise': 10,
+        my_franchise: 10,
     };
 
     return typeMap[key] ?? null;
@@ -296,6 +298,124 @@ const getCountData = async (req, res) => {
             // Content Management
             const total_content = await ContentManagement.countDocuments({ deleted_at: null });
             response.total_content = total_content;
+        } else if (resolvedType === 10) {
+            // My Franchise — employees, franchise areas, category & service counts (scoped like type 2)
+            const caller = await User.findOne({ _id: req.user.id, deleted_at: null }).select('type franchise_id');
+            if (!caller) {
+                return res.status(401).json({
+                    success: false,
+                    status: 401,
+                    message: 'User not found.',
+                });
+            }
+
+            const setMyFranchiseZeros = () => {
+                response.total_employee = 0;
+                response.inactive_employee = 0;
+                response.active_employee = 0;
+                response.total_area = 0;
+                response.inactive_area = 0;
+                response.active_area = 0;
+                response.total_category = 0;
+                response.inactive_category = 0;
+                response.active_category = 0;
+                response.requested_category = 0;
+                response.total_service = 0;
+                response.inactive_service = 0;
+                response.active_service = 0;
+                response.requested_service = 0;
+            };
+
+            if (!caller.franchise_id) {
+                setMyFranchiseZeros();
+            } else {
+                const fid = caller.franchise_id;
+
+                const employeeFilter = { type: 3, franchise_id: fid, deleted_at: null };
+                response.total_employee = await User.countDocuments(employeeFilter);
+                response.inactive_employee = await User.countDocuments({
+                    ...employeeFilter,
+                    is_active: false,
+                });
+                response.active_employee = await User.countDocuments({
+                    ...employeeFilter,
+                    is_active: true,
+                });
+
+                const franchise = await Franchise.findOne({ _id: fid, deleted_at: null })
+                    .select('area_id')
+                    .lean();
+                const areaIds =
+                    franchise && Array.isArray(franchise.area_id) ? franchise.area_id : [];
+                if (areaIds.length === 0) {
+                    response.total_area = 0;
+                    response.inactive_area = 0;
+                    response.active_area = 0;
+                } else {
+                    const areaBase = { _id: { $in: areaIds }, deleted_at: null };
+                    response.total_area = await Area.countDocuments(areaBase);
+                    response.inactive_area = await Area.countDocuments({
+                        ...areaBase,
+                        is_active: false,
+                    });
+                    response.active_area = await Area.countDocuments({
+                        ...areaBase,
+                        is_active: true,
+                    });
+                }
+
+                const franchiseUserIds = await User.find({
+                    franchise_id: fid,
+                    deleted_at: null,
+                }).distinct('_id');
+
+                const categoryFilter = {
+                    deleted_at: null,
+                    requested_by: { $in: franchiseUserIds },
+                };
+                const serviceFilter = {
+                    deleted_at: null,
+                    requested_by: { $in: franchiseUserIds },
+                };
+
+                response.total_category = await Category.countDocuments({
+                    ...categoryFilter,
+                    is_request: false,
+                });
+                response.inactive_category = await Category.countDocuments({
+                    ...categoryFilter,
+                    is_active: false,
+                    is_request: false,
+                });
+                response.active_category = await Category.countDocuments({
+                    ...categoryFilter,
+                    is_active: true,
+                    is_request: false,
+                });
+                response.requested_category = await Category.countDocuments({
+                    ...categoryFilter,
+                    is_request: true,
+                });
+
+                response.total_service = await Service.countDocuments({
+                    ...serviceFilter,
+                    is_request: false,
+                });
+                response.inactive_service = await Service.countDocuments({
+                    ...serviceFilter,
+                    is_active: false,
+                    is_request: false,
+                });
+                response.active_service = await Service.countDocuments({
+                    ...serviceFilter,
+                    is_active: true,
+                    is_request: false,
+                });
+                response.requested_service = await Service.countDocuments({
+                    ...serviceFilter,
+                    is_request: true,
+                });
+            }
         }
         return res.status(200).json({
             success: true,

@@ -204,6 +204,4 @@ exports.handler = async (event, context) => {
 };
 
 console.log("Server is running...");
-//checking the git
-//testing
-//test123
+//testing the git 123456

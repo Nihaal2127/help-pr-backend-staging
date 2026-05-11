@@ -108,6 +108,24 @@ const validateServiceIds = async (oids) => {
     return { ok: true };
 };
 
+const buildFranchiseCategoriesListForCreate = async (activeCategoryOids) => {
+    const rows = await Category.find({ deleted_at: null }).select('_id').sort({ name: 1 }).lean();
+    const active = new Set(activeCategoryOids.map((id) => id.toString()));
+    return rows.map((c) => ({
+        category_id: c._id,
+        is_active: active.has(c._id.toString()),
+    }));
+};
+
+const buildFranchiseServicesListForCreate = async (activeServiceOids) => {
+    const rows = await Service.find({ deleted_at: null }).select('_id').sort({ name: 1 }).lean();
+    const active = new Set(activeServiceOids.map((id) => id.toString()));
+    return rows.map((s) => ({
+        service_id: s._id,
+        is_active: active.has(s._id.toString()),
+    }));
+};
+
 const dedupeIdsPreserveOrder = (oids) => {
     const seen = new Set();
     const out = [];
@@ -347,13 +365,15 @@ const createFranchise = async (body) => {
 
         const saved = await doc.save();
         try {
+            const categories_list = await buildFranchiseCategoriesListForCreate(categoryOids);
+            const services_list = await buildFranchiseServicesListForCreate(serviceOids);
             await FranchiseCategory.create({
                 franchise_id: saved._id,
-                categories_list: categoryOids,
+                categories_list,
             });
             await FranchiseService.create({
                 franchise_id: saved._id,
-                services_list: serviceOids,
+                services_list,
             });
         } catch (mapError) {
             await Franchise.findByIdAndDelete(saved._id);

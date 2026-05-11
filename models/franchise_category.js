@@ -1,5 +1,17 @@
 const mongoose = require('mongoose');
 
+const franchiseCategoryEntrySchema = new mongoose.Schema(
+    {
+        category_id: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'category',
+            required: true,
+        },
+        is_active: { type: Boolean, default: false },
+    },
+    { _id: false }
+);
+
 const franchiseCategorySchema = new mongoose.Schema(
     {
         franchise_id: {
@@ -8,7 +20,7 @@ const franchiseCategorySchema = new mongoose.Schema(
             required: true,
         },
         categories_list: {
-            type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'category' }],
+            type: [franchiseCategoryEntrySchema],
             default: [],
         },
         active_categories: { type: Boolean, default: false },

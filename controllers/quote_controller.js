@@ -306,6 +306,82 @@ const getAll = async (req, res) => {
   }
 };
 
+const getQuoteCounts = async (req, res) => {
+  try {
+    const baseFilter = { deleted_at: null };
+
+    if (req.query.franchise_id) {
+      if (!mongoose.Types.ObjectId.isValid(req.query.franchise_id)) {
+        return res.status(409).json({
+          success: false,
+          status: 409,
+          message: "Invalid franchise id.",
+        });
+      }
+      baseFilter.franchise_id = new mongoose.Types.ObjectId(req.query.franchise_id);
+    }
+
+    const newFilter = {
+      ...baseFilter,
+      status: STATUS_PENDING,
+      partner_id: null,
+    };
+
+    const pendingFilter = {
+      ...baseFilter,
+      status: STATUS_PENDING,
+      partner_id: { $ne: null },
+    };
+
+    const acceptedFilter = {
+      ...baseFilter,
+      status: { $in: [STATUS_APPROVED, STATUS_CONVERTED] },
+    };
+
+    const successFilter = {
+      ...baseFilter,
+      status: STATUS_CONVERTED,
+      order_id: { $ne: null },
+    };
+
+    const failedFilter = {
+      ...baseFilter,
+      status: STATUS_APPROVED,
+      order_id: null,
+    };
+
+    const [newCount, pendingCount, acceptedCount, successCount, failedCount] =
+      await Promise.all([
+        Quote.countDocuments(newFilter),
+        Quote.countDocuments(pendingFilter),
+        Quote.countDocuments(acceptedFilter),
+        Quote.countDocuments(successFilter),
+        Quote.countDocuments(failedFilter),
+      ]);
+
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: "Quote counts fetched successfully.",
+      record: {
+        new: newCount,
+        pending: pendingCount,
+        accepted: acceptedCount,
+        success: successCount,
+        failed: failedCount,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching quote counts:", error);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: "Internal server error.",
+      error: error.message,
+    });
+  }
+};
+
 const getById = async (req, res) => {
   const { id } = req.params;
 
@@ -820,6 +896,7 @@ const deleteQuote = async (req, res) => {
 module.exports = {
   create,
   getAll,
+  getQuoteCounts,
   getById,
   getCustomerQuotes,
   update,

@@ -8,6 +8,8 @@ const {
     getDropDown,
     getMyServices,
     getAvailableServices,
+    getAvailableFranchiseCategories,
+    getAvailableFranchiseServices,
     addMyServices,
     updateMyService,
     toggleMyServiceStatus,
@@ -30,6 +32,18 @@ router.delete('/delete/:id', authMiddleware, requireBackoffice, deleteState);
 // Partner-scoped routes (partner_id is taken from JWT)
 router.get('/myServices', authMiddleware, requirePartner, getMyServices);
 router.get('/availableServices', authMiddleware, requirePartner, getAvailableServices);
+router.get(
+    '/availableFranchiseCategories',
+    authMiddleware,
+    requirePartner,
+    getAvailableFranchiseCategories
+);
+router.get(
+    '/availableFranchiseServices',
+    authMiddleware,
+    requirePartner,
+    getAvailableFranchiseServices
+);
 router.post('/addMyServices', authMiddleware, requirePartner, addMyServices);
 router.put('/updateMyService/:id', authMiddleware, requirePartner, updateMyService);
 router.post('/toggleMyServiceStatus/:id', authMiddleware, requirePartner, toggleMyServiceStatus);

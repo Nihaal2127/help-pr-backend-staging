@@ -53,7 +53,7 @@
       "value": "",
       "type": "string",
       "enabled": true,
-      "description": "Franchise document _id."
+      "description": "Franchise document _id. Used in request bodies and GET /api/franchise/related-catalog/{{franchise_id}}."
     },
     {
       "key": "admin_id",
@@ -1315,6 +1315,25 @@
             "header": [],
             "url": "{{base_url}}/api/franchise/get/{{id}}"
           }
+        },
+        {
+          "name": "Related catalog",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/franchise/related-catalog/{{franchise_id}}"
+          },
+          "description": "**GET** `/api/franchise/related-catalog/:franchise_id`\n\n**Who can call:** Super admin (5), Staff (6), or Admin (1) / Employee (3) whose `franchise_id` **equals** the path `franchise_id`. Others get **403**; invalid id format **400**.\n\n**Bearer:** Set `{{auth_token}}` (and `{{franchise_id}}` in collection or environment).\n\n**Response `record`:** `franchise`, raw `franchise_categories` / `franchise_services` docs, filtered **`categories`** and **`services`** (franchise mapping `is_active` plus catalogue `is_active` + `approval_status: approve`), **`partners`** each with **`active_services_providing`** (partner_service rows for franchise-active services), **`employees`**."
         },
         {
           "name": "Get all",

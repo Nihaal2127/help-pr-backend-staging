@@ -2542,6 +2542,44 @@
           }
         },
         {
+          "name": "Available franchise categories (partner)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/partner_service/availableFranchiseCategories?page=1&limit=10&name=",
+            "description": "Partner token only. Franchise comes from the authenticated user's `franchise_id` (do not send franchise_id). Returns active, approved categories configured on that franchise."
+          }
+        },
+        {
+          "name": "Available franchise services (partner)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/partner_service/availableFranchiseServices?page=1&limit=10&category_id={{category_id}}&name=",
+            "description": "Partner token only. Same franchise resolution as categories. Required query: `category_id`. Lists franchise-configured services for that category not yet added to the partner."
+          }
+        },
+        {
           "name": "Add my services (partner)",
           "request": {
             "auth": {

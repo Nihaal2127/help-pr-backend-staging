@@ -1,5 +1,17 @@
 const mongoose = require('mongoose');
 
+const franchiseServiceEntrySchema = new mongoose.Schema(
+    {
+        service_id: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'service',
+            required: true,
+        },
+        is_active: { type: Boolean, default: false },
+    },
+    { _id: false }
+);
+
 const franchiseServiceSchema = new mongoose.Schema(
     {
         franchise_id: {
@@ -8,7 +20,7 @@ const franchiseServiceSchema = new mongoose.Schema(
             required: true,
         },
         services_list: {
-            type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'service' }],
+            type: [franchiseServiceEntrySchema],
             default: [],
         },
         active_services: { type: Boolean, default: false },
@@ -27,3 +39,4 @@ franchiseServiceSchema.index({ franchise_id: 1 });
 franchiseServiceSchema.index({ deleted_at: 1 });
 
 module.exports = mongoose.model('franchise_service', franchiseServiceSchema);
+    

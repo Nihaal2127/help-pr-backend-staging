@@ -324,7 +324,7 @@ const getAll = async (req, res) => {
           message: 'You are not allowed to use franchise_id filter.',
         });
       }
-      const allowedTypes = [2, 3, 4];
+      const allowedTypes = [1, 2, 3, 4];
       if (Number.isInteger(type) && !allowedTypes.includes(type)) {
         return res.status(403).json({
           success: false,

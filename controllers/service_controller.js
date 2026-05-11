@@ -880,6 +880,14 @@ const getById = async (req, res) => {
       const city = await City.findById(selectedCityId);
       response.service_price = price + (city?.city_service_price || 0);
     }
+    let category_name = null;
+    if (service.category_id) {
+      const catDoc = await Category.findById(service.category_id).lean();
+      if (catDoc) {
+        category_name = catDoc.category_name ?? catDoc.name ?? null;
+      }
+    }
+    response.category_name = category_name;
     const [enrichedService] = await attachRequestedByUser([response]);
     res.status(200).json({
       success: true,

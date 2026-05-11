@@ -150,6 +150,26 @@ const listPopulateFields = [
     },
 ];
 
+/** When no FranchiseService row exists (legacy / missing mapping), mirror Franchise.services as active mappings. */
+const buildSyntheticFranchiseServiceFromFranchiseDoc = async (franchiseOid) => {
+    const fr = await Franchise.findOne({ _id: franchiseOid, deleted_at: null }).select('services').lean();
+    if (!fr || !Array.isArray(fr.services) || fr.services.length === 0) return null;
+    const row = {
+        _id: new mongoose.Types.ObjectId(),
+        franchise_id: franchiseOid,
+        services_list: fr.services.map((service_id) => ({ service_id, is_active: true })),
+        active_services: false,
+        inactive_services: false,
+        order_number: 0,
+        created_at: null,
+        updated_at: null,
+        deleted_at: null,
+        synthetic_from_franchise: true,
+    };
+    const populated = await FranchiseService.populate([row], listPopulateFields);
+    return populated[0];
+};
+
 const list = async (query, userId) => {
     try {
         const page = parseInt(query.page, 10) || 1;
@@ -187,7 +207,7 @@ const list = async (query, userId) => {
         const filterFlags = resolveCatalogBoolFilters(query);
         if (!filterFlags.ok) return fail(400, filterFlags.message);
 
-        const { data, totalCount, totalPages, currentPage } = await applyPagination(
+        let { data, totalCount, totalPages, currentPage } = await applyPagination(
             FranchiseService,
             filter,
             page,
@@ -196,6 +216,20 @@ const list = async (query, userId) => {
             {},
             listPopulateFields
         );
+
+        if (
+            filter.franchise_id &&
+            page === 1 &&
+            data.length === 0 &&
+            totalCount === 0
+        ) {
+            const synthetic = await buildSyntheticFranchiseServiceFromFranchiseDoc(filter.franchise_id);
+            if (synthetic) {
+                data = [synthetic];
+                totalCount = 1;
+                totalPages = 1;
+            }
+        }
 
         const records = applyServiceCatalogFiltersToRecords(
             data,

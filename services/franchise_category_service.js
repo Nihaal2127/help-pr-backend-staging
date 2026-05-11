@@ -2,10 +2,16 @@ const mongoose = require('mongoose');
 const FranchiseCategory = require('../models/franchise_category');
 const Franchise = require('../models/franchise');
 const Category = require('../models/category');
+const User = require('../models/user');
 const { applyPagination } = require('../utils/pagination');
 
 const fail = (status, message, extra = {}) => ({ ok: false, status, message, ...extra });
 const ok = (status, data) => ({ ok: true, status, data });
+
+const USER_TYPE_ADMIN = 1;
+const USER_TYPE_EMPLOYEE = 3;
+const USER_TYPE_SUPER_ADMIN = 5;
+const USER_TYPE_STAFF = 6;
 
 const parseObjectId = (raw, fieldName) => {
     if (raw instanceof mongoose.Types.ObjectId) {
@@ -18,20 +24,65 @@ const parseObjectId = (raw, fieldName) => {
     return { ok: true, oid: new mongoose.Types.ObjectId(value) };
 };
 
-const parseObjectIdArray = (raw, fieldName) => {
-    if (!Array.isArray(raw)) return { ok: false, message: `${fieldName} must be an array.` };
-    const unique = new Set();
-    const ids = [];
+/** Normalize DB value: legacy plain ObjectId entries or { category_id, is_active }. */
+const normalizeStoredCategoriesList = (raw) => {
+    if (!raw || !Array.isArray(raw) || raw.length === 0) return [];
+    const out = [];
     for (const item of raw) {
-        const parsed = parseObjectId(item, fieldName);
-        if (!parsed.ok) return parsed;
-        const key = parsed.oid.toString();
-        if (!unique.has(key)) {
-            unique.add(key);
-            ids.push(parsed.oid);
+        if (!item) continue;
+        if (typeof item === 'object' && item.category_id) {
+            out.push({
+                category_id: item.category_id,
+                is_active: Boolean(item.is_active),
+            });
+        } else if (item instanceof mongoose.Types.ObjectId) {
+            out.push({ category_id: item, is_active: true });
         }
     }
-    return { ok: true, ids };
+    return out;
+};
+
+const parseCategoriesListInput = (raw, fieldName) => {
+    if (!Array.isArray(raw)) return { ok: false, message: `${fieldName} must be an array.` };
+    const entries = [];
+    const seen = new Set();
+    for (let i = 0; i < raw.length; i += 1) {
+        const item = raw[i];
+        const isObjectShape =
+            item !== null &&
+            typeof item === 'object' &&
+            !(item instanceof mongoose.Types.ObjectId) &&
+            item.category_id !== undefined &&
+            item.category_id !== null;
+
+        if (isObjectShape) {
+            const p = parseObjectId(item.category_id, `${fieldName}[${i}].category_id`);
+            if (!p.ok) return p;
+            const key = p.oid.toString();
+            if (seen.has(key)) continue;
+            seen.add(key);
+            entries.push({ category_id: p.oid, is_active: Boolean(item.is_active) });
+        } else {
+            const p = parseObjectId(item, `${fieldName}[${i}]`);
+            if (!p.ok) return p;
+            const key = p.oid.toString();
+            if (seen.has(key)) continue;
+            seen.add(key);
+            entries.push({ category_id: p.oid, is_active: true });
+        }
+    }
+    return { ok: true, entries };
+};
+
+const loadUserFranchiseAuth = async (userId) => {
+    if (!userId) return null;
+    const user = await User.findOne({ _id: userId, deleted_at: null }).select('type franchise_id');
+    if (!user) return null;
+    const t = Number(user.type);
+    const isSuper = t === USER_TYPE_SUPER_ADMIN || t === USER_TYPE_STAFF;
+    const isFranchiseAdmin = t === USER_TYPE_ADMIN && user.franchise_id;
+    const isEmployee = t === USER_TYPE_EMPLOYEE && user.franchise_id;
+    return { user, isSuper, isFranchiseAdmin, isEmployee, franchise_id: user.franchise_id };
 };
 
 const ensureFranchise = async (franchiseOid) => {
@@ -86,18 +137,19 @@ const create = async (body) => {
         const parsedFranchise = parseObjectId(body.franchise_id, 'franchise_id');
         if (!parsedFranchise.ok) return fail(400, parsedFranchise.message);
 
-        const parsedCategories = parseObjectIdArray(body.categories_list || [], 'categories_list');
+        const parsedCategories = parseCategoriesListInput(body.categories_list || [], 'categories_list');
         if (!parsedCategories.ok) return fail(400, parsedCategories.message);
 
         const franchise = await ensureFranchise(parsedFranchise.oid);
         if (!franchise) return fail(404, 'Franchise not found.');
 
-        const validCategories = await ensureCategories(parsedCategories.ids);
+        const catIds = parsedCategories.entries.map((e) => e.category_id);
+        const validCategories = await ensureCategories(catIds);
         if (!validCategories) return fail(400, 'One or more category IDs are invalid or deleted.');
 
         const doc = new FranchiseCategory({
             franchise_id: parsedFranchise.oid,
-            categories_list: parsedCategories.ids,
+            categories_list: parsedCategories.entries,
             active_categories: false,
             inactive_categories: false,
             order_number:
@@ -144,11 +196,54 @@ const update = async (id, body, userId) => {
         }
 
         if (body.categories_list !== undefined) {
-            const parsedCategories = parseObjectIdArray(body.categories_list, 'categories_list');
+            const parsedCategories = parseCategoriesListInput(body.categories_list, 'categories_list');
             if (!parsedCategories.ok) return fail(400, parsedCategories.message);
-            const validCategories = await ensureCategories(parsedCategories.ids);
+            const catIds = parsedCategories.entries.map((e) => e.category_id);
+            const validCategories = await ensureCategories(catIds);
             if (!validCategories) return fail(400, 'One or more category IDs are invalid or deleted.');
-            record.categories_list = parsedCategories.ids;
+
+            const auth = await loadUserFranchiseAuth(userId);
+            if (!auth) return fail(403, 'Access denied.');
+
+            if (auth.isSuper) {
+                record.categories_list = parsedCategories.entries;
+            } else if (auth.isEmployee) {
+                return fail(403, 'Franchise employees cannot update categories list.');
+            } else if (auth.isFranchiseAdmin) {
+                if (String(record.franchise_id) !== String(auth.franchise_id)) {
+                    return fail(403, 'Access denied.');
+                }
+                const franchise = await Franchise.findOne({
+                    _id: record.franchise_id,
+                    deleted_at: null,
+                }).select('categories');
+                if (!franchise) return fail(404, 'Franchise not found.');
+                const allowed = new Set((franchise.categories || []).map((id) => id.toString()));
+                const existingNorm = normalizeStoredCategoriesList(record.categories_list);
+                const existingById = new Map(
+                    existingNorm.map((e) => [e.category_id.toString(), e.is_active])
+                );
+                const incomingKeys = new Set(parsedCategories.entries.map((e) => e.category_id.toString()));
+                if (
+                    existingById.size !== incomingKeys.size ||
+                    ![...incomingKeys].every((k) => existingById.has(k))
+                ) {
+                    return fail(400, 'categories_list must include every mapped category.');
+                }
+                for (const ent of parsedCategories.entries) {
+                    const idStr = ent.category_id.toString();
+                    const prev = existingById.get(idStr);
+                    if (!allowed.has(idStr) && Boolean(ent.is_active) !== Boolean(prev)) {
+                        return fail(
+                            403,
+                            'You can only change status for categories assigned to your franchise.'
+                        );
+                    }
+                }
+                record.categories_list = parsedCategories.entries;
+            } else {
+                return fail(403, 'Access denied.');
+            }
         }
 
         const isStatusEditRequest =

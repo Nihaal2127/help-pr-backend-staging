@@ -22,12 +22,12 @@ const create = async (req, res) => {
 };
 
 const getAll = async (req, res) => {
-    const result = await franchiseCategoryService.list(req.query);
+    const result = await franchiseCategoryService.list(req.query, req.user?.id);
     return sendServiceResult(res, result);
 };
 
 const getById = async (req, res) => {
-    const result = await franchiseCategoryService.getById(req.params.id);
+    const result = await franchiseCategoryService.getById(req.params.id, req.user?.id, req.query);
     return sendServiceResult(res, result);
 };
 

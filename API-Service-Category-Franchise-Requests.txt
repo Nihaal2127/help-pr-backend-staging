@@ -1,0 +1,290 @@
+================================================================================
+COMMON (ALL REQUESTS BELOW)
+================================================================================
+Method + URL: as listed per endpoint.
+Headers:
+  Authorization: Bearer <your_jwt_token>
+  Content-Type: application/json
+
+Optional: For POST /api/service/create-request and POST /api/category/create-request
+you may use multipart/form-data with file field "image" or "service_image" (services)
+/ category image — middleware will set image_url. If you use JSON, send image_url as a string URL.
+
+================================================================================
+SERVICE — Create request (global Service row, pending approval)
+================================================================================
+POST {{baseUrl}}/api/service/create-request
+
+Request body (JSON) — required fields enforced by createServiceRequestMiddleware:
+{
+  "name": "string, required",
+  "desc": "string, required",
+  "image_url": "string URL, required (omit if uploading file in multipart)",
+  "category_id": "24-char Mongo ObjectId string, required",
+  "tax": 0,
+  "commission": 0,
+  "payment_type": "per_hour | per_day | per_month | per_consultancy (or similar string; stored normalized)",
+  "minimum_deposit": 0,
+  "price": 0,
+  "is_active": false,
+  "city_ids": [],
+  "state_ids": []
+}
+
+Notes:
+- price defaults to 0 if omitted (controller).
+- is_active defaults to false for requests if omitted.
+- Middleware sets is_request=true internally for this route.
+- Duplicate name + same category_id returns 409.
+
+Success response — HTTP 200:
+{
+  "success": true,
+  "status": 200,
+  "message": "Service created successfully.",
+  "record": {
+    "_id": "...",
+    "name": "...",
+    "service_id": "...",
+    "desc": "...",
+    "price": 0,
+    "tax": 0,
+    "commission": 0,
+    "payment_type": "per_hour",
+    "minimum_deposit": 0,
+    "category_id": "...",
+    "image_url": "...",
+    "is_active": false,
+    "is_request": true,
+    "approval_status": "pending",
+    "rejection_reason": null,
+    "requested_by": "<user ObjectId>",
+    "created_at": "...",
+    "updated_at": "...",
+    "deleted_at": null
+  }
+}
+(city_ids / state_ids are stripped from record in response if present on model.)
+
+Error examples:
+400 — validation message (missing field, invalid number, etc.)
+409 — { "success": false, "status": 409, "message": "Service name already exists." }
+401 — Unauthorized if no/invalid token
+
+================================================================================
+SERVICE — Franchise service map list
+================================================================================
+GET {{baseUrl}}/api/franchise-service/getAll?page=1&limit=10&franchise_id={{franchiseId}}
+
+Query params:
+  page — optional, default 1
+  limit — optional, default 10
+  franchise_id — optional 24-char hex; if provided, filters FranchiseService documents by franchise
+
+Request body: none
+
+Success — HTTP 200:
+{
+  "success": true,
+  "status": 200,
+  "message": "Franchise service list fetched successfully.",
+  "totalItems": 0,
+  "totalPages": 0,
+  "currentPage": 1,
+  "records": [
+    {
+      "_id": "<franchiseServiceMapId>",
+      "franchise_id": "...",
+      "services_list": [
+        { "service_id": "...", "is_active": true }
+      ],
+      "active_services": false,
+      "inactive_services": false,
+      "order_number": 0,
+      "created_at": "...",
+      "updated_at": "...",
+      "deleted_at": null
+    }
+  ]
+}
+
+Error — HTTP 400 if franchise_id invalid:
+{ "success": false, "status": 400, "message": "franchise_id must be a valid MongoDB ObjectId." }
+
+================================================================================
+SERVICE — Franchise service map by id
+================================================================================
+GET {{baseUrl}}/api/franchise-service/get/{{franchiseServiceMapId}}
+
+Request body: none
+
+Success — HTTP 200:
+{
+  "success": true,
+  "status": 200,
+  "message": "Franchise service fetched successfully.",
+  "record": { ...same shape as one element of records above... }
+}
+
+Error — HTTP 404:
+{ "success": false, "status": 404, "message": "No record found" }
+
+================================================================================
+SERVICE — Franchise service map update
+================================================================================
+PUT {{baseUrl}}/api/franchise-service/update/{{franchiseServiceMapId}}
+
+Request body (JSON) — send only fields you need to change; behavior depends on role (super/staff vs franchise admin vs employee):
+
+{
+  "franchise_id": "optional ObjectId string",
+  "services_list": [
+    { "service_id": "<ObjectId>", "is_active": true }
+  ],
+  "active_services": true,
+  "inactive_services": false,
+  "order_number": 0
+}
+
+Rules (summary):
+- Super/staff: may replace services_list freely (valid service ids).
+- Franchise admin: may update services_list only with same set of service_ids as before; toggling is_active restricted for ids not on franchise.services.
+- Employees: cannot change services_list (403).
+- Only franchise admin user matching franchise.admin_id may set active_services / inactive_services.
+
+Success — HTTP 200:
+{
+  "success": true,
+  "status": 200,
+  "message": "Franchise service updated successfully.",
+  "record": { ...updated FranchiseService document... }
+}
+
+Errors: 400 validation, 403 access denied, 404 not found — shape:
+{ "success": false, "status": <code>, "message": "<text>" }
+
+================================================================================
+CATEGORY — Create request (global Category row, pending approval)
+================================================================================
+POST {{baseUrl}}/api/category/create-request
+
+Request body (JSON) — required by createCategoryRequestMiddleware:
+{
+  "name": "string, required",
+  "desc": "string, required",
+  "image_url": "string URL, required (or upload file in multipart)",
+  "service_ids": [ "<service ObjectId>", "..." ],
+  "city_ids": [],
+  "state_ids": []
+}
+
+Notes:
+- Middleware sets is_request=true on body.
+- service_ids must be non-empty array of non-empty ids.
+
+Success — HTTP 200:
+{
+  "success": true,
+  "status": 200,
+  "message": "Category created successfully.",
+  "record": {
+    "_id": "...",
+    "category_id": "<generated string id>",
+    "name": "...",
+    "desc": "...",
+    "services": [ "..." ],
+    "image_url": "...",
+    "is_active": false,
+    "is_request": true,
+    "approval_status": "pending",
+    "rejection_reason": null,
+    "requested_by": "<user ObjectId>",
+    "created_at": "...",
+    "updated_at": "...",
+    "deleted_at": null
+  }
+}
+
+Error — HTTP 409 duplicate name:
+{ "success": false, "status": 409, "message": "Category name already exists." }
+
+================================================================================
+CATEGORY — Franchise category map list
+================================================================================
+GET {{baseUrl}}/api/franchise-category/getAll?page=1&limit=10
+
+Optional query:
+  franchise_id=<24-char hex>  — filters list to that franchise (same as service list)
+
+Request body: none
+
+Success — HTTP 200:
+{
+  "success": true,
+  "status": 200,
+  "message": "Franchise category list fetched successfully.",
+  "totalItems": 0,
+  "totalPages": 0,
+  "currentPage": 1,
+  "records": [
+    {
+      "_id": "<franchiseCategoryMapId>",
+      "franchise_id": "...",
+      "categories_list": [
+        { "category_id": "...", "is_active": true }
+      ],
+      "active_categories": false,
+      "inactive_categories": false,
+      "order_number": 0,
+      "created_at": "...",
+      "updated_at": "...",
+      "deleted_at": null
+    }
+  ]
+}
+
+================================================================================
+CATEGORY — Franchise category map by id
+================================================================================
+GET {{baseUrl}}/api/franchise-category/get/{{franchiseCategoryMapId}}
+
+Request body: none
+
+Success — HTTP 200:
+{
+  "success": true,
+  "status": 200,
+  "message": "Franchise category fetched successfully.",
+  "record": { ...one FranchiseCategory document... }
+}
+
+================================================================================
+CATEGORY — Franchise category map update
+================================================================================
+PUT {{baseUrl}}/api/franchise-category/update/{{franchiseCategoryMapId}}
+
+Request body (JSON):
+
+{
+  "franchise_id": "optional ObjectId string",
+  "categories_list": [
+    { "category_id": "<ObjectId>", "is_active": true }
+  ],
+  "active_categories": true,
+  "inactive_categories": false,
+  "order_number": 0
+}
+
+Rules mirror franchise-service (super/staff full list; admin same keys + allowed toggles; employee cannot change list; only franchise admin for active/inactive flags).
+
+Success — HTTP 200:
+{
+  "success": true,
+  "status": 200,
+  "message": "Franchise category updated successfully.",
+  "record": { ...updated document... }
+}
+
+================================================================================
+END
+================================================================================

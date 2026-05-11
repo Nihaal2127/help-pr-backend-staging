@@ -74,6 +74,61 @@ const parseCategoriesListInput = (raw, fieldName) => {
     return { ok: true, entries };
 };
 
+const parseOptionalQueryBool = (raw, fieldName) => {
+    if (raw === undefined || raw === null) return { ok: true, present: false };
+    const s = String(raw).trim().toLowerCase();
+    if (s === '') return { ok: true, present: false };
+    if (s === 'true' || s === '1') return { ok: true, present: true, value: true };
+    if (s === 'false' || s === '0') return { ok: true, present: true, value: false };
+    return { ok: false, message: `${fieldName} must be true or false.` };
+};
+
+const categoryEntryMatchesCatalogFilters = (entry, isActiveFilter, isRequestFilter) => {
+    if (isActiveFilter === undefined && isRequestFilter === undefined) return true;
+    const cid = entry && entry.category_id;
+    const doc =
+        cid && typeof cid === 'object' && !(cid instanceof mongoose.Types.ObjectId) ? cid : null;
+    if (!doc) return false;
+    if (isActiveFilter !== undefined && Boolean(doc.is_active) !== isActiveFilter) return false;
+    if (isRequestFilter !== undefined && Boolean(doc.is_request) !== isRequestFilter) return false;
+    return true;
+};
+
+const applyCategoryCatalogFiltersToRecords = (records, isActiveFilter, isRequestFilter) => {
+    if (isActiveFilter === undefined && isRequestFilter === undefined) return records;
+    return records.map((row) => {
+        const plain = row && typeof row.toObject === 'function' ? row.toObject() : { ...row };
+        const list = Array.isArray(plain.categories_list) ? plain.categories_list : [];
+        plain.categories_list = list.filter((e) =>
+            categoryEntryMatchesCatalogFilters(e, isActiveFilter, isRequestFilter)
+        );
+        return plain;
+    });
+};
+
+const resolveCatalogBoolFilters = (query) => {
+    const a = parseOptionalQueryBool(query.is_active, 'is_active');
+    if (!a.ok) return { ok: false, message: a.message };
+    const r = parseOptionalQueryBool(query.is_request, 'is_request');
+    if (!r.ok) return { ok: false, message: r.message };
+    return {
+        ok: true,
+        isActiveFilter: a.present ? a.value : undefined,
+        isRequestFilter: r.present ? r.value : undefined,
+    };
+};
+
+const listPopulateFields = [
+    { path: 'franchise_id', select: 'name admin_name is_active' },
+    {
+        path: 'categories_list',
+        populate: {
+            path: 'category_id',
+            select: 'name desc image_url is_active is_request',
+        },
+    },
+];
+
 const loadUserFranchiseAuth = async (userId) => {
     if (!userId) return null;
     const user = await User.findOne({ _id: userId, deleted_at: null }).select('type franchise_id');
@@ -99,24 +154,57 @@ const ensureCategories = async (categoryIds) => {
     return count === categoryIds.length;
 };
 
-const list = async (query) => {
+const list = async (query, userId) => {
     try {
         const page = parseInt(query.page, 10) || 1;
         const limit = parseInt(query.limit, 10) || 10;
         const filter = { deleted_at: null };
 
-        if (query.franchise_id) {
+        if (userId) {
+            const auth = await loadUserFranchiseAuth(userId);
+            if (!auth) return fail(403, 'Access denied.');
+            if (auth.isFranchiseAdmin || auth.isEmployee) {
+                if (!auth.franchise_id) return fail(403, 'Access denied.');
+                if (query.franchise_id) {
+                    const parsed = parseObjectId(query.franchise_id, 'franchise_id');
+                    if (!parsed.ok) return fail(400, parsed.message);
+                    if (String(parsed.oid) !== String(auth.franchise_id)) {
+                        return fail(403, 'Access denied.');
+                    }
+                }
+                filter.franchise_id = auth.franchise_id;
+            } else if (auth.isSuper) {
+                if (query.franchise_id) {
+                    const parsed = parseObjectId(query.franchise_id, 'franchise_id');
+                    if (!parsed.ok) return fail(400, parsed.message);
+                    filter.franchise_id = parsed.oid;
+                }
+            } else {
+                return fail(403, 'Access denied.');
+            }
+        } else if (query.franchise_id) {
             const parsed = parseObjectId(query.franchise_id, 'franchise_id');
             if (!parsed.ok) return fail(400, parsed.message);
             filter.franchise_id = parsed.oid;
         }
+
+        const filterFlags = resolveCatalogBoolFilters(query);
+        if (!filterFlags.ok) return fail(400, filterFlags.message);
 
         const { data, totalCount, totalPages, currentPage } = await applyPagination(
             FranchiseCategory,
             filter,
             page,
             limit,
-            { created_at: -1 }
+            { created_at: -1 },
+            {},
+            listPopulateFields
+        );
+
+        const records = applyCategoryCatalogFiltersToRecords(
+            data,
+            filterFlags.isActiveFilter,
+            filterFlags.isRequestFilter
         );
 
         return ok(200, {
@@ -124,7 +212,7 @@ const list = async (query) => {
             totalItems: totalCount,
             totalPages,
             currentPage,
-            records: data,
+            records,
         });
     } catch (error) {
         console.error('franchiseCategory.list', error.message);
@@ -166,13 +254,35 @@ const create = async (body) => {
     }
 };
 
-const getById = async (id) => {
+const getById = async (id, userId, query = {}) => {
     try {
         const parsed = parseObjectId(id, 'id');
         if (!parsed.ok) return fail(400, parsed.message);
         const record = await FranchiseCategory.findOne({ _id: parsed.oid, deleted_at: null });
         if (!record) return fail(404, 'No record found');
-        return ok(200, { message: 'Franchise category fetched successfully.', record });
+
+        if (userId) {
+            const auth = await loadUserFranchiseAuth(userId);
+            if (!auth) return fail(403, 'Access denied.');
+            if (auth.isFranchiseAdmin || auth.isEmployee) {
+                if (!auth.franchise_id || String(record.franchise_id) !== String(auth.franchise_id)) {
+                    return fail(403, 'Access denied.');
+                }
+            } else if (!auth.isSuper) {
+                return fail(403, 'Access denied.');
+            }
+        }
+
+        const filterFlags = resolveCatalogBoolFilters(query);
+        if (!filterFlags.ok) return fail(400, filterFlags.message);
+
+        await record.populate(listPopulateFields);
+        const [recordOut] = applyCategoryCatalogFiltersToRecords(
+            [record],
+            filterFlags.isActiveFilter,
+            filterFlags.isRequestFilter
+        );
+        return ok(200, { message: 'Franchise category fetched successfully.', record: recordOut });
     } catch (error) {
         console.error('franchiseCategory.getById', error.message);
         return fail(500, 'Internal server error.');

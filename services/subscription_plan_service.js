@@ -314,6 +314,21 @@ const importSubscriptionPlans = async (records) => {
     }
 };
 
+const listAllSubscriptionPlans = async () => {
+    try {
+        const records = await SubscriptionPlan.find({ deleted_at: null })
+            .sort({ priority: 1, created_at: -1 })
+            .lean();
+        return ok(200, {
+            message: 'Subscription plans fetched successfully.',
+            records,
+        });
+    } catch (err) {
+        console.log('listAllSubscriptionPlans', err.message);
+        return fail(500, 'Internal server error.');
+    }
+};
+
 const listSubscriptionPlansForDropdown = async (query) => {
     try {
         const filter = {
@@ -340,6 +355,7 @@ const listSubscriptionPlansForDropdown = async (query) => {
 
 module.exports = {
     listSubscriptionPlans,
+    listAllSubscriptionPlans,
     createSubscriptionPlan,
     updateSubscriptionPlan,
     getSubscriptionPlanById,

@@ -6,6 +6,9 @@ const User = require("../models/user");
 const Category = require("../models/category");
 const Service = require("../models/service");
 const Address = require("../models/address");
+const Franchise = require("../models/franchise");
+const City = require("../models/city");
+const State = require("../models/state");
 const { applyPagination } = require("../utils/pagination");
 const { getOrderId, getQuoteSequenceId } = require("../helper/id_generator");
 const { checkObjectIdExists } = require("../validator/id_validator");
@@ -172,6 +175,10 @@ const getAll = async (req, res) => {
     const usersColl = User.collection.name;
     const categoriesColl = Category.collection.name;
     const servicesColl = Service.collection.name;
+    const franchiseColl = Franchise.collection.name;
+    const addressColl = Address.collection.name;
+    const citiesColl = City.collection.name;
+    const statesColl = State.collection.name;
 
     const pipeline = [
       { $match: baseFilter },
@@ -201,6 +208,14 @@ const getAll = async (req, res) => {
       },
       {
         $lookup: {
+          from: usersColl,
+          localField: "created_by_id",
+          foreignField: "_id",
+          as: "_created_by",
+        },
+      },
+      {
+        $lookup: {
           from: categoriesColl,
           localField: "category_id",
           foreignField: "_id",
@@ -215,11 +230,48 @@ const getAll = async (req, res) => {
           as: "_service",
         },
       },
+      {
+        $lookup: {
+          from: franchiseColl,
+          localField: "franchise_id",
+          foreignField: "_id",
+          as: "_franchise",
+        },
+      },
+      {
+        $lookup: {
+          from: addressColl,
+          localField: "address_id",
+          foreignField: "_id",
+          as: "_address",
+        },
+      },
       { $unwind: { path: "$_user", preserveNullAndEmptyArrays: true } },
       { $unwind: { path: "$_partner", preserveNullAndEmptyArrays: true } },
       { $unwind: { path: "$_employee", preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: "$_created_by", preserveNullAndEmptyArrays: true } },
       { $unwind: { path: "$_category", preserveNullAndEmptyArrays: true } },
       { $unwind: { path: "$_service", preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: "$_franchise", preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: "$_address", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: citiesColl,
+          localField: "_address.city_id",
+          foreignField: "_id",
+          as: "_addr_city",
+        },
+      },
+      {
+        $lookup: {
+          from: statesColl,
+          localField: "_address.state_id",
+          foreignField: "_id",
+          as: "_addr_state",
+        },
+      },
+      { $unwind: { path: "$_addr_city", preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: "$_addr_state", preserveNullAndEmptyArrays: true } },
       ...(regex
         ? [
             {
@@ -236,8 +288,11 @@ const getAll = async (req, res) => {
                   { "_partner.phone_number": regex },
                   { "_employee.name": regex },
                   { "_employee.user_id": regex },
+                  { "_created_by.name": regex },
+                  { "_created_by.user_id": regex },
                   { "_category.name": regex },
                   { "_service.name": regex },
+                  { "_franchise.name": regex },
                 ],
               },
             },
@@ -253,6 +308,132 @@ const getAll = async (req, res) => {
           employee_name: "$_employee.name",
           category_name: "$_category.name",
           service_name: "$_service.name",
+          user_id: {
+            $cond: [
+              { $ifNull: ["$_user._id", false] },
+              {
+                _id: "$_user._id",
+                name: "$_user.name",
+                user_id: "$_user.user_id",
+                email: "$_user.email",
+                phone_number: "$_user.phone_number",
+                profile_url: "$_user.profile_url",
+                type: "$_user.type",
+              },
+              null,
+            ],
+          },
+          partner_id: {
+            $cond: [
+              { $ifNull: ["$_partner._id", false] },
+              {
+                _id: "$_partner._id",
+                name: "$_partner.name",
+                user_id: "$_partner.user_id",
+                email: "$_partner.email",
+                phone_number: "$_partner.phone_number",
+                profile_url: "$_partner.profile_url",
+                type: "$_partner.type",
+              },
+              null,
+            ],
+          },
+          employee_id: {
+            $cond: [
+              { $ifNull: ["$_employee._id", false] },
+              {
+                _id: "$_employee._id",
+                name: "$_employee.name",
+                user_id: "$_employee.user_id",
+                email: "$_employee.email",
+                phone_number: "$_employee.phone_number",
+                profile_url: "$_employee.profile_url",
+                type: "$_employee.type",
+              },
+              null,
+            ],
+          },
+          created_by_id: {
+            $cond: [
+              { $ifNull: ["$_created_by._id", false] },
+              {
+                _id: "$_created_by._id",
+                name: "$_created_by.name",
+                user_id: "$_created_by.user_id",
+                email: "$_created_by.email",
+                phone_number: "$_created_by.phone_number",
+                profile_url: "$_created_by.profile_url",
+                type: "$_created_by.type",
+              },
+              null,
+            ],
+          },
+          category_id: {
+            $cond: [
+              { $ifNull: ["$_category._id", false] },
+              {
+                _id: "$_category._id",
+                name: "$_category.name",
+                category_id: "$_category.category_id",
+                desc: "$_category.desc",
+                image_url: "$_category.image_url",
+              },
+              null,
+            ],
+          },
+          service_id: {
+            $cond: [
+              { $ifNull: ["$_service._id", false] },
+              {
+                _id: "$_service._id",
+                name: "$_service.name",
+                service_id: "$_service.service_id",
+                desc: "$_service.desc",
+                image_url: "$_service.image_url",
+                price: "$_service.price",
+              },
+              null,
+            ],
+          },
+          franchise_id: {
+            $cond: [
+              { $ifNull: ["$_franchise._id", false] },
+              {
+                _id: "$_franchise._id",
+                name: "$_franchise.name",
+                city_name: "$_franchise.city_name",
+                state_name: "$_franchise.state_name",
+              },
+              null,
+            ],
+          },
+          address_id: {
+            $cond: [
+              { $ifNull: ["$_address._id", false] },
+              {
+                $mergeObjects: [
+                  "$_address",
+                  {
+                    city_id: {
+                      $cond: [
+                        { $ifNull: ["$_addr_city._id", false] },
+                        { _id: "$_addr_city._id", name: "$_addr_city.name" },
+                        "$_address.city_id",
+                      ],
+                    },
+                    state_id: {
+                      $cond: [
+                        { $ifNull: ["$_addr_state._id", false] },
+                        { _id: "$_addr_state._id", name: "$_addr_state.name" },
+                        "$_address.state_id",
+                      ],
+                    },
+                  },
+                ],
+              },
+              null,
+            ],
+          },
         },
       },
       {
@@ -260,8 +441,13 @@ const getAll = async (req, res) => {
           _user: 0,
           _partner: 0,
           _employee: 0,
+          _created_by: 0,
           _category: 0,
           _service: 0,
+          _franchise: 0,
+          _address: 0,
+          _addr_city: 0,
+          _addr_state: 0,
         },
       },
       {

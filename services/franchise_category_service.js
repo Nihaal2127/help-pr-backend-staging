@@ -129,6 +129,26 @@ const listPopulateFields = [
     },
 ];
 
+/** When no FranchiseCategory row exists, mirror Franchise.categories as active mappings. */
+const buildSyntheticFranchiseCategoryFromFranchiseDoc = async (franchiseOid) => {
+    const fr = await Franchise.findOne({ _id: franchiseOid, deleted_at: null }).select('categories').lean();
+    if (!fr || !Array.isArray(fr.categories) || fr.categories.length === 0) return null;
+    const row = {
+        _id: new mongoose.Types.ObjectId(),
+        franchise_id: franchiseOid,
+        categories_list: fr.categories.map((category_id) => ({ category_id, is_active: true })),
+        active_categories: false,
+        inactive_categories: false,
+        order_number: 0,
+        created_at: null,
+        updated_at: null,
+        deleted_at: null,
+        synthetic_from_franchise: true,
+    };
+    const populated = await FranchiseCategory.populate([row], listPopulateFields);
+    return populated[0];
+};
+
 const loadUserFranchiseAuth = async (userId) => {
     if (!userId) return null;
     const user = await User.findOne({ _id: userId, deleted_at: null }).select('type franchise_id');
@@ -191,7 +211,7 @@ const list = async (query, userId) => {
         const filterFlags = resolveCatalogBoolFilters(query);
         if (!filterFlags.ok) return fail(400, filterFlags.message);
 
-        const { data, totalCount, totalPages, currentPage } = await applyPagination(
+        let { data, totalCount, totalPages, currentPage } = await applyPagination(
             FranchiseCategory,
             filter,
             page,
@@ -200,6 +220,20 @@ const list = async (query, userId) => {
             {},
             listPopulateFields
         );
+
+        if (
+            filter.franchise_id &&
+            page === 1 &&
+            data.length === 0 &&
+            totalCount === 0
+        ) {
+            const synthetic = await buildSyntheticFranchiseCategoryFromFranchiseDoc(filter.franchise_id);
+            if (synthetic) {
+                data = [synthetic];
+                totalCount = 1;
+                totalPages = 1;
+            }
+        }
 
         const records = applyCategoryCatalogFiltersToRecords(
             data,

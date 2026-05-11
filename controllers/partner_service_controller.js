@@ -426,4 +426,425 @@ const getDropDown = async (req, res) => {
 
 
 
-module.exports = { getAll, create, updateStatus, deleteState, getDropDown };
+// ─────────────────────────────────────────────────────────────
+// Partner-scoped routes (partner_id is taken from req.user.id)
+// All five require authMiddleware + requirePartner upstream.
+// ─────────────────────────────────────────────────────────────
+
+// GET /api/partner_service/myServices
+const getMyServices = async (req, res) => {
+  try {
+    const partnerId = new mongoose.Types.ObjectId(req.user.id);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+
+    const filter = {
+      partner_id: partnerId,
+      deleted_at: null,
+    };
+
+    // Only apply the boolean filter when an explicit value was provided
+    if (req.query.is_accept_request !== undefined && req.query.is_accept_request !== '') {
+      filter.is_accept_request = parseBoolean(req.query.is_accept_request);
+    }
+
+    if (req.query.category_id) {
+      const categoryResult = validateObjectId(req.query.category_id, 'category');
+      if (!categoryResult.valid) {
+        return res.status(400).json({
+          success: false,
+          status: 400,
+          message: categoryResult.message,
+        });
+      }
+      filter.category_id = new mongoose.Types.ObjectId(req.query.category_id);
+    }
+
+    // Pre-resolve service_ids whose name matches so the filter is applied
+    // at the DB layer (and pagination remains consistent).
+    if (req.query.name) {
+      const matchingServices = await Service.find({
+        name: { $regex: new RegExp(req.query.name, 'i') },
+        deleted_at: null,
+      }).select('_id');
+      filter.service_id = { $in: matchingServices.map((s) => s._id) };
+    }
+
+    const sort = { created_at: -1 };
+    const { data: services, totalCount, totalPages, currentPage } = await applyPagination(
+      PartnerService,
+      filter,
+      page,
+      limit,
+      sort
+    );
+
+    const populated = await PartnerService.populate(services, [
+      { path: 'service_id' },
+      { path: 'category_id' },
+    ]);
+
+    const processed = populated.map((ps) => {
+      const { service_id, category_id, ...rest } = ps;
+      return {
+        ...rest,
+        service_id: service_id?._id || null,
+        service_name: service_id?.name || null,
+        service_image: service_id?.image_url || null,
+        service_price: service_id?.price ?? null,
+        category_id: category_id?._id || null,
+        category_name: category_id?.name || null,
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: 'My services fetched successfully.',
+      totalItems: totalCount,
+      totalPages,
+      currentPage,
+      records: processed,
+    });
+  } catch (err) {
+    console.error('getMyServices error:', err.message);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Internal server error.',
+    });
+  }
+};
+
+// GET /api/partner_service/availableServices
+// Lists services from the master catalog that the partner has NOT yet added.
+const getAvailableServices = async (req, res) => {
+  try {
+    const partnerId = new mongoose.Types.ObjectId(req.user.id);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+
+    const taken = await PartnerService.find({
+      partner_id: partnerId,
+      deleted_at: null,
+    }).select('service_id');
+    const takenIds = taken.map((t) => t.service_id).filter(Boolean);
+
+    const filter = {
+      _id: { $nin: takenIds },
+      deleted_at: null,
+      is_active: true,
+      approval_status: 'approve',
+    };
+
+    if (req.query.category_id) {
+      const categoryResult = validateObjectId(req.query.category_id, 'category');
+      if (!categoryResult.valid) {
+        return res.status(400).json({
+          success: false,
+          status: 400,
+          message: categoryResult.message,
+        });
+      }
+      filter.category_id = new mongoose.Types.ObjectId(req.query.category_id);
+    }
+
+    if (req.query.name) {
+      filter.name = { $regex: new RegExp(req.query.name, 'i') };
+    }
+
+    const sort = { created_at: -1 };
+    const { data: services, totalCount, totalPages, currentPage } = await applyPagination(
+      Service,
+      filter,
+      page,
+      limit,
+      sort,
+      {},
+      [{ path: 'category_id' }]
+    );
+
+    const processed = services.map((s) => ({
+      _id: s._id,
+      name: s.name,
+      desc: s.desc,
+      price: s.price,
+      tax: s.tax,
+      image_url: s.image_url,
+      category_id: s.category_id?._id || null,
+      category_name: s.category_id?.name || null,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: 'Available services fetched successfully.',
+      totalItems: totalCount,
+      totalPages,
+      currentPage,
+      records: processed,
+    });
+  } catch (err) {
+    console.error('getAvailableServices error:', err.message);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Internal server error.',
+    });
+  }
+};
+
+// POST /api/partner_service/addMyServices
+// Body: { services: [{ service_id, category_id }] }
+// partner_id is forced from req.user.id (cannot be spoofed via body).
+const addMyServices = async (req, res) => {
+  try {
+    const partnerId = new mongoose.Types.ObjectId(req.user.id);
+    const records = req.body.services;
+
+    if (!records || !Array.isArray(records)) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Invalid input. Expected services to be an array.',
+      });
+    }
+    if (records.length === 0) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Please provide at least one service.',
+      });
+    }
+
+    for (let i = 0; i < records.length; i++) {
+      const r = records[i];
+      const sv = validateObjectId(r.service_id, 'service');
+      if (!sv.valid) {
+        return res.status(400).json({ success: false, status: 400, message: sv.message });
+      }
+      const cv = validateObjectId(r.category_id, 'category');
+      if (!cv.valid) {
+        return res.status(400).json({ success: false, status: 400, message: cv.message });
+      }
+    }
+
+    const serviceIds = [...new Set(records.map((r) => r.service_id.toString()))];
+    const existing = await PartnerService.find({
+      partner_id: partnerId,
+      service_id: { $in: serviceIds.map((id) => new mongoose.Types.ObjectId(id)) },
+      deleted_at: null,
+    }).select('service_id');
+    const existingSet = new Set(existing.map((e) => e.service_id.toString()));
+
+    const toInsert = [];
+    const errorMessages = [];
+    const touchedCategories = new Set();
+
+    for (const r of records) {
+      if (existingSet.has(r.service_id.toString())) {
+        errorMessages.push(`Service ${r.service_id} is already in your offerings.`);
+        continue;
+      }
+
+      const service = await Service.findById(r.service_id);
+      if (!service || service.deleted_at) {
+        errorMessages.push(`Service ${r.service_id} does not exist.`);
+        continue;
+      }
+      const category = await Category.findById(r.category_id);
+      if (!category || category.deleted_at) {
+        errorMessages.push(`Category ${r.category_id} does not exist.`);
+        continue;
+      }
+
+      service.helpers = (service.helpers || 0) + 1;
+      await service.save();
+
+      if (!touchedCategories.has(r.category_id.toString())) {
+        category.helpers = (category.helpers || 0) + 1;
+        await category.save();
+        touchedCategories.add(r.category_id.toString());
+      }
+
+      toInsert.push({
+        partner_id: partnerId,
+        service_id: new mongoose.Types.ObjectId(r.service_id),
+        category_id: new mongoose.Types.ObjectId(r.category_id),
+        is_accept_request: r.is_accept_request === undefined ? true : !!r.is_accept_request,
+      });
+      existingSet.add(r.service_id.toString());
+    }
+
+    if (toInsert.length > 0) {
+      await PartnerService.insertMany(toInsert);
+    }
+
+    if (errorMessages.length > 0) {
+      return res.status(207).json({
+        success: false,
+        status: 207,
+        message:
+          toInsert.length > 0
+            ? `Partial success: ${toInsert.length} added, ${errorMessages.length} skipped.`
+            : `No services added.`,
+        data: { insertedRecords: toInsert.length, failedRecords: errorMessages.length },
+        errors: errorMessages,
+      });
+    }
+
+    return res.status(201).json({
+      success: true,
+      status: 201,
+      message: `${toInsert.length} services added successfully.`,
+    });
+  } catch (err) {
+    console.error('addMyServices error:', err.message);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Internal server error.',
+      error: err.message,
+    });
+  }
+};
+
+// PUT /api/partner_service/updateMyService/:id
+// Editable fields for the partner: category_id, is_accept_request.
+const updateMyService = async (req, res) => {
+  try {
+    const partnerId = new mongoose.Types.ObjectId(req.user.id);
+    const { id } = req.params;
+
+    const idCheck = validateObjectId(id, 'partner service');
+    if (!idCheck.valid) {
+      return res.status(400).json({ success: false, status: 400, message: idCheck.message });
+    }
+
+    const partnerService = await PartnerService.findOne({
+      _id: id,
+      deleted_at: null,
+    });
+    if (!partnerService) {
+      return res.status(404).json({
+        success: false,
+        status: 404,
+        message: 'No record found.',
+      });
+    }
+
+    if (partnerService.partner_id.toString() !== partnerId.toString()) {
+      return res.status(403).json({
+        success: false,
+        status: 403,
+        message: 'You can only modify your own services.',
+      });
+    }
+
+    const { category_id, is_accept_request } = req.body;
+
+    if (category_id !== undefined) {
+      const cv = validateObjectId(category_id, 'category');
+      if (!cv.valid) {
+        return res.status(400).json({ success: false, status: 400, message: cv.message });
+      }
+      const category = await Category.findById(category_id);
+      if (!category || category.deleted_at) {
+        return res.status(404).json({
+          success: false,
+          status: 404,
+          message: 'Category not found.',
+        });
+      }
+      partnerService.category_id = new mongoose.Types.ObjectId(category_id);
+    }
+
+    if (is_accept_request !== undefined) {
+      partnerService.is_accept_request = !!is_accept_request;
+    }
+
+    partnerService.updated_at = new Date();
+    await partnerService.save();
+
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: 'Service updated successfully.',
+      record: partnerService,
+    });
+  } catch (err) {
+    console.error('updateMyService error:', err.message);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Internal server error.',
+    });
+  }
+};
+
+// POST /api/partner_service/toggleMyServiceStatus/:id
+// Flips is_accept_request (the active/inactive switch) on the partner's own service.
+const toggleMyServiceStatus = async (req, res) => {
+  try {
+    const partnerId = new mongoose.Types.ObjectId(req.user.id);
+    const { id } = req.params;
+
+    const idCheck = validateObjectId(id, 'partner service');
+    if (!idCheck.valid) {
+      return res.status(400).json({ success: false, status: 400, message: idCheck.message });
+    }
+
+    const partnerService = await PartnerService.findOne({
+      _id: id,
+      deleted_at: null,
+    });
+    if (!partnerService) {
+      return res.status(404).json({
+        success: false,
+        status: 404,
+        message: 'No record found.',
+      });
+    }
+
+    if (partnerService.partner_id.toString() !== partnerId.toString()) {
+      return res.status(403).json({
+        success: false,
+        status: 403,
+        message: 'You can only modify your own services.',
+      });
+    }
+
+    partnerService.is_accept_request = !partnerService.is_accept_request;
+    partnerService.updated_at = new Date();
+    await partnerService.save();
+
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: partnerService.is_accept_request
+        ? 'Service marked active.'
+        : 'Service marked inactive.',
+      is_accept_request: partnerService.is_accept_request,
+    });
+  } catch (err) {
+    console.error('toggleMyServiceStatus error:', err.message);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Internal server error.',
+    });
+  }
+};
+
+module.exports = {
+  getAll,
+  create,
+  updateStatus,
+  deleteState,
+  getDropDown,
+  getMyServices,
+  getAvailableServices,
+  addMyServices,
+  updateMyService,
+  toggleMyServiceStatus,
+};

@@ -1,11 +1,38 @@
 const mongoose = require("mongoose");
 const PartnerService = require('../models/partner_service');
+const User = require('../models/user');
+const Franchise = require('../models/franchise');
 const { applyPagination, applyDropDownFilter } = require('../utils/pagination');
 const { parseBoolean } = require('../utils/parser');
 const { validationResult } = require('express-validator');
 const { validateObjectId } = require('../validator/form_validator');
+const { sanitizeInput } = require('../validator/search_keyword_validator');
 const Service = require("../models/service");
 const Category = require("../models/category");
+
+/**
+ * Categories / services allowed for a partner come from their user's franchise document.
+ * @returns {{ ok: true, categoryIds: mongoose.Types.ObjectId[], serviceIds: mongoose.Types.ObjectId[] } | { ok: false, status: number, message: string }}
+ */
+const resolvePartnerFranchiseCatalog = async (partnerId) => {
+  const user = await User.findOne({ _id: partnerId, deleted_at: null }).select('franchise_id');
+  if (!user) {
+    return { ok: false, status: 401, message: 'User not found.' };
+  }
+  if (!user.franchise_id) {
+    return { ok: false, status: 400, message: 'Partner account is not linked to a franchise.' };
+  }
+  const franchise = await Franchise.findOne({
+    _id: user.franchise_id,
+    deleted_at: null,
+  }).select('categories services');
+  if (!franchise) {
+    return { ok: false, status: 404, message: 'Franchise not found.' };
+  }
+  const categoryIds = Array.isArray(franchise.categories) ? franchise.categories : [];
+  const serviceIds = Array.isArray(franchise.services) ? franchise.services : [];
+  return { ok: true, categoryIds, serviceIds };
+};
 
 const getAll = async (req, res) => {
 
@@ -594,6 +621,214 @@ const getAvailableServices = async (req, res) => {
   }
 };
 
+// GET /api/partner_service/availableFranchiseCategories
+// Active, approved categories configured on the partner's franchise (for add-service flows).
+const getAvailableFranchiseCategories = async (req, res) => {
+  try {
+    const partnerId = new mongoose.Types.ObjectId(req.user.id);
+    const resolved = await resolvePartnerFranchiseCatalog(partnerId);
+    if (!resolved.ok) {
+      return res.status(resolved.status).json({
+        success: false,
+        status: resolved.status,
+        message: resolved.message,
+      });
+    }
+
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+
+    const { categoryIds } = resolved;
+    if (categoryIds.length === 0) {
+      return res.status(200).json({
+        success: true,
+        status: 200,
+        message: 'No categories configured for your franchise.',
+        totalItems: 0,
+        totalPages: 0,
+        currentPage: page,
+        records: [],
+      });
+    }
+
+    const filter = {
+      _id: { $in: categoryIds },
+      deleted_at: null,
+      is_active: true,
+      is_request: false,
+      approval_status: 'approve',
+    };
+
+    if (req.query.name) {
+      filter.name = { $regex: new RegExp(sanitizeInput(String(req.query.name)), 'i') };
+    }
+
+    const sort = { created_at: -1 };
+    const { data, totalCount, totalPages, currentPage } = await applyPagination(
+      Category,
+      filter,
+      page,
+      limit,
+      sort
+    );
+
+    const processed = data.map((c) => ({
+      _id: c._id,
+      name: c.name,
+      desc: c.desc,
+      image_url: c.image_url,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: 'Franchise categories fetched successfully.',
+      totalItems: totalCount,
+      totalPages,
+      currentPage,
+      records: processed,
+    });
+  } catch (err) {
+    console.error('getAvailableFranchiseCategories error:', err.message);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Internal server error.',
+    });
+  }
+};
+
+// GET /api/partner_service/availableFranchiseServices?category_id=
+// Active, approved franchise services for one category; excludes services already on the partner profile.
+const getAvailableFranchiseServices = async (req, res) => {
+  try {
+    const partnerId = new mongoose.Types.ObjectId(req.user.id);
+    const resolved = await resolvePartnerFranchiseCatalog(partnerId);
+    if (!resolved.ok) {
+      return res.status(resolved.status).json({
+        success: false,
+        status: resolved.status,
+        message: resolved.message,
+      });
+    }
+
+    const { categoryIds, serviceIds } = resolved;
+
+    if (!req.query.category_id) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'category_id query parameter is required.',
+      });
+    }
+
+    const categoryResult = validateObjectId(req.query.category_id, 'category');
+    if (!categoryResult.valid) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: categoryResult.message,
+      });
+    }
+
+    const categoryOid = new mongoose.Types.ObjectId(req.query.category_id);
+    const categoryAllowed = categoryIds.some((id) => id.toString() === categoryOid.toString());
+    if (!categoryAllowed) {
+      return res.status(403).json({
+        success: false,
+        status: 403,
+        message: 'This category is not available for your franchise.',
+      });
+    }
+
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+
+    if (serviceIds.length === 0) {
+      return res.status(200).json({
+        success: true,
+        status: 200,
+        message: 'No services configured for your franchise.',
+        totalItems: 0,
+        totalPages: 0,
+        currentPage: page,
+        records: [],
+      });
+    }
+
+    const taken = await PartnerService.find({
+      partner_id: partnerId,
+      deleted_at: null,
+    }).select('service_id');
+    const takenSet = new Set(taken.map((t) => String(t.service_id)));
+    const candidateIds = serviceIds.filter((id) => !takenSet.has(String(id)));
+
+    if (candidateIds.length === 0) {
+      return res.status(200).json({
+        success: true,
+        status: 200,
+        message: 'No franchise services left to add for this category.',
+        totalItems: 0,
+        totalPages: 0,
+        currentPage: page,
+        records: [],
+      });
+    }
+
+    const filter = {
+      _id: { $in: candidateIds },
+      category_id: categoryOid,
+      deleted_at: null,
+      is_active: true,
+      is_request: false,
+      approval_status: 'approve',
+    };
+
+    if (req.query.name) {
+      filter.name = { $regex: new RegExp(sanitizeInput(String(req.query.name)), 'i') };
+    }
+
+    const sort = { created_at: -1 };
+    const { data: services, totalCount, totalPages, currentPage } = await applyPagination(
+      Service,
+      filter,
+      page,
+      limit,
+      sort,
+      {},
+      [{ path: 'category_id' }]
+    );
+
+    const processed = services.map((s) => ({
+      _id: s._id,
+      name: s.name,
+      desc: s.desc,
+      price: s.price,
+      tax: s.tax,
+      image_url: s.image_url,
+      category_id: s.category_id?._id || null,
+      category_name: s.category_id?.name || null,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: 'Available franchise services fetched successfully.',
+      totalItems: totalCount,
+      totalPages,
+      currentPage,
+      records: processed,
+    });
+  } catch (err) {
+    console.error('getAvailableFranchiseServices error:', err.message);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Internal server error.',
+    });
+  }
+};
+
 // POST /api/partner_service/addMyServices
 // Body: { services: [{ service_id, category_id }] }
 // partner_id is forced from req.user.id (cannot be spoofed via body).
@@ -629,6 +864,28 @@ const addMyServices = async (req, res) => {
       }
     }
 
+    const catalog = await resolvePartnerFranchiseCatalog(partnerId);
+    if (
+      !catalog.ok &&
+      !(
+        catalog.status === 400 &&
+        catalog.message === 'Partner account is not linked to a franchise.'
+      )
+    ) {
+      return res.status(catalog.status).json({
+        success: false,
+        status: catalog.status,
+        message: catalog.message,
+      });
+    }
+    const enforceFranchise = catalog.ok === true;
+    const franchiseCategorySet = enforceFranchise
+      ? new Set(catalog.categoryIds.map((id) => String(id)))
+      : null;
+    const franchiseServiceSet = enforceFranchise
+      ? new Set(catalog.serviceIds.map((id) => String(id)))
+      : null;
+
     const serviceIds = [...new Set(records.map((r) => r.service_id.toString()))];
     const existing = await PartnerService.find({
       partner_id: partnerId,
@@ -656,6 +913,43 @@ const addMyServices = async (req, res) => {
       if (!category || category.deleted_at) {
         errorMessages.push(`Category ${r.category_id} does not exist.`);
         continue;
+      }
+
+      if (enforceFranchise) {
+        if (!franchiseCategorySet.has(String(r.category_id))) {
+          errorMessages.push(
+            `Category ${r.category_id} is not offered by your franchise.`
+          );
+          continue;
+        }
+        if (!franchiseServiceSet.has(String(r.service_id))) {
+          errorMessages.push(
+            `Service ${r.service_id} is not offered by your franchise.`
+          );
+          continue;
+        }
+        if (String(service.category_id) !== String(r.category_id)) {
+          errorMessages.push(
+            `Service ${r.service_id} does not belong to the selected category.`
+          );
+          continue;
+        }
+        if (
+          !service.is_active ||
+          service.is_request ||
+          service.approval_status !== 'approve'
+        ) {
+          errorMessages.push(`Service ${r.service_id} is not available to add.`);
+          continue;
+        }
+        if (
+          !category.is_active ||
+          category.is_request ||
+          category.approval_status !== 'approve'
+        ) {
+          errorMessages.push(`Category ${r.category_id} is not available to add.`);
+          continue;
+        }
       }
 
       service.helpers = (service.helpers || 0) + 1;
@@ -844,6 +1138,8 @@ module.exports = {
   getDropDown,
   getMyServices,
   getAvailableServices,
+  getAvailableFranchiseCategories,
+  getAvailableFranchiseServices,
   addMyServices,
   updateMyService,
   toggleMyServiceStatus,

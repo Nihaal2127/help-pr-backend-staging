@@ -13,6 +13,7 @@ const Franchise = require('../models/franchise');
 const Expense = require('../models/expense');
 const ExpenseCategory = require('../models/expense_category');
 const ContentManagement = require('../models/content_management');
+const Quote = require('../models/quote');
 const SubscriptionPlan = require('../models/subscription_plan');
 const PartnerSubscription = require('../models/partner_subscription');
 const { checkObjectIdExists } = require('../validator/id_validator');
@@ -50,7 +51,7 @@ const resolveCountType = (type) => {
         'user-management': 3,
         'financials': 4,
         'order-payment': 4,
-        'partner-management': 11,
+        'partner-management': 12,
         'partner-payment': 5,
         'franchise-management': 6,
         'expenses': 7,
@@ -58,6 +59,9 @@ const resolveCountType = (type) => {
         'content-management': 9,
         'my-franchise': 10,
         my_franchise: 10,
+        'quote-management': 11,
+        quote_management: 11,
+        quotes: 11,
     };
 
     return typeMap[key] ?? null;
@@ -198,6 +202,9 @@ const getCountData = async (req, res) => {
                 const data = result[0];
                 response.received_amount = data.received_amount;
                 response.pending_amount = data.pending_amount;
+            } else {
+                response.received_amount = 0;
+                response.pending_amount = 0;
             }
         } else if (resolvedType === 5) {
             // Partner Payment
@@ -228,6 +235,10 @@ const getCountData = async (req, res) => {
                 response.completed_amount = data.completed_amount;
                 response.pending_amount = data.pending_amount;
                 response.returned_amount = data.returned_amount;
+            } else {
+                response.completed_amount = 0;
+                response.pending_amount = 0;
+                response.returned_amount = 0;
             }
         } else if (resolvedType === 6) {
             // Franchise Management
@@ -472,6 +483,67 @@ const getCountData = async (req, res) => {
                 });
             }
         } else if (resolvedType === 11) {
+            // Quote Management
+            const STATUS_PENDING = 1;
+            const STATUS_APPROVED = 2;
+            const STATUS_CONVERTED = 4;
+
+            const baseFilter = { deleted_at: null };
+            if (
+                req.body.franchise_id !== undefined &&
+                req.body.franchise_id !== null &&
+                req.body.franchise_id !== ''
+            ) {
+                if (!mongoose.Types.ObjectId.isValid(req.body.franchise_id)) {
+                    return res.status(409).json({
+                        success: false,
+                        status: 409,
+                        message: "Invalid franchise id.",
+                    });
+                }
+                baseFilter.franchise_id = new mongoose.Types.ObjectId(req.body.franchise_id);
+            }
+
+            const newFilter = {
+                ...baseFilter,
+                status: STATUS_PENDING,
+                partner_id: null,
+            };
+            const pendingFilter = {
+                ...baseFilter,
+                status: STATUS_PENDING,
+                partner_id: { $ne: null },
+            };
+            const acceptedFilter = {
+                ...baseFilter,
+                status: { $in: [STATUS_APPROVED, STATUS_CONVERTED] },
+            };
+            const successFilter = {
+                ...baseFilter,
+                status: STATUS_CONVERTED,
+                order_id: { $ne: null },
+            };
+            const failedFilter = {
+                ...baseFilter,
+                status: STATUS_APPROVED,
+                order_id: null,
+            };
+
+            const [newCount, pendingCount, acceptedCount, successCount, failedCount] =
+                await Promise.all([
+                    Quote.countDocuments(newFilter),
+                    Quote.countDocuments(pendingFilter),
+                    Quote.countDocuments(acceptedFilter),
+                    Quote.countDocuments(successFilter),
+                    Quote.countDocuments(failedFilter),
+                ]);
+
+            response.new = newCount;
+            response.pending = pendingCount;
+            response.accepted = acceptedCount;
+            response.success = successCount;
+            response.failed = failedCount;
+        } else if (resolvedType === 12) {
             // Partner Management — subscription plans & partner subscriptions (dashboard cards)
             const planBase = { deleted_at: null };
             response.total_plans = await SubscriptionPlan.countDocuments(planBase);
@@ -493,6 +565,7 @@ const getCountData = async (req, res) => {
             success: true,
             status: 200,
             record: response,
+            records: response,
         });
     } catch (error) {
         console.error('Error fetching Count data:', error);

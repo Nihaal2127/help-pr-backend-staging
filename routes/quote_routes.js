@@ -9,6 +9,7 @@ const {
 const {
   create,
   getAll,
+  getQuoteCounts,
   getById,
   getCustomerQuotes,
   update,
@@ -21,6 +22,7 @@ const {
 
 router.post("/create", authMiddleware, createQuoteMiddleware, create);
 router.get("/getAll", authMiddleware, getAll);
+router.get("/getCounts", authMiddleware, getQuoteCounts);
 router.get("/get/:id", authMiddleware, getById);
 router.get("/getCustomerQuotes", authMiddleware, getCustomerQuotes);
 router.put("/update/:id", authMiddleware, updateQuoteMiddleware, update);

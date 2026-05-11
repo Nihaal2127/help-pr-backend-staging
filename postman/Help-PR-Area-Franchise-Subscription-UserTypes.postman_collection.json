@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "b1f0b5f2-help-pr-area-franchise-subscription-user-types",
     "name": "Help PR - Area, Franchise, Subscription, Partner Subscription + User Types",
-    "description": "Full API list from Area/Franchise/Subscription/Partner Subscription collection, plus user creation requests for Super Admin (type 5) and Staff (type 6) via web flow.",
+    "description": "Full API list from Area/Franchise/Subscription/Partner Subscription collection, plus user creation requests. Collection uses Bearer {{auth_token}}. POST /api/user/create requires a logged-in user with permission (Super Admin or Staff to create types 5/6; Admin/Employee may create partner, employee, user per backend rules).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {

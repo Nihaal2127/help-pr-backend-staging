@@ -66,7 +66,6 @@ const createUserMiddleware = (req, res, next) => {
     city_id,
     profile_url,
     password,
-    confirm_password,
     is_from_web,
     is_active,
     is_blocked,
@@ -182,20 +181,6 @@ const createUserMiddleware = (req, res, next) => {
       message: 'Password must be at least 8 characters long, contain an uppercase letter, a lowercase letter, a number, and a special character.'
     });
   }
-  if (confirm_password === undefined || confirm_password === null || String(confirm_password).trim() === '') {
-    return res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'Confirm password is required.'
-    });
-  }
-  if (password !== confirm_password) {
-    return res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'Password and confirm password do not match.'
-    });
-  }
   if (type < 1 || type > 6) {
     return res.status(400).json({
       success: false,
@@ -267,37 +252,6 @@ const createUserMiddleware = (req, res, next) => {
       status: 400,
       message: 'Blocked status must be boolean.'
     });
-  }
-  if (password !== undefined) {
-    if (String(password).trim() === '') {
-      return res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'Password is required.'
-      });
-    }
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-    if (!passwordRegex.test(password)) {
-      return res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'Password must be at least 8 characters long, contain one uppercase, one lowercase, one number, and one special character.'
-      });
-    }
-    if (confirm_password === undefined || confirm_password === null || String(confirm_password).trim() === '') {
-      return res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'Confirm password is required.'
-      });
-    }
-    if (password !== confirm_password) {
-      return res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'Password and confirm password do not match.'
-      });
-    }
   }
   if ([1, 3].includes(type) && franchise_id !== undefined && franchise_id !== null && String(franchise_id).trim() !== '') {
     if (!mongoose.Types.ObjectId.isValid(franchise_id)) {
@@ -482,7 +436,6 @@ const updateUserMiddleware = (req, res, next) => {
     accessible_screens,
     chat,
     password,
-    confirm_password,
   } = req.body;
   if (accessible_screens !== undefined && !validateAccessibleScreens(accessible_screens, res)) return;
 
@@ -565,20 +518,6 @@ const updateUserMiddleware = (req, res, next) => {
         success: false,
         status: 400,
         message: 'Password must be at least 8 characters long, contain one uppercase, one lowercase, one number, and one special character.'
-      });
-    }
-    if (confirm_password === undefined || confirm_password === null || String(confirm_password).trim() === '') {
-      return res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'Confirm password is required.'
-      });
-    }
-    if (password !== confirm_password) {
-      return res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'Password and confirm password do not match.'
       });
     }
   }
@@ -729,7 +668,7 @@ const getPartnerDropDownMiddleware = (req, res, next) => {
   next();
 };
 const changePasswordMiddleware = (req, res, next) => {
-  const { new_password, confirm_password, user_id, type } = req.body;
+  const { new_password, user_id, type } = req.body;
   if (!user_id || String(user_id).trim() === '') {
     return res.status(400).json({
       success: false,
@@ -772,20 +711,6 @@ const changePasswordMiddleware = (req, res, next) => {
       success: false,
       status: 400,
       message: 'Password must be at least 8 characters long, contain an uppercase letter, a lowercase letter, a number, and a special character.',
-    });
-  }
-  if (confirm_password === undefined || confirm_password === null || String(confirm_password).trim() === '') {
-    return res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'Confirm password is required.',
-    });
-  }
-  if (new_password !== confirm_password) {
-    return res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'Password and confirm password do not match.',
     });
   }
   next();

@@ -342,9 +342,17 @@
           "name": "Create user",
           "request": {
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "POST",
+            "description": "POST /api/user/create — requires Bearer token. Super Admin (5) and Staff (6) may create any user type. Admin (1) and Employee (3) may create only Partner, Employee, and User; partner/employee `franchise_id` is forced to the caller's franchise. Partner and User cannot call this route. Send a single `password` (strength rules apply).",
             "header": [
               {
                 "key": "Content-Type",
@@ -357,7 +365,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{}",
+              "raw": "{\n  \"name\": \"Example Admin\",\n  \"email\": \"admin.example@example.com\",\n  \"phone_number\": \"+919876543210\",\n  \"password\": \"Test@1234\",\n  \"type\": 1,\n  \"is_from_web\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -381,6 +389,7 @@
               ]
             },
             "method": "POST",
+            "description": "POST /api/user/changePassword. Supported `type` values: 2 (partner) or 4 (user). Send `new_password` only; `confirm_password` is not used by the API.",
             "header": [
               {
                 "key": "Content-Type",
@@ -393,7 +402,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{}",
+              "raw": "{\n  \"user_id\": \"{{id}}\",\n  \"type\": 4,\n  \"new_password\": \"Test@1234\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -507,6 +516,7 @@
               ]
             },
             "method": "PUT",
+            "description": "PUT /api/user/update/:id. If you send `password`, use a single field only; `confirm_password` is not used by the API.",
             "header": [
               {
                 "key": "Content-Type",

@@ -2405,7 +2405,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{}",
+              "raw": "{\n  \"services\": [\n    {\n      \"partner_id\": \"{{partner_id}}\",\n      \"category_id\": \"{{category_id}}\",\n      \"service_id\": \"{{service_id}}\",\n      \"is_accept_request\": true\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2430,18 +2430,25 @@
             },
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/api/partner_service/getAll"
+            "url": "{{base_url}}/api/partner_service/getAll?page=1&limit=10&partner_id={{partner_id}}&type=&is_active=&name="
           }
         },
         {
           "name": "Get dropdown",
           "request": {
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/api/partner_service/getDropDown"
+            "url": "{{base_url}}/api/partner_service/getDropDown?partner_id={{partner_id}}&service_id={{service_id}}"
           }
         },
         {
@@ -2496,6 +2503,132 @@
             "method": "DELETE",
             "header": [],
             "url": "{{base_url}}/api/partner_service/delete/{{id}}"
+          }
+        },
+        {
+          "name": "My services (partner)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/partner_service/myServices?page=1&limit=10&category_id=&is_accept_request=&name="
+          }
+        },
+        {
+          "name": "Available services (partner)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/partner_service/availableServices?page=1&limit=10&category_id=&name="
+          }
+        },
+        {
+          "name": "Add my services (partner)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"services\": [\n    {\n      \"service_id\": \"{{service_id}}\",\n      \"category_id\": \"{{category_id}}\",\n      \"is_accept_request\": true\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/partner_service/addMyServices"
+          }
+        },
+        {
+          "name": "Update my service (partner)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category_id\": \"{{category_id}}\",\n  \"is_accept_request\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/partner_service/updateMyService/{{id}}"
+          }
+        },
+        {
+          "name": "Toggle my service status (partner)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/api/partner_service/toggleMyServiceStatus/{{id}}"
           }
         }
       ]

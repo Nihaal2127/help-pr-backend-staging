@@ -148,12 +148,46 @@ const requirePartner = async (req, res, next) => {
     }
 };
 
+/**
+ * Loads caller from DB and requires a back-office role:
+ * Super Admin (5), Admin (1), Staff (6), or Employee (3).
+ * Explicitly rejects Partner (2) and User (4). Use after authMiddleware.
+ */
+const BACKOFFICE_TYPES = [
+    USER_TYPE_ADMIN,
+    USER_TYPE_EMPLOYEE,
+    USER_TYPE_SUPER_ADMIN,
+    USER_TYPE_STAFF,
+];
+
+const requireBackoffice = async (req, res, next) => {
+    try {
+        const user = await User.findOne({ _id: req.user.id, deleted_at: null }).select('type');
+        if (!user || !BACKOFFICE_TYPES.includes(Number(user.type))) {
+            return res.status(403).json({
+                success: false,
+                status: 403,
+                message: 'Super admin, admin, staff, or employee access required.',
+            });
+        }
+        next();
+    } catch (err) {
+        console.error('requireBackoffice', err.message);
+        return res.status(500).json({
+            success: false,
+            status: 500,
+            message: 'Internal server error.',
+        });
+    }
+};
+
 module.exports = {
     requireAdmin,
     requireSuperAdmin,
     requirePartner,
     requireSuperAdminOrStaff,
     requireSuperAdminStaffFranchiseAdminEmployee,
+    requireBackoffice,
     USER_TYPE_ADMIN,
     USER_TYPE_SUPER_ADMIN,
     USER_TYPE_PARTNER,

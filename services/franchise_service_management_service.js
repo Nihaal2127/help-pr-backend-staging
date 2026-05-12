@@ -135,6 +135,8 @@ const ensureServices = async (serviceIds) => {
     return count === serviceIds.length;
 };
 
+const categoryPopulateSelect = 'name desc image_url is_active is_request category_id';
+
 const listPopulateFields = [
     { path: 'franchise_id', select: 'name admin_name is_active' },
     {
@@ -142,6 +144,11 @@ const listPopulateFields = [
         populate: {
             path: 'service_id',
             select: 'name desc image_url category_id is_active is_request',
+            populate: {
+                path: 'category_id',
+                select: categoryPopulateSelect,
+                match: { deleted_at: null },
+            },
         },
     },
 ];
@@ -194,7 +201,15 @@ const buildAllServicesWithFranchiseMappingStatus = async (franchiseOid) => {
         (coerced.active_services || []).forEach((id) => activeSet.add(id.toString()));
     }
 
-    const allSvcs = await Service.find({ deleted_at: null }).sort({ name: 1 }).lean();
+    const allSvcs = await Service.find({ deleted_at: null })
+        .populate({
+            path: 'category_id',
+            select: categoryPopulateSelect,
+            match: { deleted_at: null },
+        })
+        .sort({ name: 1 })
+        .lean();
+
     return allSvcs.map((svc) => ({
         ...svc,
         franchise_active: activeSet.has(svc._id.toString()),

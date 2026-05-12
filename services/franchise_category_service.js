@@ -121,10 +121,86 @@ const listPopulateFields = [
         path: 'categories_list',
         populate: {
             path: 'category_id',
-            select: 'name desc image_url is_active is_request',
+            select: 'name desc image_url is_active is_request category_id',
         },
     },
 ];
+
+/** Global `services` where `service.category_id` matches the category (_id). */
+const RELATED_SERVICE_FIELDS =
+    'name desc image_url category_id is_active is_request price helpers service_id tax commission payment_type minimum_deposit approval_status rejection_reason requested_by created_at updated_at';
+
+const loadServicesGroupedByCategoryId = async (categoryObjectIds) => {
+    const map = new Map();
+    if (!categoryObjectIds || categoryObjectIds.length === 0) return map;
+    const unique = [...new Set(categoryObjectIds.map((id) => (id ? id.toString() : '')))].filter(
+        Boolean
+    );
+    if (unique.length === 0) return map;
+    const oids = unique.map((s) => new mongoose.Types.ObjectId(s));
+    const rows = await Service.find({
+        deleted_at: null,
+        category_id: { $in: oids },
+    })
+        .select(RELATED_SERVICE_FIELDS)
+        .sort({ name: 1 })
+        .lean();
+    for (const s of rows) {
+        const cid = s.category_id ? s.category_id.toString() : '';
+        if (!cid) continue;
+        if (!map.has(cid)) map.set(cid, []);
+        map.get(cid).push(s);
+    }
+    return map;
+};
+
+/**
+ * Attaches `related_services` on each populated `categories_list[].category_id` (global services for that category).
+ */
+const enrichFranchiseCategoryRecordsWithRelatedServices = async (records) => {
+    if (!Array.isArray(records) || records.length === 0) return records;
+    const catIds = [];
+    for (const row of records) {
+        const list = row.categories_list || [];
+        for (const e of list) {
+            const cid = e.category_id;
+            if (!cid) continue;
+            if (cid instanceof mongoose.Types.ObjectId) {
+                catIds.push(cid);
+            } else if (typeof cid === 'object' && cid._id) {
+                catIds.push(cid._id);
+            }
+        }
+    }
+    const svcMap = await loadServicesGroupedByCategoryId(catIds);
+    return records.map((row) => {
+        const plain = row && typeof row.toObject === 'function' ? row.toObject() : { ...row };
+        const list = Array.isArray(plain.categories_list) ? plain.categories_list : [];
+        plain.categories_list = list.map((e) => {
+            const cid = e.category_id;
+            if (!cid) return e;
+            let idStr;
+            if (cid instanceof mongoose.Types.ObjectId) {
+                idStr = cid.toString();
+                const svcs = svcMap.get(idStr) || [];
+                return { ...e, related_services: svcs };
+            }
+            if (typeof cid === 'object' && cid._id) {
+                idStr = cid._id.toString();
+                const svcs = svcMap.get(idStr) || [];
+                return {
+                    ...e,
+                    category_id: {
+                        ...cid,
+                        related_services: svcs,
+                    },
+                };
+            }
+            return e;
+        });
+        return plain;
+    });
+};
 
 /** When no FranchiseCategory row exists, mirror Franchise.categories as active mappings. */
 const buildSyntheticFranchiseCategoryFromFranchiseDoc = async (franchiseOid) => {
@@ -175,9 +251,11 @@ const buildAllCategoriesWithFranchiseMappingStatus = async (franchiseOid) => {
     }
 
     const allCats = await Category.find({ deleted_at: null }).sort({ name: 1 }).lean();
+    const svcMap = await loadServicesGroupedByCategoryId(allCats.map((c) => c._id));
     return allCats.map((cat) => ({
         ...cat,
         franchise_active: activeSet.has(cat._id.toString()),
+        related_services: svcMap.get(cat._id.toString()) || [],
     }));
 };
 
@@ -337,7 +415,7 @@ const list = async (query, userId) => {
             }
         }
 
-        const records = filterRecordsByFranchiseMappingToggle(
+        let records = filterRecordsByFranchiseMappingToggle(
             applyCategoryCatalogFiltersToRecords(
                 data,
                 undefined,
@@ -349,6 +427,8 @@ const list = async (query, userId) => {
             'inactive_categories',
             'category_id'
         );
+
+        records = await enrichFranchiseCategoryRecordsWithRelatedServices(records);
 
         let all_categories;
         if (filter.franchise_id) {
@@ -444,7 +524,7 @@ const getById = async (id, userId, query = {}) => {
             undefined,
             listFlags.isRequestFilter
         ).map((row) => coerceLegacyCategoryMappingArrays(row));
-        const [recordOut] = filterRecordsByFranchiseMappingToggle(
+        let [recordOut] = filterRecordsByFranchiseMappingToggle(
             afterCatalog,
             listFlags.mappingActiveFilter,
             'categories_list',
@@ -452,6 +532,10 @@ const getById = async (id, userId, query = {}) => {
             'inactive_categories',
             'category_id'
         );
+        const [enriched] = await enrichFranchiseCategoryRecordsWithRelatedServices(
+            recordOut ? [recordOut] : []
+        );
+        recordOut = enriched || recordOut;
         return ok(200, {
             message: 'Franchise category fetched successfully.',
             record: recordOut,

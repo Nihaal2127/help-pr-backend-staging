@@ -12,7 +12,10 @@ const {
 } = require('../controllers/franchise_controller');
 const authMiddleware = require('../middleware/auth_middleware');
 const rateLimiter = require('../middleware/rate_middleware');
-const { requireFranchiseRelatedCatalogAccess } = require('../middleware/role_middleware');
+const {
+    requireFranchiseRelatedCatalogAccess,
+    requireFranchiseDropDownAccess,
+} = require('../middleware/role_middleware');
 const {
     createFranchiseMiddleware,
     updateFranchiseMiddleware,
@@ -30,7 +33,7 @@ router.get(
 );
 router.get('/get/:id', authMiddleware, getById);
 router.get('/getAll', authMiddleware, getAll);
-router.get('/getDropDown', authMiddleware, getDropDown);
+router.get('/getDropDown', authMiddleware, requireFranchiseDropDownAccess, getDropDown);
 router.put('/update/:id', authMiddleware, updateFranchiseMiddleware, update);
 router.delete('/delete/:id', authMiddleware, deleteFranchise);
 

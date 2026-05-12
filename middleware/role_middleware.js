@@ -39,6 +39,26 @@ const requireSuperAdminOrStaff = async (req, res, next) => {
     }
 };
 
+/** Query keys: full_list, fullList — true | 1 */
+const isFranchiseDropDownFullListQuery = (req) => {
+    const raw = req.query.full_list ?? req.query.fullList;
+    if (raw === true || raw === 1) return true;
+    const s = String(raw ?? '').trim().toLowerCase();
+    return s === 'true' || s === '1';
+};
+
+/**
+ * GET /api/franchise/getDropDown:
+ * - Default: Super Admin or Staff only (assign franchise to admin — excludes franchises owned by other admins).
+ * - full_list=true|1: Super Admin, Staff, Franchise Admin, or Franchise Employee — all active franchises (dropdown filters, etc.).
+ */
+const requireFranchiseDropDownAccess = async (req, res, next) => {
+    if (isFranchiseDropDownFullListQuery(req)) {
+        return requireSuperAdminStaffFranchiseAdminEmployee(req, res, next);
+    }
+    return requireSuperAdminOrStaff(req, res, next);
+};
+
 /**
  * Get / update franchise category or franchise service records:
  * Super Admin, Staff, Franchise Admin (admin with franchise_id), Franchise Employee (employee with franchise_id).
@@ -245,6 +265,7 @@ module.exports = {
     requireSuperAdmin,
     requirePartner,
     requireSuperAdminOrStaff,
+    requireFranchiseDropDownAccess,
     requireSuperAdminStaffFranchiseAdminEmployee,
     requireFranchiseRelatedCatalogAccess,
     requireBackoffice,

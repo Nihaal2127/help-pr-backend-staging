@@ -605,6 +605,38 @@ const listFranchisesForDropdown = async (query) => {
             deleted_at: null,
             is_active: true,
         };
+
+        const fullListRaw = query.full_list ?? query.fullList;
+        const fullList =
+            fullListRaw === true ||
+            fullListRaw === 1 ||
+            String(fullListRaw ?? '')
+                .trim()
+                .toLowerCase() === 'true' ||
+            String(fullListRaw ?? '').trim() === '1';
+
+        if (!fullList) {
+            const adminFranchiseOwners = {
+                deleted_at: null,
+                type: 1,
+                franchise_id: { $exists: true, $ne: null },
+            };
+            const forUserRaw = query.for_user_id ?? query.forUserId;
+            if (forUserRaw !== undefined && forUserRaw !== null && String(forUserRaw).trim() !== '') {
+                const parsedUser = parseObjectId(forUserRaw, 'for_user_id');
+                if (!parsedUser.ok) {
+                    return fail(400, parsedUser.message);
+                }
+                adminFranchiseOwners._id = { $ne: parsedUser.oid };
+            }
+
+            const assignedFranchiseIds = await User.distinct('franchise_id', adminFranchiseOwners);
+            const blockedIds = assignedFranchiseIds.filter((id) => id != null);
+            if (blockedIds.length > 0) {
+                filter._id = { $nin: blockedIds };
+            }
+        }
+
         const sort = { name: 1 };
         const projection = { _id: 1, name: 1 };
         const { data: rows } = await applyDropDownFilter(Franchise, filter, sort, projection);

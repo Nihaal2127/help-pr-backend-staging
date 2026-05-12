@@ -1235,7 +1235,7 @@
     },
     {
       "name": "Franchise",
-      "description": "Franchise CRUD plus **franchise-category** / **franchise-service** mapping APIs.\n\n**Create franchise:** Inserts mapping rows: `categories_list` / `services_list` (assigned ids only), `active_*` / empty `inactive_*`, **`categories_order`** / **`services_order`** (payload order).\n\n**Toggle on/off:** Use mapping `PUT .../update` with **`active_categories`/`inactive_categories`** or **`active_services`/`inactive_services`** only — those arrays persist; **`categories_list` / `services_list` are not rewritten** on toggle (only when the full list is replaced). Responses **hydrate** list `is_active` from `active_*` for display.\n\n**Cascade:** Inactive **category** ⇒ related **services** (same franchise) are moved to **`inactive_services`** automatically.\n\n**Partners:** `availableFranchiseCategories` / `availableFranchiseServices` use **`franchise.categories` ∩ `active_categories`** and **`franchise.services` ∩ `active_services`**, and hide services whose category is inactive.",
+      "description": "Franchise CRUD plus **franchise-category** / **franchise-service** mapping APIs.\n\n**Create franchise:** Inserts mapping rows: `categories_list` / `services_list` (assigned ids only), `active_*` / empty `inactive_*`, **`categories_order`** / **`services_order`** (payload order).\n\n**Toggle on/off:** Use mapping `PUT .../update` with **`active_categories`/`inactive_categories`** or **`active_services`/`inactive_services`** only — those arrays persist; **`categories_list` / `services_list` are not rewritten** on toggle (only when the full list is replaced). Responses **hydrate** list `is_active` from `active_*` for display.\n\n**Cascade:** Inactive **category** ⇒ related **services** (same franchise) are moved to **`inactive_services`** automatically.\n\n**Partners:** `availableFranchiseCategories` / `availableFranchiseServices` use **`franchise.categories` ∩ `active_categories`** and **`franchise.services` ∩ `active_services`**, and hide services whose category is inactive.\n\n**Dropdown (`GET /api/franchise/getDropDown`):** Subfolder **Dropdown**. Default request = franchises **not** already assigned to another admin (Super Admin / Staff). **`full_list=true`** = all active franchises for franchise admin / employee / super admin / staff. Bearer **`{{auth_token}}`** required.\n\n**Global catalog request queue (per franchise):** Subfolder **Global catalog — requested (franchise queue)** calls **`GET /api/category/getAll`** and **`GET /api/service/getAll`** on the global catalogue. Pending proposals come from **`POST /api/category/create-request`** / **`POST /api/service/create-request`**. For **Franchise Admin** (`user.type` = 1 **and** `user.franchise_id` set), the server filters to rows whose **`requested_by`** belongs to a user with the **same `franchise_id`** as the caller — no `franchise_id` query param; use a franchise-admin **`{{auth_token}}`** aligned with **`{{franchise_id}}`**. Super Admin / Staff are not scoped this way. Use query **`is_request=true`**; add **`approval_status=pending`** for the approval queue only.",
       "item": [
         {
           "name": "Create",
@@ -1366,15 +1366,82 @@
           }
         },
         {
-          "name": "Get dropdown",
-          "request": {
-            "auth": {
-              "type": "noauth"
+          "name": "Dropdown",
+          "description": "**GET** `/api/franchise/getDropDown` — returns `records`: `{ _id, name }[]` for **active** franchises (`deleted_at` null). **Bearer** `{{auth_token}}` required (**401** if missing/invalid).\n\n**Default (no `full_list`):** **Super Admin (5)** or **Staff (6)** only (**403** otherwise). Omits franchises already linked to another **admin** (`user.type` 1 with `franchise_id`). Optional **`for_user_id`** / **`forUserId`**: when editing that admin user, their current franchise remains in the list.\n\n**`full_list=true`** or **`full_list=1`** (camelCase **`fullList`**): **Super Admin**, **Staff**, **Franchise Admin** (type 1 + `franchise_id`), or **Franchise Employee** (type 3 + `franchise_id`). Returns **all** active franchises (no admin-assignment exclusion).",
+          "item": [
+            {
+              "name": "Assignable franchises (super admin / staff)",
+              "description": "Pick a franchise for an admin who does not have one yet. **Super Admin or Staff** JWT. Franchises assigned to another admin are omitted.",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{auth_token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/franchise/getDropDown"
+              }
             },
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/api/franchise/getDropDown"
-          }
+            {
+              "name": "Assignable — editing existing admin",
+              "description": "Same as assignable list, but pass **`for_user_id`** so this admin’s current franchise is **not** treated as held by “another” admin. Set **`{{admin_id}}`** to the franchise-admin user being edited.",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{auth_token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/franchise/getDropDown?for_user_id={{admin_id}}"
+              }
+            },
+            {
+              "name": "Full list (filters / franchise backoffice)",
+              "description": "**`full_list=true`** — all active franchises. **Super Admin**, **Staff**, **Franchise Admin**, or **Franchise Employee** token (see folder description). Use for filters and screens that need every franchise, not only unassigned ones.",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{auth_token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/franchise/getDropDown?full_list=true"
+              }
+            }
+          ]
         },
         {
           "name": "Update",
@@ -1674,6 +1741,60 @@
             },
             "url": "{{base_url}}/api/franchise-service/update/{{id}}"
           }
+        },
+        {
+          "name": "Global catalog — requested (franchise queue)",
+          "description": "Lists **global** `category` / `service` documents that were submitted as requests (`is_request`, `approval_status`). These are **not** `franchise_category` / `franchise_service` mapping rows.\n\n**Auth:** Prefer **Franchise Admin** JWT (`type` 1, `franchise_id` on user). Server applies **`requested_by` ∈ users where `franchise_id` matches the caller’s franchise**.\n\n**Query:** `is_request=true` (required for “requests only”). Optional `approval_status=pending` for items awaiting review. Pagination: `page`, `limit`, `sort`, `sort_by`.\n\n**Submit new requests:** `POST /api/category/create-request`, `POST /api/service/create-request` (see Category / Service folders). **Approve/reject:** `PUT /api/category/update/:id` or `PUT /api/service/update/:id` with `approval_status` and rejection reason when rejecting.",
+          "item": [
+            {
+              "name": "List requested categories (franchise-scoped)",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{auth_token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/category/getAll?page=1&limit=10&is_request=true&approval_status=pending&sort=1",
+                "description": "Use **Franchise Admin** token tied to **`{{franchise_id}}`**. Returns pending global category requests submitted by users under that franchise. Remove `approval_status=pending` to include other approval states while keeping `is_request=true`."
+              }
+            },
+            {
+              "name": "List requested services (franchise-scoped)",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{auth_token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/service/getAll?page=1&limit=10&is_request=true&approval_status=pending&sort=1",
+                "description": "Same scoping as requested categories: **Franchise Admin** token; **`requested_by`** must be a user of your franchise."
+              }
+            }
+          ]
         }
       ]
     },

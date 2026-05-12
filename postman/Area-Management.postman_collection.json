@@ -1,0 +1,330 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-area-mgmt-2026",
+    "name": "Area Management (API tests)",
+    "description": "Tests **`/api/area`** routes from `routes/area_routes.js`.\n\n**Setup:** Set **`{{baseUrl}}`**, **`{{email}}`**, **`{{password}}`**, and **`{{cityId}}`** (24-char ObjectId from `GET /api/city/getAll`). Run **Login** first — the test script saves **`{{token}}`**.\n\n**Postman Params:** Only **checked** query rows are sent. Use **Get all areas (no franchise filter)** vs **Get all areas (my-franchise)** to compare lists.\n\n**`type=my-franchise`:** Also works if you send JSON body `{\"type\":\"my-franchise\"}` on GET (merged in `area_controller` when query `type` is empty).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00 — Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  if (j && j.record && j.record.auth_token) {",
+                  "    pm.collectionVariables.set('token', j.record.auth_token);",
+                  "  }",
+                  "} catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"device_token\": \"{{deviceToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Health (no auth)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 — List areas (compare)",
+      "item": [
+        {
+          "name": "Get all areas (no franchise filter)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/area/getAll?page={{page}}&limit={{limit}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "area", "getAll"],
+              "query": [
+                { "key": "page", "value": "{{page}}", "disabled": false },
+                { "key": "limit", "value": "{{limit}}", "disabled": false },
+                { "key": "type", "value": "my-franchise", "disabled": true, "description": "Leave DISABLED for this request = all non-deleted areas." }
+              ]
+            },
+            "description": "**Do not** send `type`. In Postman Params, keep **`type` unchecked** (disabled) or remove it. Compare **`totalItems`** with the my-franchise request."
+          }
+        },
+        {
+          "name": "Get all areas (my-franchise)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/area/getAll?page={{page}}&limit={{limit}}&type=my-franchise",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "area", "getAll"],
+              "query": [
+                { "key": "page", "value": "{{page}}", "disabled": false },
+                { "key": "limit", "value": "{{limit}}", "disabled": false },
+                { "key": "type", "value": "my-franchise", "disabled": false }
+              ]
+            },
+            "description": "Only areas whose **`_id`** appears on your user’s franchise **`area_id`** list. **`type` must be checked** in Params (or use this pre-built URL)."
+          }
+        },
+        {
+          "name": "Get all areas (my-franchise) — body fallback",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"my-franchise\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/area/getAll?page={{page}}&limit={{limit}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "area", "getAll"],
+              "query": [
+                { "key": "page", "value": "{{page}}" },
+                { "key": "limit", "value": "{{limit}}" }
+              ]
+            },
+            "description": "Same as my-franchise list when **`type`** is not in the query; server reads **`type`** from JSON body (`area_controller`). Some clients omit query `type` — this shows that path."
+          }
+        },
+        {
+          "name": "Get all areas — filters (optional)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/area/getAll?page={{page}}&limit={{limit}}&is_active=true&sort=-1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "area", "getAll"],
+              "query": [
+                { "key": "page", "value": "{{page}}" },
+                { "key": "limit", "value": "{{limit}}" },
+                { "key": "is_active", "value": "true" },
+                { "key": "name", "value": "{{areaSearchName}}", "description": "Optional name search (also accepts areaname)." },
+                { "key": "city", "value": "{{areaSearchCity}}", "description": "Optional city name filter (after lookup)." },
+                { "key": "state", "value": "{{areaSearchState}}", "description": "Optional state name filter." },
+                { "key": "pincode", "value": "{{areaSearchPincode}}" },
+                { "key": "sort", "value": "-1", "description": "created_at sort direction when sort_by not used." },
+                { "key": "sort_by", "value": "{{sortBy}}", "disabled": true },
+                { "key": "sort_order", "value": "{{sortOrder}}", "disabled": true }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 — CRUD",
+      "item": [
+        {
+          "name": "Create area",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  try {",
+                  "    const j = pm.response.json();",
+                  "    const id = j && j.record && (j.record._id || j.record.id);",
+                  "    if (id) pm.collectionVariables.set('areaId', String(id));",
+                  "  } catch (e) {}",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Test Area\",\n  \"city_id\": \"{{cityId}}\",\n  \"is_active\": true,\n  \"pincodes\": [\"560001\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/area/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "area", "create"]
+            },
+            "description": "**`city_id`** must be a valid city **`_id`**. **`is_active`** is required by middleware. Saves **`areaId`** on HTTP 200."
+          }
+        },
+        {
+          "name": "Get area by id",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/area/get/{{areaId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "area", "get", "{{areaId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update area",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Test Area (updated)\",\n  \"is_active\": true,\n  \"pincodes\": [\"560001\", \"560002\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/area/update/{{areaId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "area", "update", "{{areaId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete area (soft)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/area/delete/{{areaId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "area", "delete", "{{areaId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 — Imports & dropdown",
+      "item": [
+        {
+          "name": "Import areas",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"records\": [\n    {\n      \"name\": \"Bulk Area One\",\n      \"city_id\": \"{{cityId}}\",\n      \"is_active\": true,\n      \"pincodes\": [\"411001\"]\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/area/imports",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "area", "imports"]
+            }
+          }
+        },
+        {
+          "name": "Get area dropdown (no auth)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/area/getDropDown?city_id={{cityId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "area", "getDropDown"],
+              "query": [
+                { "key": "city_id", "value": "{{cityId}}", "description": "Optional filter." },
+                { "key": "state_id", "value": "{{stateId}}", "disabled": true }
+              ]
+            },
+            "description": "`area_routes.js` does **not** use `authMiddleware` on this route."
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 — Dashboard count (optional)",
+      "item": [
+        {
+          "name": "getCount — location-management",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"location-management\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/getCount",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "getCount"]
+            },
+            "description": "Returns state/city/area totals (see `count_controller.js`)."
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5001" },
+    { "key": "email", "value": "your@email.com" },
+    { "key": "password", "value": "your-password" },
+    { "key": "deviceToken", "value": "postman-device" },
+    { "key": "token", "value": "" },
+    { "key": "cityId", "value": "PUT_24_CHAR_CITY_OBJECT_ID" },
+    { "key": "stateId", "value": "", "description": "Optional for getDropDown." },
+    { "key": "areaId", "value": "" },
+    { "key": "page", "value": "1" },
+    { "key": "limit", "value": "100" },
+    { "key": "areaSearchName", "value": "", "description": "Optional; enable in Get all — filters request." },
+    { "key": "areaSearchCity", "value": "" },
+    { "key": "areaSearchState", "value": "" },
+    { "key": "areaSearchPincode", "value": "" },
+    { "key": "sortBy", "value": "name" },
+    { "key": "sortOrder", "value": "desc" }
+  ]
+}

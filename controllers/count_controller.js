@@ -10,6 +10,8 @@ const OrderService = require('../models/order_services');
 const Order = require('../models/order');
 const PartnerService = require('../models/partner_service');
 const Franchise = require('../models/franchise');
+const FranchiseCategory = require('../models/franchise_category');
+const FranchiseService = require('../models/franchise_service');
 const Expense = require('../models/expense');
 const ExpenseCategory = require('../models/expense_category');
 const ContentManagement = require('../models/content_management');
@@ -449,51 +451,53 @@ const getCountData = async (req, res) => {
                     deleted_at: null,
                 }).distinct('_id');
 
-                const categoryFilter = {
-                    deleted_at: null,
-                    requested_by: { $in: franchiseUserIds },
-                };
-                const serviceFilter = {
-                    deleted_at: null,
-                    requested_by: { $in: franchiseUserIds },
-                };
+                // Global catalogue totals (non–soft-deleted)
+                response.total_category = await Category.countDocuments({ deleted_at: null });
+                response.total_service = await Service.countDocuments({ deleted_at: null });
 
-                response.total_category = await Category.countDocuments({
-                    ...categoryFilter,
-                    is_request: false,
-                });
-                response.inactive_category = await Category.countDocuments({
-                    ...categoryFilter,
-                    is_active: false,
-                    is_request: false,
-                });
-                response.active_category = await Category.countDocuments({
-                    ...categoryFilter,
-                    is_active: true,
-                    is_request: false,
-                });
+                // Active / inactive from franchise mapping rows (`franchise_category` / `franchise_service`)
+                const franchiseCategoryDocs = await FranchiseCategory.find({
+                    franchise_id: { $in: franchiseIdsScope },
+                    deleted_at: null,
+                })
+                    .select('active_categories inactive_categories')
+                    .lean();
+
+                let activeCategorySlots = 0;
+                let inactiveCategorySlots = 0;
+                for (const row of franchiseCategoryDocs) {
+                    activeCategorySlots += (row.active_categories || []).length;
+                    inactiveCategorySlots += (row.inactive_categories || []).length;
+                }
+                response.active_category = activeCategorySlots;
+                response.inactive_category = inactiveCategorySlots;
+
+                const franchiseServiceDocs = await FranchiseService.find({
+                    franchise_id: { $in: franchiseIdsScope },
+                    deleted_at: null,
+                })
+                    .select('active_services inactive_services')
+                    .lean();
+
+                let activeServiceSlots = 0;
+                let inactiveServiceSlots = 0;
+                for (const row of franchiseServiceDocs) {
+                    activeServiceSlots += (row.active_services || []).length;
+                    inactiveServiceSlots += (row.inactive_services || []).length;
+                }
+                response.active_service = activeServiceSlots;
+                response.inactive_service = inactiveServiceSlots;
+
+                // Pending requests: global category/service rows requested by users on this franchise
                 response.requested_category = await Category.countDocuments({
-                    ...categoryFilter,
+                    deleted_at: null,
                     is_request: true,
-                });
-
-                response.total_service = await Service.countDocuments({
-                    ...serviceFilter,
-                    is_request: false,
-                });
-                response.inactive_service = await Service.countDocuments({
-                    ...serviceFilter,
-                    is_active: false,
-                    is_request: false,
-                });
-                response.active_service = await Service.countDocuments({
-                    ...serviceFilter,
-                    is_active: true,
-                    is_request: false,
+                    requested_by: { $in: franchiseUserIds },
                 });
                 response.requested_service = await Service.countDocuments({
-                    ...serviceFilter,
+                    deleted_at: null,
                     is_request: true,
+                    requested_by: { $in: franchiseUserIds },
                 });
             }
         } else if (resolvedType === 11) {

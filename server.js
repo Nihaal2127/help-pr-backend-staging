@@ -154,11 +154,12 @@ app.use((err, req, res, next) => {
 // serves static files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Start the server
-if (process.env.NODE_ENV !== 'production') {
+// Start the HTTP server for local / VM / container deploys. Lambda uses exports.handler only.
+const isLambda = !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+
+if (!isLambda) {
   const PORT = process.env.PORT || 5001;
-  //app.listen(PORT, () => {
-    const httpServer = http.createServer(app);
+  const httpServer = http.createServer(app);
   const io = new Server(httpServer, {
     cors: {
       origin: '*',
@@ -173,9 +174,7 @@ if (process.env.NODE_ENV !== 'production') {
     console.error('HTTP server failed to start:', err.message);
   });
 } else {
-  console.log(
-    'NODE_ENV=production: local HTTP server not started (use NODE_ENV=development or unset for localhost).'
-  );
+  console.log('AWS Lambda: HTTP server not started (using exports.handler).');
 }
 
 const server = awsServerlessExpress.createServer(app);

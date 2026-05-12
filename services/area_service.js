@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 const Area = require('../models/area');
 const City = require('../models/city');
+const User = require('../models/user');
+const Franchise = require('../models/franchise');
 const { applyPagination, applyDropDownFilter } = require('../utils/pagination');
 const { parseBoolean } = require('../utils/parser');
 
@@ -54,7 +56,68 @@ const attachCityNames = async (areaDocs) => {
 const fail = (status, message, extra = {}) => ({ ok: false, status, message, ...extra });
 const ok = (status, data) => ({ ok: true, status, data });
 
-const listAreas = async (query) => {
+const collectFranchiseAreaIds = (franchiseDocs) => {
+    const seen = new Set();
+    const oids = [];
+    for (const fr of franchiseDocs || []) {
+        if (!fr || fr.area_id == null) continue;
+        const arr = Array.isArray(fr.area_id) ? fr.area_id : [fr.area_id];
+        for (const item of arr) {
+            let oid = null;
+            if (item instanceof mongoose.Types.ObjectId) {
+                oid = item;
+            } else if (item && typeof item === 'object' && item._id) {
+                oid = item._id;
+            } else if (typeof item === 'string' && /^[a-fA-F0-9]{24}$/i.test(item.trim())) {
+                oid = new mongoose.Types.ObjectId(item.trim());
+            }
+            if (!oid) continue;
+            const k = oid.toString();
+            if (seen.has(k)) continue;
+            seen.add(k);
+            oids.push(oid);
+        }
+    }
+    return oids;
+};
+
+const getMyFranchiseAreaIds = async (userId) => {
+    const caller = await User.findOne({ _id: userId, deleted_at: null }).select('type franchise_id').lean();
+    if (!caller) return [];
+
+    const callerType = Number(caller.type);
+    let franchiseDocs = [];
+    if (callerType === 1) {
+        if (caller.franchise_id) {
+            const one = await Franchise.findOne({
+                _id: caller.franchise_id,
+                deleted_at: null,
+            })
+                .select('_id area_id')
+                .lean();
+            franchiseDocs = one ? [one] : [];
+        } else {
+            franchiseDocs = await Franchise.find({
+                deleted_at: null,
+                admin_id: userId,
+            })
+                .select('_id area_id')
+                .lean();
+        }
+    } else if (caller.franchise_id) {
+        const one = await Franchise.findOne({
+            _id: caller.franchise_id,
+            deleted_at: null,
+        })
+            .select('_id area_id')
+            .lean();
+        if (one) franchiseDocs = [one];
+    }
+
+    return collectFranchiseAreaIds(franchiseDocs);
+};
+
+const listAreas = async (query, authUser) => {
     try {
         const page = parseInt(query.page, 10) || 1;
         const limit = parseInt(query.limit, 10) || 10;
@@ -66,6 +129,16 @@ const listAreas = async (query) => {
             deleted_at: null,
             ...(query.is_active !== undefined && { is_active }),
         };
+
+        const typeRaw = (query.type ?? '').toString().trim().toLowerCase();
+        const isMyFranchiseList = typeRaw === 'my-franchise' || typeRaw === 'my_franchise';
+        if (isMyFranchiseList) {
+            if (!authUser || authUser.id == null) {
+                return fail(401, 'Unauthorized.');
+            }
+            const areaIds = await getMyFranchiseAreaIds(authUser.id);
+            filter._id = { $in: areaIds };
+        }
         const areaNameSearch = query.areaname || query.name;
         if (areaNameSearch) {
             filter.name = { $regex: new RegExp(String(areaNameSearch).trim(), 'i') };

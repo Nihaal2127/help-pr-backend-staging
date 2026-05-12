@@ -67,6 +67,19 @@ const resolveCountType = (type) => {
     return typeMap[key] ?? null;
 };
 
+/** Success payload for POST /api/getCount — only top-level `record` (no `records`). */
+const buildGetCountSuccessBody = (response) => {
+    const record = JSON.parse(JSON.stringify(response));
+    if (record && typeof record === 'object' && !Array.isArray(record)) {
+        delete record.records;
+    }
+    return {
+        success: true,
+        status: 200,
+        record,
+    };
+};
+
 const getCountData = async (req, res) => {
     try {
         const { type } = req.body;
@@ -367,20 +380,21 @@ const getCountData = async (req, res) => {
             const callerType = Number(caller.type);
             let franchiseDocs = [];
             if (callerType === 1) {
-                franchiseDocs = await Franchise.find({
-                    deleted_at: null,
-                    admin_id: req.user.id,
-                })
-                    .select('_id area_id')
-                    .lean();
-                if (franchiseDocs.length === 0 && caller.franchise_id) {
+                if (caller.franchise_id) {
                     const one = await Franchise.findOne({
                         _id: caller.franchise_id,
                         deleted_at: null,
                     })
                         .select('_id area_id')
                         .lean();
-                    if (one) franchiseDocs = [one];
+                    franchiseDocs = one ? [one] : [];
+                } else {
+                    franchiseDocs = await Franchise.find({
+                        deleted_at: null,
+                        admin_id: req.user.id,
+                    })
+                        .select('_id area_id')
+                        .lean();
                 }
             } else if (caller.franchise_id) {
                 const one = await Franchise.findOne({
@@ -391,7 +405,7 @@ const getCountData = async (req, res) => {
                     .lean();
                 if (one) franchiseDocs = [one];
             }
-
+ 
             if (franchiseDocs.length === 0) {
                 setMyFranchiseZeros();
             } else {
@@ -561,12 +575,8 @@ const getCountData = async (req, res) => {
                 status: { $ne: 'active' },
             });
         }
-        return res.status(200).json({
-            success: true,
-            status: 200,
-            record: response,
-            records: response,
-        });
+        const body = buildGetCountSuccessBody(response);
+        return res.status(200).type('application/json').send(JSON.stringify(body));
     } catch (error) {
         console.error('Error fetching Count data:', error);
         return res.status(500).json({

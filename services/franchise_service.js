@@ -6,6 +6,7 @@ const State = require('../models/state');
 const City = require('../models/city');
 const Area = require('../models/area');
 const User = require('../models/user');
+const Address = require('../models/address');
 const FranchiseCategory = require('../models/franchise_category');
 const FranchiseService = require('../models/franchise_service');
 const PartnerService = require('../models/partner_service');
@@ -692,9 +693,14 @@ const listFranchisesForDropdown = async (query) => {
 
 const USER_TYPE_PARTNER = 2;
 const USER_TYPE_EMPLOYEE = 3;
+const USER_TYPE_CUSTOMER = 4;
 
 const USER_LIST_SELECT =
     'name email phone_number user_id profile_url type franchise_id is_active is_blocked city_id state_id created_at';
+
+/** Matches user_controller getAll shape for type-4 address rows. */
+const CUSTOMER_ADDRESS_LIST_SELECT =
+    'contact_name contact_number address landmark area state_id city_id pincode address_status created_at updated_at';
 
 const isCatalogCategoryActive = (doc) =>
     Boolean(
@@ -764,6 +770,117 @@ const mergeFranchiseServiceEntries = (docs) => {
     return [...map.values()];
 };
 
+/** Area ObjectIds linked on franchise.area_id (same shape as area_service / count_controller). */
+const collectFranchiseAreaIds = (franchiseDocs) => {
+    const seen = new Set();
+    const oids = [];
+    for (const fr of franchiseDocs || []) {
+        if (!fr || fr.area_id == null) continue;
+        const arr = Array.isArray(fr.area_id) ? fr.area_id : [fr.area_id];
+        for (const item of arr) {
+            let oid = null;
+            if (item instanceof mongoose.Types.ObjectId) {
+                oid = item;
+            } else if (item && typeof item === 'object' && item._id) {
+                oid = item._id;
+            } else if (typeof item === 'string' && /^[a-fA-F0-9]{24}$/i.test(item.trim())) {
+                oid = new mongoose.Types.ObjectId(item.trim());
+            }
+            if (!oid) continue;
+            const k = oid.toString();
+            if (seen.has(k)) continue;
+            seen.add(k);
+            oids.push(oid);
+        }
+    }
+    return oids;
+};
+
+/**
+ * Type-4 users with at least one non-deleted Address whose pincode matches a pincode
+ * on one of the franchise's linked areas (area.pincodes).
+ */
+const fetchCustomersMatchingFranchiseAreaPincodes = async (franchiseLean) => {
+    const areaIds = collectFranchiseAreaIds([franchiseLean]);
+    if (areaIds.length === 0) return [];
+
+    const areas = await Area.find({
+        _id: { $in: areaIds },
+        deleted_at: null,
+    })
+        .select('pincodes')
+        .lean();
+
+    const allowedPins = [];
+    const pinSeen = new Set();
+    for (const a of areas) {
+        for (const p of a.pincodes || []) {
+            const t = String(p).trim();
+            if (!t || pinSeen.has(t)) continue;
+            pinSeen.add(t);
+            allowedPins.push(t);
+        }
+    }
+    if (allowedPins.length === 0) return [];
+
+    const rows = await Address.aggregate([
+        {
+            $match: {
+                deleted_at: null,
+                user_id: { $exists: true, $ne: null },
+            },
+        },
+        {
+            $addFields: {
+                pinNorm: {
+                    $trim: {
+                        input: {
+                            $toString: { $ifNull: ['$pincode', ''] },
+                        },
+                    },
+                },
+            },
+        },
+        { $match: { pinNorm: { $in: allowedPins } } },
+        { $group: { _id: '$user_id' } },
+    ]);
+
+    const userIds = rows.map((r) => r._id).filter(Boolean);
+    if (userIds.length === 0) return [];
+
+    const customers = await User.find({
+        _id: { $in: userIds },
+        type: USER_TYPE_CUSTOMER,
+        deleted_at: null,
+    })
+        .select(USER_LIST_SELECT)
+        .sort({ name: 1 })
+        .lean();
+
+    if (customers.length === 0) return [];
+
+    const allAddresses = await Address.find({
+        user_id: { $in: userIds },
+        deleted_at: null,
+    })
+        .sort({ created_at: 1 })
+        .select(CUSTOMER_ADDRESS_LIST_SELECT)
+        .lean();
+
+    const addressesByUserId = new Map();
+    for (const addr of allAddresses) {
+        const uid = addr.user_id && addr.user_id.toString();
+        if (!uid) continue;
+        if (!addressesByUserId.has(uid)) addressesByUserId.set(uid, []);
+        addressesByUserId.get(uid).push(addr);
+    }
+
+    return customers.map((c) => ({
+        ...c,
+        addresses: addressesByUserId.get(c._id.toString()) || [],
+    }));
+};
+
 const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
     try {
         const parsed = parseObjectId(franchiseIdRaw, 'franchise_id');
@@ -773,11 +890,11 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
             _id: parsed.oid,
             deleted_at: null,
         })
-            .select('_id name')
+            .select('_id name area_id')
             .lean();
         if (!franchise) return fail(404, 'Franchise not found.');
 
-        const [fcDocs, fsDocs, partners, employees] = await Promise.all([
+        const [fcDocs, fsDocs, partners, employees, customers] = await Promise.all([
             FranchiseCategory.find({ franchise_id: parsed.oid, deleted_at: null })
                 .sort({ created_at: -1 })
                 .lean(),
@@ -800,6 +917,7 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
                 .select(USER_LIST_SELECT)
                 .sort({ name: 1 })
                 .lean(),
+            fetchCustomersMatchingFranchiseAreaPincodes(franchise),
         ]);
 
         const mergedCatEntries = mergeFranchiseCategoryEntries(fcDocs);
@@ -929,6 +1047,7 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
                 services,
                 partners: partnersWithServices,
                 employees,
+                customers,
             },
         });
     } catch (err) {

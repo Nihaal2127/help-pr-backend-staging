@@ -326,7 +326,11 @@ const extractCatalogRefId = (ref) => {
 
 /**
  * Keep only franchise-toggle active or inactive rows (after coerceLegacy* sets entry.is_active).
- * Optionally updates active_*/inactive_* and *_order to stay consistent with the filtered list.
+ * Optionally updates:
+ * - active_*
+ * - inactive_*
+ * - *_order
+ * fields to stay consistent with the filtered list.
  *
  * @param {unknown[]} records
  * @param {boolean | undefined} mappingActiveFilter — true = franchise-on only, false = franchise-off only

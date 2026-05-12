@@ -53,7 +53,7 @@
       "value": "",
       "type": "string",
       "enabled": true,
-      "description": "Franchise document _id. Used in request bodies and GET /api/franchise/related-catalog/{{franchise_id}}."
+      "description": "Franchise document _id. Used in franchise create side-effects, franchise-category / franchise-service bodies, GET /api/franchise/related-catalog/{{franchise_id}}, and getAll query filters."
     },
     {
       "key": "admin_id",
@@ -1235,9 +1235,11 @@
     },
     {
       "name": "Franchise",
+      "description": "Franchise CRUD plus **franchise-category** / **franchise-service** mapping APIs.\n\n**Create franchise:** Inserts mapping rows: `categories_list` / `services_list` (assigned ids only), `active_*` / empty `inactive_*`, **`categories_order`** / **`services_order`** (payload order).\n\n**Toggle on/off:** Use mapping `PUT .../update` with **`active_categories`/`inactive_categories`** or **`active_services`/`inactive_services`** only — those arrays persist; **`categories_list` / `services_list` are not rewritten** on toggle (only when the full list is replaced). Responses **hydrate** list `is_active` from `active_*` for display.\n\n**Cascade:** Inactive **category** ⇒ related **services** (same franchise) are moved to **`inactive_services`** automatically.\n\n**Partners:** `availableFranchiseCategories` / `availableFranchiseServices` use **`franchise.categories` ∩ `active_categories`** and **`franchise.services` ∩ `active_services`**, and hide services whose category is inactive.",
       "item": [
         {
           "name": "Create",
+          "description": "Super admin / staff. Required: `name`, `state_id`, `city_id`, `area_id` (array), `admin_id`, `categories`, `services`, `is_active`. Creates mapping rows (see folder description). **Partners** see intersection with mapping `active_*` after toggles.",
           "request": {
             "auth": {
               "type": "bearer",
@@ -1262,7 +1264,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{}",
+              "raw": "{\n  \"name\": \"Sample franchise\",\n  \"state_id\": \"{{state_id}}\",\n  \"city_id\": \"{{city_id}}\",\n  \"area_id\": [\"{{area_id}}\"],\n  \"admin_id\": \"{{admin_id}}\",\n  \"categories\": [\"{{category_id}}\"],\n  \"services\": [\"{{service_id}}\"],\n  \"is_active\": true,\n  \"description\": \"\",\n  \"contact\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1343,7 +1345,7 @@
             "header": [],
             "url": "{{base_url}}/api/franchise/related-catalog/{{franchise_id}}"
           },
-          "description": "**GET** `/api/franchise/related-catalog/:franchise_id`\n\n**Who can call:** Super admin (5), Staff (6), or Admin (1) / Employee (3) whose `franchise_id` **equals** the path `franchise_id`. Others get **403**; invalid id format **400**.\n\n**Bearer:** Set `{{auth_token}}` (and `{{franchise_id}}` in collection or environment).\n\n**Response `record`:** `franchise`, raw `franchise_categories` / `franchise_services` docs, filtered **`categories`** and **`services`** (franchise mapping `is_active` plus catalogue `is_active` + `approval_status: approve`), **`partners`** each with **`active_services_providing`** (partner_service rows for franchise-active services), **`employees`**."
+          "description": "**GET** `/api/franchise/related-catalog/:franchise_id`\n\n**Who can call:** Super admin (5), Staff (6), or Admin (1) / Employee (3) whose `franchise_id` **equals** the path `franchise_id`. Others **403**; bad id **400**.\n\n**Bearer:** `{{auth_token}}`, `{{franchise_id}}`.\n\n**Response `record`:** `franchise`; raw **`franchise_categories`** / **`franchise_services`** (each has `categories_list`/`services_list`, **`active_*` / `inactive_*`**, **`categories_order`** / **`services_order`**). Filtered **`categories`** / **`services`** use **`active_*`** arrays for effective on/off (not toggled list subdocs). **`partners`** (`active_services_providing`), **`employees`**."
         },
         {
           "name": "Get all",
@@ -1376,6 +1378,7 @@
         },
         {
           "name": "Update",
+          "description": "PUT /api/franchise/update/:id. Updates the **franchise** document (e.g. `categories`, `services` arrays on the franchise). **Does not** rewrite `franchise_category` / `franchise_service` mapping rows — use those APIs for toggles. After changing franchise `categories`/`services`, keep mapping docs in sync manually or via super-admin mapping create/update. **Partner** availability intersects franchise lists with mapping **`active_*`**.",
           "request": {
             "auth": {
               "type": "bearer",
@@ -1400,7 +1403,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{}",
+              "raw": "{\n  \"name\": \"Updated franchise name\",\n  \"categories\": [\"{{category_id}}\"],\n  \"services\": [\"{{service_id}}\"],\n  \"is_active\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1426,6 +1429,250 @@
             "method": "DELETE",
             "header": [],
             "url": "{{base_url}}/api/franchise/delete/{{id}}"
+          }
+        },
+        {
+          "name": "Franchise category — create",
+          "description": "POST /api/franchise-category/create — super admin / staff only. Body: `franchise_id`, `categories_list` (`category_id`, `is_active`). Server sets `active_categories` / `inactive_categories` and **`categories_order`** (same order as entries in `categories_list`).",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"franchise_id\": \"{{franchise_id}}\",\n  \"categories_list\": [\n    { \"category_id\": \"{{category_id}}\", \"is_active\": true }\n  ],\n  \"order_number\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/franchise-category/create"
+          }
+        },
+        {
+          "name": "Franchise category — getAll",
+          "description": "GET /api/franchise-category/getAll — super / staff / franchise admin / employee. Query: `franchise_id`, `page`, `limit`, optional `is_active` / `is_request` (catalog doc filters). Each record: `active_categories`, `inactive_categories`, `categories_order`, plus **hydrated** `categories_list` for API display.",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/franchise-category/getAll?page=1&limit=10&franchise_id={{franchise_id}}"
+          }
+        },
+        {
+          "name": "Franchise category — get by id",
+          "description": "GET /api/franchise-category/get/:id — super / staff / franchise admin / employee (scoped). Response record includes `active_categories`, `inactive_categories`, `categories_order`, and **hydrated** `categories_list[].is_active` from `active_categories`.",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/franchise-category/get/{{id}}"
+          }
+        },
+        {
+          "name": "Franchise category — update",
+          "description": "PUT /api/franchise-category/update/:id.\n\n**A — Partition toggle (default):** Body with **`active_categories`** and/or **`inactive_categories`** (ObjectId string arrays). They must **partition** every `category_id` in `categories_list`. **`categories_list` is not persisted** from this toggle. **Cascade:** any category moved to **inactive** forces services under that category (same franchise) from **`active_services`** → **`inactive_services`** on the mapping doc.\n\n**B — Replace full list:** Super admin (or franchise admin under rules) may send **`categories_list`** — then `active_*` / `inactive_*` / **`categories_order`** are rebuilt from the payload.\n\n**C — Reorder only:** **`categories_order`** alone (permutation of mapped ids). Responses hydrate `categories_list[].is_active` from `active_categories`.",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"active_categories\": [],\n  \"inactive_categories\": [\"{{category_id}}\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/franchise-category/update/{{id}}"
+          }
+        },
+        {
+          "name": "Franchise service — create",
+          "description": "POST /api/franchise-service/create — super admin / staff only. Body: `franchise_id`, `services_list` (`service_id`, `is_active`). Server sets `active_services` / `inactive_services` and **`services_order`** (same order as `services_list` entries).",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"franchise_id\": \"{{franchise_id}}\",\n  \"services_list\": [\n    { \"service_id\": \"{{service_id}}\", \"is_active\": true }\n  ],\n  \"order_number\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/franchise-service/create"
+          }
+        },
+        {
+          "name": "Franchise service — getAll",
+          "description": "GET /api/franchise-service/getAll — same roles as franchise category. Records include `active_services`, `inactive_services`, `services_order`, **hydrated** `services_list`.",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/franchise-service/getAll?page=1&limit=10&franchise_id={{franchise_id}}"
+          }
+        },
+        {
+          "name": "Franchise service — get by id",
+          "description": "GET /api/franchise-service/get/:id — same auth as getAll. Response hydrates `services_list[].is_active` from `active_services`.",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/franchise-service/get/{{id}}"
+          }
+        },
+        {
+          "name": "Franchise service — update",
+          "description": "PUT /api/franchise-service/update/:id.\n\n**Partition toggle:** `active_services` / `inactive_services` only — **`services_list` not persisted** from toggle (only when the full list is replaced). Send one or both arrays; complement derived. **No** parent-category cascade on service toggle.\n\n**Reorder:** optional **`services_order`**. Responses hydrate `services_list[].is_active` from `active_services`.",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"active_services\": [],\n  \"inactive_services\": [\"{{service_id}}\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/franchise-service/update/{{id}}"
           }
         }
       ]
@@ -2407,6 +2654,7 @@
     },
     {
       "name": "Partner service",
+      "description": "Partner-authenticated routes. **Available franchise categories / services** intersect the franchise document with the latest mapping **`active_categories`** / **`active_services`** (and drop services in inactive categories). Use franchise mapping APIs to toggle availability.",
       "item": [
         {
           "name": "Create",
@@ -2586,7 +2834,7 @@
             "method": "GET",
             "header": [],
             "url": "{{base_url}}/api/partner_service/availableFranchiseCategories?page=1&limit=10&name=",
-            "description": "Partner token only. Franchise comes from the authenticated user's `franchise_id` (do not send franchise_id). Returns active, approved categories configured on that franchise."
+            "description": "GET `/api/partner_service/availableFranchiseCategories`. **Partner** token; franchise from JWT `franchise_id`. Returns categories that are on the franchise **and** in mapping **`active_categories`**, still active + approved in the global catalogue. Toggle categories via **Franchise category — update** (partition arrays)."
           }
         },
         {
@@ -2605,7 +2853,7 @@
             "method": "GET",
             "header": [],
             "url": "{{base_url}}/api/partner_service/availableFranchiseServices?page=1&limit=10&category_id={{category_id}}&name=",
-            "description": "Partner token only. Same franchise resolution as categories. Required query: `category_id`. Lists franchise-configured services for that category not yet added to the partner."
+            "description": "GET `/api/partner_service/availableFranchiseServices`. **Partner** token; required **`category_id`** query. Lists services on the franchise in mapping **`active_services`**, category allowed and active in mapping, global catalogue active + approved, not already on the partner profile. Inactive parent category ⇒ services hidden (cascade + partner filter)."
           }
         },
         {

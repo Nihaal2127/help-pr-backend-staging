@@ -6,6 +6,13 @@ const Franchise = require('../models/franchise');
 const { applyPagination, applyDropDownFilter } = require('../utils/pagination');
 const { parseBoolean } = require('../utils/parser');
 
+const escapeRegExp = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const areaNameExistsInCity = (trimmedName, cityObjectId) => ({
+    deleted_at: null,
+    city_id: cityObjectId,
+    name: new RegExp(`^${escapeRegExp(trimmedName)}$`, 'i'),
+});
+
 const normalizePincodes = (pincodes) => {
     if (!pincodes || !Array.isArray(pincodes)) return [];
     return [...new Set(pincodes.map((p) => String(p).trim()).filter(Boolean))];
@@ -248,6 +255,10 @@ const createArea = async (body) => {
     try {
         const { name, is_active, city_id, pincodes } = body;
         const pinList = normalizePincodes(pincodes);
+        const trimmedName = String(name).trim();
+        if (!trimmedName) {
+            return fail(400, 'Area name is required.');
+        }
 
         const parsedCity = parseObjectId(city_id, 'city_id');
         if (!parsedCity.ok) return fail(400, parsedCity.message);
@@ -255,15 +266,11 @@ const createArea = async (body) => {
         const ctx = await loadCityContext(parsedCity.oid);
         if (!ctx) return fail(404, 'City not found.');
 
-        const existing = await Area.findOne({
-            name,
-            city_id: ctx.city._id,
-            deleted_at: null,
-        });
+        const existing = await Area.findOne(areaNameExistsInCity(trimmedName, ctx.city._id));
         if (existing) return fail(409, 'Area name already exists for this city.');
 
         const newArea = new Area({
-            name,
+            name: trimmedName,
             is_active,
             city_id: ctx.city._id,
             state_id: ctx.state_id,
@@ -301,14 +308,17 @@ const updateArea = async (id, body) => {
             area.city_id = ctx.city._id;
         }
 
-        if (body.name) {
+        if (body.name !== undefined) {
+            const trimmedName = String(body.name).trim();
+            if (!trimmedName) {
+                return fail(400, 'Area name is required.');
+            }
             const existing = await Area.findOne({
-                name: body.name,
-                city_id: targetCityId,
-                deleted_at: null,
+                ...areaNameExistsInCity(trimmedName, targetCityId),
                 _id: { $ne: id },
             });
             if (existing) return fail(409, 'Area name already exists for this city.');
+            if (updateData.name !== undefined) updateData.name = trimmedName;
         }
 
         if (body.pincodes !== undefined) {
@@ -385,8 +395,12 @@ const importAreas = async (records) => {
                 return fail(400, `City not found for area: ${rec.name}`);
             }
             const pinList = normalizePincodes(rec.pincodes);
+            const trimmedAreaName = String(rec.name || '').trim();
+            if (!trimmedAreaName) {
+                return fail(400, 'Each record must include a non-empty area name.');
+            }
             toInsert.push({
-                name: rec.name,
+                name: trimmedAreaName,
                 city_id: ctx.city._id,
                 is_active: rec.is_active,
                 state_id: ctx.state_id,
@@ -395,20 +409,21 @@ const importAreas = async (records) => {
             });
         }
 
-        const keys = toInsert.map((r) => `${r.city_id.toString()}:${r.name}`);
-        const dupInFile = new Set();
-        const seen = new Set();
-        for (const k of keys) {
-            if (seen.has(k)) dupInFile.add(k);
-            seen.add(k);
-        }
-        if (dupInFile.size > 0) {
-            return fail(409, 'Duplicate city/name combinations in import file.');
+        const seenKeys = new Set();
+        for (const r of toInsert) {
+            const k = `${r.city_id.toString()}:${r.name.toLowerCase()}`;
+            if (seenKeys.has(k)) {
+                return fail(409, 'Duplicate area name for the same city in import file.');
+            }
+            seenKeys.add(k);
         }
 
         const existing = await Area.find({
             deleted_at: null,
-            $or: toInsert.map((r) => ({ name: r.name, city_id: r.city_id })),
+            $or: toInsert.map((r) => ({
+                city_id: r.city_id,
+                name: new RegExp(`^${escapeRegExp(r.name)}$`, 'i'),
+            })),
         }).select('name city_id');
 
         if (existing.length > 0) {
@@ -425,6 +440,26 @@ const importAreas = async (records) => {
         console.log('importAreas', error.message);
         return fail(500, 'Internal server error.', { error: error.message });
     }
+};
+
+/** Area IDs already linked on a non-deleted franchise; optionally skip one franchise (e.g. edit form). */
+const collectAreaIdsAssignedToOtherFranchises = async (ignoreFranchiseOid) => {
+    const docs = await Franchise.find({ deleted_at: null }).select('_id area_id').lean();
+    const excluded = new Set();
+    for (const fr of docs) {
+        if (ignoreFranchiseOid && String(fr._id) === String(ignoreFranchiseOid)) {
+            continue;
+        }
+        const arr = Array.isArray(fr.area_id) ? fr.area_id : [];
+        for (const raw of arr) {
+            if (!raw) continue;
+            const s = raw instanceof mongoose.Types.ObjectId ? raw.toString() : String(raw).trim();
+            if (s && /^[a-fA-F0-9]{24}$/.test(s)) {
+                excluded.add(s);
+            }
+        }
+    }
+    return [...excluded].map((s) => new mongoose.Types.ObjectId(s));
 };
 
 const listAreasForDropdown = async (query) => {
@@ -471,6 +506,21 @@ const listAreasForDropdown = async (query) => {
                 return fail(400, 'Provide at least one valid state_id.');
             }
             filter.state_id = { $in: oids };
+        }
+
+        let ignoreFranchiseOid = null;
+        if (
+            query.franchise_id !== undefined &&
+            query.franchise_id !== null &&
+            String(query.franchise_id).trim() !== ''
+        ) {
+            const parsedFr = parseObjectId(query.franchise_id, 'franchise_id');
+            if (!parsedFr.ok) return fail(400, parsedFr.message);
+            ignoreFranchiseOid = parsedFr.oid;
+        }
+        const assignedElsewhere = await collectAreaIdsAssignedToOtherFranchises(ignoreFranchiseOid);
+        if (assignedElsewhere.length > 0) {
+            filter._id = { $nin: assignedElsewhere };
         }
 
         const { data: areas } = await applyDropDownFilter(Area, filter, sort);

@@ -316,6 +316,56 @@ const validateServicesOrderPermutation = (orderOids, catalogStr) => {
     return { ok: true };
 };
 
+/** Populated ref or raw ObjectId from a categories_list / services_list entry. */
+const extractCatalogRefId = (ref) => {
+    if (!ref) return null;
+    if (ref instanceof mongoose.Types.ObjectId) return ref;
+    if (typeof ref === 'object' && ref._id) return ref._id;
+    return ref;
+};
+
+/**
+ * Keep only franchise-toggle active or inactive rows (after coerceLegacy* sets entry.is_active).
+ * Optionally updates active_*/inactive_* and *_order to stay consistent with the filtered list.
+ *
+ * @param {unknown[]} records
+ * @param {boolean | undefined} mappingActiveFilter — true = franchise-on only, false = franchise-off only
+ * @param {'categories_list'|'services_list'} listKey
+ * @param {'active_categories'|'active_services'} activeKey
+ * @param {'inactive_categories'|'inactive_services'} inactiveKey
+ * @param {'category_id'|'service_id'} entryIdKey
+ */
+const filterRecordsByFranchiseMappingToggle = (
+    records,
+    mappingActiveFilter,
+    listKey,
+    activeKey,
+    inactiveKey,
+    entryIdKey
+) => {
+    if (mappingActiveFilter === undefined) return records;
+    const orderKey = listKey === 'categories_list' ? 'categories_order' : 'services_order';
+    return records.map((row) => {
+        const plain = row && typeof row.toObject === 'function' ? row.toObject() : { ...row };
+        const list = Array.isArray(plain[listKey]) ? plain[listKey] : [];
+        const filtered = list.filter((e) => Boolean(e.is_active) === mappingActiveFilter);
+        plain[listKey] = filtered;
+        const ids = filtered.map((e) => extractCatalogRefId(e[entryIdKey])).filter(Boolean);
+        if (mappingActiveFilter === true) {
+            plain[activeKey] = ids;
+            plain[inactiveKey] = [];
+        } else {
+            plain[activeKey] = [];
+            plain[inactiveKey] = ids;
+        }
+        const idSet = new Set(ids.map((id) => id.toString()));
+        if (Array.isArray(plain[orderKey])) {
+            plain[orderKey] = plain[orderKey].filter((oid) => idSet.has(oid.toString()));
+        }
+        return plain;
+    });
+};
+
 module.exports = {
     dedupeObjectIdsPreserveOrder,
     parseObjectIdArray,
@@ -328,4 +378,5 @@ module.exports = {
     validateServiceActiveInactivePartition,
     validateCategoriesOrderPermutation,
     validateServicesOrderPermutation,
+    filterRecordsByFranchiseMappingToggle,
 };

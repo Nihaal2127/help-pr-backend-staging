@@ -22,10 +22,11 @@ const { checkObjectIdExists } = require('../validator/id_validator');
 const moment = require("moment-timezone");
 
 const resolveCountType = (type) => {
-    if (typeof type === 'number') return type;
+    if (typeof type === 'number' && !Number.isNaN(type)) return type;
     if (typeof type !== 'string') return null;
 
-    const trimmedType = type.trim();
+    // Strip BOM / zero-width space so Postman or editors don't break the map key
+    const trimmedType = type.replace(/\uFEFF/g, '').replace(/\u200B/g, '').trim();
     if (trimmedType === '') return null;
 
     if (/^\d+$/.test(trimmedType)) {

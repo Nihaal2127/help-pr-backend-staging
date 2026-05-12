@@ -89,6 +89,14 @@ const getCountData = async (req, res) => {
     try {
         const { type } = req.body;
         const resolvedType = resolveCountType(type);
+        if (resolvedType === null || resolvedType === undefined) {
+            return res.status(400).json({
+                success: false,
+                status: 400,
+                message:
+                    'Invalid or unsupported count type. Send JSON body with "type" (e.g. "settings-role", "location-management", or a supported numeric code).',
+            });
+        }
         const response = {}
         if (resolvedType === 1) {
             const total_state = await State.countDocuments({ deleted_at: null });

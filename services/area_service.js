@@ -138,6 +138,22 @@ const listAreas = async (query, authUser) => {
             }
             const areaIds = await getMyFranchiseAreaIds(authUser.id);
             filter._id = { $in: areaIds };
+        } else if (
+            query.franchise_id !== undefined &&
+            query.franchise_id !== null &&
+            String(query.franchise_id).trim() !== ''
+        ) {
+            const parsedFranchise = parseObjectId(query.franchise_id, 'franchise_id');
+            if (!parsedFranchise.ok) return fail(400, parsedFranchise.message);
+            const franchise = await Franchise.findOne({
+                _id: parsedFranchise.oid,
+                deleted_at: null,
+            })
+                .select('area_id')
+                .lean();
+            if (!franchise) return fail(404, 'Franchise not found.');
+            const areaIds = collectFranchiseAreaIds([franchise]);
+            filter._id = { $in: areaIds };
         }
         const areaNameSearch = query.areaname || query.name;
         if (areaNameSearch) {

@@ -1345,7 +1345,7 @@
             "header": [],
             "url": "{{base_url}}/api/franchise/related-catalog/{{franchise_id}}"
           },
-          "description": "**GET** `/api/franchise/related-catalog/:franchise_id`\n\n**Who can call:** Super admin (5), Staff (6), or Admin (1) / Employee (3) whose `franchise_id` **equals** the path `franchise_id`. Others **403**; bad id **400**.\n\n**Bearer:** `{{auth_token}}`, `{{franchise_id}}`.\n\n**Response `record`:** `franchise`; raw **`franchise_categories`** / **`franchise_services`** (each has `categories_list`/`services_list`, **`active_*` / `inactive_*`**, **`categories_order`** / **`services_order`**). Filtered **`categories`** / **`services`** use **`active_*`** arrays for effective on/off (not toggled list subdocs). **`partners`** (`active_services_providing`), **`employees`**."
+          "description": "**GET** `/api/franchise/related-catalog/:franchise_id`\n\n**Who can call:** Super admin (5), Staff (6), or Admin (1) / Employee (3) whose `franchise_id` **equals** the path `franchise_id`. Others **403**; bad id **400**.\n\n**Bearer:** `{{auth_token}}`, `{{franchise_id}}`.\n\n**Response `record`:** `franchise`; raw **`franchise_categories`** / **`franchise_services`** (each has `categories_list`/`services_list`, **`active_*` / `inactive_*`**, **`categories_order`** / **`services_order`**). Filtered **`categories`** / **`services`** use **`active_*`** arrays for effective on/off (not toggled list subdocs). **`partners`** (`active_services_providing`), **`employees`**, **`customers`** (type 4 only: users with at least one non-deleted **`address`** row whose trimmed **`pincode`** is in the union of **`pincodes`** on the franchise's linked **`area`** documents; not all global users). Each customer includes **`addresses`**: all non-deleted **`address`** documents for that user (same fields as user getAll), sorted by **`created_at`** ascending."
         },
         {
           "name": "Get all",
@@ -2163,7 +2163,7 @@
     },
     {
       "name": "Category",
-      "description": "Same request workflow as Service: types 5/6 direct publish; types 1/3 pending (is_active false). Super admin/staff approve or reject. getDropDown: catalog only.",
+      "description": "Global catalog `category` documents (not franchise mapping). Workflow: types 5/6 direct publish; types 1/3 pending (`is_request`). Super admin/staff approve/reject via update body. **getDropDown:** accepted catalog only.\n\n**Create:** `POST /api/category/create` or **`POST /api/category/create-request`** (request path requires non-empty `service_ids`).\n\n**Update — editable fields (same for normal vs request route unless noted):** `name`, `desc`, `description` (alias → `desc`), `image_url`, `service_ids` (writes `services` array), `city_ids`, `state_ids`, `is_active`, `is_request`, **`approval_status`** (`approve` | `pending` | `rejected`), **`rejection_reason`** (required when rejecting), **`is_rejected`** (alias → approval). Client cannot set **`requested_by`** (stripped).\n- **`PUT /api/category/update/:id`** — Partial JSON OK; middleware rejects empty strings for any of `name`/`desc`/`image_url` **if** sent; if `service_ids` is sent it must be non-empty.\n- **`PUT /api/category/update-request/:id`** — Same handler; **must** send **`name`**, **`desc`**, **`image_url`**, and non-empty **`service_ids`** every time (full resubmit).\n\n**Multipart:** `multipart/form-data` with field `image` updates `image_url` via upload.",
       "item": [
         {
           "name": "Create (direct — Super Admin / Staff)",
@@ -2268,8 +2268,8 @@
             },
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/api/category/getAll?page=1&limit=10&request_status=pending",
-            "description": "Filter pending queue."
+            "url": "{{base_url}}/api/category/getAll?page=1&limit=10&is_request=true&approval_status=pending&sort=1",
+            "description": "Pending global category requests: query uses **is_request** and **approval_status** (not request_status)."
           }
         },
         {
@@ -2338,7 +2338,8 @@
                 }
               }
             },
-            "url": "{{base_url}}/api/category/update/{{category_id}}"
+            "url": "{{base_url}}/api/category/update/{{category_id}}",
+            "description": "Partial update example. See folder description for full list (`service_ids`, `city_ids`, `state_ids`, `is_active`, `approval_status`, etc.). For resubmitting a **pending request** with all required fields use **`PUT /api/category/update-request/:id`**."
           }
         },
         {
@@ -2363,14 +2364,15 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"request_status\": \"accepted\",\n  \"is_active\": true\n}",
+              "raw": "{\n  \"approval_status\": \"approve\",\n  \"is_active\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "url": "{{base_url}}/api/category/update/{{category_id}}"
+            "url": "{{base_url}}/api/category/update/{{category_id}}",
+            "description": "Backend field is **`approval_status`**: `approve` | `pending` | `rejected` (not `request_status`)."
           }
         },
         {
@@ -2395,14 +2397,52 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"request_status\": \"rejected\",\n  \"rejection_reason\": \"Not aligned with policy.\",\n  \"is_active\": false\n}",
+              "raw": "{\n  \"approval_status\": \"rejected\",\n  \"rejection_reason\": \"Not aligned with policy.\",\n  \"is_active\": false\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "url": "{{base_url}}/api/category/update/{{category_id}}"
+            "url": "{{base_url}}/api/category/update/{{category_id}}",
+            "description": "`rejection_reason` is required when **`approval_status`** is `rejected`."
+          }
+        },
+        {
+          "name": "Update request (resubmit pending — full body)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Requested category\",\n  \"desc\": \"Updated copy after review feedback\",\n  \"image_url\": \"https://example.com/cat.jpg\",\n  \"service_ids\": [\"{{service_id}}\"],\n  \"city_ids\": [\"{{city_id}}\"],\n  \"state_ids\": [\"{{state_id}}\"],\n  \"is_active\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/category/update-request/{{category_id}}",
+            "description": "PUT **`/api/category/update-request/:id`**. Same controller as **`/update`**; middleware requires **every** call to include **`name`**, **`desc`**, **`image_url`**, and a non-empty **`service_ids`** array (like **`POST /create-request`**). Optional: **`city_ids`**, **`state_ids`**, **`is_active`**, **`approval_status`**, etc. Multipart with field **`image`** also supported (same as category update)."
           }
         },
         {
@@ -2460,7 +2500,7 @@
     },
     {
       "name": "Service",
-      "description": "Service workflow: Super Admin (5) / Staff (6) create published services directly (request_status accepted, is_request_mode false). Admin (1) / Employee (3) create pending requests (is_active forced false until approved). Super Admin / Staff can approve or reject with rejection_reason. Admin / Employee can edit only their own pending/request rows and cannot set request_status or rejection_reason. getDropDown returns only accepted catalog entries.",
+      "description": "Global catalog `service` documents (not franchise mapping). Super Admin (5) / Staff (6) create published services (`approval_status` **approve**, `is_request` false). Admin (1) / Employee (3) use **`POST /api/service/create-request`** for pending rows (`is_request` true). Super Admin / Staff approve/reject via **`approval_status`** on update (not `request_status`). **getDropDown** returns accepted catalog entries.\n\n**Create:** `POST /api/service/create` or **`POST /api/service/create-request`**.\n\n**Update — editable fields:** `name`, `desc`, `description` (→ `desc`), `image_url`, `category_id` or `category` (alias), `price`, `tax`, `commission`, `payment_type`, `minimum_deposit`, `city_ids`, `state_ids`, `is_active`, `is_request`, **`approval_status`** (`approve`|`pending`|`rejected`), **`rejection_reason`**, **`is_rejected`**. Client cannot set **`requested_by`** (stripped). Changing **`category_id`** updates parent **`Category.services`** arrays.\n- **`PUT /api/service/update/:id`** — Partial updates OK per middleware when fields are present.\n- **`PUT /api/service/update-request/:id`** — Same fields; middleware matches create-request rules; server forces **`is_request`** true before approval merge.\n\n**Multipart:** `multipart/form-data` with `image` or `service_image` for `image_url`.",
       "item": [
         {
           "name": "Create (direct — Super Admin / Staff)",
@@ -2569,8 +2609,8 @@
             },
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/api/service/getAll?page=1&limit=10&request_status=pending",
-            "description": "Only super admin or staff can filter by request_status."
+            "url": "{{base_url}}/api/service/getAll?page=1&limit=10&is_request=true&approval_status=pending&sort=1",
+            "description": "Pending global service requests: query **`is_request`** and **`approval_status`** (backend has no `request_status`)."
           }
         },
         {
@@ -2644,7 +2684,7 @@
               }
             },
             "url": "{{base_url}}/api/service/update/{{service_id}}",
-            "description": "Admin/employee: only on services they requested. Cannot send request_status or rejection_reason."
+            "description": "Partial content update example. See folder description for full field list. Franchise users: align with app auth rules. Approvals use **`approval_status`**, not `request_status`. To resubmit pending edits under stricter validation use **`PUT /api/service/update-request/:id`**."
           }
         },
         {
@@ -2673,14 +2713,15 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"request_status\": \"accepted\",\n  \"is_active\": true\n}",
+              "raw": "{\n  \"approval_status\": \"approve\",\n  \"is_active\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "url": "{{base_url}}/api/service/update/{{service_id}}"
+            "url": "{{base_url}}/api/service/update/{{service_id}}",
+            "description": "Use **`approval_status`**: `approve` (not `request_status` / accepted)."
           }
         },
         {
@@ -2709,14 +2750,52 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"request_status\": \"rejected\",\n  \"rejection_reason\": \"Category does not match franchise coverage.\",\n  \"is_active\": false\n}",
+              "raw": "{\n  \"approval_status\": \"rejected\",\n  \"rejection_reason\": \"Category does not match franchise coverage.\",\n  \"is_active\": false\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "url": "{{base_url}}/api/service/update/{{service_id}}"
+            "url": "{{base_url}}/api/service/update/{{service_id}}",
+            "description": "`rejection_reason` required when **`approval_status`** is `rejected`."
+          }
+        },
+        {
+          "name": "Update request (resubmit pending — full body)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Requested service\",\n  \"desc\": \"Updated description after feedback\",\n  \"image_url\": \"https://example.com/service.jpg\",\n  \"category_id\": \"{{category_id}}\",\n  \"price\": 299,\n  \"tax\": 5,\n  \"commission\": 10,\n  \"payment_type\": \"per_hour\",\n  \"minimum_deposit\": 0,\n  \"city_ids\": [\"{{city_id}}\"],\n  \"state_ids\": [\"{{state_id}}\"],\n  \"is_active\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/service/update-request/{{service_id}}",
+            "description": "PUT **`/api/service/update-request/:id`**. Uses **`updateServiceRequestMiddleware`** (same required fields as **`POST /api/service/create-request`**): **`name`**, **`desc`**, **`image_url`**, **`category_id`**, **`tax`**, **`commission`**, **`payment_type`**, **`minimum_deposit`**. Server sets **`is_request`: true** before save (unless superseded by **`approval_status`** merge). Include **`price`** and location arrays as needed. Multipart: fields **`image`** or **`service_image`**."
           }
         },
         {

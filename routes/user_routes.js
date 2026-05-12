@@ -5,6 +5,7 @@ const authMiddleware = require('../middleware/auth_middleware');
 // const rateLimiter = require('../middleware/rate_middleware');
 const {createUserMiddleware, updateUserMiddleware,getPartnerDropDownMiddleware, changePasswordMiddleware} = require('../middleware/user_middleware');
 const { authorizeUserCreate } = require('../middleware/user_create_authorization_middleware');
+const { publicPartnerRegisterMiddleware } = require('../middleware/public_partner_register_middleware');
 const { requireSuperAdmin } = require('../middleware/role_middleware');
 const { uploadImages } = require('../utils/fileUpload');
 // Apply rate limiting middleware to sensitive routes
@@ -15,6 +16,13 @@ const { uploadImages } = require('../utils/fileUpload');
 
 
 router.post('/changePassword', authMiddleware, changePasswordMiddleware, changePassword);
+router.post(
+  '/register-partner',
+  uploadImages.single('image'),
+  publicPartnerRegisterMiddleware,
+  createUserMiddleware,
+  create
+);
 router.post('/create', uploadImages.single('image'), authMiddleware, authorizeUserCreate, createUserMiddleware, create);
 
 // // Protected route: Create a new user

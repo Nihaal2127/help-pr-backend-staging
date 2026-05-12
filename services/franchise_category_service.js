@@ -13,6 +13,7 @@ const {
     coerceLegacyCategoryMappingArrays,
     validateCategoryActiveInactivePartition,
     validateCategoriesOrderPermutation,
+    filterRecordsByFranchiseMappingToggle,
 } = require('../utils/franchise_catalog_lists');
 
 const fail = (status, message, extra = {}) => ({ ok: false, status, message, ...extra });
@@ -98,14 +99,18 @@ const applyCategoryCatalogFiltersToRecords = (records, isActiveFilter, isRequest
     });
 };
 
-const resolveCatalogBoolFilters = (query) => {
-    const a = parseOptionalQueryBool(query.is_active, 'is_active');
-    if (!a.ok) return { ok: false, message: a.message };
+/**
+ * List/getById query: is_active = franchise mapping on/off (omit = both).
+ * is_request = optional catalog filter on Category.is_request (pending vs approved).
+ */
+const resolveFranchiseMappingListQuery = (query) => {
+    const m = parseOptionalQueryBool(query.is_active, 'is_active');
+    if (!m.ok) return { ok: false, message: m.message };
     const r = parseOptionalQueryBool(query.is_request, 'is_request');
     if (!r.ok) return { ok: false, message: r.message };
     return {
         ok: true,
-        isActiveFilter: a.present ? a.value : undefined,
+        mappingActiveFilter: m.present ? m.value : undefined,
         isRequestFilter: r.present ? r.value : undefined,
     };
 };
@@ -116,10 +121,86 @@ const listPopulateFields = [
         path: 'categories_list',
         populate: {
             path: 'category_id',
-            select: 'name desc image_url is_active is_request',
+            select: 'name desc image_url is_active is_request category_id',
         },
     },
 ];
+
+/** Global `services` where `service.category_id` matches the category (_id). */
+const RELATED_SERVICE_FIELDS =
+    'name desc image_url category_id is_active is_request price helpers service_id tax commission payment_type minimum_deposit approval_status rejection_reason requested_by created_at updated_at';
+
+const loadServicesGroupedByCategoryId = async (categoryObjectIds) => {
+    const map = new Map();
+    if (!categoryObjectIds || categoryObjectIds.length === 0) return map;
+    const unique = [...new Set(categoryObjectIds.map((id) => (id ? id.toString() : '')))].filter(
+        Boolean
+    );
+    if (unique.length === 0) return map;
+    const oids = unique.map((s) => new mongoose.Types.ObjectId(s));
+    const rows = await Service.find({
+        deleted_at: null,
+        category_id: { $in: oids },
+    })
+        .select(RELATED_SERVICE_FIELDS)
+        .sort({ name: 1 })
+        .lean();
+    for (const s of rows) {
+        const cid = s.category_id ? s.category_id.toString() : '';
+        if (!cid) continue;
+        if (!map.has(cid)) map.set(cid, []);
+        map.get(cid).push(s);
+    }
+    return map;
+};
+
+/**
+ * Attaches `related_services` on each populated `categories_list[].category_id` (global services for that category).
+ */
+const enrichFranchiseCategoryRecordsWithRelatedServices = async (records) => {
+    if (!Array.isArray(records) || records.length === 0) return records;
+    const catIds = [];
+    for (const row of records) {
+        const list = row.categories_list || [];
+        for (const e of list) {
+            const cid = e.category_id;
+            if (!cid) continue;
+            if (cid instanceof mongoose.Types.ObjectId) {
+                catIds.push(cid);
+            } else if (typeof cid === 'object' && cid._id) {
+                catIds.push(cid._id);
+            }
+        }
+    }
+    const svcMap = await loadServicesGroupedByCategoryId(catIds);
+    return records.map((row) => {
+        const plain = row && typeof row.toObject === 'function' ? row.toObject() : { ...row };
+        const list = Array.isArray(plain.categories_list) ? plain.categories_list : [];
+        plain.categories_list = list.map((e) => {
+            const cid = e.category_id;
+            if (!cid) return e;
+            let idStr;
+            if (cid instanceof mongoose.Types.ObjectId) {
+                idStr = cid.toString();
+                const svcs = svcMap.get(idStr) || [];
+                return { ...e, related_services: svcs };
+            }
+            if (typeof cid === 'object' && cid._id) {
+                idStr = cid._id.toString();
+                const svcs = svcMap.get(idStr) || [];
+                return {
+                    ...e,
+                    category_id: {
+                        ...cid,
+                        related_services: svcs,
+                    },
+                };
+            }
+            return e;
+        });
+        return plain;
+    });
+};
 
 /** When no FranchiseCategory row exists, mirror Franchise.categories as active mappings. */
 const buildSyntheticFranchiseCategoryFromFranchiseDoc = async (franchiseOid) => {
@@ -140,6 +221,42 @@ const buildSyntheticFranchiseCategoryFromFranchiseDoc = async (franchiseOid) => 
     };
     const populated = await FranchiseCategory.populate([row], listPopulateFields);
     return populated[0];
+};
+
+/**
+ * Every global category (non-deleted), each with franchise_active derived from the latest
+ * franchise_category mapping for this franchise (active_categories after coerce).
+ */
+const buildAllCategoriesWithFranchiseMappingStatus = async (franchiseOid) => {
+    const row = await FranchiseCategory.findOne({
+        franchise_id: franchiseOid,
+        deleted_at: null,
+    })
+        .sort({ created_at: -1 })
+        .lean();
+
+    let plainForCoerce = row;
+    if (!row) {
+        const synthetic = await buildSyntheticFranchiseCategoryFromFranchiseDoc(franchiseOid);
+        if (synthetic) {
+            plainForCoerce =
+                typeof synthetic.toObject === 'function' ? synthetic.toObject() : { ...synthetic };
+        }
+    }
+
+    const activeSet = new Set();
+    if (plainForCoerce) {
+        const coerced = coerceLegacyCategoryMappingArrays(plainForCoerce);
+        (coerced.active_categories || []).forEach((id) => activeSet.add(id.toString()));
+    }
+
+    const allCats = await Category.find({ deleted_at: null }).sort({ name: 1 }).lean();
+    const svcMap = await loadServicesGroupedByCategoryId(allCats.map((c) => c._id));
+    return allCats.map((cat) => ({
+        ...cat,
+        franchise_active: activeSet.has(cat._id.toString()),
+        related_services: svcMap.get(cat._id.toString()) || [],
+    }));
 };
 
 const loadUserFranchiseAuth = async (userId) => {
@@ -271,8 +388,8 @@ const list = async (query, userId) => {
             filter.franchise_id = parsed.oid;
         }
 
-        const filterFlags = resolveCatalogBoolFilters(query);
-        if (!filterFlags.ok) return fail(400, filterFlags.message);
+        const listFlags = resolveFranchiseMappingListQuery(query);
+        if (!listFlags.ok) return fail(400, listFlags.message);
 
         let { data, totalCount, totalPages, currentPage } = await applyPagination(
             FranchiseCategory,
@@ -298,11 +415,25 @@ const list = async (query, userId) => {
             }
         }
 
-        const records = applyCategoryCatalogFiltersToRecords(
-            data,
-            filterFlags.isActiveFilter,
-            filterFlags.isRequestFilter
-        ).map((row) => coerceLegacyCategoryMappingArrays(row));
+        let records = filterRecordsByFranchiseMappingToggle(
+            applyCategoryCatalogFiltersToRecords(
+                data,
+                undefined,
+                listFlags.isRequestFilter
+            ).map((row) => coerceLegacyCategoryMappingArrays(row)),
+            listFlags.mappingActiveFilter,
+            'categories_list',
+            'active_categories',
+            'inactive_categories',
+            'category_id'
+        );
+
+        records = await enrichFranchiseCategoryRecordsWithRelatedServices(records);
+
+        let all_categories;
+        if (filter.franchise_id) {
+            all_categories = await buildAllCategoriesWithFranchiseMappingStatus(filter.franchise_id);
+        }
 
         return ok(200, {
             message: 'Franchise category list fetched successfully.',
@@ -310,6 +441,7 @@ const list = async (query, userId) => {
             totalPages,
             currentPage,
             records,
+            ...(all_categories !== undefined && { all_categories }),
         });
     } catch (error) {
         console.error('franchiseCategory.list', error.message);
@@ -383,18 +515,30 @@ const getById = async (id, userId, query = {}) => {
             }
         }
 
-        const filterFlags = resolveCatalogBoolFilters(query);
-        if (!filterFlags.ok) return fail(400, filterFlags.message);
+        const listFlags = resolveFranchiseMappingListQuery(query);
+        if (!listFlags.ok) return fail(400, listFlags.message);
 
         await record.populate(listPopulateFields);
-        const [recordOut] = applyCategoryCatalogFiltersToRecords(
+        const afterCatalog = applyCategoryCatalogFiltersToRecords(
             [record],
-            filterFlags.isActiveFilter,
-            filterFlags.isRequestFilter
+            undefined,
+            listFlags.isRequestFilter
+        ).map((row) => coerceLegacyCategoryMappingArrays(row));
+        let [recordOut] = filterRecordsByFranchiseMappingToggle(
+            afterCatalog,
+            listFlags.mappingActiveFilter,
+            'categories_list',
+            'active_categories',
+            'inactive_categories',
+            'category_id'
         );
+        const [enriched] = await enrichFranchiseCategoryRecordsWithRelatedServices(
+            recordOut ? [recordOut] : []
+        );
+        recordOut = enriched || recordOut;
         return ok(200, {
             message: 'Franchise category fetched successfully.',
-            record: coerceLegacyCategoryMappingArrays(recordOut),
+            record: recordOut,
         });
     } catch (error) {
         console.error('franchiseCategory.getById', error.message);

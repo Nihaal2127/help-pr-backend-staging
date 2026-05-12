@@ -167,6 +167,40 @@ const buildSyntheticFranchiseServiceFromFranchiseDoc = async (franchiseOid) => {
     return populated[0];
 };
 
+/**
+ * Every global service (non-deleted), each with franchise_active derived from the latest
+ * franchise_service mapping for this franchise (active_services after coerce).
+ */
+const buildAllServicesWithFranchiseMappingStatus = async (franchiseOid) => {
+    const row = await FranchiseService.findOne({
+        franchise_id: franchiseOid,
+        deleted_at: null,
+    })
+        .sort({ created_at: -1 })
+        .lean();
+
+    let plainForCoerce = row;
+    if (!row) {
+        const synthetic = await buildSyntheticFranchiseServiceFromFranchiseDoc(franchiseOid);
+        if (synthetic) {
+            plainForCoerce =
+                typeof synthetic.toObject === 'function' ? synthetic.toObject() : { ...synthetic };
+        }
+    }
+
+    const activeSet = new Set();
+    if (plainForCoerce) {
+        const coerced = coerceLegacyServiceMappingArrays(plainForCoerce);
+        (coerced.active_services || []).forEach((id) => activeSet.add(id.toString()));
+    }
+
+    const allSvcs = await Service.find({ deleted_at: null }).sort({ name: 1 }).lean();
+    return allSvcs.map((svc) => ({
+        ...svc,
+        franchise_active: activeSet.has(svc._id.toString()),
+    }));
+};
+
 const list = async (query, userId) => {
     try {
         const page = parseInt(query.page, 10) || 1;
@@ -241,12 +275,18 @@ const list = async (query, userId) => {
             'service_id'
         );
 
+        let all_services;
+        if (filter.franchise_id) {
+            all_services = await buildAllServicesWithFranchiseMappingStatus(filter.franchise_id);
+        }
+
         return ok(200, {
             message: 'Franchise service list fetched successfully.',
             totalItems: totalCount,
             totalPages,
             currentPage,
             records,
+            ...(all_services !== undefined && { all_services }),
         });
     } catch (error) {
         console.error('franchiseService.list', error.message);

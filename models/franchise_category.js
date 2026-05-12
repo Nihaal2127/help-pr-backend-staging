@@ -23,8 +23,19 @@ const franchiseCategorySchema = new mongoose.Schema(
             type: [franchiseCategoryEntrySchema],
             default: [],
         },
-        active_categories: { type: Boolean, default: false },
-        inactive_categories: { type: Boolean, default: false },
+        active_categories: {
+            type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'category' }],
+            default: [],
+        },
+        inactive_categories: {
+            type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'category' }],
+            default: [],
+        },
+        /** Display order: every category_id in categories_list appears exactly once, in client payload order. */
+        categories_order: {
+            type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'category' }],
+            default: [],
+        },
         order_number: { type: Number, default: 0 },
         created_at: { type: Date, default: Date.now },
         deleted_at: { type: Date, default: null },

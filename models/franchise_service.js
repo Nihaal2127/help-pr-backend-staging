@@ -23,8 +23,19 @@ const franchiseServiceSchema = new mongoose.Schema(
             type: [franchiseServiceEntrySchema],
             default: [],
         },
-        active_services: { type: Boolean, default: false },
-        inactive_services: { type: Boolean, default: false },
+        active_services: {
+            type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'service' }],
+            default: [],
+        },
+        inactive_services: {
+            type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'service' }],
+            default: [],
+        },
+        /** Display order: every service_id in services_list appears exactly once, in client payload order. */
+        services_order: {
+            type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'service' }],
+            default: [],
+        },
         order_number: { type: Number, default: 0 },
         created_at: { type: Date, default: Date.now },
         deleted_at: { type: Date, default: null },

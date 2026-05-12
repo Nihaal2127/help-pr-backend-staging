@@ -4,6 +4,14 @@ const Franchise = require('../models/franchise');
 const Service = require('../models/service');
 const User = require('../models/user');
 const { applyPagination } = require('../utils/pagination');
+const {
+    normalizeStoredServicesList,
+    parseObjectIdArray,
+    parseObjectIdArrayOrdered,
+    coerceLegacyServiceMappingArrays,
+    validateServiceActiveInactivePartition,
+    validateServicesOrderPermutation,
+} = require('../utils/franchise_catalog_lists');
 
 const fail = (status, message, extra = {}) => ({ ok: false, status, message, ...extra });
 const ok = (status, data) => ({ ok: true, status, data });
@@ -20,23 +28,6 @@ const parseObjectId = (raw, fieldName) => {
         return { ok: false, message: `${fieldName} must be a valid MongoDB ObjectId.` };
     }
     return { ok: true, oid: new mongoose.Types.ObjectId(value) };
-};
-
-const normalizeStoredServicesList = (raw) => {
-    if (!raw || !Array.isArray(raw) || raw.length === 0) return [];
-    const out = [];
-    for (const item of raw) {
-        if (!item) continue;
-        if (typeof item === 'object' && item.service_id) {
-            out.push({
-                service_id: item.service_id,
-                is_active: Boolean(item.is_active),
-            });
-        } else if (item instanceof mongoose.Types.ObjectId) {
-            out.push({ service_id: item, is_active: true });
-        }
-    }
-    return out;
 };
 
 const parseServicesListInput = (raw, fieldName) => {
@@ -158,8 +149,9 @@ const buildSyntheticFranchiseServiceFromFranchiseDoc = async (franchiseOid) => {
         _id: new mongoose.Types.ObjectId(),
         franchise_id: franchiseOid,
         services_list: fr.services.map((service_id) => ({ service_id, is_active: true })),
-        active_services: false,
-        inactive_services: false,
+        active_services: [...fr.services],
+        inactive_services: [],
+        services_order: [...fr.services],
         order_number: 0,
         created_at: null,
         updated_at: null,
@@ -235,7 +227,7 @@ const list = async (query, userId) => {
             data,
             filterFlags.isActiveFilter,
             filterFlags.isRequestFilter
-        );
+        ).map((row) => coerceLegacyServiceMappingArrays(row));
 
         return ok(200, {
             message: 'Franchise service list fetched successfully.',
@@ -265,11 +257,16 @@ const create = async (body) => {
         const validServices = await ensureServices(svcIds);
         if (!validServices) return fail(400, 'One or more service IDs are invalid or deleted.');
 
+        const activeSvc = parsedServices.entries.filter((e) => e.is_active).map((e) => e.service_id);
+        const inactiveSvc = parsedServices.entries.filter((e) => !e.is_active).map((e) => e.service_id);
+        const servicesOrderIds = parsedServices.entries.map((e) => e.service_id);
+
         const doc = new FranchiseService({
             franchise_id: parsedFranchise.oid,
             services_list: parsedServices.entries,
-            active_services: false,
-            inactive_services: false,
+            active_services: activeSvc,
+            inactive_services: inactiveSvc,
+            services_order: servicesOrderIds,
             order_number:
                 body.order_number !== undefined && body.order_number !== null
                     ? Number(body.order_number)
@@ -277,7 +274,10 @@ const create = async (body) => {
         });
 
         const saved = await doc.save();
-        return ok(200, { message: 'Franchise service created successfully.', record: saved });
+        return ok(200, {
+            message: 'Franchise service created successfully.',
+            record: coerceLegacyServiceMappingArrays(saved),
+        });
     } catch (error) {
         console.error('franchiseService.create', error.message);
         return fail(500, 'Internal server error.');
@@ -312,7 +312,10 @@ const getById = async (id, userId, query = {}) => {
             filterFlags.isActiveFilter,
             filterFlags.isRequestFilter
         );
-        return ok(200, { message: 'Franchise service fetched successfully.', record: recordOut });
+        return ok(200, {
+            message: 'Franchise service fetched successfully.',
+            record: coerceLegacyServiceMappingArrays(recordOut),
+        });
     } catch (error) {
         console.error('franchiseService.getById', error.message);
         return fail(500, 'Internal server error.');
@@ -345,8 +348,17 @@ const update = async (id, body, userId) => {
             const auth = await loadUserFranchiseAuth(userId);
             if (!auth) return fail(403, 'Access denied.');
 
+            const servicesOrderFromEntries = parsedServices.entries.map((e) => e.service_id);
+
             if (auth.isSuper) {
                 record.services_list = parsedServices.entries;
+                record.active_services = parsedServices.entries
+                    .filter((e) => e.is_active)
+                    .map((e) => e.service_id);
+                record.inactive_services = parsedServices.entries
+                    .filter((e) => !e.is_active)
+                    .map((e) => e.service_id);
+                record.services_order = servicesOrderFromEntries;
             } else if (auth.isEmployee) {
                 return fail(403, 'Franchise employees cannot update services list.');
             } else if (auth.isFranchiseAdmin) {
@@ -381,6 +393,13 @@ const update = async (id, body, userId) => {
                     }
                 }
                 record.services_list = parsedServices.entries;
+                record.active_services = parsedServices.entries
+                    .filter((e) => e.is_active)
+                    .map((e) => e.service_id);
+                record.inactive_services = parsedServices.entries
+                    .filter((e) => !e.is_active)
+                    .map((e) => e.service_id);
+                record.services_order = servicesOrderFromEntries;
             } else {
                 return fail(403, 'Access denied.');
             }
@@ -390,20 +409,86 @@ const update = async (id, body, userId) => {
             body.active_services !== undefined || body.inactive_services !== undefined;
 
         if (isStatusEditRequest) {
-            const franchise = await ensureFranchise(record.franchise_id);
+            const auth = await loadUserFranchiseAuth(userId);
+            if (!auth) return fail(403, 'Access denied.');
+
+            const franchise = await Franchise.findOne({
+                _id: record.franchise_id,
+                deleted_at: null,
+            })
+                .select('admin_id')
+                .lean();
             if (!franchise) return fail(404, 'Franchise not found.');
-            if (String(franchise.admin_id) !== String(userId)) {
+
+            const canEditStatus = auth.isSuper || String(franchise.admin_id) === String(userId);
+            if (!canEditStatus) {
                 return fail(
                     403,
-                    'Only this franchise admin can update active/inactive service status.'
+                    'Only this franchise admin or a super admin can update active/inactive service lists.'
                 );
             }
-            if (body.active_services !== undefined) {
-                record.active_services = Boolean(body.active_services);
+
+            const normList = normalizeStoredServicesList(record.services_list);
+            const catalogStr = new Set(normList.map((e) => e.service_id.toString()));
+
+            let activeIds;
+            let inactiveIds;
+            if (body.active_services !== undefined && body.inactive_services !== undefined) {
+                const pa = parseObjectIdArray(body.active_services, 'active_services');
+                if (!pa.ok) return fail(400, pa.message);
+                const pi = parseObjectIdArray(body.inactive_services, 'inactive_services');
+                if (!pi.ok) return fail(400, pi.message);
+                activeIds = pa.oids;
+                inactiveIds = pi.oids;
+            } else if (body.active_services !== undefined) {
+                const pa = parseObjectIdArray(body.active_services, 'active_services');
+                if (!pa.ok) return fail(400, pa.message);
+                activeIds = pa.oids;
+                const activeStr = new Set(activeIds.map((a) => a.toString()));
+                inactiveIds = normList
+                    .filter((e) => !activeStr.has(e.service_id.toString()))
+                    .map((e) => e.service_id);
+            } else {
+                const pi = parseObjectIdArray(body.inactive_services, 'inactive_services');
+                if (!pi.ok) return fail(400, pi.message);
+                inactiveIds = pi.oids;
+                const inactiveStr = new Set(inactiveIds.map((a) => a.toString()));
+                activeIds = normList
+                    .filter((e) => !inactiveStr.has(e.service_id.toString()))
+                    .map((e) => e.service_id);
             }
-            if (body.inactive_services !== undefined) {
-                record.inactive_services = Boolean(body.inactive_services);
+
+            const partitionCheck = validateServiceActiveInactivePartition(
+                catalogStr,
+                activeIds,
+                inactiveIds
+            );
+            if (!partitionCheck.ok) return fail(400, partitionCheck.message);
+
+            record.active_services = activeIds;
+            record.inactive_services = inactiveIds;
+        }
+
+        if (body.services_order !== undefined) {
+            const auth = await loadUserFranchiseAuth(userId);
+            if (!auth) return fail(403, 'Access denied.');
+            if (auth.isEmployee) {
+                return fail(403, 'Franchise employees cannot update services order.');
             }
+            const canEditOrder =
+                auth.isSuper ||
+                (auth.isFranchiseAdmin &&
+                    String(record.franchise_id) === String(auth.franchise_id));
+            if (!canEditOrder) {
+                return fail(403, 'Access denied.');
+            }
+            const normListOrder = normalizeStoredServicesList(record.services_list);
+            const catalogStrOrder = new Set(normListOrder.map((e) => e.service_id.toString()));
+            const po = parseObjectIdArrayOrdered(body.services_order, 'services_order');
+            if (!po.ok) return fail(400, po.message);
+            const orderCheck = validateServicesOrderPermutation(po.oids, catalogStrOrder);
+            if (!orderCheck.ok) return fail(400, orderCheck.message);
+            record.services_order = po.oids;
         }
 
         if (body.order_number !== undefined) {
@@ -412,7 +497,10 @@ const update = async (id, body, userId) => {
 
         record.updated_at = new Date();
         const updated = await record.save();
-        return ok(200, { message: 'Franchise service updated successfully.', record: updated });
+        return ok(200, {
+            message: 'Franchise service updated successfully.',
+            record: coerceLegacyServiceMappingArrays(updated),
+        });
     } catch (error) {
         console.error('franchiseService.update', error.message);
         return fail(500, 'Internal server error.');

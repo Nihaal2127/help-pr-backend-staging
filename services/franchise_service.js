@@ -109,23 +109,13 @@ const validateServiceIds = async (oids) => {
     return { ok: true };
 };
 
-const buildFranchiseCategoriesListForCreate = async (activeCategoryOids) => {
-    const rows = await Category.find({ deleted_at: null }).select('_id').sort({ name: 1 }).lean();
-    const active = new Set(activeCategoryOids.map((id) => id.toString()));
-    return rows.map((c) => ({
-        category_id: c._id,
-        is_active: active.has(c._id.toString()),
-    }));
-};
+/** Only categories from the franchise create payload; all active initially. */
+const buildFranchiseCategoriesListForCreate = (categoryOids) =>
+    categoryOids.map((category_id) => ({ category_id, is_active: true }));
 
-const buildFranchiseServicesListForCreate = async (activeServiceOids) => {
-    const rows = await Service.find({ deleted_at: null }).select('_id').sort({ name: 1 }).lean();
-    const active = new Set(activeServiceOids.map((id) => id.toString()));
-    return rows.map((s) => ({
-        service_id: s._id,
-        is_active: active.has(s._id.toString()),
-    }));
-};
+/** Only services from the franchise create payload; all active initially. */
+const buildFranchiseServicesListForCreate = (serviceOids) =>
+    serviceOids.map((service_id) => ({ service_id, is_active: true }));
 
 const dedupeIdsPreserveOrder = (oids) => {
     const seen = new Set();
@@ -366,15 +356,21 @@ const createFranchise = async (body) => {
 
         const saved = await doc.save();
         try {
-            const categories_list = await buildFranchiseCategoriesListForCreate(categoryOids);
-            const services_list = await buildFranchiseServicesListForCreate(serviceOids);
+            const categories_list = buildFranchiseCategoriesListForCreate(categoryOids);
+            const services_list = buildFranchiseServicesListForCreate(serviceOids);
             await FranchiseCategory.create({
                 franchise_id: saved._id,
                 categories_list,
+                active_categories: [...categoryOids],
+                inactive_categories: [],
+                categories_order: [...categoryOids],
             });
             await FranchiseService.create({
                 franchise_id: saved._id,
                 services_list,
+                active_services: [...serviceOids],
+                inactive_services: [],
+                services_order: [...serviceOids],
             });
         } catch (mapError) {
             await Franchise.findByIdAndDelete(saved._id);
@@ -642,11 +638,13 @@ const isCatalogServiceActive = (doc) =>
             String(doc.approval_status || '').toLowerCase() === 'approve'
     );
 
-/** Merge { category_id, is_active } from multiple franchise_category rows (first doc wins = newest when docs are newest-first). */
+/** Merge { category_id, is_active } from multiple franchise_category rows (first doc wins = newest when docs are newest-first). is_active follows active_categories[] when present, else categories_list row flags. */
 const mergeFranchiseCategoryEntries = (docs) => {
     const map = new Map();
     for (const doc of docs) {
         const list = doc.categories_list || [];
+        const partitionActive =
+            doc && Array.isArray(doc.active_categories) ? new Set(doc.active_categories.map((id) => id.toString())) : null;
         for (const row of list) {
             if (!row) continue;
             const cid =
@@ -656,19 +654,24 @@ const mergeFranchiseCategoryEntries = (docs) => {
             if (!cid) continue;
             const key = cid.toString();
             if (map.has(key)) continue;
+            const fromPartition =
+                partitionActive !== null ? partitionActive.has(key) : Boolean(row.is_active);
             map.set(key, {
                 category_id: cid,
-                is_active: Boolean(row.is_active),
+                is_active: fromPartition,
             });
         }
     }
     return [...map.values()];
 };
 
+/** is_active follows active_services[] when present, else services_list row flags. */
 const mergeFranchiseServiceEntries = (docs) => {
     const map = new Map();
     for (const doc of docs) {
         const list = doc.services_list || [];
+        const partitionActive =
+            doc && Array.isArray(doc.active_services) ? new Set(doc.active_services.map((id) => id.toString())) : null;
         for (const row of list) {
             if (!row) continue;
             const sid =
@@ -678,9 +681,11 @@ const mergeFranchiseServiceEntries = (docs) => {
             if (!sid) continue;
             const key = sid.toString();
             if (map.has(key)) continue;
+            const fromPartition =
+                partitionActive !== null ? partitionActive.has(key) : Boolean(row.is_active);
             map.set(key, {
                 service_id: sid,
-                is_active: Boolean(row.is_active),
+                is_active: fromPartition,
             });
         }
     }

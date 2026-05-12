@@ -2,6 +2,8 @@ const mongoose = require("mongoose");
 const PartnerService = require('../models/partner_service');
 const User = require('../models/user');
 const Franchise = require('../models/franchise');
+const FranchiseCategory = require('../models/franchise_category');
+const FranchiseService = require('../models/franchise_service');
 const { applyPagination, applyDropDownFilter } = require('../utils/pagination');
 const { parseBoolean } = require('../utils/parser');
 const { validationResult } = require('express-validator');
@@ -11,7 +13,8 @@ const Service = require("../models/service");
 const Category = require("../models/category");
 
 /**
- * Categories / services allowed for a partner come from their user's franchise document.
+ * Categories / services allowed for a partner: franchise document lists intersected with
+ * mapping active_categories / active_services when present; services whose category is inactive are excluded.
  * @returns {{ ok: true, categoryIds: mongoose.Types.ObjectId[], serviceIds: mongoose.Types.ObjectId[] } | { ok: false, status: number, message: string }}
  */
 const resolvePartnerFranchiseCatalog = async (partnerId) => {
@@ -29,8 +32,51 @@ const resolvePartnerFranchiseCatalog = async (partnerId) => {
   if (!franchise) {
     return { ok: false, status: 404, message: 'Franchise not found.' };
   }
-  const categoryIds = Array.isArray(franchise.categories) ? franchise.categories : [];
-  const serviceIds = Array.isArray(franchise.services) ? franchise.services : [];
+  const franchiseCatIds = Array.isArray(franchise.categories) ? franchise.categories : [];
+  const franchiseSvcIds = Array.isArray(franchise.services) ? franchise.services : [];
+
+  const [fc, fsRow] = await Promise.all([
+    FranchiseCategory.findOne({ franchise_id: user.franchise_id, deleted_at: null })
+      .sort({ created_at: -1 })
+      .select('active_categories')
+      .lean(),
+    FranchiseService.findOne({ franchise_id: user.franchise_id, deleted_at: null })
+      .sort({ created_at: -1 })
+      .select('active_services')
+      .lean(),
+  ]);
+
+  let categoryIds;
+  if (fc && Array.isArray(fc.active_categories)) {
+    const allow = new Set(fc.active_categories.map((x) => x.toString()));
+    categoryIds = franchiseCatIds.filter((cid) => allow.has(cid.toString()));
+  } else {
+    categoryIds = franchiseCatIds;
+  }
+
+  let serviceIdsFromFranchise;
+  if (fsRow && Array.isArray(fsRow.active_services)) {
+    const allow = new Set(fsRow.active_services.map((x) => x.toString()));
+    serviceIdsFromFranchise = franchiseSvcIds.filter((sid) => allow.has(sid.toString()));
+  } else {
+    serviceIdsFromFranchise = franchiseSvcIds;
+  }
+
+  const categoryAllow = new Set(categoryIds.map((c) => c.toString()));
+  const svcDocs =
+    serviceIdsFromFranchise.length === 0
+      ? []
+      : await Service.find({
+          _id: { $in: serviceIdsFromFranchise },
+          deleted_at: null,
+        })
+          .select('category_id')
+          .lean();
+
+  const serviceIds = svcDocs
+    .filter((s) => s.category_id && categoryAllow.has(s.category_id.toString()))
+    .map((s) => s._id);
+
   return { ok: true, categoryIds, serviceIds };
 };
 

@@ -1,9 +1,19 @@
 const mongoose = require('mongoose');
 const FranchiseCategory = require('../models/franchise_category');
 const Franchise = require('../models/franchise');
+const FranchiseService = require('../models/franchise_service');
 const Category = require('../models/category');
+const Service = require('../models/service');
 const User = require('../models/user');
 const { applyPagination } = require('../utils/pagination');
+const {
+    normalizeStoredCategoriesList,
+    parseObjectIdArray,
+    parseObjectIdArrayOrdered,
+    coerceLegacyCategoryMappingArrays,
+    validateCategoryActiveInactivePartition,
+    validateCategoriesOrderPermutation,
+} = require('../utils/franchise_catalog_lists');
 
 const fail = (status, message, extra = {}) => ({ ok: false, status, message, ...extra });
 const ok = (status, data) => ({ ok: true, status, data });
@@ -22,24 +32,6 @@ const parseObjectId = (raw, fieldName) => {
         return { ok: false, message: `${fieldName} must be a valid MongoDB ObjectId.` };
     }
     return { ok: true, oid: new mongoose.Types.ObjectId(value) };
-};
-
-/** Normalize DB value: legacy plain ObjectId entries or { category_id, is_active }. */
-const normalizeStoredCategoriesList = (raw) => {
-    if (!raw || !Array.isArray(raw) || raw.length === 0) return [];
-    const out = [];
-    for (const item of raw) {
-        if (!item) continue;
-        if (typeof item === 'object' && item.category_id) {
-            out.push({
-                category_id: item.category_id,
-                is_active: Boolean(item.is_active),
-            });
-        } else if (item instanceof mongoose.Types.ObjectId) {
-            out.push({ category_id: item, is_active: true });
-        }
-    }
-    return out;
 };
 
 const parseCategoriesListInput = (raw, fieldName) => {
@@ -137,8 +129,9 @@ const buildSyntheticFranchiseCategoryFromFranchiseDoc = async (franchiseOid) => 
         _id: new mongoose.Types.ObjectId(),
         franchise_id: franchiseOid,
         categories_list: fr.categories.map((category_id) => ({ category_id, is_active: true })),
-        active_categories: false,
-        inactive_categories: false,
+        active_categories: [...fr.categories],
+        inactive_categories: [],
+        categories_order: [...fr.categories],
         order_number: 0,
         created_at: null,
         updated_at: null,
@@ -172,6 +165,76 @@ const ensureCategories = async (categoryIds) => {
         deleted_at: null,
     });
     return count === categoryIds.length;
+};
+
+/**
+ * When categories are inactive, every mapped service under those categories must leave active_services
+ * (same franchise). Only updates active_services / inactive_services — not services_list.
+ */
+const cascadeInactiveCategoriesToFranchiseServices = async (franchiseOid, inactiveCategoryIds) => {
+    const inactiveCat = new Set((inactiveCategoryIds || []).map((id) => id.toString()));
+    if (inactiveCat.size === 0) return;
+
+    const fsDocs = await FranchiseService.find({ franchise_id: franchiseOid, deleted_at: null });
+    if (!fsDocs || fsDocs.length === 0) return;
+
+    const allSvcOids = [];
+    for (const d of fsDocs) {
+        const norm = normalizeStoredServicesList(d.services_list);
+        for (const e of norm) {
+            if (e.service_id) allSvcOids.push(e.service_id);
+        }
+    }
+    if (allSvcOids.length === 0) return;
+
+    const svcRows = await Service.find({
+        _id: { $in: allSvcOids },
+        deleted_at: null,
+    })
+        .select('category_id')
+        .lean();
+    const svcCategoryById = new Map(
+        svcRows.map((s) => [s._id.toString(), s.category_id ? s.category_id.toString() : ''])
+    );
+
+    for (const d of fsDocs) {
+        const norm = normalizeStoredServicesList(d.services_list);
+        const catalogIds = norm.map((e) => e.service_id);
+        if (catalogIds.length === 0) continue;
+
+        const activeSet = new Set((d.active_services || []).map((x) => x.toString()));
+        const inactiveSet = new Set((d.inactive_services || []).map((x) => x.toString()));
+
+        for (const sid of catalogIds) {
+            const cat = svcCategoryById.get(sid.toString());
+            if (cat && inactiveCat.has(cat)) {
+                activeSet.delete(sid.toString());
+                inactiveSet.add(sid.toString());
+            }
+        }
+
+        for (const sid of catalogIds) {
+            const s = sid.toString();
+            if (!activeSet.has(s) && !inactiveSet.has(s)) {
+                const cat = svcCategoryById.get(s);
+                if (cat && inactiveCat.has(cat)) inactiveSet.add(s);
+                else activeSet.add(s);
+            }
+        }
+        for (const sid of catalogIds) {
+            const s = sid.toString();
+            if (activeSet.has(s) && inactiveSet.has(s)) {
+                const cat = svcCategoryById.get(s);
+                if (cat && inactiveCat.has(cat)) activeSet.delete(s);
+                else inactiveSet.delete(s);
+            }
+        }
+
+        d.active_services = catalogIds.filter((id) => activeSet.has(id.toString()));
+        d.inactive_services = catalogIds.filter((id) => inactiveSet.has(id.toString()));
+        d.updated_at = new Date();
+        await d.save();
+    }
 };
 
 const list = async (query, userId) => {
@@ -239,7 +302,7 @@ const list = async (query, userId) => {
             data,
             filterFlags.isActiveFilter,
             filterFlags.isRequestFilter
-        );
+        ).map((row) => coerceLegacyCategoryMappingArrays(row));
 
         return ok(200, {
             message: 'Franchise category list fetched successfully.',
@@ -269,11 +332,21 @@ const create = async (body) => {
         const validCategories = await ensureCategories(catIds);
         if (!validCategories) return fail(400, 'One or more category IDs are invalid or deleted.');
 
+        const activeCats = parsedCategories.entries
+            .filter((e) => e.is_active)
+            .map((e) => e.category_id);
+        const inactiveCats = parsedCategories.entries
+            .filter((e) => !e.is_active)
+            .map((e) => e.category_id);
+
+        const categoriesOrderIds = parsedCategories.entries.map((e) => e.category_id);
+
         const doc = new FranchiseCategory({
             franchise_id: parsedFranchise.oid,
             categories_list: parsedCategories.entries,
-            active_categories: false,
-            inactive_categories: false,
+            active_categories: activeCats,
+            inactive_categories: inactiveCats,
+            categories_order: categoriesOrderIds,
             order_number:
                 body.order_number !== undefined && body.order_number !== null
                     ? Number(body.order_number)
@@ -281,7 +354,10 @@ const create = async (body) => {
         });
 
         const saved = await doc.save();
-        return ok(200, { message: 'Franchise category created successfully.', record: saved });
+        return ok(200, {
+            message: 'Franchise category created successfully.',
+            record: coerceLegacyCategoryMappingArrays(saved),
+        });
     } catch (error) {
         console.error('franchiseCategory.create', error.message);
         return fail(500, 'Internal server error.');
@@ -316,7 +392,10 @@ const getById = async (id, userId, query = {}) => {
             filterFlags.isActiveFilter,
             filterFlags.isRequestFilter
         );
-        return ok(200, { message: 'Franchise category fetched successfully.', record: recordOut });
+        return ok(200, {
+            message: 'Franchise category fetched successfully.',
+            record: coerceLegacyCategoryMappingArrays(recordOut),
+        });
     } catch (error) {
         console.error('franchiseCategory.getById', error.message);
         return fail(500, 'Internal server error.');
@@ -349,8 +428,17 @@ const update = async (id, body, userId) => {
             const auth = await loadUserFranchiseAuth(userId);
             if (!auth) return fail(403, 'Access denied.');
 
+            const categoriesOrderFromEntries = parsedCategories.entries.map((e) => e.category_id);
+
             if (auth.isSuper) {
                 record.categories_list = parsedCategories.entries;
+                record.active_categories = parsedCategories.entries
+                    .filter((e) => e.is_active)
+                    .map((e) => e.category_id);
+                record.inactive_categories = parsedCategories.entries
+                    .filter((e) => !e.is_active)
+                    .map((e) => e.category_id);
+                record.categories_order = categoriesOrderFromEntries;
             } else if (auth.isEmployee) {
                 return fail(403, 'Franchise employees cannot update categories list.');
             } else if (auth.isFranchiseAdmin) {
@@ -385,6 +473,13 @@ const update = async (id, body, userId) => {
                     }
                 }
                 record.categories_list = parsedCategories.entries;
+                record.active_categories = parsedCategories.entries
+                    .filter((e) => e.is_active)
+                    .map((e) => e.category_id);
+                record.inactive_categories = parsedCategories.entries
+                    .filter((e) => !e.is_active)
+                    .map((e) => e.category_id);
+                record.categories_order = categoriesOrderFromEntries;
             } else {
                 return fail(403, 'Access denied.');
             }
@@ -394,20 +489,87 @@ const update = async (id, body, userId) => {
             body.active_categories !== undefined || body.inactive_categories !== undefined;
 
         if (isStatusEditRequest) {
-            const franchise = await ensureFranchise(record.franchise_id);
+            const auth = await loadUserFranchiseAuth(userId);
+            if (!auth) return fail(403, 'Access denied.');
+
+            const franchise = await Franchise.findOne({
+                _id: record.franchise_id,
+                deleted_at: null,
+            })
+                .select('admin_id')
+                .lean();
             if (!franchise) return fail(404, 'Franchise not found.');
-            if (String(franchise.admin_id) !== String(userId)) {
+
+            const canEditStatus = auth.isSuper || String(franchise.admin_id) === String(userId);
+            if (!canEditStatus) {
                 return fail(
                     403,
-                    'Only this franchise admin can update active/inactive category status.'
+                    'Only this franchise admin or a super admin can update active/inactive category lists.'
                 );
             }
-            if (body.active_categories !== undefined) {
-                record.active_categories = Boolean(body.active_categories);
+
+            const normList = normalizeStoredCategoriesList(record.categories_list);
+            const catalogStr = new Set(normList.map((e) => e.category_id.toString()));
+
+            let activeIds;
+            let inactiveIds;
+            if (body.active_categories !== undefined && body.inactive_categories !== undefined) {
+                const pa = parseObjectIdArray(body.active_categories, 'active_categories');
+                if (!pa.ok) return fail(400, pa.message);
+                const pi = parseObjectIdArray(body.inactive_categories, 'inactive_categories');
+                if (!pi.ok) return fail(400, pi.message);
+                activeIds = pa.oids;
+                inactiveIds = pi.oids;
+            } else if (body.active_categories !== undefined) {
+                const pa = parseObjectIdArray(body.active_categories, 'active_categories');
+                if (!pa.ok) return fail(400, pa.message);
+                activeIds = pa.oids;
+                const activeStr = new Set(activeIds.map((a) => a.toString()));
+                inactiveIds = normList
+                    .filter((e) => !activeStr.has(e.category_id.toString()))
+                    .map((e) => e.category_id);
+            } else {
+                const pi = parseObjectIdArray(body.inactive_categories, 'inactive_categories');
+                if (!pi.ok) return fail(400, pi.message);
+                inactiveIds = pi.oids;
+                const inactiveStr = new Set(inactiveIds.map((a) => a.toString()));
+                activeIds = normList
+                    .filter((e) => !inactiveStr.has(e.category_id.toString()))
+                    .map((e) => e.category_id);
             }
-            if (body.inactive_categories !== undefined) {
-                record.inactive_categories = Boolean(body.inactive_categories);
+
+            const partitionCheck = validateCategoryActiveInactivePartition(
+                catalogStr,
+                activeIds,
+                inactiveIds
+            );
+            if (!partitionCheck.ok) return fail(400, partitionCheck.message);
+
+            record.active_categories = activeIds;
+            record.inactive_categories = inactiveIds;
+            await cascadeInactiveCategoriesToFranchiseServices(record.franchise_id, inactiveIds);
+        }
+
+        if (body.categories_order !== undefined) {
+            const auth = await loadUserFranchiseAuth(userId);
+            if (!auth) return fail(403, 'Access denied.');
+            if (auth.isEmployee) {
+                return fail(403, 'Franchise employees cannot update categories order.');
             }
+            const canEditOrder =
+                auth.isSuper ||
+                (auth.isFranchiseAdmin &&
+                    String(record.franchise_id) === String(auth.franchise_id));
+            if (!canEditOrder) {
+                return fail(403, 'Access denied.');
+            }
+            const normListOrder = normalizeStoredCategoriesList(record.categories_list);
+            const catalogStrOrder = new Set(normListOrder.map((e) => e.category_id.toString()));
+            const po = parseObjectIdArrayOrdered(body.categories_order, 'categories_order');
+            if (!po.ok) return fail(400, po.message);
+            const orderCheck = validateCategoriesOrderPermutation(po.oids, catalogStrOrder);
+            if (!orderCheck.ok) return fail(400, orderCheck.message);
+            record.categories_order = po.oids;
         }
 
         if (body.order_number !== undefined) {
@@ -416,7 +578,10 @@ const update = async (id, body, userId) => {
 
         record.updated_at = new Date();
         const updated = await record.save();
-        return ok(200, { message: 'Franchise category updated successfully.', record: updated });
+        return ok(200, {
+            message: 'Franchise category updated successfully.',
+            record: coerceLegacyCategoryMappingArrays(updated),
+        });
     } catch (error) {
         console.error('franchiseCategory.update', error.message);
         return fail(500, 'Internal server error.');

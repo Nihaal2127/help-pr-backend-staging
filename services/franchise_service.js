@@ -109,13 +109,51 @@ const validateServiceIds = async (oids) => {
     return { ok: true };
 };
 
-/** Only categories from the franchise create payload; all active initially. */
-const buildFranchiseCategoriesListForCreate = (categoryOids) =>
-    categoryOids.map((category_id) => ({ category_id, is_active: true }));
+/**
+ * Franchise create: payload categories stay active; every other global (non-deleted) category is inactive.
+ * `categories_list` / `categories_order` include the full partition (active first in payload order, then inactive sorted).
+ */
+const buildInitialFranchiseCategoryMappingForCreate = async (categoryOids) => {
+    const active_categories = dedupeIdsPreserveOrder(categoryOids || []);
+    const activeSet = new Set(active_categories.map((id) => id.toString()));
+    const allRows = await Category.find({ deleted_at: null }).select('_id').lean();
+    const inactive_categories = [];
+    for (const row of allRows) {
+        const cid = row._id.toString();
+        if (!activeSet.has(cid)) inactive_categories.push(row._id);
+    }
+    inactive_categories.sort((a, b) => a.toString().localeCompare(b.toString()));
 
-/** Only services from the franchise create payload; all active initially. */
-const buildFranchiseServicesListForCreate = (serviceOids) =>
-    serviceOids.map((service_id) => ({ service_id, is_active: true }));
+    const categories_list = [
+        ...active_categories.map((category_id) => ({ category_id, is_active: true })),
+        ...inactive_categories.map((category_id) => ({ category_id, is_active: false })),
+    ];
+    const categories_order = [...active_categories, ...inactive_categories];
+    return { categories_list, active_categories, inactive_categories, categories_order };
+};
+
+/**
+ * Franchise create: payload services stay active; every other global (non-deleted) service is inactive.
+ * `services_list` / `services_order` include the full partition (active first in payload order, then inactive sorted).
+ */
+const buildInitialFranchiseServiceMappingForCreate = async (serviceOids) => {
+    const active_services = dedupeIdsPreserveOrder(serviceOids || []);
+    const activeSet = new Set(active_services.map((id) => id.toString()));
+    const allRows = await Service.find({ deleted_at: null }).select('_id').lean();
+    const inactive_services = [];
+    for (const row of allRows) {
+        const sid = row._id.toString();
+        if (!activeSet.has(sid)) inactive_services.push(row._id);
+    }
+    inactive_services.sort((a, b) => a.toString().localeCompare(b.toString()));
+
+    const services_list = [
+        ...active_services.map((service_id) => ({ service_id, is_active: true })),
+        ...inactive_services.map((service_id) => ({ service_id, is_active: false })),
+    ];
+    const services_order = [...active_services, ...inactive_services];
+    return { services_list, active_services, inactive_services, services_order };
+};
 
 const dedupeIdsPreserveOrder = (oids) => {
     const seen = new Set();
@@ -356,21 +394,23 @@ const createFranchise = async (body) => {
 
         const saved = await doc.save();
         try {
-            const categories_list = buildFranchiseCategoriesListForCreate(categoryOids);
-            const services_list = buildFranchiseServicesListForCreate(serviceOids);
+            const [catMapping, svcMapping] = await Promise.all([
+                buildInitialFranchiseCategoryMappingForCreate(categoryOids),
+                buildInitialFranchiseServiceMappingForCreate(serviceOids),
+            ]);
             await FranchiseCategory.create({
                 franchise_id: saved._id,
-                categories_list,
-                active_categories: [...categoryOids],
-                inactive_categories: [],
-                categories_order: [...categoryOids],
+                categories_list: catMapping.categories_list,
+                active_categories: catMapping.active_categories,
+                inactive_categories: catMapping.inactive_categories,
+                categories_order: catMapping.categories_order,
             });
             await FranchiseService.create({
                 franchise_id: saved._id,
-                services_list,
-                active_services: [...serviceOids],
-                inactive_services: [],
-                services_order: [...serviceOids],
+                services_list: svcMapping.services_list,
+                active_services: svcMapping.active_services,
+                inactive_services: svcMapping.inactive_services,
+                services_order: svcMapping.services_order,
             });
         } catch (mapError) {
             await Franchise.findByIdAndDelete(saved._id);

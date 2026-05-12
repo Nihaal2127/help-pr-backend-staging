@@ -17,7 +17,13 @@ const sendServiceResult = (res, result) => {
 };
 
 const getAll = async (req, res) => {
-    const result = await areaService.listAreas(req.query);
+    const query = { ...req.query };
+    const bodyType = req.body && req.body.type !== undefined && req.body.type !== null ? String(req.body.type).trim() : '';
+    const queryType = query.type !== undefined && query.type !== null ? String(query.type).trim() : '';
+    if (!queryType && bodyType) {
+        query.type = req.body.type;
+    }
+    const result = await areaService.listAreas(query, req.user);
     return sendServiceResult(res, result);
 };
 

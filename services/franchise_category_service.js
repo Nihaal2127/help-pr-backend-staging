@@ -147,6 +147,40 @@ const buildSyntheticFranchiseCategoryFromFranchiseDoc = async (franchiseOid) => 
     return populated[0];
 };
 
+/**
+ * Every global category (non-deleted), each with franchise_active derived from the latest
+ * franchise_category mapping for this franchise (active_categories after coerce).
+ */
+const buildAllCategoriesWithFranchiseMappingStatus = async (franchiseOid) => {
+    const row = await FranchiseCategory.findOne({
+        franchise_id: franchiseOid,
+        deleted_at: null,
+    })
+        .sort({ created_at: -1 })
+        .lean();
+
+    let plainForCoerce = row;
+    if (!row) {
+        const synthetic = await buildSyntheticFranchiseCategoryFromFranchiseDoc(franchiseOid);
+        if (synthetic) {
+            plainForCoerce =
+                typeof synthetic.toObject === 'function' ? synthetic.toObject() : { ...synthetic };
+        }
+    }
+
+    const activeSet = new Set();
+    if (plainForCoerce) {
+        const coerced = coerceLegacyCategoryMappingArrays(plainForCoerce);
+        (coerced.active_categories || []).forEach((id) => activeSet.add(id.toString()));
+    }
+
+    const allCats = await Category.find({ deleted_at: null }).sort({ name: 1 }).lean();
+    return allCats.map((cat) => ({
+        ...cat,
+        franchise_active: activeSet.has(cat._id.toString()),
+    }));
+};
+
 const loadUserFranchiseAuth = async (userId) => {
     if (!userId) return null;
     const user = await User.findOne({ _id: userId, deleted_at: null }).select('type franchise_id');
@@ -316,12 +350,18 @@ const list = async (query, userId) => {
             'category_id'
         );
 
+        let all_categories;
+        if (filter.franchise_id) {
+            all_categories = await buildAllCategoriesWithFranchiseMappingStatus(filter.franchise_id);
+        }
+
         return ok(200, {
             message: 'Franchise category list fetched successfully.',
             totalItems: totalCount,
             totalPages,
             currentPage,
             records,
+            ...(all_categories !== undefined && { all_categories }),
         });
     } catch (error) {
         console.error('franchiseCategory.list', error.message);

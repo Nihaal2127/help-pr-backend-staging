@@ -13,6 +13,7 @@ const {
     coerceLegacyCategoryMappingArrays,
     validateCategoryActiveInactivePartition,
     validateCategoriesOrderPermutation,
+    filterRecordsByFranchiseMappingToggle,
 } = require('../utils/franchise_catalog_lists');
 
 const fail = (status, message, extra = {}) => ({ ok: false, status, message, ...extra });
@@ -98,14 +99,18 @@ const applyCategoryCatalogFiltersToRecords = (records, isActiveFilter, isRequest
     });
 };
 
-const resolveCatalogBoolFilters = (query) => {
-    const a = parseOptionalQueryBool(query.is_active, 'is_active');
-    if (!a.ok) return { ok: false, message: a.message };
+/**
+ * List/getById query: is_active = franchise mapping on/off (omit = both).
+ * is_request = optional catalog filter on Category.is_request (pending vs approved).
+ */
+const resolveFranchiseMappingListQuery = (query) => {
+    const m = parseOptionalQueryBool(query.is_active, 'is_active');
+    if (!m.ok) return { ok: false, message: m.message };
     const r = parseOptionalQueryBool(query.is_request, 'is_request');
     if (!r.ok) return { ok: false, message: r.message };
     return {
         ok: true,
-        isActiveFilter: a.present ? a.value : undefined,
+        mappingActiveFilter: m.present ? m.value : undefined,
         isRequestFilter: r.present ? r.value : undefined,
     };
 };
@@ -271,8 +276,8 @@ const list = async (query, userId) => {
             filter.franchise_id = parsed.oid;
         }
 
-        const filterFlags = resolveCatalogBoolFilters(query);
-        if (!filterFlags.ok) return fail(400, filterFlags.message);
+        const listFlags = resolveFranchiseMappingListQuery(query);
+        if (!listFlags.ok) return fail(400, listFlags.message);
 
         let { data, totalCount, totalPages, currentPage } = await applyPagination(
             FranchiseCategory,
@@ -298,11 +303,18 @@ const list = async (query, userId) => {
             }
         }
 
-        const records = applyCategoryCatalogFiltersToRecords(
-            data,
-            filterFlags.isActiveFilter,
-            filterFlags.isRequestFilter
-        ).map((row) => coerceLegacyCategoryMappingArrays(row));
+        const records = filterRecordsByFranchiseMappingToggle(
+            applyCategoryCatalogFiltersToRecords(
+                data,
+                undefined,
+                listFlags.isRequestFilter
+            ).map((row) => coerceLegacyCategoryMappingArrays(row)),
+            listFlags.mappingActiveFilter,
+            'categories_list',
+            'active_categories',
+            'inactive_categories',
+            'category_id'
+        );
 
         return ok(200, {
             message: 'Franchise category list fetched successfully.',
@@ -383,18 +395,26 @@ const getById = async (id, userId, query = {}) => {
             }
         }
 
-        const filterFlags = resolveCatalogBoolFilters(query);
-        if (!filterFlags.ok) return fail(400, filterFlags.message);
+        const listFlags = resolveFranchiseMappingListQuery(query);
+        if (!listFlags.ok) return fail(400, listFlags.message);
 
         await record.populate(listPopulateFields);
-        const [recordOut] = applyCategoryCatalogFiltersToRecords(
+        const afterCatalog = applyCategoryCatalogFiltersToRecords(
             [record],
-            filterFlags.isActiveFilter,
-            filterFlags.isRequestFilter
+            undefined,
+            listFlags.isRequestFilter
+        ).map((row) => coerceLegacyCategoryMappingArrays(row));
+        const [recordOut] = filterRecordsByFranchiseMappingToggle(
+            afterCatalog,
+            listFlags.mappingActiveFilter,
+            'categories_list',
+            'active_categories',
+            'inactive_categories',
+            'category_id'
         );
         return ok(200, {
             message: 'Franchise category fetched successfully.',
-            record: coerceLegacyCategoryMappingArrays(recordOut),
+            record: recordOut,
         });
     } catch (error) {
         console.error('franchiseCategory.getById', error.message);

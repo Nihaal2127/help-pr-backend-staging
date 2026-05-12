@@ -6,6 +6,12 @@ const { validationResult } = require('express-validator');
 const { parseBoolean } = require('../utils/parser');
 const state = require('../models/state');
 
+const escapeRegExp = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const cityNameExistsRegex = (trimmedName) => ({
+  deleted_at: null,
+  name: new RegExp(`^${escapeRegExp(trimmedName)}$`, 'i'),
+});
+
 const getAll = async (req, res) => {
 
   try {
@@ -42,7 +48,10 @@ const getAll = async (req, res) => {
       filter,
       page,
       limit,
-      sort
+      sort,
+      {},
+      [],
+      {}
     );
 
     res.status(200).json({
@@ -66,13 +75,16 @@ const getAll = async (req, res) => {
 const create = async (req, res) => {
   try {
     const { name, is_active, state_id,city_service_price } = req.body;
+    const trimmedName = String(name).trim();
+    if (!trimmedName) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'City name is requiered.',
+      });
+    }
 
-    const existingCity = await City.findOne({
-      $or: [
-        { name },
-      ],
-      deleted_at: null
-    });
+    const existingCity = await City.findOne(cityNameExistsRegex(trimmedName));
 
     if (existingCity) {
       return res.status(409).json({
@@ -85,7 +97,7 @@ const create = async (req, res) => {
     const state = await State.findOne({ _id: state_id, deleted_at: null })
 
     const newCity = new City({
-      name,
+      name: trimmedName,
       city_service_price,
       state_name: state.name,
       is_active,
@@ -132,13 +144,17 @@ const update = async (req, res) => {
       });
     }
 
-    if (req.body.name) {
-      const name = req.body.name
+    if (req.body.name !== undefined) {
+      const trimmedName = String(req.body.name).trim();
+      if (!trimmedName) {
+        return res.status(400).json({
+          success: false,
+          status: 400,
+          message: 'City name is requiered.',
+        });
+      }
       const existingCity = await City.findOne({
-        $or: [
-          { name },
-        ],
-        deleted_at: null,
+        ...cityNameExistsRegex(trimmedName),
         _id: { $ne: id },
       });
 
@@ -149,6 +165,7 @@ const update = async (req, res) => {
           message: 'City name already exists.',
         });
       }
+      updateData.name = trimmedName;
     }
     if (req.body.state_id) {
       const state_id = req.body.state_id;
@@ -270,8 +287,36 @@ const importRecords = async (req, res) => {
     }
 
 
-    const names = records.map(record => record.name);
-    const existingRecords = await City.find({ name: { $in: names }, deleted_at: null }).select('name');
+    const normalizedRows = records.map((record) => ({
+      ...record,
+      name: String(record.name || '').trim(),
+    }));
+    for (const r of normalizedRows) {
+      if (!r.name) {
+        return res.status(400).json({
+          success: false,
+          status: 400,
+          message: 'Each record must include a non-empty city name.',
+        });
+      }
+    }
+    const seenNorm = new Set();
+    for (const r of normalizedRows) {
+      const k = r.name.toLowerCase();
+      if (seenNorm.has(k)) {
+        return res.status(409).json({
+          success: false,
+          status: 409,
+          message: 'Duplicate city names in import file (case-insensitive).',
+        });
+      }
+      seenNorm.add(k);
+    }
+    const uniqueNames = [...new Set(normalizedRows.map((r) => r.name))];
+    const existingRecords = await City.find({
+      deleted_at: null,
+      $or: uniqueNames.map((n) => ({ name: new RegExp(`^${escapeRegExp(n)}$`, 'i') })),
+    }).select('name');
 
     if (existingRecords.length > 0) {
       const duplicateNames = existingRecords.map(record => record.name).join('\n');
@@ -282,7 +327,7 @@ const importRecords = async (req, res) => {
       });
     }
 
-    const stateNames = [...new Set(records.map(record => record.state_name))];
+    const stateNames = [...new Set(normalizedRows.map(record => record.state_name))];
     const states = await State.find({
       name: { $in: stateNames.map(state => new RegExp(`^${state}$`, 'i')) },
       deleted_at: null
@@ -292,7 +337,7 @@ const importRecords = async (req, res) => {
     const enrichedRecords = [];
     const missingStates = new Set();
 
-    for (const record of records) {
+    for (const record of normalizedRows) {
       const state = stateMap.get(record.state_name);
       if (state) {
         enrichedRecords.push({

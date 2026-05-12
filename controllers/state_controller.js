@@ -3,6 +3,12 @@ const { applyPagination, applyDropDownFilter } = require('../utils/pagination');
 const { parseBoolean } = require('../utils/parser');
 const { validationResult } = require('express-validator');
 
+const escapeRegExp = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const nameExistsRegex = (trimmedName) => ({
+  deleted_at: null,
+  name: new RegExp(`^${escapeRegExp(trimmedName)}$`, 'i'),
+});
+
 const getAll = async (req, res) => {
 
   try {
@@ -39,7 +45,10 @@ const getAll = async (req, res) => {
       filter,
       page,
       limit,
-      sort
+      sort,
+      {},
+      [],
+      {}
     );
 
     res.status(200).json({
@@ -62,12 +71,16 @@ const getAll = async (req, res) => {
 const create = async (req, res) => {
   try {
     const { name, is_active } = req.body;
+    const trimmedName = String(name).trim();
+    if (!trimmedName) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'State name is requiered.',
+      });
+    }
 
-    const existingState = await State.findOne({
-
-      name, deleted_at: null,
-
-    });
+    const existingState = await State.findOne(nameExistsRegex(trimmedName));
 
     if (existingState) {
       return res.status(409).json({
@@ -77,7 +90,7 @@ const create = async (req, res) => {
       });
     }
     const newState = new State({
-      name,
+      name: trimmedName,
       is_active,
     });
 
@@ -123,13 +136,17 @@ const update = async (req, res) => {
       });
     }
 
-    if (req.body.name) {
-      const name = req.body.name
+    if (req.body.name !== undefined) {
+      const trimmedName = String(req.body.name).trim();
+      if (!trimmedName) {
+        return res.status(400).json({
+          success: false,
+          status: 400,
+          message: 'State name is requiered.',
+        });
+      }
       const existingState = await State.findOne({
-        $or: [
-          { name },
-        ],
-        deleted_at: null,
+        ...nameExistsRegex(trimmedName),
         _id: { $ne: id },
       });
 
@@ -140,6 +157,7 @@ const update = async (req, res) => {
           message: 'State name already exists.',
         });
       }
+      updateData.name = trimmedName;
     }
 
     Object.keys(updateData).forEach((key) => {
@@ -258,8 +276,36 @@ const importRecords = async (req, res) => {
     }
 
 
-    const names = records.map(record => record.name);
-    const existingRecords = await State.find({ name: { $in: names }, deleted_at: null }).select('name');
+    const normalizedRows = records.map((record) => ({
+      ...record,
+      name: String(record.name || '').trim(),
+    }));
+    for (const r of normalizedRows) {
+      if (!r.name) {
+        return res.status(400).json({
+          success: false,
+          status: 400,
+          message: 'Each record must include a non-empty state name.',
+        });
+      }
+    }
+    const seenNorm = new Set();
+    for (const r of normalizedRows) {
+      const k = r.name.toLowerCase();
+      if (seenNorm.has(k)) {
+        return res.status(409).json({
+          success: false,
+          status: 409,
+          message: 'Duplicate state names in import file (case-insensitive).',
+        });
+      }
+      seenNorm.add(k);
+    }
+    const uniqueNames = [...new Set(normalizedRows.map((r) => r.name))];
+    const existingRecords = await State.find({
+      deleted_at: null,
+      $or: uniqueNames.map((n) => ({ name: new RegExp(`^${escapeRegExp(n)}$`, 'i') })),
+    }).select('name');
 
     if (existingRecords.length > 0) {
       const duplicateNames = existingRecords.map(record => record.name).join('\n');
@@ -269,7 +315,7 @@ const importRecords = async (req, res) => {
         message: `Duplicate records found. No records were added.\nDuplicate records:\n${duplicateNames}`
       });
     }
-    const result = await State.insertMany(records, { ordered: false });
+    const result = await State.insertMany(normalizedRows, { ordered: false });
     res.status(200).json({
       success: true,
       status: 200,

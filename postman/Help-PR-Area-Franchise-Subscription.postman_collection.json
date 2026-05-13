@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "3f7a9b2e-1c4d-5e6f-8a9b-0c1d2e3f4a5b",
-    "name": "Help PR - All API routes",
-    "description": "Postman Collection v2.1. Regenerate: node postman/generate-all-routes-collection.js. Import postman/Help-PR-All-Routes.postman_collection.json, then import postman/Local.postman_environment.json (or Staging) and select that environment. Collection Variables hold defaults; Environment overrides base_url, auth_token, and resource ids. Requests use {{base_url}}, {{auth_token}}, {{id}}.",
+    "name": "Help PR — Area, Franchise, Subscription",
+    "description": "Postman Collection v2.1 — **Area**, **Franchise** (CRUD + franchise-category + franchise-service mapping), **Subscription plan**, **Partner document**, **Partner service**, **Partner subscription**, **Tax**, **Employee**, **Export**, etc.\n\n**Environment:** Set `base_url`, `auth_token`, and ids (see Collection Variables). Prefer a Postman Environment for secrets.\n\n---\n### Franchise & mapping — route manifest (matches `server.js`)\n\n**`/api/franchise`**\n- `POST /create` — Create\n- `POST /imports` — Imports (`body.records` array)\n- `GET /related-catalog/:franchise_id` — Related catalog\n- `GET /get/:id` — Get by id (`{{id}}` = franchise _id)\n- `GET /getAll`\n- `GET /getDropDown`\n- `PUT /update/:id`\n- `DELETE /delete/:id`\n\n**`/api/franchise-category`** (mapping collection)\n- `POST /create`\n- `GET /getAll` — query: `page`, `limit`, `franchise_id`, optional `is_active`, `is_request` (catalog filters)\n- `GET /get/:id` — use **`{{franchise_category_mapping_id}}`**\n- `PUT /update/:id` — toggles `active_categories`/`inactive_categories`, optional `categories_order`; full list replace via `categories_list`\n\n**`/api/franchise-service`** (mapping collection)\n- `POST /create`\n- `GET /getAll` — same query shape\n- `GET /get/:id` — use **`{{franchise_service_mapping_id}}`**\n- `PUT /update/:id` — toggles `active_services`/`inactive_services`, optional `services_order`\n\n**`/api/partner_service`**\n- **Backoffice:** `POST /create`, `GET /getAll`, `GET /getDropDown`, `POST /updateStatus/:id`, `DELETE /delete/:id`\n- **Partner JWT:** `GET /myServices`, `GET /availableServices`, `GET /availableFranchiseCategories`, `GET /availableFranchiseServices`, `POST /addMyServices`, `PUT /updateMyService/:id`, `POST /toggleMyServiceStatus/:id`\n\nFolder **Franchise** documents the mapping toggle/cascade behavior in request descriptions.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -25,7 +25,21 @@
       "value": "",
       "type": "string",
       "enabled": true,
-      "description": "Generic MongoDB resource _id used in URLs like .../get/{{id}}, .../update/{{id}}."
+      "description": "Generic MongoDB _id: franchise GET/update/delete, subscription-plan, imports, etc. For mapping docs prefer franchise_category_mapping_id / franchise_service_mapping_id."
+    },
+    {
+      "key": "franchise_category_mapping_id",
+      "value": "",
+      "type": "string",
+      "enabled": true,
+      "description": "`franchise_category` collection document _id (from getAll). Used in /api/franchise-category/get/:id and .../update/:id."
+    },
+    {
+      "key": "franchise_service_mapping_id",
+      "value": "",
+      "type": "string",
+      "enabled": true,
+      "description": "`franchise_service` collection document _id (from getAll). Used in /api/franchise-service/get/:id and .../update/:id."
     },
     {
       "key": "state_id",
@@ -1513,7 +1527,7 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/api/franchise-category/get/{{id}}"
+            "url": "{{base_url}}/api/franchise-category/get/{{franchise_category_mapping_id}}"
           }
         },
         {
@@ -1550,7 +1564,7 @@
                 }
               }
             },
-            "url": "{{base_url}}/api/franchise-category/update/{{id}}"
+            "url": "{{base_url}}/api/franchise-category/update/{{franchise_category_mapping_id}}"
           }
         },
         {
@@ -1635,7 +1649,7 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/api/franchise-service/get/{{id}}"
+            "url": "{{base_url}}/api/franchise-service/get/{{franchise_service_mapping_id}}"
           }
         },
         {

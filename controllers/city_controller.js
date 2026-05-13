@@ -24,7 +24,14 @@ const getAll = async (req, res) => {
       ...(req.query.is_active && { is_active: is_active }),
     };
     if (req.query.name) {
-      filter.name = { $regex: new RegExp(req.query.name, "i") }; // Case-insensitive match
+      const nameSearch = String(req.query.name).trim();
+      if (nameSearch) {
+        const namePattern = new RegExp(escapeRegExp(nameSearch), 'i');
+        filter.$or = [
+          { name: { $regex: namePattern } },
+          { state_name: { $regex: namePattern } },
+        ];
+      }
     }
     if (req.query.state_name) {
       filter.state_name = { $regex: new RegExp(req.query.state_name, "i") }; // Case-insensitive match

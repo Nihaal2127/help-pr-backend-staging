@@ -1199,7 +1199,7 @@ const getById = async (req, res) => {
   const { id } = req.params;
   try {
 
-    let user = await User.findById({ _id: id }).lean();
+    let user = await User.findById(id).lean();
 
     if (!user) {
       return res.status(404).json({
@@ -1219,7 +1219,7 @@ const getById = async (req, res) => {
     }
 
 
-    user = await User.findById({ _id: id }).populate([
+    user = await User.findById(id).populate([
       { path: "state_id" },
       { path: "city_id" },
     ]).lean();
@@ -1261,7 +1261,7 @@ const getById = async (req, res) => {
       response.total_amount = service_count_data.total_amount;
     }
     if (user.type === 2 && user.is_business === true) {
-      user = await User.findById({ _id: id }).populate([
+      user = await User.findById(id).populate([
         { path: "business_info_id" },
       ]).lean();
       response.business_info_id = user.business_info_id?._id ?? null;

@@ -21,6 +21,100 @@ const PartnerSubscription = require('../models/partner_subscription');
 const { checkObjectIdExists } = require('../validator/id_validator');
 const moment = require("moment-timezone");
 
+/**
+ * Optional franchise scope from JSON body: `franchise` (preferred) or `franchise_id`.
+ * When present, must be a valid 24-char ObjectId.
+ */
+const parseOptionalFranchiseFromBody = (req) => {
+    const rawPrimary = req.body?.franchise;
+    const rawAlt = req.body?.franchise_id;
+    const pick =
+        rawPrimary !== undefined && rawPrimary !== null && String(rawPrimary).trim() !== ''
+            ? rawPrimary
+            : rawAlt !== undefined && rawAlt !== null && String(rawAlt).trim() !== ''
+              ? rawAlt
+              : null;
+    if (pick === null) {
+        return { ok: true, oid: null };
+    }
+    const s = String(pick).trim();
+    if (!mongoose.Types.ObjectId.isValid(s)) {
+        return { ok: false, status: 409, message: 'Invalid franchise id.' };
+    }
+    return { ok: true, oid: new mongoose.Types.ObjectId(s) };
+};
+
+const assertFranchiseAccess = async (req, franchiseOid) => {
+    const caller = await User.findOne({ _id: req.user.id, deleted_at: null })
+        .select('type franchise_id')
+        .lean();
+    if (!caller) {
+        return { ok: false, status: 401, message: 'User not found.' };
+    }
+    const fr = await Franchise.findOne({ _id: franchiseOid, deleted_at: null }).select('admin_id').lean();
+    if (!fr) {
+        return { ok: false, status: 404, message: 'Franchise not found.' };
+    }
+    const ft = Number(caller.type);
+    if (ft === 5 || ft === 6) {
+        return { ok: true };
+    }
+    if (ft === 1) {
+        if (caller.franchise_id && caller.franchise_id.toString() === franchiseOid.toString()) {
+            return { ok: true };
+        }
+        if (fr.admin_id && fr.admin_id.toString() === String(req.user.id)) {
+            return { ok: true };
+        }
+        return { ok: false, status: 403, message: 'You are not allowed to view counts for this franchise.' };
+    }
+    if (ft === 3) {
+        if (caller.franchise_id && caller.franchise_id.toString() === franchiseOid.toString()) {
+            return { ok: true };
+        }
+        return { ok: false, status: 403, message: 'You are not allowed to view counts for this franchise.' };
+    }
+    return { ok: false, status: 403, message: 'You are not allowed to view counts for this franchise.' };
+};
+
+/** Order model has no franchise_id; scope via quotes + staff-created orders. */
+const buildFranchiseScopedCompletedOrderIds = async (franchiseOid) => {
+    const staffIds = await User.find({
+        franchise_id: franchiseOid,
+        type: { $in: [1, 3] },
+        deleted_at: null,
+    }).distinct('_id');
+
+    const quoteOrderIds = await Quote.find({
+        franchise_id: franchiseOid,
+        deleted_at: null,
+        order_id: { $ne: null },
+    }).distinct('order_id');
+
+    const idSet = new Set();
+    for (const id of quoteOrderIds) {
+        if (id) idSet.add(id.toString());
+    }
+    if (staffIds.length > 0) {
+        const staffOrderIds = await Order.find({
+            deleted_at: null,
+            created_by_id: { $in: staffIds },
+        }).distinct('_id');
+        for (const id of staffOrderIds) {
+            if (id) idSet.add(id.toString());
+        }
+    }
+    if (idSet.size === 0) {
+        return [];
+    }
+    const candidates = Array.from(idSet, (s) => new mongoose.Types.ObjectId(s));
+    return Order.find({
+        _id: { $in: candidates },
+        deleted_at: null,
+        order_status: 3,
+    }).distinct('_id');
+};
+
 const resolveCountType = (type) => {
     if (typeof type === 'number' && !Number.isNaN(type)) return type;
     if (typeof type !== 'string') return null;
@@ -98,29 +192,107 @@ const getCountData = async (req, res) => {
                     'Invalid or unsupported count type. Send JSON body with "type" (e.g. "settings-role", "location-management", or a supported numeric code).',
             });
         }
+
+        const parsedFranchise = parseOptionalFranchiseFromBody(req);
+        if (!parsedFranchise.ok) {
+            return res.status(parsedFranchise.status).json({
+                success: false,
+                status: parsedFranchise.status,
+                message: parsedFranchise.message,
+            });
+        }
+        const franchiseScopeOid = parsedFranchise.oid;
+        if (franchiseScopeOid) {
+            const access = await assertFranchiseAccess(req, franchiseScopeOid);
+            if (!access.ok) {
+                return res.status(access.status).json({
+                    success: false,
+                    status: access.status,
+                    message: access.message,
+                });
+            }
+        }
+
         const response = {}
         if (resolvedType === 1) {
-            const total_state = await State.countDocuments({ deleted_at: null });
-            const inactive_state = await State.countDocuments({ is_active: false, deleted_at: null });
-            const active_state = await State.countDocuments({ is_active: true, deleted_at: null });
+            if (franchiseScopeOid) {
+                const frDoc = await Franchise.findOne({ _id: franchiseScopeOid, deleted_at: null })
+                    .select('state_id city_id area_id')
+                    .lean();
+                if (!frDoc) {
+                    return res.status(404).json({
+                        success: false,
+                        status: 404,
+                        message: 'Franchise not found.',
+                    });
+                }
+                const stateId = frDoc.state_id;
+                const cityId = frDoc.city_id;
+                const areaIds = (frDoc.area_id || []).filter(Boolean);
 
-            const total_city = await City.countDocuments({ deleted_at: null });
-            const inactive_city = await City.countDocuments({ is_active: false, deleted_at: null });
-            const active_city = await City.countDocuments({ is_active: true, deleted_at: null });
+                response.total_state = await State.countDocuments({ _id: stateId, deleted_at: null });
+                response.inactive_state = await State.countDocuments({
+                    _id: stateId,
+                    is_active: false,
+                    deleted_at: null,
+                });
+                response.active_state = await State.countDocuments({
+                    _id: stateId,
+                    is_active: true,
+                    deleted_at: null,
+                });
 
-            const total_area = await Area.countDocuments({ deleted_at: null });
-            const inactive_area = await Area.countDocuments({ is_active: false, deleted_at: null });
-            const active_area = await Area.countDocuments({ is_active: true, deleted_at: null });
+                response.total_city = await City.countDocuments({ _id: cityId, deleted_at: null });
+                response.inactive_city = await City.countDocuments({
+                    _id: cityId,
+                    is_active: false,
+                    deleted_at: null,
+                });
+                response.active_city = await City.countDocuments({
+                    _id: cityId,
+                    is_active: true,
+                    deleted_at: null,
+                });
 
-            response.total_state = total_state;
-            response.inactive_state = inactive_state;
-            response.active_state = active_state;
-            response.total_city = total_city;
-            response.inactive_city = inactive_city;
-            response.active_city = active_city;
-            response.total_area = total_area;
-            response.inactive_area = inactive_area;
-            response.active_area = active_area;
+                if (areaIds.length === 0) {
+                    response.total_area = 0;
+                    response.inactive_area = 0;
+                    response.active_area = 0;
+                } else {
+                    const areaBase = { _id: { $in: areaIds }, deleted_at: null };
+                    response.total_area = await Area.countDocuments(areaBase);
+                    response.inactive_area = await Area.countDocuments({
+                        ...areaBase,
+                        is_active: false,
+                    });
+                    response.active_area = await Area.countDocuments({
+                        ...areaBase,
+                        is_active: { $ne: false },
+                    });
+                }
+            } else {
+                const total_state = await State.countDocuments({ deleted_at: null });
+                const inactive_state = await State.countDocuments({ is_active: false, deleted_at: null });
+                const active_state = await State.countDocuments({ is_active: true, deleted_at: null });
+
+                const total_city = await City.countDocuments({ deleted_at: null });
+                const inactive_city = await City.countDocuments({ is_active: false, deleted_at: null });
+                const active_city = await City.countDocuments({ is_active: true, deleted_at: null });
+
+                const total_area = await Area.countDocuments({ deleted_at: null });
+                const inactive_area = await Area.countDocuments({ is_active: false, deleted_at: null });
+                const active_area = await Area.countDocuments({ is_active: true, deleted_at: null });
+
+                response.total_state = total_state;
+                response.inactive_state = inactive_state;
+                response.active_state = active_state;
+                response.total_city = total_city;
+                response.inactive_city = inactive_city;
+                response.active_city = active_city;
+                response.total_area = total_area;
+                response.inactive_area = inactive_area;
+                response.active_area = active_area;
+            }
 
         } else if (resolvedType === 2) {
             // Service & Category
@@ -136,7 +308,14 @@ const getCountData = async (req, res) => {
             const categoryFilter = { deleted_at: null };
             const serviceFilter = { deleted_at: null };
 
-            if (caller.type === 1) {
+            if (franchiseScopeOid) {
+                const franchiseUserIds = await User.find({
+                    franchise_id: franchiseScopeOid,
+                    deleted_at: null,
+                }).distinct('_id');
+                categoryFilter.requested_by = { $in: franchiseUserIds };
+                serviceFilter.requested_by = { $in: franchiseUserIds };
+            } else if (caller.type === 1) {
                 if (!caller.franchise_id) {
                     categoryFilter.requested_by = { $in: [] };
                     serviceFilter.requested_by = { $in: [] };
@@ -172,24 +351,25 @@ const getCountData = async (req, res) => {
 
         } else if (resolvedType === 3) {
             // Users & partner & Employee & Verifications -> Total,Verified,Pending,Rejected
+            const userFr = franchiseScopeOid ? { franchise_id: franchiseScopeOid } : {};
 
-            const total_user = await User.countDocuments({ type: 4, deleted_at: null });
-            const inactive_user = await User.countDocuments({ type: 4, is_active: false, deleted_at: null });
-            const active_user = await User.countDocuments({ type: 4, is_active: true, deleted_at: null });
-            const blocked_user = await User.countDocuments({ type: 4, is_blocked: true, deleted_at: null });
+            const total_user = await User.countDocuments({ type: 4, deleted_at: null, ...userFr });
+            const inactive_user = await User.countDocuments({ type: 4, is_active: false, deleted_at: null, ...userFr });
+            const active_user = await User.countDocuments({ type: 4, is_active: true, deleted_at: null, ...userFr });
+            const blocked_user = await User.countDocuments({ type: 4, is_blocked: true, deleted_at: null, ...userFr });
 
-            const total_employee = await User.countDocuments({ type: 3, deleted_at: null });
-            const inactive_employee = await User.countDocuments({ type: 3, is_active: false, deleted_at: null });
-            const active_employee = await User.countDocuments({ type: 3, is_active: true, deleted_at: null });
+            const total_employee = await User.countDocuments({ type: 3, deleted_at: null, ...userFr });
+            const inactive_employee = await User.countDocuments({ type: 3, is_active: false, deleted_at: null, ...userFr });
+            const active_employee = await User.countDocuments({ type: 3, is_active: true, deleted_at: null, ...userFr });
 
-            const total_partner = await User.countDocuments({ type: 2, verification_status: 2, deleted_at: null });
-            const inactive_partner = await User.countDocuments({ type: 2, verification_status: 2, is_active: false, deleted_at: null });
-            const active_partner = await User.countDocuments({ type: 2, verification_status: 2, is_active: true, deleted_at: null });
+            const total_partner = await User.countDocuments({ type: 2, verification_status: 2, deleted_at: null, ...userFr });
+            const inactive_partner = await User.countDocuments({ type: 2, verification_status: 2, is_active: false, deleted_at: null, ...userFr });
+            const active_partner = await User.countDocuments({ type: 2, verification_status: 2, is_active: true, deleted_at: null, ...userFr });
 
-            const total_document = await User.countDocuments({ type: 2, deleted_at: null });
-            const pending_document = await User.countDocuments({ type: 2, verification_status: 1, deleted_at: null });
-            const verified_document = await User.countDocuments({ type: 2, verification_status: 2, deleted_at: null });
-            const reject_document = await User.countDocuments({ type: 2, verification_status: 3, deleted_at: null });
+            const total_document = await User.countDocuments({ type: 2, deleted_at: null, ...userFr });
+            const pending_document = await User.countDocuments({ type: 2, verification_status: 1, deleted_at: null, ...userFr });
+            const verified_document = await User.countDocuments({ type: 2, verification_status: 2, deleted_at: null, ...userFr });
+            const reject_document = await User.countDocuments({ type: 2, verification_status: 3, deleted_at: null, ...userFr });
 
             response.total_user = total_user;
             response.inactive_user = inactive_user;
@@ -210,12 +390,14 @@ const getCountData = async (req, res) => {
             response.reject_document = reject_document;
         } else if (resolvedType === 4) {
             // Order Payment
+            const orderMatch = {
+                deleted_at: null,
+                order_status: 3,
+                ...(franchiseScopeOid ? { _id: { $in: await buildFranchiseScopedCompletedOrderIds(franchiseScopeOid) } } : {}),
+            };
             const result = await Order.aggregate([
                 {
-                    $match: {
-                        deleted_at: null,
-                        order_status: 3
-                    }
+                    $match: orderMatch,
                 },
                 {
                     $group: {
@@ -235,12 +417,16 @@ const getCountData = async (req, res) => {
             }
         } else if (resolvedType === 5) {
             // Partner Payment
+            const osMatch = {
+                deleted_at: null,
+                service_status: 3,
+                ...(franchiseScopeOid
+                    ? { order_id: { $in: await buildFranchiseScopedCompletedOrderIds(franchiseScopeOid) } }
+                    : {}),
+            };
             const result = await OrderService.aggregate([
                 {
-                    $match: {
-                        deleted_at: null,
-                        service_status: 3
-                    }
+                    $match: osMatch,
                 },
                 {
                     $group: {
@@ -279,7 +465,9 @@ const getCountData = async (req, res) => {
             }
 
             const franchiseFilter = { deleted_at: null };
-            if (caller.type === 1) {
+            if (franchiseScopeOid) {
+                franchiseFilter._id = franchiseScopeOid;
+            } else if (caller.type === 1) {
                 franchiseFilter.admin_id = req.user.id;
             }
 
@@ -302,7 +490,9 @@ const getCountData = async (req, res) => {
             }
 
             const expenseFilter = { deleted_at: null };
-            if (caller.type === 1) {
+            if (franchiseScopeOid) {
+                expenseFilter.franchise_id = franchiseScopeOid;
+            } else if (caller.type === 1) {
                 if (!caller.franchise_id) {
                     expenseFilter.franchise_id = { $in: [] };
                 } else {
@@ -324,7 +514,9 @@ const getCountData = async (req, res) => {
             }
 
             const expenseCategoryFilter = { deleted_at: null };
-            if (caller.type === 1) {
+            if (franchiseScopeOid) {
+                expenseCategoryFilter.franchise_id = franchiseScopeOid;
+            } else if (caller.type === 1) {
                 if (!caller.franchise_id) {
                     expenseCategoryFilter.franchise_id = { $in: [] };
                 } else {
@@ -393,7 +585,15 @@ const getCountData = async (req, res) => {
 
             const callerType = Number(caller.type);
             let franchiseDocs = [];
-            if (callerType === 1) {
+            if (franchiseScopeOid) {
+                const one = await Franchise.findOne({
+                    _id: franchiseScopeOid,
+                    deleted_at: null,
+                })
+                    .select('_id area_id')
+                    .lean();
+                franchiseDocs = one ? [one] : [];
+            } else if (callerType === 1) {
                 if (caller.franchise_id) {
                     const one = await Franchise.findOne({
                         _id: caller.franchise_id,
@@ -467,38 +667,34 @@ const getCountData = async (req, res) => {
                 response.total_category = await Category.countDocuments({ deleted_at: null });
                 response.total_service = await Service.countDocuments({ deleted_at: null });
 
-                // Active / inactive from franchise mapping rows (`franchise_category` / `franchise_service`)
+                // Active = sum of franchise mapping array lengths; inactive = global total minus active (floored at 0)
                 const franchiseCategoryDocs = await FranchiseCategory.find({
                     franchise_id: { $in: franchiseIdsScope },
                     deleted_at: null,
                 })
-                    .select('active_categories inactive_categories')
+                    .select('active_categories')
                     .lean();
 
                 let activeCategorySlots = 0;
-                let inactiveCategorySlots = 0;
                 for (const row of franchiseCategoryDocs) {
                     activeCategorySlots += (row.active_categories || []).length;
-                    inactiveCategorySlots += (row.inactive_categories || []).length;
                 }
                 response.active_category = activeCategorySlots;
-                response.inactive_category = inactiveCategorySlots;
+                response.inactive_category = Math.max(0, response.total_category - activeCategorySlots);
 
                 const franchiseServiceDocs = await FranchiseService.find({
                     franchise_id: { $in: franchiseIdsScope },
                     deleted_at: null,
                 })
-                    .select('active_services inactive_services')
+                    .select('active_services')
                     .lean();
 
                 let activeServiceSlots = 0;
-                let inactiveServiceSlots = 0;
                 for (const row of franchiseServiceDocs) {
                     activeServiceSlots += (row.active_services || []).length;
-                    inactiveServiceSlots += (row.inactive_services || []).length;
                 }
                 response.active_service = activeServiceSlots;
-                response.inactive_service = inactiveServiceSlots;
+                response.inactive_service = Math.max(0, response.total_service - activeServiceSlots);
 
                 // Pending requests: global category/service rows requested by users on this franchise
                 response.requested_category = await Category.countDocuments({
@@ -519,19 +715,8 @@ const getCountData = async (req, res) => {
             const STATUS_CONVERTED = 4;
 
             const baseFilter = { deleted_at: null };
-            if (
-                req.body.franchise_id !== undefined &&
-                req.body.franchise_id !== null &&
-                req.body.franchise_id !== ''
-            ) {
-                if (!mongoose.Types.ObjectId.isValid(req.body.franchise_id)) {
-                    return res.status(409).json({
-                        success: false,
-                        status: 409,
-                        message: "Invalid franchise id.",
-                    });
-                }
-                baseFilter.franchise_id = new mongoose.Types.ObjectId(req.body.franchise_id);
+            if (franchiseScopeOid) {
+                baseFilter.franchise_id = franchiseScopeOid;
             }
 
             const newFilter = {
@@ -581,17 +766,41 @@ const getCountData = async (req, res) => {
             response.inactive_plans = await SubscriptionPlan.countDocuments({ ...planBase, is_active: false });
 
             const subBase = { deleted_at: null };
-            response.total_partner_subscriptions = await PartnerSubscription.countDocuments(subBase);
-            response.active_partner_subscriptions = await PartnerSubscription.countDocuments({
-                ...subBase,
-                status: 'active',
-            });
-            response.inactive_partner_subscriptions = await PartnerSubscription.countDocuments({
-                ...subBase,
-                status: { $ne: 'active' },
-            });
+            if (franchiseScopeOid) {
+                const partnerIds = await User.find({
+                    type: 2,
+                    franchise_id: franchiseScopeOid,
+                    deleted_at: null,
+                }).distinct('_id');
+                if (partnerIds.length === 0) {
+                    response.total_partner_subscriptions = 0;
+                    response.active_partner_subscriptions = 0;
+                    response.inactive_partner_subscriptions = 0;
+                } else {
+                    const scopedSub = { ...subBase, partner_id: { $in: partnerIds } };
+                    response.total_partner_subscriptions = await PartnerSubscription.countDocuments(scopedSub);
+                    response.active_partner_subscriptions = await PartnerSubscription.countDocuments({
+                        ...scopedSub,
+                        status: 'active',
+                    });
+                    response.inactive_partner_subscriptions = await PartnerSubscription.countDocuments({
+                        ...scopedSub,
+                        status: { $ne: 'active' },
+                    });
+                }
+            } else {
+                response.total_partner_subscriptions = await PartnerSubscription.countDocuments(subBase);
+                response.active_partner_subscriptions = await PartnerSubscription.countDocuments({
+                    ...subBase,
+                    status: 'active',
+                });
+                response.inactive_partner_subscriptions = await PartnerSubscription.countDocuments({
+                    ...subBase,
+                    status: { $ne: 'active' },
+                });
+            }
         } else if (resolvedType === 13) {
-            // Settings → Management roles: Franchise Admin (type 1 + franchise_id), Franchise Employee (type 3 + franchise_id), Staff (type 6)
+            // Settings → Management roles: Franchise Admin (type 1), Franchise Employee (type 3), Staff (type 6); optional franchiseScope narrows all three
             const caller = await User.findOne({ _id: req.user.id, deleted_at: null }).select('type franchise_id');
             if (!caller) {
                 return res.status(401).json({
@@ -609,16 +818,8 @@ const getCountData = async (req, res) => {
 
             let franchiseScope = null;
             if (callerType === CALLER_SUPER_ADMIN || callerType === CALLER_STAFF) {
-                const raw = req.body.franchise_id;
-                if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
-                    if (!mongoose.Types.ObjectId.isValid(String(raw).trim())) {
-                        return res.status(409).json({
-                            success: false,
-                            status: 409,
-                            message: 'Invalid franchise id.',
-                        });
-                    }
-                    franchiseScope = new mongoose.Types.ObjectId(String(raw).trim());
+                if (franchiseScopeOid) {
+                    franchiseScope = franchiseScopeOid;
                 }
             } else if (callerType === CALLER_FRANCHISE_ADMIN || callerType === CALLER_EMPLOYEE) {
                 if (!caller.franchise_id) {
@@ -649,13 +850,11 @@ const getCountData = async (req, res) => {
             const franchiseAdminBase = {
                 ...base,
                 type: CALLER_FRANCHISE_ADMIN,
-                franchise_id: { $ne: null, $exists: true },
                 ...franchiseMatch,
             };
             const franchiseEmployeeBase = {
                 ...base,
                 type: CALLER_EMPLOYEE,
-                franchise_id: { $ne: null, $exists: true },
                 ...franchiseMatch,
             };
             const staffBase = {

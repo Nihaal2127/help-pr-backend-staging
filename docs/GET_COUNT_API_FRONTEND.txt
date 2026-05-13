@@ -1,0 +1,212 @@
+================================================================================
+POST /api/getCount — dashboard aggregate counts (frontend reference)
+================================================================================
+
+ENDPOINT
+  Method:   POST
+  Path:     /api/getCount
+  Base URL: your API host + stage (e.g. …/staging) — full path is /api/getCount
+
+AUTHENTICATION
+  Required: Bearer JWT in header
+    Authorization: Bearer <access_token>
+
+CONTENT-TYPE
+  application/json
+
+--------------------------------------------------------------------------------
+REQUEST BODY (JSON)
+--------------------------------------------------------------------------------
+
+REQUIRED
+  type (string | number)
+    Which dashboard module’s counts to return. Use one of the string keys below,
+    or the numeric code if you already map them in the app.
+
+OPTIONAL — franchise scope
+  franchise (string, preferred)
+    MongoDB ObjectId string (24 hex chars). When sent, counts are scoped to that
+    franchise where the backend supports it (see table below).
+
+  franchise_id (string, fallback)
+    Same as franchise. If both are non-empty, "franchise" wins.
+
+  Rules when franchise / franchise_id is present:
+    • Must be a valid ObjectId → otherwise HTTP 409 "Invalid franchise id."
+    • User must be allowed to read that franchise → otherwise HTTP 403/404
+      (super admin 5 and staff 6: any franchise; franchise admin 1: own
+       franchise or franchises they admin; employee 3: only own franchise_id).
+
+--------------------------------------------------------------------------------
+"type" VALUES (string keys → same as internal numeric code)
+--------------------------------------------------------------------------------
+
+  location-management           1
+  service-management            2
+  user-management                 3
+  financials                    4   (alias: order-payment → 4)
+  order-payment                 4
+  partner-payment               5
+  franchise-management          6
+  expenses                      7
+  settings-expense-categories   8
+  content-management            9
+  my-franchise                  10  (alias: my_franchise)
+  quote-management              11  (aliases: quote_management, quotes)
+  partner-management            12
+  settings-role                 13  (aliases: settings_role, settingsrole)
+
+  You may also send "type" as a string of digits (e.g. "11") — it is parsed as a number.
+
+--------------------------------------------------------------------------------
+FRANCHISE PARAMETER — WHAT CHANGES PER "type"
+--------------------------------------------------------------------------------
+
+  When franchise / franchise_id is OMITTED: behaviour is the previous “global”
+  or caller-scoped logic (e.g. franchise admin sees only their franchise for
+  some modules without sending the id).
+
+  When franchise / franchise_id is SENT (and access OK):
+
+  1  location-management
+     Counts only that franchise’s state, city, and linked areas.
+
+  2  service-management
+     Category/service counts use users belonging to that franchise (requested_by).
+
+  3  user-management
+     User counts filtered by user.franchise_id = that franchise.
+
+  4  financials / order-payment
+     Completed orders (status 3) tied to that franchise via quotes and/or
+     orders created by franchise admin/employee users.
+
+  5  partner-payment
+     Same order scope as type 4, applied to completed order services.
+
+  6  franchise-management
+     Counts only that franchise row.
+
+  7  expenses
+  8  settings-expense-categories
+     Filtered by expense / expense category franchise_id.
+
+  9  content-management
+     No franchise field on content — counts unchanged; franchise id still
+     validated for access if you send it.
+
+  10 my-franchise
+      Counts for the resolved franchise scope (employees, areas, catalogue vs
+      mapping, pending requests). See section “MY-FRANCHISE (TYPE 10)” below.
+
+  11 quote-management
+      Quote buckets filtered by franchise_id (same as sending franchise filter).
+
+  12 partner-management
+      Subscription plan totals stay global; partner subscription counts only
+      partners (type 2) with that franchise_id.
+
+  13 settings-role
+      Super admin / staff: optional franchise scope (same id as above).
+      Franchise admin / employee: still tied to their own franchise in logic.
+
+--------------------------------------------------------------------------------
+MY-FRANCHISE (TYPE 10) — HOW "record" FIELDS ARE COMPUTED
+--------------------------------------------------------------------------------
+
+  Franchise scope (which Franchise row(s) are used):
+    • Optional body "franchise" / "franchise_id" (after access check), else
+      franchise admin (type 1): their franchise_id, or all franchises they admin,
+      else any user with franchise_id: that franchise.
+
+  Employees
+    total_employee, inactive_employee, active_employee
+      Users with type = 3 (employee), deleted_at null, franchise_id in scope;
+      inactive/active split on is_active.
+
+  Areas
+    total_area, inactive_area, active_area
+      Area documents whose _id appears on the franchise’s area_id list(s),
+      deleted_at null; inactive = is_active false; active = is_active not false.
+
+  Global catalogue size (same for all franchises)
+    total_category
+      Count of all non-deleted Category documents (global catalogue).
+    total_service
+      Count of all non-deleted Service documents (global catalogue).
+
+  Franchise mapping vs catalogue (categories)
+    active_category
+      Sum of array lengths: FranchiseCategory.active_categories for each mapping
+      row where franchise_id is in scope (not Category.is_active).
+    inactive_category
+      max(0, total_category - active_category)
+      i.e. global categories minus how many slots are listed as active on the
+      franchise mapping (never negative).
+
+  Franchise mapping vs catalogue (services)
+    active_service
+      Sum of array lengths: FranchiseService.active_services for franchise_id in scope.
+    inactive_service
+      max(0, total_service - active_service)
+      i.e. global services minus active mapping slots (never negative).
+
+  Pending requests (raised by users tied to the franchise)
+    requested_category, requested_service
+      Global Category / Service rows with is_request true and requested_by in the
+      set of user _ids that have franchise_id in the resolved franchise scope.
+
+--------------------------------------------------------------------------------
+SUCCESS RESPONSE (200)
+--------------------------------------------------------------------------------
+
+  {
+    "success": true,
+    "status": 200,
+    "record": { ... }   // shape depends on "type" — dashboard card fields only
+  }
+
+  Field names in "record" differ per module (e.g. quote-management: new, pending,
+  accepted, success, failed). Inspect one successful response per module or ask
+  backend for the exact keys.
+
+--------------------------------------------------------------------------------
+ERROR RESPONSES (typical)
+--------------------------------------------------------------------------------
+
+  400  Invalid or unsupported "type"
+  401  Missing/invalid JWT or user not found where applicable
+  403  Not allowed to read counts for the given franchise
+  404  Franchise not found (when franchise id is used)
+  409  Invalid franchise id format
+  500  Server error
+
+--------------------------------------------------------------------------------
+EXAMPLE REQUESTS
+--------------------------------------------------------------------------------
+
+  Global quote dashboard (all franchises, if caller is allowed):
+    POST /api/getCount
+    { "type": "quote-management" }
+
+  Quote dashboard for one franchise:
+    POST /api/getCount
+    { "type": "quote-management", "franchise": "<24-char ObjectId>" }
+
+  User management counts for one franchise:
+    POST /api/getCount
+    { "type": "user-management", "franchise": "<24-char ObjectId>" }
+
+  Same using fallback key:
+    { "type": "user-management", "franchise_id": "<24-char ObjectId>" }
+
+--------------------------------------------------------------------------------
+RELATED ENDPOINT (quotes only)
+--------------------------------------------------------------------------------
+
+  GET /api/quote/getCounts?franchise_id=<optional ObjectId>
+  Same five buckets as quote-management on POST /api/getCount; query param, not body.
+
+================================================================================
+File: docs/GET_COUNT_API_FRONTEND.txt — keep in sync if API changes.
+================================================================================

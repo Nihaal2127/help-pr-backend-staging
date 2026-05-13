@@ -2,6 +2,29 @@ const mongoose = require("mongoose");
 
 var schema = mongoose.Schema;
 
+const quoteHistoryChangeSchema = new schema(
+  {
+    field: { type: String, default: "", trim: true },
+    old_value: { type: mongoose.Schema.Types.Mixed, default: null },
+    new_value: { type: mongoose.Schema.Types.Mixed, default: null },
+  },
+  { _id: false }
+);
+
+const quoteHistoryEventSchema = new schema(
+  {
+    event_type: { type: String, default: "", trim: true },
+    actor_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "user" },
+    actor_role: { type: String, default: "system", trim: true },
+    actor_name: { type: String, default: "", trim: true },
+    actor_unique_id: { type: String, default: "", trim: true },
+    changes: { type: [quoteHistoryChangeSchema], default: [] },
+    notes: { type: String, default: "", trim: true },
+    at: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 var quoteSchema = new schema(
   {
     quote_sequence_id: { type: String, default: "", trim: true },
@@ -25,6 +48,7 @@ var quoteSchema = new schema(
     cancellation_reason: { type: String, default: "", trim: true },
     rejection_reason: { type: String, default: "", trim: true },
     customer_description: { type: String, default: "", trim: true },
+    history: { type: [quoteHistoryEventSchema], default: [] },
     created_at: { type: Date, default: Date.now },
     updated_at: { type: Date, default: Date.now },
     deleted_at: { type: Date, default: null },

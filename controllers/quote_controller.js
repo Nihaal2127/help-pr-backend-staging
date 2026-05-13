@@ -20,6 +20,13 @@ const STATUS_REJECTED = 3;
 const STATUS_CONVERTED = 4;
 const STATUS_CANCELLED = 5;
 
+const USER_TYPE_ADMIN = 1;
+const USER_TYPE_PARTNER = 2;
+const USER_TYPE_EMPLOYEE = 3;
+const USER_TYPE_CUSTOMER = 4;
+const USER_TYPE_SUPER_ADMIN = 5;
+const USER_TYPE_STAFF = 6;
+
 const ORDER_TYPE_DEFAULT = 2;
 
 const QUOTE_SORT_WHITELIST = new Set([
@@ -67,6 +74,121 @@ const buildOrderStatusInfo = () => [
   { status: 4, updated_at: null },
 ];
 
+const getCallerId = (req) =>
+  (req && req.user && (req.user.id || req.user._id)) || null;
+
+const mapUserTypeToRole = (type) => {
+  switch (Number(type)) {
+    case USER_TYPE_ADMIN:
+      return "admin";
+    case USER_TYPE_PARTNER:
+      return "partner";
+    case USER_TYPE_EMPLOYEE:
+      return "employee";
+    case USER_TYPE_CUSTOMER:
+      return "customer";
+    case USER_TYPE_SUPER_ADMIN:
+      return "super_admin";
+    case USER_TYPE_STAFF:
+      return "staff";
+    default:
+      return "user";
+  }
+};
+
+const resolveQuoteActor = async (quote, req) => {
+  const callerId = getCallerId(req);
+  if (!callerId || !mongoose.Types.ObjectId.isValid(callerId)) {
+    return {
+      actor_id: null,
+      actor_role: "system",
+      actor_name: "",
+      actor_unique_id: "",
+    };
+  }
+
+  const actor = await User.findOne({ _id: callerId, deleted_at: null })
+    .select("name user_id type franchise_id")
+    .lean();
+
+  if (!actor) {
+    return {
+      actor_id: new mongoose.Types.ObjectId(callerId),
+      actor_role: "user",
+      actor_name: "",
+      actor_unique_id: "",
+    };
+  }
+
+  let actorRole = mapUserTypeToRole(actor.type);
+  const callerStr = String(callerId);
+  if (quote.user_id && String(quote.user_id) === callerStr) {
+    actorRole = "customer";
+  } else if (quote.employee_id && String(quote.employee_id) === callerStr) {
+    actorRole = "assigned_employee";
+  } else if (
+    Number(actor.type) === USER_TYPE_ADMIN &&
+    actor.franchise_id &&
+    quote.franchise_id &&
+    String(actor.franchise_id) === String(quote.franchise_id)
+  ) {
+    actorRole = "franchise_admin";
+  }
+
+  return {
+    actor_id: actor._id,
+    actor_role: actorRole,
+    actor_name: actor.name || "",
+    actor_unique_id: actor.user_id || "",
+  };
+};
+
+const serializeHistoryValue = (value) => {
+  if (value === undefined) return null;
+  if (value === null) return null;
+  if (value instanceof Date) return value.toISOString();
+  if (value instanceof mongoose.Types.ObjectId) {
+    return String(value);
+  }
+  if (value && value._id && mongoose.Types.ObjectId.isValid(value._id)) {
+    return String(value._id);
+  }
+  return value;
+};
+
+const valuesAreEqual = (oldValue, newValue) =>
+  JSON.stringify(serializeHistoryValue(oldValue)) ===
+  JSON.stringify(serializeHistoryValue(newValue));
+
+const buildHistoryChange = (field, oldValue, newValue) => {
+  if (valuesAreEqual(oldValue, newValue)) return null;
+  return {
+    field,
+    old_value: serializeHistoryValue(oldValue),
+    new_value: serializeHistoryValue(newValue),
+  };
+};
+
+const appendQuoteHistory = async (
+  quote,
+  req,
+  eventType,
+  changes = [],
+  notes = ""
+) => {
+  const actor = await resolveQuoteActor(quote, req);
+  if (!Array.isArray(quote.history)) {
+    quote.history = [];
+  }
+  quote.history.push({
+    event_type: eventType,
+    ...actor,
+    changes: changes.filter(Boolean),
+    notes: notes ? String(notes).trim() : "",
+    at: new Date(),
+  });
+};
+
 const create = async (req, res) => {
   try {
     const body = req.body;
@@ -106,6 +228,7 @@ const create = async (req, res) => {
           : "",
     });
 
+    await appendQuoteHistory(quote, req, "created", [], "Quote created.");
     await quote.save();
 
     return res.status(200).json({
@@ -133,6 +256,9 @@ const getAll = async (req, res) => {
 
     const status =
       req.query.status !== undefined ? parseInt(req.query.status, 10) : null;
+    const includeHistory = ["true", "1"].includes(
+      String(req.query.include_history || "").toLowerCase()
+    );
 
     const rawKeyword = req.query.keyword;
     const keyword =
@@ -453,6 +579,7 @@ const getAll = async (req, res) => {
           _address: 0,
           _addr_city: 0,
           _addr_state: 0,
+          ...(!includeHistory && { history: 0 }),
         },
       },
       {
@@ -715,6 +842,13 @@ const update = async (req, res) => {
     ];
 
     const body = req.body;
+    const previousValues = {};
+    for (const key of allowed) {
+      if (body[key] !== undefined) {
+        previousValues[key] = quote[key];
+      }
+    }
+
     for (const key of allowed) {
       if (body[key] !== undefined) {
         if (key === "employee_id" && (body[key] === null || body[key] === "")) {
@@ -735,6 +869,12 @@ const update = async (req, res) => {
     }
 
     quote.updated_at = new Date();
+    const changes = Object.keys(previousValues)
+      .map((key) => buildHistoryChange(key, previousValues[key], quote[key]))
+      .filter(Boolean);
+    if (changes.length > 0) {
+      await appendQuoteHistory(quote, req, "updated", changes);
+    }
     const updated = await quote.save();
 
     return res.status(200).json({
@@ -775,8 +915,12 @@ const approve = async (req, res) => {
       });
     }
 
+    const oldStatus = quote.status;
     quote.status = STATUS_APPROVED;
     quote.updated_at = new Date();
+    await appendQuoteHistory(quote, req, "approved", [
+      buildHistoryChange("status", oldStatus, quote.status),
+    ]);
     await quote.save();
 
     return res.status(200).json({
@@ -818,11 +962,27 @@ const reject = async (req, res) => {
       });
     }
 
+    const oldStatus = quote.status;
+    const oldRejectionReason = quote.rejection_reason;
     quote.status = STATUS_REJECTED;
     if (rejection_reason !== undefined) {
       quote.rejection_reason = String(rejection_reason).trim();
     }
     quote.updated_at = new Date();
+    await appendQuoteHistory(
+      quote,
+      req,
+      "rejected",
+      [
+        buildHistoryChange("status", oldStatus, quote.status),
+        buildHistoryChange(
+          "rejection_reason",
+          oldRejectionReason,
+          quote.rejection_reason
+        ),
+      ],
+      quote.rejection_reason
+    );
     await quote.save();
 
     return res.status(200).json({
@@ -864,11 +1024,27 @@ const cancelQuote = async (req, res) => {
       });
     }
 
+    const oldStatus = quote.status;
+    const oldCancellationReason = quote.cancellation_reason;
     quote.status = STATUS_CANCELLED;
     if (cancellation_reason !== undefined) {
       quote.cancellation_reason = String(cancellation_reason).trim();
     }
     quote.updated_at = new Date();
+    await appendQuoteHistory(
+      quote,
+      req,
+      "cancelled",
+      [
+        buildHistoryChange("status", oldStatus, quote.status),
+        buildHistoryChange(
+          "cancellation_reason",
+          oldCancellationReason,
+          quote.cancellation_reason
+        ),
+      ],
+      quote.cancellation_reason
+    );
     await quote.save();
 
     return res.status(200).json({
@@ -1028,9 +1204,21 @@ const convertToOrder = async (req, res) => {
 
     await newOrder.save();
 
+    const oldStatus = quote.status;
+    const oldOrderId = quote.order_id;
     quote.order_id = order_id;
     quote.status = STATUS_CONVERTED;
     quote.updated_at = new Date();
+    await appendQuoteHistory(
+      quote,
+      req,
+      "converted",
+      [
+        buildHistoryChange("status", oldStatus, quote.status),
+        buildHistoryChange("order_id", oldOrderId, quote.order_id),
+      ],
+      `Converted to order ${newOrder.unique_id}.`
+    );
     await quote.save();
 
     return res.status(200).json({
@@ -1069,8 +1257,12 @@ const deleteQuote = async (req, res) => {
       });
     }
 
+    const oldDeletedAt = quote.deleted_at;
     quote.deleted_at = new Date();
     quote.updated_at = new Date();
+    await appendQuoteHistory(quote, req, "deleted", [
+      buildHistoryChange("deleted_at", oldDeletedAt, quote.deleted_at),
+    ]);
     await quote.save();
 
     res.status(200).json({

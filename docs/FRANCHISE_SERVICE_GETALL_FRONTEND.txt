@@ -1,0 +1,113 @@
+================================================================================
+  Franchise service — GET list (getAll) — frontend integration
+================================================================================
+
+Base path (see server.js): /api/franchise-service
+
+Route
+-----
+  GET /api/franchise-service/getAll
+
+Authentication
+--------------
+  Required: Bearer JWT (same as other franchise-service mapping routes).
+
+  Roles allowed: Super Admin, Staff, Franchise Admin, Franchise Employee.
+
+  Franchise Admin / Employee:
+    - The server forces the list to their own franchise.
+    - If they send franchise_id, it must match their user.franchise_id (403 otherwise).
+
+  Super Admin / Staff:
+    - Pass franchise_id when you need all_services in the response.
+
+--------------------------------------------------------------------------------
+Response shape (high level)
+--------------------------------------------------------------------------------
+
+  On success (200):
+
+  - totalItems, totalPages, currentPage — pagination for mapping **records**
+  - records — franchise_service mapping documents (paginated); services_list,
+    active_services, inactive_services, services_order, etc.
+  - all_services — optional; see below
+
+  “records” = rows from the franchise_service **mapping** collection.
+
+  “all_services” = full **global** service catalog (non-deleted services), each row has:
+    - franchise_active (boolean) — on/off for this franchise in the latest mapping
+    - category_id (populated category doc when present) — use for category name in UI
+
+  all_services is included only when the request is scoped to one franchise_id.
+
+--------------------------------------------------------------------------------
+Query parameters — reference
+--------------------------------------------------------------------------------
+
+  Pagination (mapping “records”)
+  --------------------------------
+  page, limit          defaults: page=1, limit=10
+
+  Franchise scope
+  ----------------
+  franchise_id         Super Admin / Staff: pass to scope list + all_services.
+                       Franchise users: implied from JWT.
+
+  Mapping list filters (affect “records”)
+  ----------------------------------------
+  is_active            optional true|false — filters mapping entries by franchise on/off
+  is_request           optional — filters by Service.is_request on items in records
+
+  Global catalog: search (all_services only)
+  ------------------------------------------
+  search               optional string; case-insensitive substring.
+  q                    alias of search.
+
+  Logic (two steps):
+    1) If any global service’s **name** matches, return only those services.
+    2) If no service name matches, return services whose **related category name**
+       (from populated category_id.name) matches.
+
+  Omitted/empty search: no search filter; then sort is applied to the full list.
+
+  Global catalog: sort (all_services only)
+  ----------------------------------------
+  sort_by              optional; default: name
+                       - name            — service name
+                       - id  or  _id     — service MongoDB _id (string order)
+                       - category_name
+                       - category        (alias of category_name)
+                       Sort by parent category name; ties broken by service name.
+
+  sort_order           optional; default: asc
+                       asc | desc
+
+  order                alias of sort_order
+
+  Invalid sort_by or sort_order → 400 with a short message.
+
+--------------------------------------------------------------------------------
+Examples
+--------------------------------------------------------------------------------
+
+  GET /api/franchise-service/getAll?page=1&limit=10&franchise_id=<FRANCHISE_OID>
+
+  Search + sort by category name, descending:
+
+    ?franchise_id=<ID>&search=plumb&sort_by=category_name&sort_order=desc
+
+  Sort by service id:
+
+    ?franchise_id=<ID>&sort_by=id&sort_order=asc
+
+--------------------------------------------------------------------------------
+Parity with franchise-category getAll
+--------------------------------------------------------------------------------
+
+  Same idea: search + sort apply to the **global catalog** array (all_services),
+  not to paginated mapping records. Mapping filters (is_active, is_request) behave
+  as before on **records**.
+
+================================================================================
+  End of document
+================================================================================

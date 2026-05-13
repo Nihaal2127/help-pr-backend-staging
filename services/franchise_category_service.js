@@ -251,13 +251,85 @@ const buildAllCategoriesWithFranchiseMappingStatus = async (franchiseOid) => {
         (coerced.active_categories || []).forEach((id) => activeSet.add(id.toString()));
     }
 
-    const allCats = await Category.find({ deleted_at: null }).sort({ name: 1 }).lean();
+    const allCats = await Category.find({ deleted_at: null }).lean();
     const svcMap = await loadServicesGroupedByCategoryId(allCats.map((c) => c._id));
     return allCats.map((cat) => ({
         ...cat,
         franchise_active: activeSet.has(cat._id.toString()),
         related_services: svcMap.get(cat._id.toString()) || [],
     }));
+};
+
+const matchesSearchInCategoryName = (cat, qLower) => {
+    const n = cat.name != null ? String(cat.name).toLowerCase() : '';
+    return n.includes(qLower);
+};
+
+const matchesSearchInRelatedServices = (cat, qLower) => {
+    const svcs = cat.related_services || [];
+    return svcs.some((s) => {
+        const n = s.name != null ? String(s.name).toLowerCase() : '';
+        return n.includes(qLower);
+    });
+};
+
+/**
+ * Prefer categories whose name matches `search`; if none match, include categories where any
+ * related global service name matches (substring, case-insensitive).
+ */
+const filterAllCategoriesBySearch = (rows, searchRaw) => {
+    if (!Array.isArray(rows) || rows.length === 0) return rows;
+    const trimmed =
+        searchRaw !== undefined && searchRaw !== null ? String(searchRaw).trim() : '';
+    if (!trimmed) return rows;
+    const qLower = trimmed.toLowerCase();
+
+    const nameHits = rows.filter((cat) => matchesSearchInCategoryName(cat, qLower));
+    if (nameHits.length > 0) return nameHits;
+
+    return rows.filter((cat) => matchesSearchInRelatedServices(cat, qLower));
+};
+
+const parseFranchiseCategoryCatalogSort = (query) => {
+    const sortByRaw = query.sort_by;
+    const sortOrderRaw = query.sort_order ?? query.order;
+
+    let sortBy = 'name';
+    if (sortByRaw !== undefined && sortByRaw !== null && String(sortByRaw).trim() !== '') {
+        const s = String(sortByRaw).trim().toLowerCase();
+        if (s !== 'name' && s !== 'id' && s !== '_id') {
+            return { ok: false, message: 'sort_by must be name or id.' };
+        }
+        sortBy = s === '_id' ? 'id' : s;
+    }
+
+    let sortOrder = 1;
+    if (sortOrderRaw !== undefined && sortOrderRaw !== null && String(sortOrderRaw).trim() !== '') {
+        const o = String(sortOrderRaw).trim().toLowerCase();
+        if (o !== 'asc' && o !== 'desc') {
+            return { ok: false, message: 'sort_order must be asc or desc.' };
+        }
+        sortOrder = o === 'desc' ? -1 : 1;
+    }
+
+    return { ok: true, sortBy, sortOrder };
+};
+
+const sortAllCategoriesRows = (rows, sortBy, sortOrder) => {
+    if (!Array.isArray(rows) || rows.length === 0) return rows;
+    const mult = sortOrder;
+    const copy = [...rows];
+    copy.sort((a, b) => {
+        if (sortBy === 'id') {
+            const sa = a._id.toString();
+            const sb = b._id.toString();
+            return mult * sa.localeCompare(sb);
+        }
+        const na = (a.name != null ? String(a.name) : '').toLowerCase();
+        const nb = (b.name != null ? String(b.name) : '').toLowerCase();
+        return mult * na.localeCompare(nb);
+    });
+    return copy;
 };
 
 const loadUserFranchiseAuth = async (userId) => {
@@ -433,7 +505,17 @@ const list = async (query, userId) => {
 
         let all_categories;
         if (filter.franchise_id) {
+            const sortOpts = parseFranchiseCategoryCatalogSort(query);
+            if (!sortOpts.ok) return fail(400, sortOpts.message);
+
             all_categories = await buildAllCategoriesWithFranchiseMappingStatus(filter.franchise_id);
+            const searchTerm = query.search ?? query.q;
+            all_categories = filterAllCategoriesBySearch(all_categories, searchTerm);
+            all_categories = sortAllCategoriesRows(
+                all_categories,
+                sortOpts.sortBy,
+                sortOpts.sortOrder
+            );
         }
 
         return ok(200, {

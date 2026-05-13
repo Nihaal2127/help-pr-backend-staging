@@ -4,8 +4,7 @@ const User = require('../models/user');
 const City = require('../models/city');
 const State = require('../models/state');
 const Service = require('../models/service');
-const Franchise = require('../models/franchise');
-const FranchiseCategory = require('../models/franchise_category');
+const franchiseCategoryService = require('../services/franchise_category_service');
 const { applyPagination, applyDropDownFilter } = require('../utils/pagination');
 const { validationResult } = require('express-validator');
 const { parseBoolean } = require('../utils/parser');
@@ -13,7 +12,6 @@ const { checkObjectIdExists } = require('../validator/id_validator');
 const { getCategoryId } = require('../helper/id_generator');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
 const { USER_TYPE_ADMIN } = require('../middleware/role_middleware');
-const { coerceLegacyCategoryMappingArrays } = require('../utils/franchise_catalog_lists');
 
 const asBodyBool = (value, defaultValue) => {
   if (value === undefined) return defaultValue;
@@ -66,58 +64,20 @@ const getCategoryStatusConfig = (statusFilter = "") => {
   return {};
 };
 
-const getCatalogRefId = (ref) => {
-  if (!ref) return null;
-  if (ref instanceof mongoose.Types.ObjectId) return ref;
-  if (typeof ref === 'object' && ref._id) return ref._id;
-  return ref;
-};
-
-const resolveFranchiseCategoryScope = async (franchiseIdRaw, mappingActiveFilter) => {
-  if (!mongoose.Types.ObjectId.isValid(String(franchiseIdRaw))) {
-    return { ok: false, status: 400, message: 'franchise_id must be a valid MongoDB ObjectId.' };
+const sendFranchiseCategoryResult = (res, result) => {
+  if (!result.ok) {
+    return res.status(result.status).json({
+      success: false,
+      status: result.status,
+      message: result.message,
+      ...(result.error !== undefined && { error: result.error }),
+    });
   }
-
-  const franchiseOid = new mongoose.Types.ObjectId(franchiseIdRaw);
-  const franchise = await Franchise.findOne({
-    _id: franchiseOid,
-    deleted_at: null,
-  }).select('categories');
-
-  if (!franchise) {
-    return { ok: false, status: 404, message: 'Franchise not found.' };
-  }
-
-  const mapping = await FranchiseCategory.findOne({
-    franchise_id: franchiseOid,
-    deleted_at: null,
-  })
-    .sort({ created_at: -1 })
-    .lean();
-
-  if (!mapping) {
-    const fallbackIds = Array.isArray(franchise.categories) ? franchise.categories : [];
-    const ids = mappingActiveFilter === false ? [] : fallbackIds;
-    return {
-      ok: true,
-      ids,
-      activeIds: fallbackIds,
-    };
-  }
-
-  const coerced = coerceLegacyCategoryMappingArrays(mapping);
-  const list = Array.isArray(coerced.categories_list) ? coerced.categories_list : [];
-  const activeIds = Array.isArray(coerced.active_categories) ? coerced.active_categories : [];
-  const filteredList =
-    mappingActiveFilter === null
-      ? list
-      : list.filter((entry) => Boolean(entry.is_active) === mappingActiveFilter);
-
-  return {
-    ok: true,
-    ids: filteredList.map((entry) => getCatalogRefId(entry.category_id)).filter(Boolean),
-    activeIds,
-  };
+  return res.status(result.status).json({
+    success: true,
+    status: result.status,
+    ...result.data,
+  });
 };
 
 const attachRequestedByUser = async (records) => {
@@ -211,24 +171,22 @@ const getAll = async (req, res) => {
       });
     }
 
+    if (req.params.franchise_id) {
+      const result = await franchiseCategoryService.list(
+        { ...req.query, franchise_id: req.params.franchise_id },
+        req.user.id
+      );
+      return sendFranchiseCategoryResult(res, result);
+    }
+
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    const franchiseIdParam =
-      req.params.franchise_id !== undefined && req.params.franchise_id !== null
-        ? String(req.params.franchise_id).trim()
-        : '';
-    const isFranchiseScoped = Boolean(franchiseIdParam);
-    const mappingActiveFilter =
-      isFranchiseScoped && req.query.is_active !== undefined
-        ? parseBoolean(req.query.is_active)
-        : null;
-    const catalogIsActiveRaw = isFranchiseScoped ? req.query.catalog_is_active : req.query.is_active;
     const statusFilter =
       req.query.status !== undefined && req.query.status !== null
         ? String(req.query.status).trim().toLowerCase()
         : "";
     // const type = parseInt(req.query.type);
-    const is_active = catalogIsActiveRaw !== undefined ? parseBoolean(catalogIsActiveRaw) : null;
+    const is_active = req.query.is_active !== undefined ? parseBoolean(req.query.is_active) : null;
 
     // const callout_price = req.query.callout_price !== undefined ? parseFloat(req.query.callout_price) : null;
     // const fitting_price = req.query.fitting_price !== undefined ? parseFloat(req.query.fitting_price) : null;
@@ -362,20 +320,6 @@ const getAll = async (req, res) => {
       }
     }
 
-    let franchiseActiveCategorySet = null;
-    if (isFranchiseScoped) {
-      const scoped = await resolveFranchiseCategoryScope(franchiseIdParam, mappingActiveFilter);
-      if (!scoped.ok) {
-        return res.status(scoped.status).json({
-          success: false,
-          status: scoped.status,
-          message: scoped.message,
-        });
-      }
-      filter._id = { $in: scoped.ids };
-      franchiseActiveCategorySet = new Set((scoped.activeIds || []).map((id) => String(id)));
-    }
-
     const sortOrder = req.query.sort !== undefined ? parseInt(req.query.sort) : 1;
     const sortBy = req.query.sort_by !== undefined ? String(req.query.sort_by).toLowerCase() : 'created_at';
 
@@ -417,16 +361,6 @@ const getAll = async (req, res) => {
 
     const requestedByEnrichedCategories = await attachRequestedByUser(categories);
     const enrichedCategories = await attachServiceNames(requestedByEnrichedCategories);
-    const responseCategories = isFranchiseScoped
-      ? enrichedCategories.map((category) => {
-        const plainCategory =
-          category && typeof category.toObject === "function" ? category.toObject() : category;
-        return {
-          ...plainCategory,
-          franchise_active: franchiseActiveCategorySet.has(String(plainCategory._id)),
-        };
-      })
-      : enrichedCategories;
 
     res.status(200).json({
       success: true,
@@ -435,7 +369,7 @@ const getAll = async (req, res) => {
       totalItems: totalCount,
       totalPages,
       currentPage,
-      records: responseCategories,
+      records: enrichedCategories,
     });
   } catch (err) {
     console.log("Error is ", err.message);

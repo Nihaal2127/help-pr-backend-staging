@@ -104,14 +104,67 @@ const parseJsonIfString = (value, fallback) => {
 const normalizePartnerServices = (payload) => {
   const parsed = parseJsonIfString(payload, []);
   if (!Array.isArray(parsed)) return [];
-  return parsed
-    .map((item) => ({
-      category_id: item?.category_id ?? null,
-      service_id: item?.service_id ?? null,
-      description: item?.description ?? '',
-      price: item?.price ?? null,
-    }))
-    .filter((item) => item.service_id);
+  const rows = [];
+  for (const item of parsed) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    if (Array.isArray(item.services)) {
+      const parentCategoryId = item.category_id ?? null;
+      for (const svc of item.services) {
+        if (!svc || typeof svc !== 'object' || Array.isArray(svc)) continue;
+        const sid = svc.service_id ?? svc.serviceId ?? null;
+        if (!sid || !mongoose.Types.ObjectId.isValid(String(sid))) continue;
+        rows.push({
+          category_id: svc.category_id ?? parentCategoryId,
+          service_id: sid,
+          description: svc.description ?? '',
+          price: svc.price ?? null,
+        });
+      }
+    } else {
+      const sid = item.service_id ?? item.serviceId ?? null;
+      if (!sid || !mongoose.Types.ObjectId.isValid(String(sid))) continue;
+      rows.push({
+        category_id: item.category_id ?? null,
+        service_id: sid,
+        description: item.description ?? '',
+        price: item.price ?? null,
+      });
+    }
+  }
+  return rows;
+};
+
+/** When frontend sends service_ids + category_ids (+ optional names/descriptions/prices) instead of partner_services. */
+const buildPartnerServicesFromParallelFields = (body) => {
+  const coerceArray = (val, fallback = []) => {
+    if (Array.isArray(val)) return val;
+    if (val === undefined || val === null) return fallback;
+    return parseJsonIfString(val, fallback);
+  };
+  const ids = coerceArray(body.service_ids, []);
+  const cats = coerceArray(body.category_ids, []);
+  if (!Array.isArray(ids) || ids.length === 0) return [];
+  const names = coerceArray(body.service_names, []);
+  const descs = coerceArray(body.service_descriptions, []);
+  const prices = coerceArray(body.service_prices, []);
+  const rows = [];
+  for (let i = 0; i < ids.length; i++) {
+    const sid = ids[i];
+    if (!sid || !mongoose.Types.ObjectId.isValid(String(sid))) continue;
+    const cat =
+      i < cats.length && cats[i] != null && String(cats[i]).trim() !== ''
+        ? cats[i]
+        : cats.length > 0
+          ? cats[cats.length - 1]
+          : null;
+    rows.push({
+      category_id: cat != null && mongoose.Types.ObjectId.isValid(String(cat)) ? cat : null,
+      service_id: sid,
+      description: descs[i] != null ? String(descs[i]) : '',
+      price: prices[i] != null ? prices[i] : null,
+    });
+  }
+  return rows;
 };
 
 const normalizePartnerDocuments = (payload) => {
@@ -163,6 +216,61 @@ const normalizePartnerSubscriptionPayload = (payload) => {
     notes: parsed.notes ?? '',
   };
 };
+
+const PARTNER_DOCUMENT_FILE_FIELDS = [
+  'vehicle_registration',
+  'police_verification_certificate',
+  'pan_card',
+  'driving_license',
+  'aadhar_card',
+];
+
+const mergePartnerDocumentPayloadFromMultipart = async (req, partner_documents) => {
+  const base = parseJsonIfString(partner_documents, {});
+  const merged =
+    base && typeof base === 'object' && !Array.isArray(base) ? { ...base } : {};
+  const files = req.files || {};
+  for (const field of PARTNER_DOCUMENT_FILE_FIELDS) {
+    const arr = files[field];
+    if (!arr || !arr[0]) continue;
+    merged[field] = await handleImageUpload(arr[0], getUploadType(4), true, null);
+  }
+  return merged;
+};
+
+async function applyPartnerDocumentImageUpdates(partnerId, normalizedDocumentPayload) {
+  if (!normalizedDocumentPayload || Object.keys(normalizedDocumentPayload).length === 0) {
+    return;
+  }
+  const documentList = await getDocumentList();
+  const documentNameToId = new Map(
+    documentList.map((doc) => [String(doc.name || '').trim().toLowerCase(), String(doc._id)])
+  );
+  const documentImageById = {};
+  Object.entries(normalizedDocumentPayload).forEach(([key, value]) => {
+    const normalizedKey = String(key).trim().toLowerCase();
+    const normalizedValue = value === undefined || value === null ? '' : String(value).trim();
+    if (!normalizedValue) return;
+    const mappedDocumentId = documentNameToId.get(normalizedKey);
+    if (mappedDocumentId) {
+      documentImageById[mappedDocumentId] = normalizedValue;
+    }
+  });
+  if (Object.keys(documentImageById).length === 0) {
+    return;
+  }
+  const updates = Object.entries(documentImageById).map(([documentId, imageUrl]) =>
+    PartnerDocument.updateOne(
+      {
+        partner_id: partnerId,
+        document_id: new mongoose.Types.ObjectId(documentId),
+        deleted_at: null,
+      },
+      { $set: { document_image: imageUrl } }
+    )
+  );
+  await Promise.all(updates);
+}
 
 
 const changePassword = async (req, res) => {
@@ -601,9 +709,21 @@ const create = async (req, res) => {
       bank_account,
       partner_subscription,
     } = req.body;
+    let resolvedPartnerServicesInput = partner_services;
+    if (type === 2) {
+      const psArr = Array.isArray(partner_services) ? partner_services : [];
+      const hasPartnerServicesPayload = psArr.length > 0;
+      const hasParallelIds =
+        (Array.isArray(req.body.service_ids) && req.body.service_ids.length > 0) ||
+        (typeof req.body.service_ids === 'string' && String(req.body.service_ids).trim() !== '');
+      if (!hasPartnerServicesPayload && hasParallelIds) {
+        resolvedPartnerServicesInput = buildPartnerServicesFromParallelFields(req.body);
+      }
+    }
     let resolvedProfileUrl = profile_url;
-    if (req.file) {
-      resolvedProfileUrl = await handleImageUpload(req.file, getUploadType(4), true, null);
+    const profileUpload = req.files?.image?.[0] || req.file;
+    if (profileUpload) {
+      resolvedProfileUrl = await handleImageUpload(profileUpload, getUploadType(4), true, null);
     }
     const resolvedIsActive =
       type === 2
@@ -739,7 +859,7 @@ const create = async (req, res) => {
         }
       });
 
-      const normalizedServiceRows = normalizePartnerServices(partner_services);
+      const normalizedServiceRows = normalizePartnerServices(resolvedPartnerServicesInput);
       const partnerServicesRows = normalizedServiceRows.map((serviceRow) => ({
         _id: new mongoose.Types.ObjectId(),
         partner_id: _id,
@@ -755,35 +875,11 @@ const create = async (req, res) => {
           await PartnerServices.insertMany(partnerServicesRows, { ordered: false });
         }
 
-        const normalizedDocumentPayload = normalizePartnerDocuments(partner_documents);
-        if (Object.keys(normalizedDocumentPayload).length > 0) {
-          const documentNameToId = new Map(
-            documentList.map((doc) => [String(doc.name || '').trim().toLowerCase(), String(doc._id)])
-          );
-          const documentImageById = {};
-          Object.entries(normalizedDocumentPayload).forEach(([key, value]) => {
-            const normalizedKey = String(key).trim().toLowerCase();
-            const normalizedValue = value === undefined || value === null ? '' : String(value).trim();
-            if (!normalizedValue) return;
-            const mappedDocumentId = documentNameToId.get(normalizedKey);
-            if (mappedDocumentId) {
-              documentImageById[mappedDocumentId] = normalizedValue;
-            }
-          });
-          if (Object.keys(documentImageById).length > 0) {
-            const updates = Object.entries(documentImageById).map(([documentId, imageUrl]) =>
-              PartnerDocument.updateOne(
-                {
-                  partner_id: savedUser._id,
-                  document_id: new mongoose.Types.ObjectId(documentId),
-                  deleted_at: null,
-                },
-                { $set: { document_image: imageUrl } }
-              )
-            );
-            await Promise.all(updates);
-          }
-        }
+        const mergedPartnerDocs = await mergePartnerDocumentPayloadFromMultipart(req, partner_documents);
+        await applyPartnerDocumentImageUpdates(
+          savedUser._id,
+          normalizePartnerDocuments(mergedPartnerDocs)
+        );
 
         const normalizedBankAccount = normalizePartnerBankAccount(
           bank_account ?? {
@@ -939,9 +1035,10 @@ const update = async (req, res) => {
         message: 'User not found'
       });
     }
-    if (req.file) {
+    if (req.files?.image?.[0] || req.file) {
+      const profileUpload = req.files?.image?.[0] || req.file;
       updateData.profile_url = await handleImageUpload(
-        req.file,
+        profileUpload,
         getUploadType(4),
         true,
         null
@@ -1160,6 +1257,16 @@ const update = async (req, res) => {
         });
       }
     }
+    if (effectiveType === 2) {
+      const mergedPartnerDocs = await mergePartnerDocumentPayloadFromMultipart(
+        req,
+        updateData.partner_documents
+      );
+      await applyPartnerDocumentImageUpdates(
+        updatedUser._id,
+        normalizePartnerDocuments(mergedPartnerDocs)
+      );
+    }
     let responseRecord = updatedUser;
 
     if (effectiveType === 4 || effectiveType === 2) {
@@ -1199,7 +1306,7 @@ const getById = async (req, res) => {
   const { id } = req.params;
   try {
 
-    let user = await User.findById({ _id: id }).lean();
+    let user = await User.findById(id).lean();
 
     if (!user) {
       return res.status(404).json({
@@ -1219,7 +1326,7 @@ const getById = async (req, res) => {
     }
 
 
-    user = await User.findById({ _id: id }).populate([
+    user = await User.findById(id).populate([
       { path: "state_id" },
       { path: "city_id" },
     ]).lean();
@@ -1261,7 +1368,7 @@ const getById = async (req, res) => {
       response.total_amount = service_count_data.total_amount;
     }
     if (user.type === 2 && user.is_business === true) {
-      user = await User.findById({ _id: id }).populate([
+      user = await User.findById(id).populate([
         { path: "business_info_id" },
       ]).lean();
       response.business_info_id = user.business_info_id?._id ?? null;

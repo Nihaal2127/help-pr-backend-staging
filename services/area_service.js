@@ -163,9 +163,13 @@ const listAreas = async (query, authUser) => {
             filter._id = { $in: areaIds };
         }
         const areaNameSearch = query.areaname || query.name;
-        if (areaNameSearch) {
-            filter.name = { $regex: new RegExp(String(areaNameSearch).trim(), 'i') };
-        }
+        const trimmedAreaSearch =
+            areaNameSearch !== undefined && areaNameSearch !== null
+                ? String(areaNameSearch).trim()
+                : '';
+        const unifiedSearchPattern =
+            trimmedAreaSearch.length > 0 ? escapeRegExp(trimmedAreaSearch) : null;
+
         if (query.pincode) {
             const pc = String(query.pincode).trim();
             filter.pincodes = pc;
@@ -200,6 +204,20 @@ const listAreas = async (query, authUser) => {
               }
             : null;
 
+        const unifiedSearchStage =
+            unifiedSearchPattern !== null
+                ? {
+                      $match: {
+                          $or: [
+                              { name: { $regex: unifiedSearchPattern, $options: 'i' } },
+                              { state_name: { $regex: unifiedSearchPattern, $options: 'i' } },
+                              { city_name: { $regex: unifiedSearchPattern, $options: 'i' } },
+                              { pincodes: { $regex: unifiedSearchPattern, $options: 'i' } },
+                          ],
+                      },
+                  }
+                : null;
+
         const pipeline = [
             { $match: filter },
             {
@@ -221,6 +239,7 @@ const listAreas = async (query, authUser) => {
                     city_name: '$city_doc.name',
                 },
             },
+            ...(unifiedSearchStage ? [unifiedSearchStage] : []),
             ...(cityMatchStage ? [{ $match: cityMatchStage }] : []),
             { $sort: sort },
             {

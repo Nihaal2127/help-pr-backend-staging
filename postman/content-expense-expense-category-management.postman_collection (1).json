@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "e7d3c1b0-9a8f-4e7d-bc1a-2f3e4d5c6b7a",
     "name": "Content + Expense Category + Expense Management",
-    "description": "Postman collection for **`/api/content-management`**, **`/api/expense-category-management`**, **`/api/expense-management`**, plus **`/api/state`**, **`/api/city`**, **`/api/area`** (see `server.js`).\n\n**Setup:** Set **`{{baseUrl}}`** (e.g. `http://localhost:5001` or `https://…execute-api…/staging`). Run **Login** to set **`{{token}}`**. Set **`{{franchiseId}}`** to a real franchise ObjectId before expense category / expense calls.\n\n**State / City / Area:** Run **State → Create** first (sets **`stateId`** and **`stateNameForImport`**), then **City → Create** (**`cityId`**), then **Area → Create** (**`areaId`**). Duplicate **name** on create/update returns **409** (trim + case-insensitive for state/city; area name unique **per city**).\n\n**Dashboard counts:** **`POST /api/getCount`** with body `type` = **`content-management`**, **`expenses`**, or **`settings-expense-categories`** (see `count_controller.js` → `resolveCountType`).\n\n**Variables:** Expense category **Create** saves **`{{expenseCategoryId}}`** (parent category document) and **`{{expenseSubcategoryId}}`** for **`POST /api/expense-management/create`** — these names avoid clashing with catalogue **`categoryId`** used elsewhere.",
+    "description": "Postman collection for **`/api/content-management`**, **`/api/expense-category-management`**, **`/api/expense-management`**, plus **`/api/state`**, **`/api/city`**, **`/api/area`** (see `server.js`).\n\n**Setup:** Set **`{{baseUrl}}`** (e.g. `http://localhost:5001` or `https://…execute-api…/staging`). Run **Login** to set **`{{token}}`**. Set **`{{franchiseId}}`** to a real franchise ObjectId before expense category / expense calls.\n\n**State / City / Area:** Run **State → Create** first (sets **`stateId`** and **`stateNameForImport`**), then **City → Create** (**`cityId`**), then **Area → Create** (**`areaId`**). Duplicate **name** on create/update returns **409** (trim + case-insensitive for state/city; area name unique **per city**).\n\n**Dashboard counts:** **`POST /api/getCount`** with body `type` = **`content-management`**, **`expenses`**, or **`settings-expense-categories`** (see `count_controller.js` → `resolveCountType`).\n\n**Variables:** Expense category **Create** saves **`{{expenseCategoryId}}`** (parent category document) and **`{{expenseSubcategoryId}}`** for **`POST /api/expense-management/create`** — these names avoid clashing with catalogue **`categoryId`** used elsewhere.\n\n**06 — Franchise management:** **`/api/franchise`** (CRUD, imports, related-catalog, dropdown). **07 — User management:** **`/api/user`** with subfolders **User** and **Partner** (includes public **`POST /register-partner`**).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -30,7 +30,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -38,8 +41,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "login"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
             },
             "description": "Saves JWT to collection variable **`token`**."
           }
@@ -51,8 +60,12 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/health",
-              "host": ["{{baseUrl}}"],
-              "path": ["health"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
             },
             "description": "No auth."
           }
@@ -67,8 +80,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -76,8 +95,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/getCount",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "getCount"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getCount"
+              ]
             },
             "description": "Returns **`total_content`** under **`record`**."
           }
@@ -87,8 +111,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -96,8 +126,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/getCount",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "getCount"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getCount"
+              ]
             },
             "description": "Franchise admin (`type` 1): scoped to caller franchise. Response includes **`total_expense`**."
           }
@@ -107,8 +142,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -116,8 +157,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/getCount",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "getCount"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getCount"
+              ]
             },
             "description": "Returns **`total_expense_category`** under **`record`** (franchise-scoped for franchise admin)."
           }
@@ -150,8 +196,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -159,8 +211,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/content-management/create",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "content-management", "create"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "content-management",
+                "create"
+              ]
             }
           }
         },
@@ -169,18 +227,44 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/content-management/getAll?page={{page}}&limit={{limit}}&search={{search}}&sort_by={{sortBy}}&sort_order={{sortOrder}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "content-management", "getAll"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "content-management",
+                "getAll"
+              ],
               "query": [
-                { "key": "page", "value": "{{page}}" },
-                { "key": "limit", "value": "{{limit}}" },
-                { "key": "search", "value": "{{search}}" },
-                { "key": "sort_by", "value": "{{sortBy}}", "description": "Optional; server also accepts `sort` as alias." },
-                { "key": "sort_order", "value": "{{sortOrder}}", "description": "Use `asc` or default desc." }
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "{{sortBy}}",
+                  "description": "Optional; server also accepts `sort` as alias."
+                },
+                {
+                  "key": "sort_order",
+                  "value": "{{sortOrder}}",
+                  "description": "Use `asc` or default desc."
+                }
               ]
             }
           }
@@ -190,12 +274,22 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/content-management/get/{{contentId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "content-management", "get", "{{contentId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "content-management",
+                "get",
+                "{{contentId}}"
+              ]
             }
           }
         },
@@ -204,8 +298,14 @@
           "request": {
             "method": "PUT",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -213,8 +313,15 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/content-management/update/{{contentId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "content-management", "update", "{{contentId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "content-management",
+                "update",
+                "{{contentId}}"
+              ]
             }
           }
         },
@@ -223,12 +330,22 @@
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/content-management/delete/{{contentId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "content-management", "delete", "{{contentId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "content-management",
+                "delete",
+                "{{contentId}}"
+              ]
             }
           }
         }
@@ -261,8 +378,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -270,8 +393,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/expense-category-management/create",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "expense-category-management", "create"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "expense-category-management",
+                "create"
+              ]
             },
             "description": "Saves **`expenseCategoryId`** (parent) and **`expenseSubcategoryId`** for expense create — does not overwrite catalogue **`categoryId`**."
           }
@@ -281,22 +410,59 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/expense-category-management/getAll?page={{page}}&limit={{limit}}&search={{search}}&sort_by={{sortBy}}&sort_order={{sortOrder}}&franchise_id={{franchiseId}}&startDate={{startDate}}&endDate={{endDate}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "expense-category-management", "getAll"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "expense-category-management",
+                "getAll"
+              ],
               "query": [
-                { "key": "page", "value": "{{page}}" },
-                { "key": "limit", "value": "{{limit}}" },
-                { "key": "search", "value": "{{search}}" },
-                { "key": "sort_by", "value": "{{sortBy}}" },
-                { "key": "sort", "value": "{{sort}}", "description": "Alias of sort_by when sort_by empty." },
-                { "key": "sort_order", "value": "{{sortOrder}}" },
-                { "key": "franchise_id", "value": "{{franchiseId}}" },
-                { "key": "startDate", "value": "{{startDate}}" },
-                { "key": "endDate", "value": "{{endDate}}" }
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "{{sortBy}}"
+                },
+                {
+                  "key": "sort",
+                  "value": "{{sort}}",
+                  "description": "Alias of sort_by when sort_by empty."
+                },
+                {
+                  "key": "sort_order",
+                  "value": "{{sortOrder}}"
+                },
+                {
+                  "key": "franchise_id",
+                  "value": "{{franchiseId}}"
+                },
+                {
+                  "key": "startDate",
+                  "value": "{{startDate}}"
+                },
+                {
+                  "key": "endDate",
+                  "value": "{{endDate}}"
+                }
               ]
             }
           }
@@ -306,12 +472,22 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/expense-category-management/get/{{expenseCategoryId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "expense-category-management", "get", "{{expenseCategoryId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "expense-category-management",
+                "get",
+                "{{expenseCategoryId}}"
+              ]
             }
           }
         },
@@ -320,8 +496,14 @@
           "request": {
             "method": "PUT",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -329,8 +511,15 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/expense-category-management/update/{{expenseCategoryId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "expense-category-management", "update", "{{expenseCategoryId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "expense-category-management",
+                "update",
+                "{{expenseCategoryId}}"
+              ]
             }
           }
         },
@@ -339,12 +528,22 @@
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/expense-category-management/delete/{{expenseCategoryId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "expense-category-management", "delete", "{{expenseCategoryId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "expense-category-management",
+                "delete",
+                "{{expenseCategoryId}}"
+              ]
             }
           }
         }
@@ -376,8 +575,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -385,8 +590,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/expense-management/create",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "expense-management", "create"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "expense-management",
+                "create"
+              ]
             },
             "description": "**`category_id`** = expense category document id (`expenseCategoryId`). **`subcategory_id`** = expense subcategory id (`expenseSubcategoryId`)."
           }
@@ -396,20 +607,50 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/expense-management/getAll?page={{page}}&limit={{limit}}&search={{search}}&sort_by={{sortBy}}&sort_order={{sortOrder}}&franchise_id={{franchiseId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "expense-management", "getAll"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "expense-management",
+                "getAll"
+              ],
               "query": [
-                { "key": "page", "value": "{{page}}" },
-                { "key": "limit", "value": "{{limit}}" },
-                { "key": "search", "value": "{{search}}" },
-                { "key": "sort_by", "value": "{{sortBy}}" },
-                { "key": "sort", "value": "{{sort}}" },
-                { "key": "sort_order", "value": "{{sortOrder}}" },
-                { "key": "franchise_id", "value": "{{franchiseId}}" }
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "{{sortBy}}"
+                },
+                {
+                  "key": "sort",
+                  "value": "{{sort}}"
+                },
+                {
+                  "key": "sort_order",
+                  "value": "{{sortOrder}}"
+                },
+                {
+                  "key": "franchise_id",
+                  "value": "{{franchiseId}}"
+                }
               ]
             },
             "description": "Optional **`sort_by`**: `id`, `category`, `subcategory`, `expense_name`, `amount`, `date`, `payment_mode`, or default `created_at`."
@@ -420,14 +661,28 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/expense-management/get/{{expenseId}}?franchise_id={{franchiseId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "expense-management", "get", "{{expenseId}}"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "expense-management",
+                "get",
+                "{{expenseId}}"
+              ],
               "query": [
-                { "key": "franchise_id", "value": "{{franchiseId}}", "description": "Required for franchise-scoped lookup." }
+                {
+                  "key": "franchise_id",
+                  "value": "{{franchiseId}}",
+                  "description": "Required for franchise-scoped lookup."
+                }
               ]
             }
           }
@@ -437,8 +692,14 @@
           "request": {
             "method": "PUT",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -446,8 +707,15 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/expense-management/update/{{expenseId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "expense-management", "update", "{{expenseId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "expense-management",
+                "update",
+                "{{expenseId}}"
+              ]
             }
           }
         },
@@ -456,14 +724,27 @@
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/expense-management/delete/{{expenseId}}?franchise_id={{franchiseId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "expense-management", "delete", "{{expenseId}}"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "expense-management",
+                "delete",
+                "{{expenseId}}"
+              ],
               "query": [
-                { "key": "franchise_id", "value": "{{franchiseId}}" }
+                {
+                  "key": "franchise_id",
+                  "value": "{{franchiseId}}"
+                }
               ]
             }
           }
@@ -503,8 +784,14 @@
               "request": {
                 "method": "POST",
                 "header": [
-                  { "key": "Content-Type", "value": "application/json" },
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
                 ],
                 "body": {
                   "mode": "raw",
@@ -512,8 +799,14 @@
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/state/create",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "state", "create"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "state",
+                    "create"
+                  ]
                 },
                 "description": "Response includes **`savedState`**. Resend the same **`name`** to verify **409** `State name already exists.`"
               }
@@ -523,20 +816,56 @@
               "request": {
                 "method": "GET",
                 "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
                 ],
                 "url": {
                   "raw": "{{baseUrl}}/api/state/getAll?page={{page}}&limit={{limit}}&name=&is_active=&sort_by=name&sort_order=1",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "state", "getAll"],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "state",
+                    "getAll"
+                  ],
                   "query": [
-                    { "key": "page", "value": "{{page}}" },
-                    { "key": "limit", "value": "{{limit}}" },
-                    { "key": "name", "value": "", "description": "Optional search (regex, case-insensitive)." },
-                    { "key": "keyword", "value": "", "disabled": true, "description": "Alias for name search." },
-                    { "key": "is_active", "value": "", "description": "Optional boolean filter." },
-                    { "key": "sort_by", "value": "name", "description": "`name` or default `created_at`." },
-                    { "key": "sort_order", "value": "1", "description": "`1` asc, `-1` desc." }
+                    {
+                      "key": "page",
+                      "value": "{{page}}"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "{{limit}}"
+                    },
+                    {
+                      "key": "name",
+                      "value": "",
+                      "description": "Optional search (regex, case-insensitive)."
+                    },
+                    {
+                      "key": "keyword",
+                      "value": "",
+                      "disabled": true,
+                      "description": "Alias for name search."
+                    },
+                    {
+                      "key": "is_active",
+                      "value": "",
+                      "description": "Optional boolean filter."
+                    },
+                    {
+                      "key": "sort_by",
+                      "value": "name",
+                      "description": "`name` or default `created_at`."
+                    },
+                    {
+                      "key": "sort_order",
+                      "value": "1",
+                      "description": "`1` asc, `-1` desc."
+                    }
                   ]
                 }
               }
@@ -546,12 +875,22 @@
               "request": {
                 "method": "GET",
                 "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
                 ],
                 "url": {
                   "raw": "{{baseUrl}}/api/state/get/{{stateId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "state", "get", "{{stateId}}"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "state",
+                    "get",
+                    "{{stateId}}"
+                  ]
                 }
               }
             },
@@ -560,8 +899,14 @@
               "request": {
                 "method": "PUT",
                 "header": [
-                  { "key": "Content-Type", "value": "application/json" },
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
                 ],
                 "body": {
                   "mode": "raw",
@@ -569,8 +914,15 @@
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/state/update/{{stateId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "state", "update", "{{stateId}}"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "state",
+                    "update",
+                    "{{stateId}}"
+                  ]
                 }
               }
             },
@@ -579,8 +931,14 @@
               "request": {
                 "method": "POST",
                 "header": [
-                  { "key": "Content-Type", "value": "application/json" },
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
                 ],
                 "body": {
                   "mode": "raw",
@@ -588,8 +946,14 @@
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/state/imports",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "state", "imports"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "state",
+                    "imports"
+                  ]
                 }
               }
             },
@@ -600,8 +964,14 @@
                 "header": [],
                 "url": {
                   "raw": "{{baseUrl}}/api/state/getDropDown",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "state", "getDropDown"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "state",
+                    "getDropDown"
+                  ]
                 },
                 "description": "No auth in `state_routes`."
               }
@@ -611,12 +981,22 @@
               "request": {
                 "method": "DELETE",
                 "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
                 ],
                 "url": {
                   "raw": "{{baseUrl}}/api/state/delete/{{stateId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "state", "delete", "{{stateId}}"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "state",
+                    "delete",
+                    "{{stateId}}"
+                  ]
                 }
               }
             }
@@ -648,8 +1028,14 @@
               "request": {
                 "method": "POST",
                 "header": [
-                  { "key": "Content-Type", "value": "application/json" },
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
                 ],
                 "body": {
                   "mode": "raw",
@@ -657,8 +1043,14 @@
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/city/create",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "city", "create"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "city",
+                    "create"
+                  ]
                 },
                 "description": "Requires valid **`state_id`**. Sets **`cityId`** on success."
               }
@@ -668,19 +1060,49 @@
               "request": {
                 "method": "GET",
                 "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
                 ],
                 "url": {
                   "raw": "{{baseUrl}}/api/city/getAll?page={{page}}&limit={{limit}}&state_id={{stateId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "city", "getAll"],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "city",
+                    "getAll"
+                  ],
                   "query": [
-                    { "key": "page", "value": "{{page}}" },
-                    { "key": "limit", "value": "{{limit}}" },
-                    { "key": "name", "value": "", "disabled": true },
-                    { "key": "state_name", "value": "", "disabled": true },
-                    { "key": "state_id", "value": "{{stateId}}" },
-                    { "key": "is_active", "value": "", "disabled": true }
+                    {
+                      "key": "page",
+                      "value": "{{page}}"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "{{limit}}"
+                    },
+                    {
+                      "key": "name",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "state_name",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "state_id",
+                      "value": "{{stateId}}"
+                    },
+                    {
+                      "key": "is_active",
+                      "value": "",
+                      "disabled": true
+                    }
                   ]
                 }
               }
@@ -690,12 +1112,22 @@
               "request": {
                 "method": "GET",
                 "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
                 ],
                 "url": {
                   "raw": "{{baseUrl}}/api/city/get/{{cityId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "city", "get", "{{cityId}}"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "city",
+                    "get",
+                    "{{cityId}}"
+                  ]
                 }
               }
             },
@@ -704,8 +1136,14 @@
               "request": {
                 "method": "PUT",
                 "header": [
-                  { "key": "Content-Type", "value": "application/json" },
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
                 ],
                 "body": {
                   "mode": "raw",
@@ -713,8 +1151,15 @@
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/city/update/{{cityId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "city", "update", "{{cityId}}"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "city",
+                    "update",
+                    "{{cityId}}"
+                  ]
                 }
               }
             },
@@ -723,8 +1168,14 @@
               "request": {
                 "method": "POST",
                 "header": [
-                  { "key": "Content-Type", "value": "application/json" },
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
                 ],
                 "body": {
                   "mode": "raw",
@@ -732,8 +1183,14 @@
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/city/imports",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "city", "imports"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "city",
+                    "imports"
+                  ]
                 },
                 "description": "**`state_name`** must match an existing state in DB. Run **State → Create** first so **`stateNameForImport`** is set, or edit manually."
               }
@@ -745,10 +1202,20 @@
                 "header": [],
                 "url": {
                   "raw": "{{baseUrl}}/api/city/getDropDown?state_id={{stateId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "city", "getDropDown"],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "city",
+                    "getDropDown"
+                  ],
                   "query": [
-                    { "key": "state_id", "value": "{{stateId}}", "description": "Optional ObjectId filter." }
+                    {
+                      "key": "state_id",
+                      "value": "{{stateId}}",
+                      "description": "Optional ObjectId filter."
+                    }
                   ]
                 }
               }
@@ -758,12 +1225,22 @@
               "request": {
                 "method": "DELETE",
                 "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
                 ],
                 "url": {
                   "raw": "{{baseUrl}}/api/city/delete/{{cityId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "city", "delete", "{{cityId}}"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "city",
+                    "delete",
+                    "{{cityId}}"
+                  ]
                 }
               }
             }
@@ -795,8 +1272,14 @@
               "request": {
                 "method": "POST",
                 "header": [
-                  { "key": "Content-Type", "value": "application/json" },
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
                 ],
                 "body": {
                   "mode": "raw",
@@ -804,8 +1287,14 @@
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/area/create",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "area", "create"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "area",
+                    "create"
+                  ]
                 },
                 "description": "**`city_id`** = Mongo ObjectId (24 hex). Sets **`areaId`** on success."
               }
@@ -815,22 +1304,65 @@
               "request": {
                 "method": "GET",
                 "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
                 ],
                 "url": {
                   "raw": "{{baseUrl}}/api/area/getAll?page={{page}}&limit={{limit}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "area", "getAll"],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "area",
+                    "getAll"
+                  ],
                   "query": [
-                    { "key": "page", "value": "{{page}}" },
-                    { "key": "limit", "value": "{{limit}}" },
-                    { "key": "name", "value": "", "disabled": true },
-                    { "key": "city", "value": "", "disabled": true },
-                    { "key": "state", "value": "", "disabled": true },
-                    { "key": "pincode", "value": "", "disabled": true },
-                    { "key": "is_active", "value": "", "disabled": true },
-                    { "key": "sort_by", "value": "", "disabled": true },
-                    { "key": "sort_order", "value": "", "disabled": true }
+                    {
+                      "key": "page",
+                      "value": "{{page}}"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "{{limit}}"
+                    },
+                    {
+                      "key": "name",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "city",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "state",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "pincode",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "is_active",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "sort_by",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "sort_order",
+                      "value": "",
+                      "disabled": true
+                    }
                   ]
                 },
                 "description": "Optional: `type=my-franchise`, `franchise_id`, filters — see `area_service.listAreas`."
@@ -841,12 +1373,22 @@
               "request": {
                 "method": "GET",
                 "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
                 ],
                 "url": {
                   "raw": "{{baseUrl}}/api/area/get/{{areaId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "area", "get", "{{areaId}}"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "area",
+                    "get",
+                    "{{areaId}}"
+                  ]
                 }
               }
             },
@@ -855,8 +1397,14 @@
               "request": {
                 "method": "PUT",
                 "header": [
-                  { "key": "Content-Type", "value": "application/json" },
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
                 ],
                 "body": {
                   "mode": "raw",
@@ -864,8 +1412,15 @@
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/area/update/{{areaId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "area", "update", "{{areaId}}"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "area",
+                    "update",
+                    "{{areaId}}"
+                  ]
                 }
               }
             },
@@ -874,8 +1429,14 @@
               "request": {
                 "method": "POST",
                 "header": [
-                  { "key": "Content-Type", "value": "application/json" },
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
                 ],
                 "body": {
                   "mode": "raw",
@@ -883,8 +1444,14 @@
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/area/imports",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "area", "imports"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "area",
+                    "imports"
+                  ]
                 }
               }
             },
@@ -895,11 +1462,24 @@
                 "header": [],
                 "url": {
                   "raw": "{{baseUrl}}/api/area/getDropDown?city_id={{cityId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "area", "getDropDown"],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "area",
+                    "getDropDown"
+                  ],
                   "query": [
-                    { "key": "city_id", "value": "{{cityId}}" },
-                    { "key": "state_id", "value": "", "disabled": true }
+                    {
+                      "key": "city_id",
+                      "value": "{{cityId}}"
+                    },
+                    {
+                      "key": "state_id",
+                      "value": "",
+                      "disabled": true
+                    }
                   ]
                 }
               }
@@ -909,13 +1489,827 @@
               "request": {
                 "method": "DELETE",
                 "header": [
-                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
                 ],
                 "url": {
                   "raw": "{{baseUrl}}/api/area/delete/{{areaId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "area", "delete", "{{areaId}}"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "area",
+                    "delete",
+                    "{{areaId}}"
+                  ]
                 }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 — Franchise management",
+      "description": "Routes from `franchise_routes.js` → **`/api/franchise`**. All routes use **`rateLimiter`**. Use **`{{stateId}}`**, **`{{cityId}}`**, **`{{areaId}}`** from section 05 where needed. **`{{adminId}}`** = any existing user `_id` (saved as franchise `admin_id`). **Create** overwrites collection variable **`franchiseId`** on success.",
+      "item": [
+        {
+          "name": "Create franchise",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  if (j && j.record && j.record._id) {",
+                  "    pm.collectionVariables.set('franchiseId', String(j.record._id));",
+                  "  }",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Franchise-{{$timestamp}}\",\n  \"state_id\": \"{{stateId}}\",\n  \"city_id\": \"{{cityId}}\",\n  \"area_id\": [\n    \"{{areaId}}\"\n  ],\n  \"admin_id\": \"{{adminId}}\",\n  \"contact\": \"+919876543210\",\n  \"is_active\": true,\n  \"categories\": [],\n  \"services\": []\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/franchise/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "franchise",
+                "create"
+              ]
+            },
+            "description": "Requires valid **`admin_id`** (user must exist). **`categories`** / **`services`** are optional ObjectId arrays (validated if non-empty). Duplicate name per city returns **409**."
+          }
+        },
+        {
+          "name": "Get all franchises",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/franchise/getAll?page={{page}}&limit={{limit}}&is_active=&name=&state_id=&city_id=&admin_id=&sort_by=created_at&sort_order=desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "franchise",
+                "getAll"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "is_active",
+                  "value": "",
+                  "description": "Optional boolean."
+                },
+                {
+                  "key": "name",
+                  "value": "",
+                  "description": "Optional search (also keyword / search)."
+                },
+                {
+                  "key": "state_id",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "city_id",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "admin_id",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "sort_by",
+                  "value": "created_at"
+                },
+                {
+                  "key": "sort_order",
+                  "value": "desc"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get franchise by id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/franchise/get/{{franchiseId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "franchise",
+                "get",
+                "{{franchiseId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update franchise",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Franchise-Updated-{{$timestamp}}\",\n  \"contact\": \"+919876543211\",\n  \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/franchise/update/{{franchiseId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "franchise",
+                "update",
+                "{{franchiseId}}"
+              ]
+            },
+            "description": "Send only fields to change. See `updateFranchiseMiddleware` for validation rules."
+          }
+        },
+        {
+          "name": "Delete franchise (soft)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/franchise/delete/{{franchiseId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "franchise",
+                "delete",
+                "{{franchiseId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Import franchises",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"records\": [\n    {\n      \"name\": \"Import-Franchise-{{$timestamp}}\",\n      \"state_id\": \"{{stateId}}\",\n      \"city_id\": \"{{cityId}}\",\n      \"area_id\": [\n        \"{{areaId}}\"\n      ],\n      \"admin_id\": \"{{adminId}}\",\n      \"contact\": \"+919811122233\",\n      \"is_active\": true\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/franchise/imports",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "franchise",
+                "imports"
+              ]
+            },
+            "description": "Each record needs **`name`**, **`state_id`**, **`city_id`**, **`admin_id`** (see `importFranchises` in `franchise_service.js`)."
+          }
+        },
+        {
+          "name": "Related catalog",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/franchise/related-catalog/{{franchiseId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "franchise",
+                "related-catalog",
+                "{{franchiseId}}"
+              ]
+            },
+            "description": "Requires `requireFranchiseRelatedCatalogAccess` (see `role_middleware.js`)."
+          }
+        },
+        {
+          "name": "Get franchise dropdown",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/franchise/getDropDown?full_list=&for_user_id=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "franchise",
+                "getDropDown"
+              ],
+              "query": [
+                {
+                  "key": "full_list",
+                  "value": "",
+                  "description": "true / 1 to list all active franchises."
+                },
+                {
+                  "key": "for_user_id",
+                  "value": "",
+                  "disabled": true,
+                  "description": "Optional; excludes franchises already assigned to other admins."
+                }
+              ]
+            },
+            "description": "Requires `requireFranchiseDropDownAccess`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 — User management",
+      "description": "Routes from **`user_routes.js`** → **`/api/user`**. Split into **User** (staff/backoffice CRUD, verification list) and **Partner** (public mobile register + partner-scoped listing/dropdown). See `authorizeUserCreate` for who may call **Create**.",
+      "item": [
+        {
+          "name": "User",
+          "item": [
+            {
+              "name": "Create user",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  if (j && j.record && j.record._id) {",
+                      "    pm.collectionVariables.set('userId', String(j.record._id));",
+                      "  }",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Example Employee\",\n  \"email\": \"employee.example+{{$timestamp}}@example.com\",\n  \"phone_number\": \"+919812345678\",\n  \"password\": \"Test@1234\",\n  \"type\": 3,\n  \"is_from_web\": true,\n  \"is_active\": true,\n  \"franchise_id\": \"{{franchiseId}}\",\n  \"chat\": true,\n  \"accessible_screens\": []\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/user/create",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "user",
+                    "create"
+                  ]
+                },
+                "description": "**`POST /api/user/create`** — Bearer required. Route uses **`uploadImages.single(\"image\")`**; JSON works when no file is sent (Express JSON body). For profile upload use **form-data** with field **`image`** (file) plus text fields. Super admin (5) / staff (6): any type. Franchise admin (1) / employee (3): only partner (2), employee (3), user (4); **`franchise_id`** forced for partner/employee when omitted."
+              }
+            },
+            {
+              "name": "Change password",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"user_id\": \"{{userId}}\",\n  \"type\": 4,\n  \"new_password\": \"Test@5678\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/user/changePassword",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "user",
+                    "changePassword"
+                  ]
+                },
+                "description": "**`type`**: **2** (partner) or **4** (end user) only."
+              }
+            },
+            {
+              "name": "Get all users",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/user/getAll?page={{page}}&limit={{limit}}&type=&keyword=&is_active=&is_blocked=&franchise_id=",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "user",
+                    "getAll"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "{{page}}"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "{{limit}}"
+                    },
+                    {
+                      "key": "type",
+                      "value": "",
+                      "description": "1 admin, 2 partner, 3 employee, 4 user — access depends on caller."
+                    },
+                    {
+                      "key": "keyword",
+                      "value": "",
+                      "description": "Also `search`."
+                    },
+                    {
+                      "key": "is_active",
+                      "value": ""
+                    },
+                    {
+                      "key": "is_blocked",
+                      "value": ""
+                    },
+                    {
+                      "key": "franchise_id",
+                      "value": "",
+                      "description": "Super admin / staff only; franchise admin cannot pass this."
+                    }
+                  ]
+                },
+                "description": "See `user_controller.getAll` for role-based **`franchise_id`** filtering."
+              }
+            },
+            {
+              "name": "Get verification all (partners)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/user/getVerificationAll?page={{page}}&limit={{limit}}&verification_status=&keyword=&sort_by=created_at&sort_order=desc",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "user",
+                    "getVerificationAll"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "{{page}}"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "{{limit}}"
+                    },
+                    {
+                      "key": "verification_status",
+                      "value": ""
+                    },
+                    {
+                      "key": "keyword",
+                      "value": ""
+                    },
+                    {
+                      "key": "sort_by",
+                      "value": "created_at"
+                    },
+                    {
+                      "key": "sort_order",
+                      "value": "desc"
+                    }
+                  ]
+                },
+                "description": "Lists partners (**`type`**: 2) for verification workflows."
+              }
+            },
+            {
+              "name": "Get user by id",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/user/get/{{userId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "user",
+                    "get",
+                    "{{userId}}"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Update user",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Updated Name\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/user/update/{{userId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "user",
+                    "update",
+                    "{{userId}}"
+                  ]
+                },
+                "description": "Uses **`uploadImages.single(\"image\")`** — same note as Create for multipart."
+              }
+            },
+            {
+              "name": "Delete user (soft)",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/user/delete/{{userId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "user",
+                    "delete",
+                    "{{userId}}"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get user dropdown",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/user/getDropDown",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "user",
+                    "getDropDown"
+                  ]
+                },
+                "description": "**`requireSuperAdmin`** in routes — only super admin."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Partner",
+          "item": [
+            {
+              "name": "Register partner (public)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  if (j && j.record && j.record._id) {",
+                      "    pm.collectionVariables.set('partnerId', String(j.record._id));",
+                      "  }",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "name",
+                      "value": "Mobile Partner {{$timestamp}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "email",
+                      "value": "partner.mobile+{{$timestamp}}@example.com",
+                      "type": "text"
+                    },
+                    {
+                      "key": "phone_number",
+                      "value": "+919812340001",
+                      "type": "text"
+                    },
+                    {
+                      "key": "password",
+                      "value": "Test@1234",
+                      "type": "text"
+                    },
+                    {
+                      "key": "type",
+                      "value": "2",
+                      "type": "text"
+                    },
+                    {
+                      "key": "is_from_web",
+                      "value": "false",
+                      "type": "text"
+                    },
+                    {
+                      "key": "is_active",
+                      "value": "true",
+                      "type": "text"
+                    },
+                    {
+                      "key": "registration_type",
+                      "value": "1",
+                      "type": "text"
+                    },
+                    {
+                      "key": "state_id",
+                      "value": "{{stateId}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "city_id",
+                      "value": "{{cityId}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "profile_url",
+                      "value": "https://example.com/profile-placeholder.png",
+                      "type": "text"
+                    },
+                    {
+                      "key": "is_business",
+                      "value": "false",
+                      "type": "text"
+                    },
+                    {
+                      "key": "image",
+                      "type": "file",
+                      "src": [],
+                      "disabled": true
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/user/register-partner",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "user",
+                    "register-partner"
+                  ]
+                },
+                "description": "**No JWT.** Only **`type`: 2** and **`is_from_web`: false** (`publicPartnerRegisterMiddleware`). Web/admin-created partners must use **User → Create user** with auth. Optional **`image`** file field; enable and attach a file to satisfy profile rules without `profile_url`."
+              }
+            },
+            {
+              "name": "Get all partners",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/user/getAll?page={{page}}&limit={{limit}}&type=2",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "user",
+                    "getAll"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "{{page}}"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "{{limit}}"
+                    },
+                    {
+                      "key": "type",
+                      "value": "2"
+                    }
+                  ]
+                },
+                "description": "Same route as **Get all users** with **`type=2`**."
+              }
+            },
+            {
+              "name": "Get partner by id",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/user/get/{{partnerId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "user",
+                    "get",
+                    "{{partnerId}}"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get partner dropdown (by service)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/user/getPartnerDropDown?service_id={{serviceId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "user",
+                    "getPartnerDropDown"
+                  ],
+                  "query": [
+                    {
+                      "key": "service_id",
+                      "value": "{{serviceId}}"
+                    }
+                  ]
+                },
+                "description": "**`service_id`** required — must exist in **Service** collection."
               }
             }
           ]
@@ -924,27 +2318,122 @@
     }
   ],
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:5001" },
-    { "key": "email", "value": "admin@example.com" },
-    { "key": "password", "value": "your-password" },
-    { "key": "deviceToken", "value": "postman-test-device" },
-    { "key": "token", "value": "" },
-    { "key": "franchiseId", "value": "PUT_FRANCHISE_OBJECT_ID_24_HEX" },
-    { "key": "page", "value": "1" },
-    { "key": "limit", "value": "10" },
-    { "key": "search", "value": "" },
-    { "key": "sort", "value": "" },
-    { "key": "sortBy", "value": "created_at" },
-    { "key": "sortOrder", "value": "desc" },
-    { "key": "startDate", "value": "" },
-    { "key": "endDate", "value": "" },
-    { "key": "contentId", "value": "" },
-    { "key": "expenseCategoryId", "value": "" },
-    { "key": "expenseSubcategoryId", "value": "" },
-    { "key": "expenseId", "value": "" },
-    { "key": "stateId", "value": "", "description": "Set by State → Create (Mongo ObjectId)." },
-    { "key": "cityId", "value": "", "description": "Set by City → Create." },
-    { "key": "areaId", "value": "", "description": "Set by Area → Create." },
-    { "key": "stateNameForImport", "value": "", "description": "Set by State → Create for City → Import cities." }
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5001"
+    },
+    {
+      "key": "email",
+      "value": "admin@example.com"
+    },
+    {
+      "key": "password",
+      "value": "your-password"
+    },
+    {
+      "key": "deviceToken",
+      "value": "postman-test-device"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "franchiseId",
+      "value": "PUT_FRANCHISE_OBJECT_ID_24_HEX"
+    },
+    {
+      "key": "page",
+      "value": "1"
+    },
+    {
+      "key": "limit",
+      "value": "10"
+    },
+    {
+      "key": "search",
+      "value": ""
+    },
+    {
+      "key": "sort",
+      "value": ""
+    },
+    {
+      "key": "sortBy",
+      "value": "created_at"
+    },
+    {
+      "key": "sortOrder",
+      "value": "desc"
+    },
+    {
+      "key": "startDate",
+      "value": ""
+    },
+    {
+      "key": "endDate",
+      "value": ""
+    },
+    {
+      "key": "contentId",
+      "value": ""
+    },
+    {
+      "key": "expenseCategoryId",
+      "value": ""
+    },
+    {
+      "key": "expenseSubcategoryId",
+      "value": ""
+    },
+    {
+      "key": "expenseId",
+      "value": ""
+    },
+    {
+      "key": "stateId",
+      "value": "",
+      "description": "Set by State → Create (Mongo ObjectId)."
+    },
+    {
+      "key": "cityId",
+      "value": "",
+      "description": "Set by City → Create."
+    },
+    {
+      "key": "areaId",
+      "value": "",
+      "description": "Set by Area → Create."
+    },
+    {
+      "key": "stateNameForImport",
+      "value": "",
+      "description": "Set by State → Create for City → Import cities."
+    },
+    {
+      "key": "adminId",
+      "value": "",
+      "description": "User _id used as franchise admin_id on create/import (must exist)."
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "description": "Set by User → Create user on success."
+    },
+    {
+      "key": "partnerId",
+      "value": "",
+      "description": "Set by Partner → Register partner on success."
+    },
+    {
+      "key": "createdById",
+      "value": "",
+      "description": "Optional; Mongo _id of creator for web onboarding flows."
+    },
+    {
+      "key": "serviceId",
+      "value": "",
+      "description": "Catalog service ObjectId for getPartnerDropDown."
+    }
   ]
 }

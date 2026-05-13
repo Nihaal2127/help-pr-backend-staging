@@ -698,9 +698,9 @@ const USER_TYPE_CUSTOMER = 4;
 const USER_LIST_SELECT =
     'name email phone_number user_id profile_url type franchise_id is_active is_blocked city_id state_id created_at';
 
-/** Matches user_controller getAll shape for type-4 address rows. */
+/** Matches user_controller getAll shape for type-4 address rows; includes user_id so rows can be grouped by customer. */
 const CUSTOMER_ADDRESS_LIST_SELECT =
-    'contact_name contact_number address landmark area state_id city_id pincode address_status created_at updated_at';
+    '_id user_id contact_name contact_number address landmark area state_id city_id pincode address_status created_at updated_at';
 
 const isCatalogCategoryActive = (doc) =>
     Boolean(

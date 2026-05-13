@@ -11,6 +11,7 @@ const {
     coerceLegacyServiceMappingArrays,
     validateServiceActiveInactivePartition,
     validateServicesOrderPermutation,
+    filterRecordsByFranchiseMappingToggle,
 } = require('../utils/franchise_catalog_lists');
 
 const fail = (status, message, extra = {}) => ({ ok: false, status, message, ...extra });
@@ -94,14 +95,18 @@ const applyServiceCatalogFiltersToRecords = (records, isActiveFilter, isRequestF
     });
 };
 
-const resolveCatalogBoolFilters = (query) => {
-    const a = parseOptionalQueryBool(query.is_active, 'is_active');
-    if (!a.ok) return { ok: false, message: a.message };
+/**
+ * List/getById query: is_active = franchise mapping on/off (omit = both).
+ * is_request = optional catalog filter on Service.is_request.
+ */
+const resolveFranchiseMappingListQuery = (query) => {
+    const m = parseOptionalQueryBool(query.is_active, 'is_active');
+    if (!m.ok) return { ok: false, message: m.message };
     const r = parseOptionalQueryBool(query.is_request, 'is_request');
     if (!r.ok) return { ok: false, message: r.message };
     return {
         ok: true,
-        isActiveFilter: a.present ? a.value : undefined,
+        mappingActiveFilter: m.present ? m.value : undefined,
         isRequestFilter: r.present ? r.value : undefined,
     };
 };
@@ -130,6 +135,8 @@ const ensureServices = async (serviceIds) => {
     return count === serviceIds.length;
 };
 
+const categoryPopulateSelect = 'name desc image_url is_active is_request category_id';
+
 const listPopulateFields = [
     { path: 'franchise_id', select: 'name admin_name is_active' },
     {
@@ -137,6 +144,11 @@ const listPopulateFields = [
         populate: {
             path: 'service_id',
             select: 'name desc image_url category_id is_active is_request',
+            populate: {
+                path: 'category_id',
+                select: categoryPopulateSelect,
+                match: { deleted_at: null },
+            },
         },
     },
 ];
@@ -160,6 +172,48 @@ const buildSyntheticFranchiseServiceFromFranchiseDoc = async (franchiseOid) => {
     };
     const populated = await FranchiseService.populate([row], listPopulateFields);
     return populated[0];
+};
+
+/**
+ * Every global service (non-deleted), each with franchise_active derived from the latest
+ * franchise_service mapping for this franchise (active_services after coerce).
+ */
+const buildAllServicesWithFranchiseMappingStatus = async (franchiseOid) => {
+    const row = await FranchiseService.findOne({
+        franchise_id: franchiseOid,
+        deleted_at: null,
+    })
+        .sort({ created_at: -1 })
+        .lean();
+
+    let plainForCoerce = row;
+    if (!row) {
+        const synthetic = await buildSyntheticFranchiseServiceFromFranchiseDoc(franchiseOid);
+        if (synthetic) {
+            plainForCoerce =
+                typeof synthetic.toObject === 'function' ? synthetic.toObject() : { ...synthetic };
+        }
+    }
+
+    const activeSet = new Set();
+    if (plainForCoerce) {
+        const coerced = coerceLegacyServiceMappingArrays(plainForCoerce);
+        (coerced.active_services || []).forEach((id) => activeSet.add(id.toString()));
+    }
+
+    const allSvcs = await Service.find({ deleted_at: null })
+        .populate({
+            path: 'category_id',
+            select: categoryPopulateSelect,
+            match: { deleted_at: null },
+        })
+        .sort({ name: 1 })
+        .lean();
+
+    return allSvcs.map((svc) => ({
+        ...svc,
+        franchise_active: activeSet.has(svc._id.toString()),
+    }));
 };
 
 const list = async (query, userId) => {
@@ -196,8 +250,8 @@ const list = async (query, userId) => {
             filter.franchise_id = parsed.oid;
         }
 
-        const filterFlags = resolveCatalogBoolFilters(query);
-        if (!filterFlags.ok) return fail(400, filterFlags.message);
+        const listFlags = resolveFranchiseMappingListQuery(query);
+        if (!listFlags.ok) return fail(400, listFlags.message);
 
         let { data, totalCount, totalPages, currentPage } = await applyPagination(
             FranchiseService,
@@ -223,11 +277,23 @@ const list = async (query, userId) => {
             }
         }
 
-        const records = applyServiceCatalogFiltersToRecords(
-            data,
-            filterFlags.isActiveFilter,
-            filterFlags.isRequestFilter
-        ).map((row) => coerceLegacyServiceMappingArrays(row));
+        const records = filterRecordsByFranchiseMappingToggle(
+            applyServiceCatalogFiltersToRecords(
+                data,
+                undefined,
+                listFlags.isRequestFilter
+            ).map((row) => coerceLegacyServiceMappingArrays(row)),
+            listFlags.mappingActiveFilter,
+            'services_list',
+            'active_services',
+            'inactive_services',
+            'service_id'
+        );
+
+        let all_services;
+        if (filter.franchise_id) {
+            all_services = await buildAllServicesWithFranchiseMappingStatus(filter.franchise_id);
+        }
 
         return ok(200, {
             message: 'Franchise service list fetched successfully.',
@@ -235,6 +301,7 @@ const list = async (query, userId) => {
             totalPages,
             currentPage,
             records,
+            ...(all_services !== undefined && { all_services }),
         });
     } catch (error) {
         console.error('franchiseService.list', error.message);
@@ -303,18 +370,26 @@ const getById = async (id, userId, query = {}) => {
             }
         }
 
-        const filterFlags = resolveCatalogBoolFilters(query);
-        if (!filterFlags.ok) return fail(400, filterFlags.message);
+        const listFlags = resolveFranchiseMappingListQuery(query);
+        if (!listFlags.ok) return fail(400, listFlags.message);
 
         await record.populate(listPopulateFields);
-        const [recordOut] = applyServiceCatalogFiltersToRecords(
+        const afterCatalog = applyServiceCatalogFiltersToRecords(
             [record],
-            filterFlags.isActiveFilter,
-            filterFlags.isRequestFilter
+            undefined,
+            listFlags.isRequestFilter
+        ).map((row) => coerceLegacyServiceMappingArrays(row));
+        const [recordOut] = filterRecordsByFranchiseMappingToggle(
+            afterCatalog,
+            listFlags.mappingActiveFilter,
+            'services_list',
+            'active_services',
+            'inactive_services',
+            'service_id'
         );
         return ok(200, {
             message: 'Franchise service fetched successfully.',
-            record: coerceLegacyServiceMappingArrays(recordOut),
+            record: recordOut,
         });
     } catch (error) {
         console.error('franchiseService.getById', error.message);

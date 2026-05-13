@@ -6,6 +6,7 @@ const State = require('../models/state');
 const City = require('../models/city');
 const Area = require('../models/area');
 const User = require('../models/user');
+const Address = require('../models/address');
 const FranchiseCategory = require('../models/franchise_category');
 const FranchiseService = require('../models/franchise_service');
 const PartnerService = require('../models/partner_service');
@@ -109,13 +110,51 @@ const validateServiceIds = async (oids) => {
     return { ok: true };
 };
 
-/** Only categories from the franchise create payload; all active initially. */
-const buildFranchiseCategoriesListForCreate = (categoryOids) =>
-    categoryOids.map((category_id) => ({ category_id, is_active: true }));
+/**
+ * Franchise create: payload categories stay active; every other global (non-deleted) category is inactive.
+ * `categories_list` / `categories_order` include the full partition (active first in payload order, then inactive sorted).
+ */
+const buildInitialFranchiseCategoryMappingForCreate = async (categoryOids) => {
+    const active_categories = dedupeIdsPreserveOrder(categoryOids || []);
+    const activeSet = new Set(active_categories.map((id) => id.toString()));
+    const allRows = await Category.find({ deleted_at: null }).select('_id').lean();
+    const inactive_categories = [];
+    for (const row of allRows) {
+        const cid = row._id.toString();
+        if (!activeSet.has(cid)) inactive_categories.push(row._id);
+    }
+    inactive_categories.sort((a, b) => a.toString().localeCompare(b.toString()));
 
-/** Only services from the franchise create payload; all active initially. */
-const buildFranchiseServicesListForCreate = (serviceOids) =>
-    serviceOids.map((service_id) => ({ service_id, is_active: true }));
+    const categories_list = [
+        ...active_categories.map((category_id) => ({ category_id, is_active: true })),
+        ...inactive_categories.map((category_id) => ({ category_id, is_active: false })),
+    ];
+    const categories_order = [...active_categories, ...inactive_categories];
+    return { categories_list, active_categories, inactive_categories, categories_order };
+};
+
+/**
+ * Franchise create: payload services stay active; every other global (non-deleted) service is inactive.
+ * `services_list` / `services_order` include the full partition (active first in payload order, then inactive sorted).
+ */
+const buildInitialFranchiseServiceMappingForCreate = async (serviceOids) => {
+    const active_services = dedupeIdsPreserveOrder(serviceOids || []);
+    const activeSet = new Set(active_services.map((id) => id.toString()));
+    const allRows = await Service.find({ deleted_at: null }).select('_id').lean();
+    const inactive_services = [];
+    for (const row of allRows) {
+        const sid = row._id.toString();
+        if (!activeSet.has(sid)) inactive_services.push(row._id);
+    }
+    inactive_services.sort((a, b) => a.toString().localeCompare(b.toString()));
+
+    const services_list = [
+        ...active_services.map((service_id) => ({ service_id, is_active: true })),
+        ...inactive_services.map((service_id) => ({ service_id, is_active: false })),
+    ];
+    const services_order = [...active_services, ...inactive_services];
+    return { services_list, active_services, inactive_services, services_order };
+};
 
 const dedupeIdsPreserveOrder = (oids) => {
     const seen = new Set();
@@ -356,21 +395,23 @@ const createFranchise = async (body) => {
 
         const saved = await doc.save();
         try {
-            const categories_list = buildFranchiseCategoriesListForCreate(categoryOids);
-            const services_list = buildFranchiseServicesListForCreate(serviceOids);
+            const [catMapping, svcMapping] = await Promise.all([
+                buildInitialFranchiseCategoryMappingForCreate(categoryOids),
+                buildInitialFranchiseServiceMappingForCreate(serviceOids),
+            ]);
             await FranchiseCategory.create({
                 franchise_id: saved._id,
-                categories_list,
-                active_categories: [...categoryOids],
-                inactive_categories: [],
-                categories_order: [...categoryOids],
+                categories_list: catMapping.categories_list,
+                active_categories: catMapping.active_categories,
+                inactive_categories: catMapping.inactive_categories,
+                categories_order: catMapping.categories_order,
             });
             await FranchiseService.create({
                 franchise_id: saved._id,
-                services_list,
-                active_services: [...serviceOids],
-                inactive_services: [],
-                services_order: [...serviceOids],
+                services_list: svcMapping.services_list,
+                active_services: svcMapping.active_services,
+                inactive_services: svcMapping.inactive_services,
+                services_order: svcMapping.services_order,
             });
         } catch (mapError) {
             await Franchise.findByIdAndDelete(saved._id);
@@ -605,6 +646,38 @@ const listFranchisesForDropdown = async (query) => {
             deleted_at: null,
             is_active: true,
         };
+
+        const fullListRaw = query.full_list ?? query.fullList;
+        const fullList =
+            fullListRaw === true ||
+            fullListRaw === 1 ||
+            String(fullListRaw ?? '')
+                .trim()
+                .toLowerCase() === 'true' ||
+            String(fullListRaw ?? '').trim() === '1';
+
+        if (!fullList) {
+            const adminFranchiseOwners = {
+                deleted_at: null,
+                type: 1,
+                franchise_id: { $exists: true, $ne: null },
+            };
+            const forUserRaw = query.for_user_id ?? query.forUserId;
+            if (forUserRaw !== undefined && forUserRaw !== null && String(forUserRaw).trim() !== '') {
+                const parsedUser = parseObjectId(forUserRaw, 'for_user_id');
+                if (!parsedUser.ok) {
+                    return fail(400, parsedUser.message);
+                }
+                adminFranchiseOwners._id = { $ne: parsedUser.oid };
+            }
+
+            const assignedFranchiseIds = await User.distinct('franchise_id', adminFranchiseOwners);
+            const blockedIds = assignedFranchiseIds.filter((id) => id != null);
+            if (blockedIds.length > 0) {
+                filter._id = { $nin: blockedIds };
+            }
+        }
+
         const sort = { name: 1 };
         const projection = { _id: 1, name: 1 };
         const { data: rows } = await applyDropDownFilter(Franchise, filter, sort, projection);
@@ -620,9 +693,14 @@ const listFranchisesForDropdown = async (query) => {
 
 const USER_TYPE_PARTNER = 2;
 const USER_TYPE_EMPLOYEE = 3;
+const USER_TYPE_CUSTOMER = 4;
 
 const USER_LIST_SELECT =
     'name email phone_number user_id profile_url type franchise_id is_active is_blocked city_id state_id created_at';
+
+/** Matches user_controller getAll shape for type-4 address rows. */
+const CUSTOMER_ADDRESS_LIST_SELECT =
+    'contact_name contact_number address landmark area state_id city_id pincode address_status created_at updated_at';
 
 const isCatalogCategoryActive = (doc) =>
     Boolean(
@@ -692,6 +770,117 @@ const mergeFranchiseServiceEntries = (docs) => {
     return [...map.values()];
 };
 
+/** Area ObjectIds linked on franchise.area_id (same shape as area_service / count_controller). */
+const collectFranchiseAreaIds = (franchiseDocs) => {
+    const seen = new Set();
+    const oids = [];
+    for (const fr of franchiseDocs || []) {
+        if (!fr || fr.area_id == null) continue;
+        const arr = Array.isArray(fr.area_id) ? fr.area_id : [fr.area_id];
+        for (const item of arr) {
+            let oid = null;
+            if (item instanceof mongoose.Types.ObjectId) {
+                oid = item;
+            } else if (item && typeof item === 'object' && item._id) {
+                oid = item._id;
+            } else if (typeof item === 'string' && /^[a-fA-F0-9]{24}$/i.test(item.trim())) {
+                oid = new mongoose.Types.ObjectId(item.trim());
+            }
+            if (!oid) continue;
+            const k = oid.toString();
+            if (seen.has(k)) continue;
+            seen.add(k);
+            oids.push(oid);
+        }
+    }
+    return oids;
+};
+
+/**
+ * Type-4 users with at least one non-deleted Address whose pincode matches a pincode
+ * on one of the franchise's linked areas (area.pincodes).
+ */
+const fetchCustomersMatchingFranchiseAreaPincodes = async (franchiseLean) => {
+    const areaIds = collectFranchiseAreaIds([franchiseLean]);
+    if (areaIds.length === 0) return [];
+
+    const areas = await Area.find({
+        _id: { $in: areaIds },
+        deleted_at: null,
+    })
+        .select('pincodes')
+        .lean();
+
+    const allowedPins = [];
+    const pinSeen = new Set();
+    for (const a of areas) {
+        for (const p of a.pincodes || []) {
+            const t = String(p).trim();
+            if (!t || pinSeen.has(t)) continue;
+            pinSeen.add(t);
+            allowedPins.push(t);
+        }
+    }
+    if (allowedPins.length === 0) return [];
+
+    const rows = await Address.aggregate([
+        {
+            $match: {
+                deleted_at: null,
+                user_id: { $exists: true, $ne: null },
+            },
+        },
+        {
+            $addFields: {
+                pinNorm: {
+                    $trim: {
+                        input: {
+                            $toString: { $ifNull: ['$pincode', ''] },
+                        },
+                    },
+                },
+            },
+        },
+        { $match: { pinNorm: { $in: allowedPins } } },
+        { $group: { _id: '$user_id' } },
+    ]);
+
+    const userIds = rows.map((r) => r._id).filter(Boolean);
+    if (userIds.length === 0) return [];
+
+    const customers = await User.find({
+        _id: { $in: userIds },
+        type: USER_TYPE_CUSTOMER,
+        deleted_at: null,
+    })
+        .select(USER_LIST_SELECT)
+        .sort({ name: 1 })
+        .lean();
+
+    if (customers.length === 0) return [];
+
+    const allAddresses = await Address.find({
+        user_id: { $in: userIds },
+        deleted_at: null,
+    })
+        .sort({ created_at: 1 })
+        .select(CUSTOMER_ADDRESS_LIST_SELECT)
+        .lean();
+
+    const addressesByUserId = new Map();
+    for (const addr of allAddresses) {
+        const uid = addr.user_id && addr.user_id.toString();
+        if (!uid) continue;
+        if (!addressesByUserId.has(uid)) addressesByUserId.set(uid, []);
+        addressesByUserId.get(uid).push(addr);
+    }
+
+    return customers.map((c) => ({
+        ...c,
+        addresses: addressesByUserId.get(c._id.toString()) || [],
+    }));
+};
+
 const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
     try {
         const parsed = parseObjectId(franchiseIdRaw, 'franchise_id');
@@ -701,11 +890,11 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
             _id: parsed.oid,
             deleted_at: null,
         })
-            .select('_id name')
+            .select('_id name area_id')
             .lean();
         if (!franchise) return fail(404, 'Franchise not found.');
 
-        const [fcDocs, fsDocs, partners, employees] = await Promise.all([
+        const [fcDocs, fsDocs, partners, employees, customers] = await Promise.all([
             FranchiseCategory.find({ franchise_id: parsed.oid, deleted_at: null })
                 .sort({ created_at: -1 })
                 .lean(),
@@ -728,6 +917,7 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
                 .select(USER_LIST_SELECT)
                 .sort({ name: 1 })
                 .lean(),
+            fetchCustomersMatchingFranchiseAreaPincodes(franchise),
         ]);
 
         const mergedCatEntries = mergeFranchiseCategoryEntries(fcDocs);
@@ -857,6 +1047,7 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
                 services,
                 partners: partnersWithServices,
                 employees,
+                customers,
             },
         });
     } catch (err) {

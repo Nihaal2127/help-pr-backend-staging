@@ -1,8 +1,17 @@
 const mongoose = require('mongoose');
 const Area = require('../models/area');
 const City = require('../models/city');
+const User = require('../models/user');
+const Franchise = require('../models/franchise');
 const { applyPagination, applyDropDownFilter } = require('../utils/pagination');
 const { parseBoolean } = require('../utils/parser');
+
+const escapeRegExp = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const areaNameExistsInCity = (trimmedName, cityObjectId) => ({
+    deleted_at: null,
+    city_id: cityObjectId,
+    name: new RegExp(`^${escapeRegExp(trimmedName)}$`, 'i'),
+});
 
 const normalizePincodes = (pincodes) => {
     if (!pincodes || !Array.isArray(pincodes)) return [];
@@ -54,7 +63,68 @@ const attachCityNames = async (areaDocs) => {
 const fail = (status, message, extra = {}) => ({ ok: false, status, message, ...extra });
 const ok = (status, data) => ({ ok: true, status, data });
 
-const listAreas = async (query) => {
+const collectFranchiseAreaIds = (franchiseDocs) => {
+    const seen = new Set();
+    const oids = [];
+    for (const fr of franchiseDocs || []) {
+        if (!fr || fr.area_id == null) continue;
+        const arr = Array.isArray(fr.area_id) ? fr.area_id : [fr.area_id];
+        for (const item of arr) {
+            let oid = null;
+            if (item instanceof mongoose.Types.ObjectId) {
+                oid = item;
+            } else if (item && typeof item === 'object' && item._id) {
+                oid = item._id;
+            } else if (typeof item === 'string' && /^[a-fA-F0-9]{24}$/i.test(item.trim())) {
+                oid = new mongoose.Types.ObjectId(item.trim());
+            }
+            if (!oid) continue;
+            const k = oid.toString();
+            if (seen.has(k)) continue;
+            seen.add(k);
+            oids.push(oid);
+        }
+    }
+    return oids;
+};
+
+const getMyFranchiseAreaIds = async (userId) => {
+    const caller = await User.findOne({ _id: userId, deleted_at: null }).select('type franchise_id').lean();
+    if (!caller) return [];
+
+    const callerType = Number(caller.type);
+    let franchiseDocs = [];
+    if (callerType === 1) {
+        if (caller.franchise_id) {
+            const one = await Franchise.findOne({
+                _id: caller.franchise_id,
+                deleted_at: null,
+            })
+                .select('_id area_id')
+                .lean();
+            franchiseDocs = one ? [one] : [];
+        } else {
+            franchiseDocs = await Franchise.find({
+                deleted_at: null,
+                admin_id: userId,
+            })
+                .select('_id area_id')
+                .lean();
+        }
+    } else if (caller.franchise_id) {
+        const one = await Franchise.findOne({
+            _id: caller.franchise_id,
+            deleted_at: null,
+        })
+            .select('_id area_id')
+            .lean();
+        if (one) franchiseDocs = [one];
+    }
+
+    return collectFranchiseAreaIds(franchiseDocs);
+};
+
+const listAreas = async (query, authUser) => {
     try {
         const page = parseInt(query.page, 10) || 1;
         const limit = parseInt(query.limit, 10) || 10;
@@ -66,6 +136,32 @@ const listAreas = async (query) => {
             deleted_at: null,
             ...(query.is_active !== undefined && { is_active }),
         };
+
+        const typeRaw = (query.type ?? '').toString().trim().toLowerCase();
+        const isMyFranchiseList = typeRaw === 'my-franchise' || typeRaw === 'my_franchise';
+        if (isMyFranchiseList) {
+            if (!authUser || authUser.id == null) {
+                return fail(401, 'Unauthorized.');
+            }
+            const areaIds = await getMyFranchiseAreaIds(authUser.id);
+            filter._id = { $in: areaIds };
+        } else if (
+            query.franchise_id !== undefined &&
+            query.franchise_id !== null &&
+            String(query.franchise_id).trim() !== ''
+        ) {
+            const parsedFranchise = parseObjectId(query.franchise_id, 'franchise_id');
+            if (!parsedFranchise.ok) return fail(400, parsedFranchise.message);
+            const franchise = await Franchise.findOne({
+                _id: parsedFranchise.oid,
+                deleted_at: null,
+            })
+                .select('area_id')
+                .lean();
+            if (!franchise) return fail(404, 'Franchise not found.');
+            const areaIds = collectFranchiseAreaIds([franchise]);
+            filter._id = { $in: areaIds };
+        }
         const areaNameSearch = query.areaname || query.name;
         if (areaNameSearch) {
             filter.name = { $regex: new RegExp(String(areaNameSearch).trim(), 'i') };
@@ -159,6 +255,10 @@ const createArea = async (body) => {
     try {
         const { name, is_active, city_id, pincodes } = body;
         const pinList = normalizePincodes(pincodes);
+        const trimmedName = String(name).trim();
+        if (!trimmedName) {
+            return fail(400, 'Area name is required.');
+        }
 
         const parsedCity = parseObjectId(city_id, 'city_id');
         if (!parsedCity.ok) return fail(400, parsedCity.message);
@@ -166,15 +266,11 @@ const createArea = async (body) => {
         const ctx = await loadCityContext(parsedCity.oid);
         if (!ctx) return fail(404, 'City not found.');
 
-        const existing = await Area.findOne({
-            name,
-            city_id: ctx.city._id,
-            deleted_at: null,
-        });
+        const existing = await Area.findOne(areaNameExistsInCity(trimmedName, ctx.city._id));
         if (existing) return fail(409, 'Area name already exists for this city.');
 
         const newArea = new Area({
-            name,
+            name: trimmedName,
             is_active,
             city_id: ctx.city._id,
             state_id: ctx.state_id,
@@ -212,14 +308,17 @@ const updateArea = async (id, body) => {
             area.city_id = ctx.city._id;
         }
 
-        if (body.name) {
+        if (body.name !== undefined) {
+            const trimmedName = String(body.name).trim();
+            if (!trimmedName) {
+                return fail(400, 'Area name is required.');
+            }
             const existing = await Area.findOne({
-                name: body.name,
-                city_id: targetCityId,
-                deleted_at: null,
+                ...areaNameExistsInCity(trimmedName, targetCityId),
                 _id: { $ne: id },
             });
             if (existing) return fail(409, 'Area name already exists for this city.');
+            if (updateData.name !== undefined) updateData.name = trimmedName;
         }
 
         if (body.pincodes !== undefined) {
@@ -296,8 +395,12 @@ const importAreas = async (records) => {
                 return fail(400, `City not found for area: ${rec.name}`);
             }
             const pinList = normalizePincodes(rec.pincodes);
+            const trimmedAreaName = String(rec.name || '').trim();
+            if (!trimmedAreaName) {
+                return fail(400, 'Each record must include a non-empty area name.');
+            }
             toInsert.push({
-                name: rec.name,
+                name: trimmedAreaName,
                 city_id: ctx.city._id,
                 is_active: rec.is_active,
                 state_id: ctx.state_id,
@@ -306,20 +409,21 @@ const importAreas = async (records) => {
             });
         }
 
-        const keys = toInsert.map((r) => `${r.city_id.toString()}:${r.name}`);
-        const dupInFile = new Set();
-        const seen = new Set();
-        for (const k of keys) {
-            if (seen.has(k)) dupInFile.add(k);
-            seen.add(k);
-        }
-        if (dupInFile.size > 0) {
-            return fail(409, 'Duplicate city/name combinations in import file.');
+        const seenKeys = new Set();
+        for (const r of toInsert) {
+            const k = `${r.city_id.toString()}:${r.name.toLowerCase()}`;
+            if (seenKeys.has(k)) {
+                return fail(409, 'Duplicate area name for the same city in import file.');
+            }
+            seenKeys.add(k);
         }
 
         const existing = await Area.find({
             deleted_at: null,
-            $or: toInsert.map((r) => ({ name: r.name, city_id: r.city_id })),
+            $or: toInsert.map((r) => ({
+                city_id: r.city_id,
+                name: new RegExp(`^${escapeRegExp(r.name)}$`, 'i'),
+            })),
         }).select('name city_id');
 
         if (existing.length > 0) {
@@ -336,6 +440,26 @@ const importAreas = async (records) => {
         console.log('importAreas', error.message);
         return fail(500, 'Internal server error.', { error: error.message });
     }
+};
+
+/** Area IDs already linked on a non-deleted franchise; optionally skip one franchise (e.g. edit form). */
+const collectAreaIdsAssignedToOtherFranchises = async (ignoreFranchiseOid) => {
+    const docs = await Franchise.find({ deleted_at: null }).select('_id area_id').lean();
+    const excluded = new Set();
+    for (const fr of docs) {
+        if (ignoreFranchiseOid && String(fr._id) === String(ignoreFranchiseOid)) {
+            continue;
+        }
+        const arr = Array.isArray(fr.area_id) ? fr.area_id : [];
+        for (const raw of arr) {
+            if (!raw) continue;
+            const s = raw instanceof mongoose.Types.ObjectId ? raw.toString() : String(raw).trim();
+            if (s && /^[a-fA-F0-9]{24}$/.test(s)) {
+                excluded.add(s);
+            }
+        }
+    }
+    return [...excluded].map((s) => new mongoose.Types.ObjectId(s));
 };
 
 const listAreasForDropdown = async (query) => {
@@ -382,6 +506,21 @@ const listAreasForDropdown = async (query) => {
                 return fail(400, 'Provide at least one valid state_id.');
             }
             filter.state_id = { $in: oids };
+        }
+
+        let ignoreFranchiseOid = null;
+        if (
+            query.franchise_id !== undefined &&
+            query.franchise_id !== null &&
+            String(query.franchise_id).trim() !== ''
+        ) {
+            const parsedFr = parseObjectId(query.franchise_id, 'franchise_id');
+            if (!parsedFr.ok) return fail(400, parsedFr.message);
+            ignoreFranchiseOid = parsedFr.oid;
+        }
+        const assignedElsewhere = await collectAreaIdsAssignedToOtherFranchises(ignoreFranchiseOid);
+        if (assignedElsewhere.length > 0) {
+            filter._id = { $nin: assignedElsewhere };
         }
 
         const { data: areas } = await applyDropDownFilter(Area, filter, sort);

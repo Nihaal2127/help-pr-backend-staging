@@ -13,10 +13,38 @@ const applyPagination = async (
   // Remove null values from populateFields to avoid errors
   const validPopulateFields = populateFields.filter(field => field !== null);
 
+  const dedupeField = options.dedupeByField;
+  const dedupeStages =
+    dedupeField && typeof dedupeField === 'string'
+      ? [
+          {
+            $addFields: {
+              __dedupeKey: {
+                $toLower: {
+                  $trim: {
+                    input: { $ifNull: [`$${dedupeField}`, ''] },
+                  },
+                },
+              },
+            },
+          },
+          { $sort: sort },
+          {
+            $group: {
+              _id: '$__dedupeKey',
+              __doc: { $first: '$$ROOT' },
+            },
+          },
+          { $replaceRoot: { newRoot: '$__doc' } },
+          { $project: { __dedupeKey: 0 } },
+          { $sort: sort },
+        ]
+      : [{ $sort: sort }];
+
   // Define the aggregation pipeline
   const pipeline = [
     { $match: filter }, // Match documents based on the filter
-    { $sort: sort }, // Apply sorting if provided
+    ...dedupeStages,
     {
       $facet: {
         data: [

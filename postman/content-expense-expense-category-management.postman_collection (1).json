@@ -1,0 +1,950 @@
+{
+  "info": {
+    "_postman_id": "e7d3c1b0-9a8f-4e7d-bc1a-2f3e4d5c6b7a",
+    "name": "Content + Expense Category + Expense Management",
+    "description": "Postman collection for **`/api/content-management`**, **`/api/expense-category-management`**, **`/api/expense-management`**, plus **`/api/state`**, **`/api/city`**, **`/api/area`** (see `server.js`).\n\n**Setup:** Set **`{{baseUrl}}`** (e.g. `http://localhost:5001` or `https://…execute-api…/staging`). Run **Login** to set **`{{token}}`**. Set **`{{franchiseId}}`** to a real franchise ObjectId before expense category / expense calls.\n\n**State / City / Area:** Run **State → Create** first (sets **`stateId`** and **`stateNameForImport`**), then **City → Create** (**`cityId`**), then **Area → Create** (**`areaId`**). Duplicate **name** on create/update returns **409** (trim + case-insensitive for state/city; area name unique **per city**).\n\n**Dashboard counts:** **`POST /api/getCount`** with body `type` = **`content-management`**, **`expenses`**, or **`settings-expense-categories`** (see `count_controller.js` → `resolveCountType`).\n\n**Variables:** Expense category **Create** saves **`{{expenseCategoryId}}`** (parent category document) and **`{{expenseSubcategoryId}}`** for **`POST /api/expense-management/create`** — these names avoid clashing with catalogue **`categoryId`** used elsewhere.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00 — Auth & health",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  if (j && j.record && j.record.auth_token) {",
+                  "    pm.collectionVariables.set('token', j.record.auth_token);",
+                  "  }",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"device_token\": \"{{deviceToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Saves JWT to collection variable **`token`**."
+          }
+        },
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "No auth."
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 — Dashboard (getCount)",
+      "item": [
+        {
+          "name": "getCount — content-management",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"content-management\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/getCount",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "getCount"]
+            },
+            "description": "Returns **`total_content`** under **`record`**."
+          }
+        },
+        {
+          "name": "getCount — expenses",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"expenses\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/getCount",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "getCount"]
+            },
+            "description": "Franchise admin (`type` 1): scoped to caller franchise. Response includes **`total_expense`**."
+          }
+        },
+        {
+          "name": "getCount — settings-expense-categories",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"settings-expense-categories\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/getCount",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "getCount"]
+            },
+            "description": "Returns **`total_expense_category`** under **`record`** (franchise-scoped for franchise admin)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 — Content management",
+      "item": [
+        {
+          "name": "Create content",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  try {",
+                  "    const j = pm.response.json();",
+                  "    if (j && j.record && j.record._id) {",
+                  "      pm.collectionVariables.set('contentId', String(j.record._id));",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Terms & Conditions\",\n  \"description\": \"Application terms and conditions text.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/content-management/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "content-management", "create"]
+            }
+          }
+        },
+        {
+          "name": "Get all content",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/content-management/getAll?page={{page}}&limit={{limit}}&search={{search}}&sort_by={{sortBy}}&sort_order={{sortOrder}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "content-management", "getAll"],
+              "query": [
+                { "key": "page", "value": "{{page}}" },
+                { "key": "limit", "value": "{{limit}}" },
+                { "key": "search", "value": "{{search}}" },
+                { "key": "sort_by", "value": "{{sortBy}}", "description": "Optional; server also accepts `sort` as alias." },
+                { "key": "sort_order", "value": "{{sortOrder}}", "description": "Use `asc` or default desc." }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get content by id",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/content-management/get/{{contentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "content-management", "get", "{{contentId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update content",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Payment Policy\",\n  \"description\": \"Payment-related policies.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/content-management/update/{{contentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "content-management", "update", "{{contentId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete content",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/content-management/delete/{{contentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "content-management", "delete", "{{contentId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 — Expense category management",
+      "item": [
+        {
+          "name": "Create expense category",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  try {",
+                  "    const j = pm.response.json();",
+                  "    if (j && j.record) {",
+                  "      if (j.record._id) pm.collectionVariables.set('expenseCategoryId', String(j.record._id));",
+                  "      if (j.record.subcategory_id) pm.collectionVariables.set('expenseSubcategoryId', String(j.record.subcategory_id));",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"franchise_id\": \"{{franchiseId}}\",\n  \"category_name\": \"Travel\",\n  \"sub_category_name\": \"Fuel\",\n  \"description\": \"Travel and commute related expenses.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/expense-category-management/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "expense-category-management", "create"]
+            },
+            "description": "Saves **`expenseCategoryId`** (parent) and **`expenseSubcategoryId`** for expense create — does not overwrite catalogue **`categoryId`**."
+          }
+        },
+        {
+          "name": "Get all expense categories",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/expense-category-management/getAll?page={{page}}&limit={{limit}}&search={{search}}&sort_by={{sortBy}}&sort_order={{sortOrder}}&franchise_id={{franchiseId}}&startDate={{startDate}}&endDate={{endDate}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "expense-category-management", "getAll"],
+              "query": [
+                { "key": "page", "value": "{{page}}" },
+                { "key": "limit", "value": "{{limit}}" },
+                { "key": "search", "value": "{{search}}" },
+                { "key": "sort_by", "value": "{{sortBy}}" },
+                { "key": "sort", "value": "{{sort}}", "description": "Alias of sort_by when sort_by empty." },
+                { "key": "sort_order", "value": "{{sortOrder}}" },
+                { "key": "franchise_id", "value": "{{franchiseId}}" },
+                { "key": "startDate", "value": "{{startDate}}" },
+                { "key": "endDate", "value": "{{endDate}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get expense category by id",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/expense-category-management/get/{{expenseCategoryId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "expense-category-management", "get", "{{expenseCategoryId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update expense category",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"franchise_id\": \"{{franchiseId}}\",\n  \"category_name\": \"Travel (updated)\",\n  \"sub_category_name\": \"Fuel (updated)\",\n  \"description\": \"Updated description.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/expense-category-management/update/{{expenseCategoryId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "expense-category-management", "update", "{{expenseCategoryId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete expense category",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/expense-category-management/delete/{{expenseCategoryId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "expense-category-management", "delete", "{{expenseCategoryId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 — Expense management",
+      "item": [
+        {
+          "name": "Create expense",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  try {",
+                  "    const j = pm.response.json();",
+                  "    if (j && j.record && j.record._id) {",
+                  "      pm.collectionVariables.set('expenseId', String(j.record._id));",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"franchise_id\": \"{{franchiseId}}\",\n  \"category_id\": \"{{expenseCategoryId}}\",\n  \"subcategory_id\": \"{{expenseSubcategoryId}}\",\n  \"expense_name\": \"Petrol\",\n  \"description\": \"Client visit travel.\",\n  \"expense_amount\": 500,\n  \"expense_date\": \"2026-05-12\",\n  \"payment_mode\": \"UPI\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/expense-management/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "expense-management", "create"]
+            },
+            "description": "**`category_id`** = expense category document id (`expenseCategoryId`). **`subcategory_id`** = expense subcategory id (`expenseSubcategoryId`)."
+          }
+        },
+        {
+          "name": "Get all expenses",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/expense-management/getAll?page={{page}}&limit={{limit}}&search={{search}}&sort_by={{sortBy}}&sort_order={{sortOrder}}&franchise_id={{franchiseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "expense-management", "getAll"],
+              "query": [
+                { "key": "page", "value": "{{page}}" },
+                { "key": "limit", "value": "{{limit}}" },
+                { "key": "search", "value": "{{search}}" },
+                { "key": "sort_by", "value": "{{sortBy}}" },
+                { "key": "sort", "value": "{{sort}}" },
+                { "key": "sort_order", "value": "{{sortOrder}}" },
+                { "key": "franchise_id", "value": "{{franchiseId}}" }
+              ]
+            },
+            "description": "Optional **`sort_by`**: `id`, `category`, `subcategory`, `expense_name`, `amount`, `date`, `payment_mode`, or default `created_at`."
+          }
+        },
+        {
+          "name": "Get expense by id",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/expense-management/get/{{expenseId}}?franchise_id={{franchiseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "expense-management", "get", "{{expenseId}}"],
+              "query": [
+                { "key": "franchise_id", "value": "{{franchiseId}}", "description": "Required for franchise-scoped lookup." }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update expense",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"franchise_id\": \"{{franchiseId}}\",\n  \"category_id\": \"{{expenseCategoryId}}\",\n  \"subcategory_id\": \"{{expenseSubcategoryId}}\",\n  \"expense_name\": \"Petrol (updated)\",\n  \"description\": \"Updated notes.\",\n  \"expense_amount\": 650,\n  \"expense_date\": \"2026-05-12\",\n  \"payment_mode\": \"Online\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/expense-management/update/{{expenseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "expense-management", "update", "{{expenseId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete expense",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/expense-management/delete/{{expenseId}}?franchise_id={{franchiseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "expense-management", "delete", "{{expenseId}}"],
+              "query": [
+                { "key": "franchise_id", "value": "{{franchiseId}}" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 — State, City & Area",
+      "description": "Routes from `state_routes.js`, `city_routes.js`, `area_routes.js`. All routes use rate limiting. **`getDropDown`** for each resource has **no** `authMiddleware` in code; other calls need **`Bearer {{token}}`**.",
+      "item": [
+        {
+          "name": "State",
+          "item": [
+            {
+              "name": "Create state",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 200) {",
+                      "  try {",
+                      "    const j = pm.response.json();",
+                      "    if (j && j.savedState && j.savedState._id) {",
+                      "      pm.collectionVariables.set('stateId', String(j.savedState._id));",
+                      "    }",
+                      "    if (j && j.savedState && j.savedState.name) {",
+                      "      pm.collectionVariables.set('stateNameForImport', String(j.savedState.name));",
+                      "    }",
+                      "  } catch (e) {}",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"State-{{$timestamp}}\",\n  \"is_active\": true\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/state/create",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "state", "create"]
+                },
+                "description": "Response includes **`savedState`**. Resend the same **`name`** to verify **409** `State name already exists.`"
+              }
+            },
+            {
+              "name": "Get all states",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/state/getAll?page={{page}}&limit={{limit}}&name=&is_active=&sort_by=name&sort_order=1",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "state", "getAll"],
+                  "query": [
+                    { "key": "page", "value": "{{page}}" },
+                    { "key": "limit", "value": "{{limit}}" },
+                    { "key": "name", "value": "", "description": "Optional search (regex, case-insensitive)." },
+                    { "key": "keyword", "value": "", "disabled": true, "description": "Alias for name search." },
+                    { "key": "is_active", "value": "", "description": "Optional boolean filter." },
+                    { "key": "sort_by", "value": "name", "description": "`name` or default `created_at`." },
+                    { "key": "sort_order", "value": "1", "description": "`1` asc, `-1` desc." }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get state by id",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/state/get/{{stateId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "state", "get", "{{stateId}}"]
+                }
+              }
+            },
+            {
+              "name": "Update state",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"State-Updated-{{$timestamp}}\",\n  \"is_active\": true\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/state/update/{{stateId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "state", "update", "{{stateId}}"]
+                }
+              }
+            },
+            {
+              "name": "Import states",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"records\": [\n    { \"name\": \"Import-State-A-{{$timestamp}}\", \"is_active\": true },\n    { \"name\": \"Import-State-B-{{$timestamp}}\", \"is_active\": false }\n  ]\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/state/imports",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "state", "imports"]
+                }
+              }
+            },
+            {
+              "name": "Get state dropdown",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/state/getDropDown",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "state", "getDropDown"]
+                },
+                "description": "No auth in `state_routes`."
+              }
+            },
+            {
+              "name": "Delete state (soft)",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/state/delete/{{stateId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "state", "delete", "{{stateId}}"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "City",
+          "item": [
+            {
+              "name": "Create city",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 200) {",
+                      "  try {",
+                      "    const j = pm.response.json();",
+                      "    if (j && j.record && j.record._id) {",
+                      "      pm.collectionVariables.set('cityId', String(j.record._id));",
+                      "    }",
+                      "  } catch (e) {}",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"City-{{$timestamp}}\",\n  \"is_active\": true,\n  \"state_id\": \"{{stateId}}\",\n  \"city_service_price\": 0\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/city/create",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "city", "create"]
+                },
+                "description": "Requires valid **`state_id`**. Sets **`cityId`** on success."
+              }
+            },
+            {
+              "name": "Get all cities",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/city/getAll?page={{page}}&limit={{limit}}&state_id={{stateId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "city", "getAll"],
+                  "query": [
+                    { "key": "page", "value": "{{page}}" },
+                    { "key": "limit", "value": "{{limit}}" },
+                    { "key": "name", "value": "", "disabled": true },
+                    { "key": "state_name", "value": "", "disabled": true },
+                    { "key": "state_id", "value": "{{stateId}}" },
+                    { "key": "is_active", "value": "", "disabled": true }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get city by id",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/city/get/{{cityId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "city", "get", "{{cityId}}"]
+                }
+              }
+            },
+            {
+              "name": "Update city",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"City-Updated-{{$timestamp}}\",\n  \"is_active\": true,\n  \"city_service_price\": 10\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/city/update/{{cityId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "city", "update", "{{cityId}}"]
+                }
+              }
+            },
+            {
+              "name": "Import cities",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"records\": [\n    {\n      \"name\": \"Import-City-A-{{$timestamp}}\",\n      \"is_active\": true,\n      \"state_name\": \"{{stateNameForImport}}\",\n      \"city_service_price\": 0\n    },\n    {\n      \"name\": \"Import-City-B-{{$timestamp}}\",\n      \"is_active\": false,\n      \"state_name\": \"{{stateNameForImport}}\",\n      \"city_service_price\": 0\n    }\n  ]\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/city/imports",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "city", "imports"]
+                },
+                "description": "**`state_name`** must match an existing state in DB. Run **State → Create** first so **`stateNameForImport`** is set, or edit manually."
+              }
+            },
+            {
+              "name": "Get city dropdown",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/city/getDropDown?state_id={{stateId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "city", "getDropDown"],
+                  "query": [
+                    { "key": "state_id", "value": "{{stateId}}", "description": "Optional ObjectId filter." }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Delete city (soft)",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/city/delete/{{cityId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "city", "delete", "{{cityId}}"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Area",
+          "item": [
+            {
+              "name": "Create area",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 200) {",
+                      "  try {",
+                      "    const j = pm.response.json();",
+                      "    if (j && j.record && j.record._id) {",
+                      "      pm.collectionVariables.set('areaId', String(j.record._id));",
+                      "    }",
+                      "  } catch (e) {}",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Area-{{$timestamp}}\",\n  \"is_active\": true,\n  \"city_id\": \"{{cityId}}\",\n  \"pincodes\": [\"560001\"]\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/area/create",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "area", "create"]
+                },
+                "description": "**`city_id`** = Mongo ObjectId (24 hex). Sets **`areaId`** on success."
+              }
+            },
+            {
+              "name": "Get all areas",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/area/getAll?page={{page}}&limit={{limit}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "area", "getAll"],
+                  "query": [
+                    { "key": "page", "value": "{{page}}" },
+                    { "key": "limit", "value": "{{limit}}" },
+                    { "key": "name", "value": "", "disabled": true },
+                    { "key": "city", "value": "", "disabled": true },
+                    { "key": "state", "value": "", "disabled": true },
+                    { "key": "pincode", "value": "", "disabled": true },
+                    { "key": "is_active", "value": "", "disabled": true },
+                    { "key": "sort_by", "value": "", "disabled": true },
+                    { "key": "sort_order", "value": "", "disabled": true }
+                  ]
+                },
+                "description": "Optional: `type=my-franchise`, `franchise_id`, filters — see `area_service.listAreas`."
+              }
+            },
+            {
+              "name": "Get area by id",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/area/get/{{areaId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "area", "get", "{{areaId}}"]
+                }
+              }
+            },
+            {
+              "name": "Update area",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Area-Updated-{{$timestamp}}\",\n  \"is_active\": true,\n  \"pincodes\": [\"560001\", \"560002\"]\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/area/update/{{areaId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "area", "update", "{{areaId}}"]
+                }
+              }
+            },
+            {
+              "name": "Import areas",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"records\": [\n    {\n      \"name\": \"Import-Area-A-{{$timestamp}}\",\n      \"city_id\": \"{{cityId}}\",\n      \"is_active\": true,\n      \"pincodes\": [\"560003\"]\n    },\n    {\n      \"name\": \"Import-Area-B-{{$timestamp}}\",\n      \"city_id\": \"{{cityId}}\",\n      \"is_active\": false\n    }\n  ]\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/area/imports",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "area", "imports"]
+                }
+              }
+            },
+            {
+              "name": "Get area dropdown",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/area/getDropDown?city_id={{cityId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "area", "getDropDown"],
+                  "query": [
+                    { "key": "city_id", "value": "{{cityId}}" },
+                    { "key": "state_id", "value": "", "disabled": true }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Delete area (soft)",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/area/delete/{{areaId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "area", "delete", "{{areaId}}"]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5001" },
+    { "key": "email", "value": "admin@example.com" },
+    { "key": "password", "value": "your-password" },
+    { "key": "deviceToken", "value": "postman-test-device" },
+    { "key": "token", "value": "" },
+    { "key": "franchiseId", "value": "PUT_FRANCHISE_OBJECT_ID_24_HEX" },
+    { "key": "page", "value": "1" },
+    { "key": "limit", "value": "10" },
+    { "key": "search", "value": "" },
+    { "key": "sort", "value": "" },
+    { "key": "sortBy", "value": "created_at" },
+    { "key": "sortOrder", "value": "desc" },
+    { "key": "startDate", "value": "" },
+    { "key": "endDate", "value": "" },
+    { "key": "contentId", "value": "" },
+    { "key": "expenseCategoryId", "value": "" },
+    { "key": "expenseSubcategoryId", "value": "" },
+    { "key": "expenseId", "value": "" },
+    { "key": "stateId", "value": "", "description": "Set by State → Create (Mongo ObjectId)." },
+    { "key": "cityId", "value": "", "description": "Set by City → Create." },
+    { "key": "areaId", "value": "", "description": "Set by Area → Create." },
+    { "key": "stateNameForImport", "value": "", "description": "Set by State → Create for City → Import cities." }
+  ]
+}

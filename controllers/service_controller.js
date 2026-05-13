@@ -4,6 +4,7 @@ const User = require('../models/user');
 const Category = require('../models/category');
 const City = require('../models/city');
 const State = require('../models/state');
+const franchiseServiceManagementService = require('../services/franchise_service_management_service');
 const { applyPagination, applyDropDownFilter } = require('../utils/pagination');
 const { validationResult } = require('express-validator');
 const { parseBoolean } = require('../utils/parser');
@@ -70,6 +71,22 @@ const getServiceStatusConfig = (statusFilter = "") => {
   return {};
 };
 
+const sendFranchiseServiceResult = (res, result) => {
+  if (!result.ok) {
+    return res.status(result.status).json({
+      success: false,
+      status: result.status,
+      message: result.message,
+      ...(result.error !== undefined && { error: result.error }),
+    });
+  }
+  return res.status(result.status).json({
+    success: true,
+    status: result.status,
+    ...result.data,
+  });
+};
+
 const stripServiceLocationFields = (serviceRecord) => {
   if (!serviceRecord || typeof serviceRecord !== "object") return serviceRecord;
   const plainRecord =
@@ -134,6 +151,14 @@ const getAll = async (req, res) => {
         status: 401,
         message: "Unauthorized",
       });
+    }
+
+    if (req.params.franchise_id) {
+      const result = await franchiseServiceManagementService.list(
+        { ...req.query, franchise_id: req.params.franchise_id },
+        req.user.id
+      );
+      return sendFranchiseServiceResult(res, result);
     }
 
     const page = parseInt(req.query.page) || 1;

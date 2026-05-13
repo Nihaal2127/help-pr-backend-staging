@@ -207,13 +207,105 @@ const buildAllServicesWithFranchiseMappingStatus = async (franchiseOid) => {
             select: categoryPopulateSelect,
             match: { deleted_at: null },
         })
-        .sort({ name: 1 })
         .lean();
 
     return allSvcs.map((svc) => ({
         ...svc,
         franchise_active: activeSet.has(svc._id.toString()),
     }));
+};
+
+const getServiceCategoryName = (svc) => {
+    const c = svc.category_id;
+    if (!c) return '';
+    if (typeof c === 'object' && c !== null && !(c instanceof mongoose.Types.ObjectId)) {
+        return c.name != null ? String(c.name) : '';
+    }
+    return '';
+};
+
+const matchesSearchInServiceName = (svc, qLower) => {
+    const n = svc.name != null ? String(svc.name).toLowerCase() : '';
+    return n.includes(qLower);
+};
+
+const matchesSearchInCategoryNameForService = (svc, qLower) => {
+    const cn = getServiceCategoryName(svc).toLowerCase();
+    return cn.includes(qLower);
+};
+
+/**
+ * Prefer services whose **name** matches `search`; if none match, keep services whose
+ * related **category name** matches (substring, case-insensitive).
+ */
+const filterAllServicesBySearch = (rows, searchRaw) => {
+    if (!Array.isArray(rows) || rows.length === 0) return rows;
+    const trimmed =
+        searchRaw !== undefined && searchRaw !== null ? String(searchRaw).trim() : '';
+    if (!trimmed) return rows;
+    const qLower = trimmed.toLowerCase();
+
+    const nameHits = rows.filter((svc) => matchesSearchInServiceName(svc, qLower));
+    if (nameHits.length > 0) return nameHits;
+
+    return rows.filter((svc) => matchesSearchInCategoryNameForService(svc, qLower));
+};
+
+const parseFranchiseServiceCatalogSort = (query) => {
+    const sortByRaw = query.sort_by;
+    const sortOrderRaw = query.sort_order ?? query.order;
+
+    let sortBy = 'name';
+    if (sortByRaw !== undefined && sortByRaw !== null && String(sortByRaw).trim() !== '') {
+        const s = String(sortByRaw).trim().toLowerCase();
+        if (
+            s !== 'name' &&
+            s !== 'id' &&
+            s !== '_id' &&
+            s !== 'category' &&
+            s !== 'category_name'
+        ) {
+            return { ok: false, message: 'sort_by must be name, id, or category_name.' };
+        }
+        if (s === '_id' || s === 'id') sortBy = 'id';
+        else if (s === 'category' || s === 'category_name') sortBy = 'category_name';
+        else sortBy = 'name';
+    }
+
+    let sortOrder = 1;
+    if (sortOrderRaw !== undefined && sortOrderRaw !== null && String(sortOrderRaw).trim() !== '') {
+        const o = String(sortOrderRaw).trim().toLowerCase();
+        if (o !== 'asc' && o !== 'desc') {
+            return { ok: false, message: 'sort_order must be asc or desc.' };
+        }
+        sortOrder = o === 'desc' ? -1 : 1;
+    }
+
+    return { ok: true, sortBy, sortOrder };
+};
+
+const sortAllServicesRows = (rows, sortBy, sortOrder) => {
+    if (!Array.isArray(rows) || rows.length === 0) return rows;
+    const mult = sortOrder;
+    const copy = [...rows];
+    copy.sort((a, b) => {
+        if (sortBy === 'id') {
+            return mult * a._id.toString().localeCompare(b._id.toString());
+        }
+        if (sortBy === 'category_name') {
+            const ca = getServiceCategoryName(a).toLowerCase();
+            const cb = getServiceCategoryName(b).toLowerCase();
+            const cmp = ca.localeCompare(cb);
+            if (cmp !== 0) return mult * cmp;
+            const na = (a.name != null ? String(a.name) : '').toLowerCase();
+            const nb = (b.name != null ? String(b.name) : '').toLowerCase();
+            return mult * na.localeCompare(nb);
+        }
+        const na = (a.name != null ? String(a.name) : '').toLowerCase();
+        const nb = (b.name != null ? String(b.name) : '').toLowerCase();
+        return mult * na.localeCompare(nb);
+    });
+    return copy;
 };
 
 const list = async (query, userId) => {
@@ -292,7 +384,17 @@ const list = async (query, userId) => {
 
         let all_services;
         if (filter.franchise_id) {
+            const sortOpts = parseFranchiseServiceCatalogSort(query);
+            if (!sortOpts.ok) return fail(400, sortOpts.message);
+
             all_services = await buildAllServicesWithFranchiseMappingStatus(filter.franchise_id);
+            const searchTerm = query.search ?? query.q;
+            all_services = filterAllServicesBySearch(all_services, searchTerm);
+            all_services = sortAllServicesRows(
+                all_services,
+                sortOpts.sortBy,
+                sortOpts.sortOrder
+            );
         }
 
         return ok(200, {
@@ -439,33 +541,6 @@ const update = async (id, body, userId) => {
             } else if (auth.isFranchiseAdmin) {
                 if (String(record.franchise_id) !== String(auth.franchise_id)) {
                     return fail(403, 'Access denied.');
-                }
-                const franchise = await Franchise.findOne({
-                    _id: record.franchise_id,
-                    deleted_at: null,
-                }).select('services');
-                if (!franchise) return fail(404, 'Franchise not found.');
-                const allowed = new Set((franchise.services || []).map((id) => id.toString()));
-                const existingNorm = normalizeStoredServicesList(record.services_list);
-                const existingById = new Map(
-                    existingNorm.map((e) => [e.service_id.toString(), e.is_active])
-                );
-                const incomingKeys = new Set(parsedServices.entries.map((e) => e.service_id.toString()));
-                if (
-                    existingById.size !== incomingKeys.size ||
-                    ![...incomingKeys].every((k) => existingById.has(k))
-                ) {
-                    return fail(400, 'services_list must include every mapped service.');
-                }
-                for (const ent of parsedServices.entries) {
-                    const idStr = ent.service_id.toString();
-                    const prev = existingById.get(idStr);
-                    if (!allowed.has(idStr) && Boolean(ent.is_active) !== Boolean(prev)) {
-                        return fail(
-                            403,
-                            'You can only change status for services assigned to your franchise.'
-                        );
-                    }
                 }
                 record.services_list = parsedServices.entries;
                 record.active_services = parsedServices.entries

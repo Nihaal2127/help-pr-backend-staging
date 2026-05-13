@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const { checkObjectIdExists } = require('../validator/id_validator');
 const Service = require('../models/service');
+const User = require('../models/user');
 const { parseJSONField, parseBooleanField, parseNumberField } = require("../utils/multipart_parser");
 
 const validateAccessibleScreens = (items, res) => {
@@ -51,6 +52,7 @@ const createUserMiddleware = (req, res, next) => {
   parseBooleanField(req, "is_blocked");
   parseBooleanField(req, "is_business");
   parseBooleanField(req, "chat");
+  parseBooleanField(req, "is_verified");
   parseJSONField(req, "accessible_screens");
   parseJSONField(req, "partner_services");
   parseJSONField(req, "category_ids");
@@ -796,4 +798,54 @@ const changePasswordMiddleware = (req, res, next) => {
   }
   next();
 };
-module.exports = { createUserMiddleware, updateUserMiddleware, getPartnerDropDownMiddleware, changePasswordMiddleware };
+
+const PARTNER_PROFILE_IMAGE_MAX_BYTES = 512 * 1024;
+
+/** After multer: limit profile `image` / `req.file` to 512KB for partners only (create body type 2, register-partner, or update existing partner). */
+const enforcePartnerProfileImageSize = async (req, res, next) => {
+  try {
+    const img = req.files?.image?.[0] || req.file;
+    if (!img) return next();
+    const size =
+      typeof img.size === 'number' && !Number.isNaN(img.size)
+        ? img.size
+        : Buffer.isBuffer(img.buffer)
+          ? img.buffer.length
+          : null;
+    if (size === null) return next();
+
+    let partnerContext = false;
+    const typeRaw = req.body?.type;
+    if (typeRaw !== undefined && typeRaw !== null && String(typeRaw).trim() !== '') {
+      const typeNum = parseInt(typeRaw, 10);
+      if (typeNum === 2) partnerContext = true;
+    }
+    if (String(req.originalUrl || '').includes('register-partner')) {
+      partnerContext = true;
+    }
+    if (!partnerContext && req.params?.id && mongoose.Types.ObjectId.isValid(String(req.params.id))) {
+      const user = await User.findOne({ _id: req.params.id, deleted_at: null }).select('type').lean();
+      if (user && Number(user.type) === 2) partnerContext = true;
+    }
+
+    if (!partnerContext) return next();
+
+    if (size > PARTNER_PROFILE_IMAGE_MAX_BYTES) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Profile image must be 512 KB or smaller.',
+      });
+    }
+    return next();
+  } catch (err) {
+    console.error('enforcePartnerProfileImageSize', err.message);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Internal server error.',
+    });
+  }
+};
+
+module.exports = { createUserMiddleware, updateUserMiddleware, getPartnerDropDownMiddleware, changePasswordMiddleware, enforcePartnerProfileImageSize };

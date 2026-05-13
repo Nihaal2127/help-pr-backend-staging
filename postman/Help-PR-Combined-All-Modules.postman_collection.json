@@ -2824,7 +2824,7 @@
       "item": [
         {
           "name": "Partner (type 2)",
-          "description": "Partner CRUD uses **`/api/user`**. **`Create partner (web)`** form matches dashboard **`multipart/form-data`**: nested **`partner_services`**, optional parallel **`category_ids`** / **`service_ids`**, **`bank_account`**, verification **files**, **`profile_url`**, **`image`**. Set **`partnerId`** from create or **Register partner (public)**.",
+          "description": "Partner CRUD uses **`/api/user`**. **`Create partner (web)`** uses **`multipart/form-data`**. Form key must be **`partner_services`** (underscore), not **`partner-services`**. Set **`categoryObjectId`** and **`serviceObjectId`** in your Environment to real 24-hex MongoDB IDs. For **`type` 2** create, the API loads the master **`Document`** catalog (active, not deleted); if it is empty, **`POST /api/user/create`** returns **400** with a summary **`message`** and per-field **`document_errors`** (e.g. **`aadhar_card`**, **`pan_card`**). Seed document types whose **`name`** matches those keys. Nested **`partner_services`**, optional parallel **`category_ids`** / **`service_ids`**, **`bank_account`**, verification **files**, **`profile_url`**, **`image`**. Set **`partnerId`** from create or **Register partner (public)**.",
           "item": [
             {
               "name": "Create partner (web)",
@@ -2837,6 +2837,9 @@
                       "  const j = pm.response.json();",
                       "  if (j && j.record && j.record._id) {",
                       "    pm.collectionVariables.set('partnerId', String(j.record._id));",
+                      "  }",
+                      "  if (pm.response.code === 400 && j && j.document_errors) {",
+                      "    console.log('document_errors', j.document_errors);",
                       "  }",
                       "} catch (e) {}"
                     ],
@@ -2953,7 +2956,7 @@
                       "key": "partner_services",
                       "value": "[{\"category_id\":\"{{categoryObjectId}}\",\"services\":[{\"service_id\":\"{{serviceObjectId}}\",\"description\":\"legal documents\",\"price\":1234}]}]",
                       "type": "text",
-                      "description": "Nested dashboard shape: [{ category_id, services: [{ service_id, description, price }] }]. Add more `{ category_id, services }` objects for multiple categories."
+                      "description": "Form field name must be **partner_services** (underscore). JSON array: [{ category_id, services: [{ service_id, description, price }] }]. Resolve **{{categoryObjectId}}** / **{{serviceObjectId}}** in Environment. Add more `{ category_id, services }` objects for multiple categories."
                     },
                     {
                       "key": "category_ids",
@@ -2991,33 +2994,37 @@
                       "key": "vehicle_registration",
                       "type": "file",
                       "src": [],
-                      "description": "Verification file (image or PDF)."
+                      "description": "Verification file (image or PDF). Master **Document** catalog must include **`name`**: **`vehicle_registration`** (and **`is_active`**: true) or create fails with **document_errors**."
                     },
                     {
                       "key": "police_verification_certificate",
                       "type": "file",
-                      "src": []
+                      "src": [],
+                      "description": "Master **Document.name** should match this key for URL mapping after create."
                     },
                     {
                       "key": "pan_card",
                       "type": "file",
-                      "src": []
+                      "src": [],
+                      "description": "Master **Document.name** should match this key for URL mapping after create."
                     },
                     {
                       "key": "driving_license",
                       "type": "file",
-                      "src": []
+                      "src": [],
+                      "description": "Master **Document.name** should match this key for URL mapping after create."
                     },
                     {
                       "key": "aadhar_card",
                       "type": "file",
-                      "src": []
+                      "src": [],
+                      "description": "Master **Document.name** should match this key for URL mapping after create."
                     },
                     {
                       "key": "partner_documents",
                       "value": "{}",
                       "type": "text",
-                      "description": "Optional JSON slug→URL; merged with verification files."
+                      "description": "Optional JSON object: keys are slug names (same as file fields); values are URLs. Merged with uploaded files. Requires matching **Document** catalog rows."
                     },
                     {
                       "key": "bank_account",
@@ -3056,9 +3063,9 @@
                     "create"
                   ]
                 },
-                "description": "**`POST /api/user/create`** — **`multipart/form-data`** aligned with admin dashboard: **`type`**, **`is_from_web`**, **`registration_type`**, **`created_by_id`**, identity/address, **`is_blocked`**, **`profile_url`**, nested **`partner_services`** or (alternate) parallel **`category_ids`** / **`service_ids`**, **`bank_account`**, optional **`partner_subscription`**, verification **files** + **`partner_documents`**, **`image`**. JSON **`application/json`** still works without file parts. Do not set **`Content-Type`** manually."
+                "description": "**`POST /api/user/create`** — **`multipart/form-data`** (or raw JSON without files). Fields: **`type`**, **`is_from_web`**, **`registration_type`**, **`created_by_id`**, identity/address, **`is_blocked`**, **`profile_url`**, nested **`partner_services`** (underscore key) or parallel **`category_ids`** / **`service_ids`**, **`bank_account`**, optional **`partner_subscription`**, verification **files** + **`partner_documents`**, **`image`**. Do not set **`Content-Type`** manually for multipart. **Prerequisites:** active **`Document`** rows for partner verification (empty catalog → **400** with **`message`** + **`document_errors`** per upload key). **Postman Console** logs **`document_errors`** on **400** when present."
               },
-              "description": "Web/admin partner create — dashboard-shaped **form-data**."
+              "description": "Web/admin partner create — dashboard-shaped **form-data**; see request description for catalog and **`partner_services`** key."
             },
             {
               "name": "Get all partners",
@@ -3368,7 +3375,7 @@
                     "{{partnerId}}"
                   ]
                 },
-                "description": "**`PUT /api/user/update/:id`** — same **`multipart`** field names as create for testing; most service/bank rows disabled by default. Verification **files** + **`partner_documents`** still apply for **`type`**: **2**."
+                "description": "**`PUT /api/user/update/:id`** — same **`multipart`** field names as create; most service/bank rows disabled by default. Verification **files** + **`partner_documents`** apply for **`type`**: **2**; master **`Document`** catalog must exist so partner_document rows can be updated by name."
               },
               "description": "Multipart **`partnerId`** update — form keys aligned with create (optional fields disabled)."
             },
@@ -7650,11 +7657,13 @@
     },
     {
       "key": "categoryObjectId",
-      "value": ""
+      "value": "",
+      "description": "24-hex Mongo **_id** of a category (for **partner_services** / parallel arrays on partner create)."
     },
     {
       "key": "serviceObjectId",
-      "value": ""
+      "value": "",
+      "description": "24-hex Mongo **_id** of a service under that category (for **partner_services** / parallel arrays)."
     },
     {
       "key": "keyword",

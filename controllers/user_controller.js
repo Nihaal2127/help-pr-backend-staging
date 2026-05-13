@@ -735,6 +735,19 @@ const create = async (req, res) => {
       type === 3
         ? (chat !== undefined ? chat : true)
         : chat;
+    let partnerVerificationFields = {};
+    if (type === 2) {
+      const raw = req.body.is_verified;
+      if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
+        const isTrue =
+          raw === true ||
+          raw === 1 ||
+          String(raw).trim().toLowerCase() === 'true';
+        partnerVerificationFields = isTrue
+          ? { verification_status: 2, verified_at: new Date() }
+          : { verification_status: 1, verified_at: null };
+      }
+    }
     const existingUser = await User.findOne({
       $or: [
         { phone_number },
@@ -814,6 +827,7 @@ const create = async (req, res) => {
       profile_url: resolvedProfileUrl,
       is_from_web,
       is_active: resolvedIsActive,
+      ...partnerVerificationFields,
       ...(is_blocked !== undefined ? { is_blocked } : {}),
       chat: resolvedChat,
       is_business,
@@ -844,20 +858,20 @@ const create = async (req, res) => {
 
     if (type === 2) {
       const documentList = await getDocumentList();
-      if (documentList.length === 0) {
-        return res.status(400).json({
-          success: false,
-          status: 400,
-          message: 'Partner document list not found.',
-        });
-      }
-      const documents = documentList.map(document => {
-        return {
+      let partnerDocumentIds = [];
+      if (documentList.length > 0) {
+        const documents = documentList.map((document) => ({
           _id: new mongoose.Types.ObjectId(),
           partner_id: _id,
           document_id: document._id,
+        }));
+        const result = await createMultiple(documents);
+        if (result.success !== true) {
+          return res.status(result.status).json(result);
         }
-      });
+        partnerDocumentIds = documents.map((document) => document._id);
+      }
+      newUser.documents = partnerDocumentIds;
 
       const normalizedServiceRows = normalizePartnerServices(resolvedPartnerServicesInput);
       const partnerServicesRows = normalizedServiceRows.map((serviceRow) => ({
@@ -867,112 +881,106 @@ const create = async (req, res) => {
         service_id: serviceRow.service_id,
       }));
 
-      const result = await createMultiple(documents);
-      if (result.success === true) {
-        newUser.documents = documents.map(document => document._id);
-        const savedUser = await newUser.save();
-        if (partnerServicesRows.length > 0) {
-          await PartnerServices.insertMany(partnerServicesRows, { ordered: false });
-        }
-
-        const mergedPartnerDocs = await mergePartnerDocumentPayloadFromMultipart(req, partner_documents);
-        await applyPartnerDocumentImageUpdates(
-          savedUser._id,
-          normalizePartnerDocuments(mergedPartnerDocs)
-        );
-
-        const normalizedBankAccount = normalizePartnerBankAccount(
-          bank_account ?? {
-            account_name: req.body.account_name,
-            account_holder_name: req.body.account_holder_name,
-            account_number: req.body.account_number,
-            ifsc_code: req.body.ifsc_code,
-            bank_name: req.body.bank_name,
-            branch_name: req.body.branch_name,
-            primary_bank_account: req.body.primary_bank_account,
-            is_primary: req.body.is_primary,
-          }
-        );
-        if (normalizedBankAccount && normalizedBankAccount.account_number) {
-          const existingAccount = await PartnerBankAccount.findOne({
-            account_number: normalizedBankAccount.account_number,
-            deleted_at: null,
-          });
-          if (!existingAccount) {
-            await PartnerBankAccount.create({
-              partner_id: savedUser._id,
-              bank_name: normalizedBankAccount.bank_name,
-              account_holder_name: normalizedBankAccount.account_holder_name,
-              account_number: normalizedBankAccount.account_number,
-              ifsc_code: normalizedBankAccount.ifsc_code,
-              branch_name: normalizedBankAccount.branch_name,
-              is_primary: normalizedBankAccount.is_primary === true,
-            });
-          }
-        }
-
-        const normalizedSubscription = normalizePartnerSubscriptionPayload(
-          partner_subscription ?? {
-            partner: req.body.partner,
-            partner_id: req.body.partner_id,
-            subscription_plan: req.body.subscription_plan,
-            subscription_plan_id: req.body.subscription_plan_id,
-            subscription_start_date: req.body.subscription_start_date,
-            started_at: req.body.started_at,
-            subscription_end_date: req.body.subscription_end_date,
-            expires_at: req.body.expires_at,
-            status: req.body.status,
-            notes: req.body.notes,
-          }
-        );
-        if (normalizedSubscription && normalizedSubscription.subscription_plan_id) {
-          const resolvedStatus =
-            normalizedSubscription.status === 'inactive'
-              ? 'cancelled'
-              : normalizedSubscription.status;
-          const subscriptionResult = await partnerSubscriptionService.createPartnerSubscription(
-            {
-              partner_id: savedUser._id,
-              subscription_plan_id: normalizedSubscription.subscription_plan_id,
-              started_at: normalizedSubscription.started_at,
-              expires_at: normalizedSubscription.expires_at,
-              status: resolvedStatus,
-              notes: normalizedSubscription.notes,
-            },
-            created_by_id
-          );
-          if (!subscriptionResult.ok) {
-            return res.status(subscriptionResult.status).json({
-              success: false,
-              status: subscriptionResult.status,
-              message: subscriptionResult.message,
-            });
-          }
-        }
-
-        await createAddressRecord({
-          userId: savedUser._id,
-          name: savedUser.name,
-          phoneNumber: savedUser.phone_number,
-          address: savedUser.address,
-          stateId: savedUser.state_id,
-          cityId: savedUser.city_id,
-          pincode: savedUser.pincode,
-        });
-        const notificationSettings = new notificationSetting({
-          user_id: savedUser._id,
-        });
-        await notificationSettings.save();
-        const { documents: _, ...userWithoutDocuments } = savedUser.toObject();
-        return res.status(200).json({
-          success: true,
-          status: 200,
-          message: 'User created successfully.',
-          record: userWithoutDocuments,
-        });
-      } else {
-        return res.status(result.status).json(result);
+      const savedUser = await newUser.save();
+      if (partnerServicesRows.length > 0) {
+        await PartnerServices.insertMany(partnerServicesRows, { ordered: false });
       }
+
+      const mergedPartnerDocs = await mergePartnerDocumentPayloadFromMultipart(req, partner_documents);
+      await applyPartnerDocumentImageUpdates(
+        savedUser._id,
+        normalizePartnerDocuments(mergedPartnerDocs)
+      );
+
+      const normalizedBankAccount = normalizePartnerBankAccount(
+        bank_account ?? {
+          account_name: req.body.account_name,
+          account_holder_name: req.body.account_holder_name,
+          account_number: req.body.account_number,
+          ifsc_code: req.body.ifsc_code,
+          bank_name: req.body.bank_name,
+          branch_name: req.body.branch_name,
+          primary_bank_account: req.body.primary_bank_account,
+          is_primary: req.body.is_primary,
+        }
+      );
+      if (normalizedBankAccount && normalizedBankAccount.account_number) {
+        const existingAccount = await PartnerBankAccount.findOne({
+          account_number: normalizedBankAccount.account_number,
+          deleted_at: null,
+        });
+        if (!existingAccount) {
+          await PartnerBankAccount.create({
+            partner_id: savedUser._id,
+            bank_name: normalizedBankAccount.bank_name,
+            account_holder_name: normalizedBankAccount.account_holder_name,
+            account_number: normalizedBankAccount.account_number,
+            ifsc_code: normalizedBankAccount.ifsc_code,
+            branch_name: normalizedBankAccount.branch_name,
+            is_primary: normalizedBankAccount.is_primary === true,
+          });
+        }
+      }
+
+      const normalizedSubscription = normalizePartnerSubscriptionPayload(
+        partner_subscription ?? {
+          partner: req.body.partner,
+          partner_id: req.body.partner_id,
+          subscription_plan: req.body.subscription_plan,
+          subscription_plan_id: req.body.subscription_plan_id,
+          subscription_start_date: req.body.subscription_start_date,
+          started_at: req.body.started_at,
+          subscription_end_date: req.body.subscription_end_date,
+          expires_at: req.body.expires_at,
+          status: req.body.status,
+          notes: req.body.notes,
+        }
+      );
+      if (normalizedSubscription && normalizedSubscription.subscription_plan_id) {
+        const resolvedStatus =
+          normalizedSubscription.status === 'inactive'
+            ? 'cancelled'
+            : normalizedSubscription.status;
+        const subscriptionResult = await partnerSubscriptionService.createPartnerSubscription(
+          {
+            partner_id: savedUser._id,
+            subscription_plan_id: normalizedSubscription.subscription_plan_id,
+            started_at: normalizedSubscription.started_at,
+            expires_at: normalizedSubscription.expires_at,
+            status: resolvedStatus,
+            notes: normalizedSubscription.notes,
+          },
+          created_by_id
+        );
+        if (!subscriptionResult.ok) {
+          return res.status(subscriptionResult.status).json({
+            success: false,
+            status: subscriptionResult.status,
+            message: subscriptionResult.message,
+          });
+        }
+      }
+
+      await createAddressRecord({
+        userId: savedUser._id,
+        name: savedUser.name,
+        phoneNumber: savedUser.phone_number,
+        address: savedUser.address,
+        stateId: savedUser.state_id,
+        cityId: savedUser.city_id,
+        pincode: savedUser.pincode,
+      });
+      const notificationSettings = new notificationSetting({
+        user_id: savedUser._id,
+      });
+      await notificationSettings.save();
+      const { documents: _, ...userWithoutDocuments } = savedUser.toObject();
+      return res.status(200).json({
+        success: true,
+        status: 200,
+        message: 'User created successfully.',
+        record: userWithoutDocuments,
+      });
     }
 
     const savedUser = await newUser.save();

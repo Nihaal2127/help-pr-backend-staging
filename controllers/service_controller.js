@@ -4,6 +4,8 @@ const User = require('../models/user');
 const Category = require('../models/category');
 const City = require('../models/city');
 const State = require('../models/state');
+const Franchise = require('../models/franchise');
+const FranchiseService = require('../models/franchise_service');
 const { applyPagination, applyDropDownFilter } = require('../utils/pagination');
 const { validationResult } = require('express-validator');
 const { parseBoolean } = require('../utils/parser');
@@ -11,6 +13,7 @@ const { checkObjectIdExists } = require('../validator/id_validator');
 const { getServiceId } = require('../helper/id_generator');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
 const { USER_TYPE_ADMIN } = require('../middleware/role_middleware');
+const { coerceLegacyServiceMappingArrays } = require('../utils/franchise_catalog_lists');
 
 const asBodyBool = (value, defaultValue) => {
   if (value === undefined) return defaultValue;
@@ -68,6 +71,60 @@ const getServiceStatusConfig = (statusFilter = "") => {
     return { category: { is_request: true } };
   }
   return {};
+};
+
+const getCatalogRefId = (ref) => {
+  if (!ref) return null;
+  if (ref instanceof mongoose.Types.ObjectId) return ref;
+  if (typeof ref === 'object' && ref._id) return ref._id;
+  return ref;
+};
+
+const resolveFranchiseServiceScope = async (franchiseIdRaw, mappingActiveFilter) => {
+  if (!mongoose.Types.ObjectId.isValid(String(franchiseIdRaw))) {
+    return { ok: false, status: 400, message: 'franchise_id must be a valid MongoDB ObjectId.' };
+  }
+
+  const franchiseOid = new mongoose.Types.ObjectId(franchiseIdRaw);
+  const franchise = await Franchise.findOne({
+    _id: franchiseOid,
+    deleted_at: null,
+  }).select('services');
+
+  if (!franchise) {
+    return { ok: false, status: 404, message: 'Franchise not found.' };
+  }
+
+  const mapping = await FranchiseService.findOne({
+    franchise_id: franchiseOid,
+    deleted_at: null,
+  })
+    .sort({ created_at: -1 })
+    .lean();
+
+  if (!mapping) {
+    const fallbackIds = Array.isArray(franchise.services) ? franchise.services : [];
+    const ids = mappingActiveFilter === false ? [] : fallbackIds;
+    return {
+      ok: true,
+      ids,
+      activeIds: fallbackIds,
+    };
+  }
+
+  const coerced = coerceLegacyServiceMappingArrays(mapping);
+  const list = Array.isArray(coerced.services_list) ? coerced.services_list : [];
+  const activeIds = Array.isArray(coerced.active_services) ? coerced.active_services : [];
+  const filteredList =
+    mappingActiveFilter === null
+      ? list
+      : list.filter((entry) => Boolean(entry.is_active) === mappingActiveFilter);
+
+  return {
+    ok: true,
+    ids: filteredList.map((entry) => getCatalogRefId(entry.service_id)).filter(Boolean),
+    activeIds,
+  };
 };
 
 const stripServiceLocationFields = (serviceRecord) => {
@@ -138,12 +195,22 @@ const getAll = async (req, res) => {
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
+    const franchiseIdParam =
+      req.params.franchise_id !== undefined && req.params.franchise_id !== null
+        ? String(req.params.franchise_id).trim()
+        : '';
+    const isFranchiseScoped = Boolean(franchiseIdParam);
+    const mappingActiveFilter =
+      isFranchiseScoped && req.query.is_active !== undefined
+        ? parseBoolean(req.query.is_active)
+        : null;
+    const catalogIsActiveRaw = isFranchiseScoped ? req.query.catalog_is_active : req.query.is_active;
     const statusFilter =
       req.query.status !== undefined && req.query.status !== null
         ? String(req.query.status).trim().toLowerCase()
         : "";
     // const type = parseInt(req.query.type);
-    const is_active = req.query.is_active !== undefined ? parseBoolean(req.query.is_active) : null;
+    const is_active = catalogIsActiveRaw !== undefined ? parseBoolean(catalogIsActiveRaw) : null;
     const is_request =
       req.query.is_request !== undefined ? parseBoolean(req.query.is_request) : null;
     const approval_status =
@@ -214,6 +281,20 @@ const getAll = async (req, res) => {
         }).distinct('_id');
         filter.requested_by = { $in: franchiseUserIds };
       }
+    }
+
+    let franchiseActiveServiceSet = null;
+    if (isFranchiseScoped) {
+      const scoped = await resolveFranchiseServiceScope(franchiseIdParam, mappingActiveFilter);
+      if (!scoped.ok) {
+        return res.status(scoped.status).json({
+          success: false,
+          status: scoped.status,
+          message: scoped.message,
+        });
+      }
+      filter._id = { $in: scoped.ids };
+      franchiseActiveServiceSet = new Set((scoped.activeIds || []).map((id) => String(id)));
     }
 
     if (req.query.category_id) {
@@ -440,6 +521,12 @@ const getAll = async (req, res) => {
     const responseServices = enrichedServices.map((service) =>
       stripServiceLocationFields(service)
     );
+    const scopedResponseServices = isFranchiseScoped
+      ? responseServices.map((service) => ({
+        ...service,
+        franchise_active: franchiseActiveServiceSet.has(String(service._id)),
+      }))
+      : responseServices;
 
     res.status(200).json({
       success: true,
@@ -448,7 +535,7 @@ const getAll = async (req, res) => {
       totalItems: totalCount,
       totalPages,
       currentPage,
-      records: responseServices,
+      records: scopedResponseServices,
     });
   } catch (err) {
     console.log("Error is ", err.message);

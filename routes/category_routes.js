@@ -3,6 +3,7 @@ const router = express.Router();
 const { getAll, create,update,  getById,  deleteCategory, importRecords,getDropDown} = require('../controllers/category_controller');
 const authMiddleware = require('../middleware/auth_middleware');
 const rateLimiter = require('../middleware/rate_middleware');
+const { requireFranchiseRelatedCatalogAccess } = require('../middleware/role_middleware');
 const {
   categoryCreateParser,
   categoryUpdateParser,
@@ -36,6 +37,7 @@ router.post(
 );
 router.post('/imports', authMiddleware, importRecords);
 router.get('/get/:id', authMiddleware, getById);
+router.get('/getAll/:franchise_id', authMiddleware, requireFranchiseRelatedCatalogAccess, getAll);
 router.get('/getAll', authMiddleware, getAll);
 router.get('/getDropDown', authMiddleware, getDropDown);
 router.put(

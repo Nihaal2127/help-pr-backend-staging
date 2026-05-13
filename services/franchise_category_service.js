@@ -8,6 +8,7 @@ const User = require('../models/user');
 const { applyPagination } = require('../utils/pagination');
 const {
     normalizeStoredCategoriesList,
+    normalizeStoredServicesList,
     parseObjectIdArray,
     parseObjectIdArrayOrdered,
     coerceLegacyCategoryMappingArrays,

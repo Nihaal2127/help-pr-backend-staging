@@ -3,7 +3,7 @@ const router = express.Router();
 const {getAll, create,update,  getById,  deleteUser,getDropDown,getVerificationAll,changePassword,getPartnerDropDown} = require('../controllers/user_controller');
 const authMiddleware = require('../middleware/auth_middleware');
 // const rateLimiter = require('../middleware/rate_middleware');
-const {createUserMiddleware, updateUserMiddleware,getPartnerDropDownMiddleware, changePasswordMiddleware} = require('../middleware/user_middleware');
+const {createUserMiddleware, updateUserMiddleware,getPartnerDropDownMiddleware, changePasswordMiddleware, enforcePartnerProfileImageSize} = require('../middleware/user_middleware');
 const { authorizeUserCreate } = require('../middleware/user_create_authorization_middleware');
 const { publicPartnerRegisterMiddleware } = require('../middleware/public_partner_register_middleware');
 const { requireSuperAdmin } = require('../middleware/role_middleware');
@@ -37,11 +37,12 @@ router.post('/changePassword', authMiddleware, changePasswordMiddleware, changeP
 router.post(
   '/register-partner',
   uploadImages.single('image'),
+  enforcePartnerProfileImageSize,
   publicPartnerRegisterMiddleware,
   createUserMiddleware,
   create
 );
-router.post('/create', userMultipartUploadIfNeeded, authMiddleware, authorizeUserCreate, createUserMiddleware, create);
+router.post('/create', userMultipartUploadIfNeeded, enforcePartnerProfileImageSize, authMiddleware, authorizeUserCreate, createUserMiddleware, create);
 
 // // Protected route: Create a new user
 router.get('/getAll', authMiddleware, getAll);
@@ -50,7 +51,7 @@ router.get('/get/:id', authMiddleware, getById);
 router.get('/getDropDown', authMiddleware, requireSuperAdmin, getDropDown);
 router.get('/getPartnerDropDown', authMiddleware, getPartnerDropDownMiddleware,getPartnerDropDown);
 
-router.put('/update/:id', authMiddleware, userMultipartUploadIfNeeded, updateUserMiddleware, update);
+router.put('/update/:id', authMiddleware, userMultipartUploadIfNeeded, enforcePartnerProfileImageSize, updateUserMiddleware, update);
 router.delete('/delete/:id',authMiddleware, deleteUser);
 // router.post('/', authMiddleware, userValidationRules, validate, createUser);
 

@@ -591,7 +591,7 @@ const getCountData = async (req, res) => {
                 status: { $ne: 'active' },
             });
         } else if (resolvedType === 13) {
-            // Settings → Management roles: Franchise Admin (type 1 + franchise_id), Franchise Employee (type 3 + franchise_id), Staff (type 6)
+            // Settings → Management roles: Franchise Admin (type 1), Franchise Employee (type 3), Staff (type 6); optional franchiseScope narrows all three
             const caller = await User.findOne({ _id: req.user.id, deleted_at: null }).select('type franchise_id');
             if (!caller) {
                 return res.status(401).json({
@@ -649,13 +649,11 @@ const getCountData = async (req, res) => {
             const franchiseAdminBase = {
                 ...base,
                 type: CALLER_FRANCHISE_ADMIN,
-                franchise_id: { $ne: null, $exists: true },
                 ...franchiseMatch,
             };
             const franchiseEmployeeBase = {
                 ...base,
                 type: CALLER_EMPLOYEE,
-                franchise_id: { $ne: null, $exists: true },
                 ...franchiseMatch,
             };
             const staffBase = {

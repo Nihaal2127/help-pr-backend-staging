@@ -215,6 +215,13 @@ const buildAllServicesWithFranchiseMappingStatus = async (franchiseOid) => {
     }));
 };
 
+const normalizeFranchiseServiceSearchInput = (searchRaw) => {
+    if (searchRaw === undefined || searchRaw === null) return '';
+    return String(searchRaw)
+        .replace(/\+/g, ' ')
+        .trim();
+};
+
 const getServiceCategoryName = (svc) => {
     const c = svc.category_id;
     if (!c) return '';
@@ -240,8 +247,7 @@ const matchesSearchInCategoryNameForService = (svc, qLower) => {
  */
 const filterAllServicesBySearch = (rows, searchRaw) => {
     if (!Array.isArray(rows) || rows.length === 0) return rows;
-    const trimmed =
-        searchRaw !== undefined && searchRaw !== null ? String(searchRaw).trim() : '';
+    const trimmed = normalizeFranchiseServiceSearchInput(searchRaw);
     if (!trimmed) return rows;
     const qLower = trimmed.toLowerCase();
 
@@ -308,6 +314,74 @@ const sortAllServicesRows = (rows, sortBy, sortOrder) => {
     return copy;
 };
 
+const serviceOidFromListEntry = (entry) => {
+    const sid = entry && entry.service_id;
+    if (!sid) return null;
+    if (sid instanceof mongoose.Types.ObjectId) return sid;
+    if (typeof sid === 'object' && sid._id) return sid._id;
+    return null;
+};
+
+const entryMatchesServiceNameInList = (entry, qLower) => {
+    const sid = entry && entry.service_id;
+    if (!sid || sid instanceof mongoose.Types.ObjectId) return false;
+    const n = sid.name != null ? String(sid.name).toLowerCase() : '';
+    return n.includes(qLower);
+};
+
+const entryMatchesCategoryNameInList = (entry, qLower) => {
+    const sid = entry && entry.service_id;
+    if (!sid || sid instanceof mongoose.Types.ObjectId) return false;
+    const c = sid.category_id;
+    if (!c || typeof c !== 'object' || c instanceof mongoose.Types.ObjectId) return false;
+    const n = c.name != null ? String(c.name).toLowerCase() : '';
+    return n.includes(qLower);
+};
+
+/**
+ * When `search` / `q` is present, shrink each mapping row's services_list (and matching
+ * active_services / inactive_services / services_order) so list responses are not huge.
+ * Same rules as filterAllServicesBySearch: service name first, else category name.
+ */
+const filterFranchiseServiceMappingRecordsBySearch = (records, searchRaw) => {
+    const trimmed = normalizeFranchiseServiceSearchInput(searchRaw);
+    if (!trimmed || !Array.isArray(records)) return records;
+    const qLower = trimmed.toLowerCase();
+
+    return records.map((row) => {
+        const plain = row && typeof row.toObject === 'function' ? row.toObject() : { ...row };
+        const list = Array.isArray(plain.services_list) ? plain.services_list : [];
+
+        const nameHits = list.filter((e) => entryMatchesServiceNameInList(e, qLower));
+        const filtered = nameHits.length > 0 ? nameHits : list.filter((e) => entryMatchesCategoryNameInList(e, qLower));
+
+        const idSet = new Set(
+            filtered.map((e) => {
+                const oid = serviceOidFromListEntry(e);
+                return oid ? oid.toString() : '';
+            }).filter(Boolean)
+        );
+
+        plain.services_list = filtered;
+        plain.active_services = filtered
+            .filter((e) => e.is_active)
+            .map((e) => serviceOidFromListEntry(e))
+            .filter(Boolean);
+        plain.inactive_services = filtered
+            .filter((e) => !e.is_active)
+            .map((e) => serviceOidFromListEntry(e))
+            .filter(Boolean);
+
+        if (Array.isArray(plain.services_order)) {
+            plain.services_order = plain.services_order.filter((oid) => idSet.has(oid.toString()));
+        } else {
+            plain.services_order = filtered.map((e) => serviceOidFromListEntry(e)).filter(Boolean);
+        }
+
+        return plain;
+    });
+};
+
 const list = async (query, userId) => {
     try {
         const page = parseInt(query.page, 10) || 1;
@@ -369,7 +443,7 @@ const list = async (query, userId) => {
             }
         }
 
-        const records = filterRecordsByFranchiseMappingToggle(
+        let records = filterRecordsByFranchiseMappingToggle(
             applyServiceCatalogFiltersToRecords(
                 data,
                 undefined,
@@ -382,13 +456,17 @@ const list = async (query, userId) => {
             'service_id'
         );
 
+        const searchTerm = query.search ?? query.q;
+        if (normalizeFranchiseServiceSearchInput(searchTerm)) {
+            records = filterFranchiseServiceMappingRecordsBySearch(records, searchTerm);
+        }
+
         let all_services;
         if (filter.franchise_id) {
             const sortOpts = parseFranchiseServiceCatalogSort(query);
             if (!sortOpts.ok) return fail(400, sortOpts.message);
 
             all_services = await buildAllServicesWithFranchiseMappingStatus(filter.franchise_id);
-            const searchTerm = query.search ?? query.q;
             all_services = filterAllServicesBySearch(all_services, searchTerm);
             all_services = sortAllServicesRows(
                 all_services,

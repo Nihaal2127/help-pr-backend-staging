@@ -583,38 +583,15 @@ const update = async (id, body, userId) => {
                     .filter((e) => !e.is_active)
                     .map((e) => e.category_id);
                 record.categories_order = categoriesOrderFromEntries;
+                await cascadeInactiveCategoriesToFranchiseServices(
+                    record.franchise_id,
+                    record.inactive_categories
+                );
             } else if (auth.isEmployee) {
                 return fail(403, 'Franchise employees cannot update categories list.');
             } else if (auth.isFranchiseAdmin) {
                 if (String(record.franchise_id) !== String(auth.franchise_id)) {
                     return fail(403, 'Access denied.');
-                }
-                const franchise = await Franchise.findOne({
-                    _id: record.franchise_id,
-                    deleted_at: null,
-                }).select('categories');
-                if (!franchise) return fail(404, 'Franchise not found.');
-                const allowed = new Set((franchise.categories || []).map((id) => id.toString()));
-                const existingNorm = normalizeStoredCategoriesList(record.categories_list);
-                const existingById = new Map(
-                    existingNorm.map((e) => [e.category_id.toString(), e.is_active])
-                );
-                const incomingKeys = new Set(parsedCategories.entries.map((e) => e.category_id.toString()));
-                if (
-                    existingById.size !== incomingKeys.size ||
-                    ![...incomingKeys].every((k) => existingById.has(k))
-                ) {
-                    return fail(400, 'categories_list must include every mapped category.');
-                }
-                for (const ent of parsedCategories.entries) {
-                    const idStr = ent.category_id.toString();
-                    const prev = existingById.get(idStr);
-                    if (!allowed.has(idStr) && Boolean(ent.is_active) !== Boolean(prev)) {
-                        return fail(
-                            403,
-                            'You can only change status for categories assigned to your franchise.'
-                        );
-                    }
                 }
                 record.categories_list = parsedCategories.entries;
                 record.active_categories = parsedCategories.entries
@@ -624,6 +601,10 @@ const update = async (id, body, userId) => {
                     .filter((e) => !e.is_active)
                     .map((e) => e.category_id);
                 record.categories_order = categoriesOrderFromEntries;
+                await cascadeInactiveCategoriesToFranchiseServices(
+                    record.franchise_id,
+                    record.inactive_categories
+                );
             } else {
                 return fail(403, 'Access denied.');
             }

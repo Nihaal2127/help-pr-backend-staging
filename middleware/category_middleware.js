@@ -226,7 +226,7 @@ const createCategoryMiddleware = (req, res, next) => {
 };
 
 const createCategoryRequestMiddleware = (req, res, next) => {
-  const { name, desc, image_url, service_ids } = req.body;
+  const { name, desc, image_url } = req.body;
   if (!name || String(name).trim() === "") {
     return res.status(400).json({
       success: false,
@@ -246,17 +246,6 @@ const createCategoryRequestMiddleware = (req, res, next) => {
       success: false,
       status: 400,
       message: "Category Image is required.",
-    });
-  }
-  if (
-    !Array.isArray(service_ids) ||
-    service_ids.length === 0 ||
-    !service_ids.every((id) => id !== undefined && id !== null && String(id).trim() !== "")
-  ) {
-    return res.status(400).json({
-      success: false,
-      status: 400,
-      message: "Service id is required.",
     });
   }
   req.body.is_request = true;

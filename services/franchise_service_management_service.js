@@ -440,33 +440,6 @@ const update = async (id, body, userId) => {
                 if (String(record.franchise_id) !== String(auth.franchise_id)) {
                     return fail(403, 'Access denied.');
                 }
-                const franchise = await Franchise.findOne({
-                    _id: record.franchise_id,
-                    deleted_at: null,
-                }).select('services');
-                if (!franchise) return fail(404, 'Franchise not found.');
-                const allowed = new Set((franchise.services || []).map((id) => id.toString()));
-                const existingNorm = normalizeStoredServicesList(record.services_list);
-                const existingById = new Map(
-                    existingNorm.map((e) => [e.service_id.toString(), e.is_active])
-                );
-                const incomingKeys = new Set(parsedServices.entries.map((e) => e.service_id.toString()));
-                if (
-                    existingById.size !== incomingKeys.size ||
-                    ![...incomingKeys].every((k) => existingById.has(k))
-                ) {
-                    return fail(400, 'services_list must include every mapped service.');
-                }
-                for (const ent of parsedServices.entries) {
-                    const idStr = ent.service_id.toString();
-                    const prev = existingById.get(idStr);
-                    if (!allowed.has(idStr) && Boolean(ent.is_active) !== Boolean(prev)) {
-                        return fail(
-                            403,
-                            'You can only change status for services assigned to your franchise.'
-                        );
-                    }
-                }
                 record.services_list = parsedServices.entries;
                 record.active_services = parsedServices.entries
                     .filter((e) => e.is_active)

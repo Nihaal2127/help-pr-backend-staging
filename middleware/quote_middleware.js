@@ -7,11 +7,44 @@ const Franchise = require("../models/franchise");
 const Address = require("../models/address");
 const { checkObjectIdExists } = require("../validator/id_validator");
 
-const USER_TYPE_CUSTOMER = 4;
+const USER_TYPE_ADMIN = 1;
 const USER_TYPE_PARTNER = 2;
 const USER_TYPE_EMPLOYEE = 3;
+const USER_TYPE_CUSTOMER = 4;
 
 const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+const MAX_CUSTOMER_DESCRIPTION_LEN = 1000;
+
+const getCallerId = (req) =>
+  (req && req.user && (req.user.id || req.user._id)) || null;
+
+const canEditCustomerDescription = async (quote, callerId) => {
+  if (!callerId || !quote) return false;
+  const callerStr = String(callerId);
+
+  if (quote.user_id && String(quote.user_id) === callerStr) {
+    return true;
+  }
+
+  if (quote.employee_id && String(quote.employee_id) === callerStr) {
+    return true;
+  }
+
+  const caller = await User.findOne({
+    _id: callerId,
+    deleted_at: null,
+  }).select("type franchise_id");
+  if (!caller) return false;
+
+  const isFranchiseAdmin =
+    Number(caller.type) === USER_TYPE_ADMIN &&
+    caller.franchise_id &&
+    quote.franchise_id &&
+    String(caller.franchise_id) === String(quote.franchise_id);
+
+  return Boolean(isFranchiseAdmin);
+};
 
 const verifyUserType = async (userId, expectedType, label) => {
   if (!userId) {
@@ -54,6 +87,7 @@ const validateCommonFields = async (body, { partial } = { partial: false }) => {
     total_work_hours,
     work_start_time,
     work_end_time,
+    customer_description,
   } = body;
 
   if (!partial || user_id !== undefined) {
@@ -156,6 +190,18 @@ const validateCommonFields = async (body, { partial } = { partial: false }) => {
     }
   }
 
+  if (customer_description !== undefined && customer_description !== null) {
+    if (typeof customer_description !== "string") {
+      return { ok: false, message: "customer_description must be a string." };
+    }
+    if (customer_description.trim().length > MAX_CUSTOMER_DESCRIPTION_LEN) {
+      return {
+        ok: false,
+        message: `customer_description must be ${MAX_CUSTOMER_DESCRIPTION_LEN} characters or fewer.`,
+      };
+    }
+  }
+
   return { ok: true };
 };
 
@@ -188,6 +234,7 @@ const updateQuoteMiddleware = async (req, res, next) => {
     "work_start_time",
     "work_end_time",
     "created_by_id",
+    "customer_description",
   ]);
 
   const unknown = Object.keys(body).filter((k) => !allowedKeys.has(k));
@@ -225,7 +272,9 @@ const updateQuoteMiddleware = async (req, res, next) => {
   const needsCrossValidation =
     partialBody.from_date !== undefined ||
     partialBody.to_date !== undefined;
-  if (needsCrossValidation) {
+  const needsDescriptionAuth = partialBody.customer_description !== undefined;
+
+  if (needsCrossValidation || needsDescriptionAuth) {
     const quoteId = req.params.id;
     if (!mongoose.Types.ObjectId.isValid(quoteId)) {
       return res.status(409).json({
@@ -242,18 +291,34 @@ const updateQuoteMiddleware = async (req, res, next) => {
         message: "Quote not found.",
       });
     }
-    const from = parseDateEndOfDay(
-      partialBody.from_date !== undefined ? partialBody.from_date : existing.from_date
-    );
-    const to = parseDateEndOfDay(
-      partialBody.to_date !== undefined ? partialBody.to_date : existing.to_date
-    );
-    if (from && to && to < from) {
-      return res.status(409).json({
-        success: false,
-        status: 409,
-        message: "to_date must be on or after from_date.",
-      });
+
+    if (needsDescriptionAuth) {
+      const callerId = getCallerId(req);
+      const allowed = await canEditCustomerDescription(existing, callerId);
+      if (!allowed) {
+        return res.status(403).json({
+          success: false,
+          status: 403,
+          message:
+            "Only the customer, the assigned employee, or the franchise admin can edit customer_description.",
+        });
+      }
+    }
+
+    if (needsCrossValidation) {
+      const from = parseDateEndOfDay(
+        partialBody.from_date !== undefined ? partialBody.from_date : existing.from_date
+      );
+      const to = parseDateEndOfDay(
+        partialBody.to_date !== undefined ? partialBody.to_date : existing.to_date
+      );
+      if (from && to && to < from) {
+        return res.status(409).json({
+          success: false,
+          status: 409,
+          message: "to_date must be on or after from_date.",
+        });
+      }
     }
   }
 

@@ -100,6 +100,10 @@ const create = async (req, res) => {
       total_work_hours: parseFloat(body.total_work_hours),
       work_start_time: String(body.work_start_time).trim(),
       work_end_time: String(body.work_end_time).trim(),
+      customer_description:
+        typeof body.customer_description === "string"
+          ? body.customer_description.trim()
+          : "",
     });
 
     await quote.save();
@@ -278,6 +282,7 @@ const getAll = async (req, res) => {
               $match: {
                 $or: [
                   { quote_sequence_id: regex },
+                  { customer_description: regex },
                   { "_user.name": regex },
                   { "_user.user_id": regex },
                   { "_user.email": regex },
@@ -706,6 +711,7 @@ const update = async (req, res) => {
       "work_start_time",
       "work_end_time",
       "created_by_id",
+      "customer_description",
     ];
 
     const body = req.body;
@@ -719,6 +725,9 @@ const update = async (req, res) => {
           ["service_price", "work_hours_per_day", "total_work_hours"].includes(key)
         ) {
           quote[key] = parseFloat(body[key]);
+        } else if (key === "customer_description") {
+          quote.customer_description =
+            typeof body[key] === "string" ? body[key].trim() : "";
         } else {
           quote[key] = body[key];
         }

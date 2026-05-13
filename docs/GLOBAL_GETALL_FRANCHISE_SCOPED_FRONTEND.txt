@@ -1,0 +1,269 @@
+================================================================================
+  Global category & service getAll — franchise-scoped variants — frontend integration
+================================================================================
+
+What this is
+------------
+  Two new GET routes on the existing **global** catalog APIs that return the
+  franchise-scoped catalog using the same response shape (and underlying
+  service) as the existing franchise mapping endpoints.
+
+  - Global category list (unchanged):
+      GET /api/category/getAll
+
+  - Global service list (unchanged):
+      GET /api/service/getAll
+
+  - NEW — franchise-scoped variants:
+      GET /api/category/getAll/:franchise_id
+      GET /api/service/getAll/:franchise_id
+
+  Behavior summary:
+    - When :franchise_id is present in the URL, the request is handed off to
+      the franchise mapping service and returns exactly the same payload as
+      GET /api/franchise-category/getAll (with franchise_id) or
+      GET /api/franchise-service/getAll (with franchise_id).
+    - When :franchise_id is NOT present, the existing global getAll behavior
+      is unchanged.
+
+  TL;DR for the frontend:
+    - Want global, cross-franchise data? Use the existing /getAll.
+    - Want the same UI scoped to one franchise (mapping records + all_*
+      catalog)? Hit the new /getAll/:franchise_id variant.
+
+--------------------------------------------------------------------------------
+Routes
+--------------------------------------------------------------------------------
+
+  GET /api/category/getAll/:franchise_id
+      Delegates to the same handler as
+      GET /api/franchise-category/getAll?franchise_id=:franchise_id
+
+  GET /api/service/getAll/:franchise_id
+      Delegates to the same handler as
+      GET /api/franchise-service/getAll?franchise_id=:franchise_id
+
+  The path parameter must be a 24-char MongoDB ObjectId (the franchise _id).
+  Invalid format → 400 with a short message.
+
+--------------------------------------------------------------------------------
+Authentication & roles
+--------------------------------------------------------------------------------
+
+  Required: Bearer JWT (Authorization: Bearer <token>).
+
+  Roles allowed:
+    - Super Admin (type 5)
+    - Staff       (type 6)
+    - Franchise Admin    (type 1) — only for their own franchise_id
+    - Franchise Employee (type 3) — only for their own franchise_id
+
+  Access rules (middleware: requireFranchiseRelatedCatalogAccess):
+    - Super Admin / Staff can request any franchise_id.
+    - Franchise Admin / Employee:
+        * :franchise_id in the URL MUST equal the user’s franchise_id, else 403.
+    - Anyone else (partner, customer, etc.) → 403.
+    - franchise_id must be a valid ObjectId, else 400.
+    - Franchise not found / soft-deleted → 404 (from the underlying service).
+
+--------------------------------------------------------------------------------
+Response shape
+--------------------------------------------------------------------------------
+
+  IDENTICAL to the existing franchise mapping list endpoints. See:
+
+    - docs/FRANCHISE_CATEGORY_GETALL_FRONTEND.txt
+        (for /api/category/getAll/:franchise_id)
+
+    - docs/FRANCHISE_SERVICE_GETALL_FRONTEND.txt
+        (for /api/service/getAll/:franchise_id)
+
+  Quick recap (200 OK):
+
+  /api/category/getAll/:franchise_id
+  {
+    "success": true,
+    "status": 200,
+    "message": "Franchise category list fetched successfully.",
+    "totalItems": <number>,                        // pagination for mapping records
+    "totalPages": <number>,
+    "currentPage": <number>,
+    "records": [ <franchise_category mapping docs> ],
+    "all_categories": [ <global category catalog with franchise_active + related_services> ]
+  }
+
+  /api/service/getAll/:franchise_id
+  {
+    "success": true,
+    "status": 200,
+    "message": "Franchise service list fetched successfully.",
+    "totalItems": <number>,
+    "totalPages": <number>,
+    "currentPage": <number>,
+    "records": [ <franchise_service mapping docs> ],
+    "all_services": [ <global service catalog with franchise_active + populated category_id> ]
+  }
+
+  Notes:
+    - records  = paginated rows from the franchise_category / franchise_service
+                 **mapping** collection for this franchise.
+                 Each row exposes:
+                   categories_list / services_list
+                   active_categories / active_services
+                   inactive_categories / inactive_services
+                   categories_order / services_order
+                   order_number, franchise_id, etc.
+    - all_categories / all_services = every global Category / Service
+                 (deleted_at: null), each annotated with franchise_active
+                 (true/false) based on the latest mapping document for this
+                 franchise.
+                 - all_categories items also include related_services
+                   (non-deleted global services in that category, sorted by name).
+                 - all_services items include the populated category_id
+                   (when not deleted).
+    - Synthetic fallback: if no franchise_category / franchise_service mapping
+      document exists yet for this franchise, the API synthesises one from
+      Franchise.categories / Franchise.services treating every assigned
+      catalog id as active. This means the UI never has to special-case
+      “mapping not created yet”.
+
+--------------------------------------------------------------------------------
+Query parameters (same as franchise mapping endpoints)
+--------------------------------------------------------------------------------
+
+  Pagination — applies to `records` only
+  ---------------------------------------
+  page         number; default 1
+  limit        number; default 10
+
+  Mapping list filters — affect items inside `records`
+  -----------------------------------------------------
+  is_active    optional boolean: "true" | "false" | "1" | "0"
+               Filters mapping entries by franchise on/off:
+                 - true  → only entries currently active in the mapping
+                 - false → only entries currently inactive in the mapping
+               Omit → both are returned.
+               (Also adjusts active_* / inactive_* / *_order on each record to
+               stay consistent with the filtered list.)
+
+  is_request   optional boolean
+               Filters catalog fields on items within records:
+                 - Category.is_request (categories) — pending vs approved
+                 - Service.is_request  (services)   — pending vs approved
+               Omit → no catalog request filter.
+
+  Global catalog: search — affects `all_categories` / `all_services`
+  --------------------------------------------------------------------
+  search       optional string; case-insensitive substring.
+  q            alias of search.
+
+  /api/category/getAll/:franchise_id behavior:
+    1) Match by global category **name**; if any match, return only those.
+    2) Otherwise, return categories where any **related service name** matches.
+
+  /api/service/getAll/:franchise_id behavior:
+    1) Match by global service **name**; if any match, return only those.
+    2) Otherwise, return services whose populated **category name** matches.
+
+  Empty / omitted → no search filter; sort is then applied to the full list.
+
+  Global catalog: sort — affects `all_categories` / `all_services`
+  -----------------------------------------------------------------
+  sort_by      optional; default: name
+
+               Categories: name | id | _id
+               Services:   name | id | _id | category_name | category
+                 (category_name / category sorts by parent category name;
+                  ties broken by service name.)
+
+  sort_order   optional; default: asc.  Values: asc | desc
+  order        alias of sort_order
+
+  Invalid sort_by / sort_order → 400 with a short message.
+
+--------------------------------------------------------------------------------
+Error responses
+--------------------------------------------------------------------------------
+
+  400  franchise_id must be a valid MongoDB ObjectId.
+       Or invalid is_active / is_request / sort_by / sort_order value.
+  401  Missing / invalid JWT.
+  403  Caller role not allowed for this franchise (e.g. franchise admin
+       requesting another franchise’s data).
+  404  Franchise not found / soft-deleted.
+  500  Server error.
+
+  Error body shape:
+    {
+      "success": false,
+      "status": <number>,
+      "message": "<short reason>"
+    }
+
+--------------------------------------------------------------------------------
+Examples
+--------------------------------------------------------------------------------
+
+  Categories for one franchise — first page of mapping records + all_categories:
+    GET /api/category/getAll/64f1c0e2a1b2c3d4e5f60001?page=1&limit=10
+
+  Services for one franchise — only entries currently active in mapping:
+    GET /api/service/getAll/64f1c0e2a1b2c3d4e5f60001?is_active=true
+
+  Categories scoped by franchise + global catalog search:
+    GET /api/category/getAll/64f1c0e2a1b2c3d4e5f60001?search=plumb&sort_by=name&sort_order=desc
+
+  Services scoped by franchise + sort all_services by category name:
+    GET /api/service/getAll/64f1c0e2a1b2c3d4e5f60001?sort_by=category_name&sort_order=asc
+
+  Franchise admin (token has franchise_id):
+    GET /api/category/getAll/<their-own-franchise_id>
+    GET /api/service/getAll/<their-own-franchise_id>
+    # passing any other franchise_id → 403
+
+--------------------------------------------------------------------------------
+Difference vs the existing franchise mapping endpoints
+--------------------------------------------------------------------------------
+
+  These are equivalent (same handler, same response):
+
+    GET /api/category/getAll/:franchise_id
+    GET /api/franchise-category/getAll?franchise_id=:franchise_id
+
+    GET /api/service/getAll/:franchise_id
+    GET /api/franchise-service/getAll?franchise_id=:franchise_id
+
+  Choose based on how the URL fits the page / breadcrumb you’re building.
+  The /api/category/getAll & /api/service/getAll endpoints without the
+  :franchise_id path param continue to return the global catalogue exactly
+  as before (no behaviour change).
+
+--------------------------------------------------------------------------------
+Frontend checklist
+--------------------------------------------------------------------------------
+
+  [ ] Use the new /getAll/:franchise_id variant when the screen is dedicated
+      to one franchise (admin "manage this franchise" pages, deep-links with
+      franchise_id in the URL, etc.).
+
+  [ ] Read mapping rows from `records` (paginated, page/limit applies here).
+
+  [ ] Read the full annotated catalog (with franchise_active flags) from
+      `all_categories` / `all_services` for pick / on-off / drag-and-drop
+      screens.
+
+  [ ] Send search / sort_by / sort_order to filter and sort `all_categories`
+      / `all_services` server-side; mapping pagination keeps using page/limit.
+
+  [ ] Do NOT confuse:
+        - is_active query param (mapping toggle filter on records)
+        - franchise_active on each all_* item (current on/off in mapping)
+        - Category.is_active / Service.is_active (catalog active flag)
+
+  [ ] Franchise admin / employee dashboards should always hit
+      /getAll/:franchise_id with their own franchise_id — the API enforces it,
+      a mismatched id returns 403.
+
+================================================================================
+  End of document
+================================================================================

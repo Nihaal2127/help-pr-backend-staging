@@ -58,17 +58,27 @@ Query parameters — reference
   is_active            optional true|false — filters mapping entries by franchise on/off
   is_request           optional — filters by Service.is_request on items in records
 
-  Global catalog: search (all_services only)
-  ------------------------------------------
+  Global catalog: search (all_services and mapping records)
+  -----------------------------------------------------------
   search               optional string; case-insensitive substring.
   q                    alias of search.
+                       “+” in the value is treated as space (helps URL query strings).
 
-  Logic (two steps):
-    1) If any global service’s **name** matches, return only those services.
-    2) If no service name matches, return services whose **related category name**
-       (from populated category_id.name) matches.
+  When search is non-empty:
 
-  Omitted/empty search: no search filter; then sort is applied to the full list.
+  - **all_services** — filtered global catalog (same rules as before).
+  - **records** — each mapping row’s **services_list** is reduced to matching entries only,
+    and **active_services**, **inactive_services**, and **services_order** are trimmed to
+    that subset (original order preserved where possible). This keeps list payloads small
+    when the UI searches (e.g. one franchise row no longer returns every mapped service).
+
+  Logic (two steps), for both all_services and each record’s services_list:
+
+    1) If any service **name** matches, keep only those rows / entries.
+    2) If no service name matches, keep rows / entries whose **category name**
+       (populated category_id.name) matches.
+
+  Omitted/empty search: no search filter on records or all_services.
 
   Global catalog: sort (all_services only)
   ----------------------------------------
@@ -104,9 +114,11 @@ Examples
 Parity with franchise-category getAll
 --------------------------------------------------------------------------------
 
-  Same idea: search + sort apply to the **global catalog** array (all_services),
-  not to paginated mapping records. Mapping filters (is_active, is_request) behave
-  as before on **records**.
+  Search trims the global catalog (**all_services**). Franchise service list also trims
+  each **records** mapping row’s **services_list** (and **active_services** /
+  **inactive_services** / **services_order**) when search is set, so responses stay small.
+  **sort_by** / **sort_order** apply only to **all_services**. Mapping filters
+  (**is_active**, **is_request**) still apply before search trimming.
 
 ================================================================================
   End of document

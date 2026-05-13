@@ -24,6 +24,7 @@ var quoteSchema = new schema(
     order_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "order" },
     cancellation_reason: { type: String, default: "", trim: true },
     rejection_reason: { type: String, default: "", trim: true },
+    customer_description: { type: String, default: "", trim: true },
     created_at: { type: Date, default: Date.now },
     updated_at: { type: Date, default: Date.now },
     deleted_at: { type: Date, default: null },

@@ -2824,7 +2824,7 @@
       "item": [
         {
           "name": "Partner (type 2)",
-          "description": "Partner CRUD uses the same **`/api/user`** routes with **`type`**: **2**. Set collection variable **`partnerId`** via **Create partner (web)** or **Register partner (public)**.",
+          "description": "Partner CRUD uses **`/api/user`**. **`Create partner (web)`** form matches dashboard **`multipart/form-data`**: nested **`partner_services`**, optional parallel **`category_ids`** / **`service_ids`**, **`bank_account`**, verification **files**, **`profile_url`**, **`image`**. Set **`partnerId`** from create or **Register partner (public)**.",
           "item": [
             {
               "name": "Create partner (web)",
@@ -2856,26 +2856,6 @@
                   "mode": "formdata",
                   "formdata": [
                     {
-                      "key": "name",
-                      "value": "Web Partner {{$timestamp}}",
-                      "type": "text"
-                    },
-                    {
-                      "key": "email",
-                      "value": "partner.web+{{$timestamp}}@example.com",
-                      "type": "text"
-                    },
-                    {
-                      "key": "phone_number",
-                      "value": "+918812340002",
-                      "type": "text"
-                    },
-                    {
-                      "key": "password",
-                      "value": "Test@1234",
-                      "type": "text"
-                    },
-                    {
                       "key": "type",
                       "value": "2",
                       "type": "text"
@@ -2886,18 +2866,8 @@
                       "type": "text"
                     },
                     {
-                      "key": "is_active",
-                      "value": "true",
-                      "type": "text"
-                    },
-                    {
                       "key": "registration_type",
                       "value": "1",
-                      "type": "text"
-                    },
-                    {
-                      "key": "franchise_id",
-                      "value": "{{franchiseId}}",
                       "type": "text"
                     },
                     {
@@ -2906,8 +2876,23 @@
                       "type": "text"
                     },
                     {
+                      "key": "name",
+                      "value": "Siva",
+                      "type": "text"
+                    },
+                    {
+                      "key": "email",
+                      "value": "partner.web+{{$timestamp}}@example.com",
+                      "type": "text"
+                    },
+                    {
+                      "key": "phone_number",
+                      "value": "+919001234347",
+                      "type": "text"
+                    },
+                    {
                       "key": "address",
-                      "value": "123 Partner Lane",
+                      "value": "Door no-3/27, 2nd street",
                       "type": "text"
                     },
                     {
@@ -2921,14 +2906,131 @@
                       "type": "text"
                     },
                     {
+                      "key": "area_id",
+                      "value": "{{areaId}}",
+                      "type": "text",
+                      "description": "Optional; not stored on user model (sent for parity with dashboard)."
+                    },
+                    {
+                      "key": "is_active",
+                      "value": "true",
+                      "type": "text"
+                    },
+                    {
+                      "key": "is_blocked",
+                      "value": "false",
+                      "type": "text"
+                    },
+                    {
                       "key": "pincode",
-                      "value": "560001",
+                      "value": "535005",
                       "type": "text"
                     },
                     {
                       "key": "profile_url",
-                      "value": "https://example.com/profile.png",
+                      "value": "user_profile/3c8b7641-193a-44db-a3d4-b826a332f005_item-detail-btn-img.png",
+                      "type": "text",
+                      "description": "Relative or absolute URL; overridden when **image** file is attached."
+                    },
+                    {
+                      "key": "franchise_id",
+                      "value": "{{franchiseId}}",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "password",
+                      "value": "Test@1234",
                       "type": "text"
+                    },
+                    {
+                      "key": "confirm_password",
+                      "value": "Test@1234",
+                      "type": "text",
+                      "description": "Not read by API."
+                    },
+                    {
+                      "key": "partner_services",
+                      "value": "[{\"category_id\":\"{{categoryObjectId}}\",\"services\":[{\"service_id\":\"{{serviceObjectId}}\",\"description\":\"legal documents\",\"price\":1234}]}]",
+                      "type": "text",
+                      "description": "Nested dashboard shape: [{ category_id, services: [{ service_id, description, price }] }]. Add more `{ category_id, services }` objects for multiple categories."
+                    },
+                    {
+                      "key": "category_ids",
+                      "value": "[\"{{categoryObjectId}}\",\"{{categoryObjectId}}\"]",
+                      "type": "text",
+                      "disabled": true,
+                      "description": "Alternate path: enable and clear **partner_services** to build rows from parallel arrays."
+                    },
+                    {
+                      "key": "service_ids",
+                      "value": "[\"{{serviceObjectId}}\",\"{{serviceObjectId}}\",\"{{serviceObjectId}}\"]",
+                      "type": "text",
+                      "disabled": true,
+                      "description": "Alternate path (with **category_ids**); must use distinct real service OIDs."
+                    },
+                    {
+                      "key": "service_names",
+                      "value": "[\"Legal Documentation Service\",\"Home Companion Service\",\"Housekeeping Assistance\"]",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "service_descriptions",
+                      "value": "[\"legal documents\",\"Home services\",\"House cleaning\"]",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "service_prices",
+                      "value": "[\"1234\",\"1000\",\"999\"]",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "vehicle_registration",
+                      "type": "file",
+                      "src": [],
+                      "description": "Verification file (image or PDF)."
+                    },
+                    {
+                      "key": "police_verification_certificate",
+                      "type": "file",
+                      "src": []
+                    },
+                    {
+                      "key": "pan_card",
+                      "type": "file",
+                      "src": []
+                    },
+                    {
+                      "key": "driving_license",
+                      "type": "file",
+                      "src": []
+                    },
+                    {
+                      "key": "aadhar_card",
+                      "type": "file",
+                      "src": []
+                    },
+                    {
+                      "key": "partner_documents",
+                      "value": "{}",
+                      "type": "text",
+                      "description": "Optional JSON slug→URL; merged with verification files."
+                    },
+                    {
+                      "key": "bank_account",
+                      "value": "{\"account_holder_name\":\"Siva\",\"account_number\":\"1111111111111\",\"ifsc_code\":\"idbi000t196\",\"bank_name\":\"indian bank\",\"branch_name\":\"\",\"is_primary\":true,\"is_active\":true}",
+                      "type": "text",
+                      "description": "**is_active** on bank JSON is ignored by API (not on bank model)."
+                    },
+                    {
+                      "key": "partner_subscription",
+                      "value": "{\"subscription_plan_id\":\"{{id}}\",\"status\":1,\"notes\":\"\"}",
+                      "type": "text",
+                      "disabled": true,
+                      "description": "Enable when you have a real **subscription_plan_id**."
                     },
                     {
                       "key": "is_business",
@@ -2939,7 +3041,7 @@
                       "key": "image",
                       "type": "file",
                       "src": [],
-                      "disabled": true
+                      "description": "Optional profile image; overrides **profile_url** when set."
                     }
                   ]
                 },
@@ -2954,9 +3056,9 @@
                     "create"
                   ]
                 },
-                "description": "**`POST /api/user/create`** — **`multipart/form-data`** (route: **`uploadImages.single(\"image\")`**). **`type`**: **2**, **`is_from_web`**: **true**. **`created_by_id`**: Mongo ObjectId (e.g. **`{{adminId}}`**). Optional file field **`image`**; enable it instead of **`profile_url`** if you prefer upload. Do not set **`Content-Type`** manually in Postman (boundary is set automatically). **`authorizeUserCreate`**: franchise admin/employee may have **`franchise_id`** forced from token."
+                "description": "**`POST /api/user/create`** — **`multipart/form-data`** aligned with admin dashboard: **`type`**, **`is_from_web`**, **`registration_type`**, **`created_by_id`**, identity/address, **`is_blocked`**, **`profile_url`**, nested **`partner_services`** or (alternate) parallel **`category_ids`** / **`service_ids`**, **`bank_account`**, optional **`partner_subscription`**, verification **files** + **`partner_documents`**, **`image`**. JSON **`application/json`** still works without file parts. Do not set **`Content-Type`** manually."
               },
-              "description": "Web/admin onboarding partner — **`multipart/form-data`** body."
+              "description": "Web/admin partner create — dashboard-shaped **form-data**."
             },
             {
               "name": "Get all partners",
@@ -3066,15 +3168,191 @@
                   "mode": "formdata",
                   "formdata": [
                     {
+                      "key": "type",
+                      "value": "2",
+                      "type": "text"
+                    },
+                    {
+                      "key": "is_from_web",
+                      "value": "true",
+                      "type": "text"
+                    },
+                    {
+                      "key": "registration_type",
+                      "value": "1",
+                      "type": "text"
+                    },
+                    {
+                      "key": "created_by_id",
+                      "value": "{{adminId}}",
+                      "type": "text",
+                      "disabled": true,
+                      "description": "Usually omitted on update; harmless if sent."
+                    },
+                    {
                       "key": "name",
                       "value": "Updated Partner Name",
+                      "type": "text"
+                    },
+                    {
+                      "key": "email",
+                      "value": "partner.web+{{$timestamp}}@example.com",
+                      "type": "text"
+                    },
+                    {
+                      "key": "phone_number",
+                      "value": "+919001234347",
+                      "type": "text"
+                    },
+                    {
+                      "key": "address",
+                      "value": "Door no-3/27, 2nd street",
+                      "type": "text"
+                    },
+                    {
+                      "key": "state_id",
+                      "value": "{{stateId}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "city_id",
+                      "value": "{{cityId}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "area_id",
+                      "value": "{{areaId}}",
+                      "type": "text",
+                      "description": "Optional; not stored on user."
+                    },
+                    {
+                      "key": "is_active",
+                      "value": "true",
+                      "type": "text"
+                    },
+                    {
+                      "key": "is_blocked",
+                      "value": "false",
+                      "type": "text"
+                    },
+                    {
+                      "key": "pincode",
+                      "value": "535005",
+                      "type": "text"
+                    },
+                    {
+                      "key": "profile_url",
+                      "value": "user_profile/3c8b7641-193a-44db-a3d4-b826a332f005_item-detail-btn-img.png",
+                      "type": "text"
+                    },
+                    {
+                      "key": "franchise_id",
+                      "value": "{{franchiseId}}",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "password",
+                      "value": "Test@1234",
+                      "type": "text",
+                      "disabled": true,
+                      "description": "Enable only to change password (same validation as create)."
+                    },
+                    {
+                      "key": "confirm_password",
+                      "value": "Test@1234",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "partner_services",
+                      "value": "[{\"category_id\":\"{{categoryObjectId}}\",\"services\":[{\"service_id\":\"{{serviceObjectId}}\",\"description\":\"legal documents\",\"price\":1234}]}]",
+                      "type": "text",
+                      "disabled": true,
+                      "description": "Partner service rows are not replaced by this route by default; enable only if you extend the API."
+                    },
+                    {
+                      "key": "category_ids",
+                      "value": "[\"{{categoryObjectId}}\",\"{{categoryObjectId}}\"]",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "service_ids",
+                      "value": "[\"{{serviceObjectId}}\",\"{{serviceObjectId}}\",\"{{serviceObjectId}}\"]",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "service_names",
+                      "value": "[\"Legal Documentation Service\",\"Home Companion Service\",\"Housekeeping Assistance\"]",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "service_descriptions",
+                      "value": "[\"legal documents\",\"Home services\",\"House cleaning\"]",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "service_prices",
+                      "value": "[\"1234\",\"1000\",\"999\"]",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "vehicle_registration",
+                      "type": "file",
+                      "src": []
+                    },
+                    {
+                      "key": "police_verification_certificate",
+                      "type": "file",
+                      "src": []
+                    },
+                    {
+                      "key": "pan_card",
+                      "type": "file",
+                      "src": []
+                    },
+                    {
+                      "key": "driving_license",
+                      "type": "file",
+                      "src": []
+                    },
+                    {
+                      "key": "aadhar_card",
+                      "type": "file",
+                      "src": []
+                    },
+                    {
+                      "key": "partner_documents",
+                      "value": "{}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "bank_account",
+                      "value": "{\"account_holder_name\":\"Siva\",\"account_number\":\"1111111111111\",\"ifsc_code\":\"idbi000t196\",\"bank_name\":\"indian bank\",\"branch_name\":\"\",\"is_primary\":true,\"is_active\":true}",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "partner_subscription",
+                      "value": "{\"subscription_plan_id\":\"{{id}}\",\"status\":1,\"notes\":\"\"}",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "is_business",
+                      "value": "false",
                       "type": "text"
                     },
                     {
                       "key": "image",
                       "type": "file",
                       "src": [],
-                      "disabled": true
+                      "description": "Optional new profile photo."
                     }
                   ]
                 },
@@ -3090,9 +3368,9 @@
                     "{{partnerId}}"
                   ]
                 },
-                "description": "**`PUT /api/user/update/:id`** — **`multipart/form-data`** (route: **`uploadImages.single(\"image\")`**). Add more text keys as needed (`email`, `phone_number`, `is_active`, …). Optional file field **`image`** for profile; enable **`image`** and clear/disable **`profile_url`** if you only upload a file. Do not set **`Content-Type`** manually in Postman."
+                "description": "**`PUT /api/user/update/:id`** — same **`multipart`** field names as create for testing; most service/bank rows disabled by default. Verification **files** + **`partner_documents`** still apply for **`type`**: **2**."
               },
-              "description": "Multipart update example for **`partnerId`** — add fields as needed."
+              "description": "Multipart **`partnerId`** update — form keys aligned with create (optional fields disabled)."
             },
             {
               "name": "Delete partner (soft)",

@@ -86,7 +86,15 @@ const authorizeUserCreate = async (req, res, next) => {
               'Your account is not linked to a franchise. You cannot create partners or employees.',
           });
         }
-        req.body.franchise_id = caller.franchise_id;
+        const rawFranchise = req.body.franchise_id;
+        const hasPayloadFranchise =
+          rawFranchise !== undefined &&
+          rawFranchise !== null &&
+          String(rawFranchise).trim() !== '' &&
+          mongoose.Types.ObjectId.isValid(String(rawFranchise));
+        if (!hasPayloadFranchise) {
+          req.body.franchise_id = caller.franchise_id;
+        }
       }
 
       return next();

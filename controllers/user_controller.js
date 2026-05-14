@@ -57,6 +57,21 @@ function getSortDirection(query, fallback = -1) {
   return fallback;
 }
 
+/** GET /user/getAll ?is_verified= for type=2. Omitted → verified only (2), matching previous hardcoded filter. */
+function resolvePartnerListVerificationStatus(isVerifiedRaw) {
+  if (isVerifiedRaw === undefined || isVerifiedRaw === null || String(isVerifiedRaw).trim() === '') {
+    return { ok: true, verification_status: 2 };
+  }
+  const key = String(isVerifiedRaw).trim().toLowerCase();
+  if (key === 'approved') return { ok: true, verification_status: 2 };
+  if (key === 'pending') return { ok: true, verification_status: 1 };
+  if (key === 'rejected') return { ok: true, verification_status: 3 };
+  return {
+    ok: false,
+    message: 'is_verified must be one of: approved, pending, rejected.',
+  };
+}
+
 const parseBooleanInput = (value) => {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'string') {
@@ -74,6 +89,7 @@ const createAddressRecord = async ({
   address,
   stateId,
   cityId,
+  areaId,
   pincode,
   addressStatus,
 }) => {
@@ -85,6 +101,9 @@ const createAddressRecord = async ({
     address,
     state_id: stateId,
     city_id: cityId,
+    ...(areaId && mongoose.Types.ObjectId.isValid(String(areaId))
+      ? { area_id: areaId }
+      : {}),
     pincode,
     address_status: addressStatus === undefined ? true : parseBooleanInput(addressStatus),
   });
@@ -108,17 +127,43 @@ const normalizePartnerServices = (payload) => {
   const rows = [];
   for (const item of parsed) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const categoryIsActive = item.is_active !== undefined ? item.is_active !== false : true;
     if (Array.isArray(item.services)) {
       const parentCategoryId = item.category_id ?? null;
       for (const svc of item.services) {
-        if (!svc || typeof svc !== 'object' || Array.isArray(svc)) continue;
-        const sid = svc.service_id ?? svc.serviceId ?? null;
+        if (svc === undefined || svc === null) continue;
+        let sid = null;
+        let description = '';
+        let price = null;
+        let payment_type = '';
+        let tax = null;
+        let minimum_deposit = null;
+        let serviceIsActive = true;
+        if (typeof svc === 'string' || typeof svc === 'number') {
+          const s = String(svc).trim();
+          if (mongoose.Types.ObjectId.isValid(s)) sid = s;
+        } else if (typeof svc === 'object' && !Array.isArray(svc)) {
+          sid = svc.service_id ?? svc.serviceId ?? null;
+          description = svc.description != null ? String(svc.description) : '';
+          price = svc.price;
+          payment_type = svc.payment_type != null ? String(svc.payment_type).trim() : '';
+          tax = svc.tax;
+          minimum_deposit = svc.minimum_deposit;
+          if (svc.is_active !== undefined) serviceIsActive = svc.is_active !== false;
+        }
         if (!sid || !mongoose.Types.ObjectId.isValid(String(sid))) continue;
         rows.push({
-          category_id: svc.category_id ?? parentCategoryId,
+          category_id: svc && typeof svc === 'object' && !Array.isArray(svc) && svc.category_id
+            ? svc.category_id
+            : parentCategoryId,
           service_id: sid,
-          description: svc.description ?? '',
-          price: svc.price ?? null,
+          description,
+          price,
+          payment_type,
+          tax,
+          minimum_deposit,
+          is_active: serviceIsActive,
+          category_is_active: categoryIsActive,
         });
       }
     } else {
@@ -127,8 +172,13 @@ const normalizePartnerServices = (payload) => {
       rows.push({
         category_id: item.category_id ?? null,
         service_id: sid,
-        description: item.description ?? '',
-        price: item.price ?? null,
+        description: item.description != null ? String(item.description) : '',
+        price: item.price,
+        payment_type: item.payment_type != null ? String(item.payment_type).trim() : '',
+        tax: item.tax,
+        minimum_deposit: item.minimum_deposit,
+        is_active: item.is_active !== undefined ? item.is_active !== false : true,
+        category_is_active: categoryIsActive,
       });
     }
   }
@@ -148,6 +198,9 @@ const buildPartnerServicesFromParallelFields = (body) => {
   const names = coerceArray(body.service_names, []);
   const descs = coerceArray(body.service_descriptions, []);
   const prices = coerceArray(body.service_prices, []);
+  const taxes = coerceArray(body.service_taxes, []);
+  const paymentTypes = coerceArray(body.service_payment_types, []);
+  const minimumDeposits = coerceArray(body.service_minimum_deposits, []);
   const rows = [];
   for (let i = 0; i < ids.length; i++) {
     const sid = ids[i];
@@ -163,6 +216,11 @@ const buildPartnerServicesFromParallelFields = (body) => {
       service_id: sid,
       description: descs[i] != null ? String(descs[i]) : '',
       price: prices[i] != null ? prices[i] : null,
+      tax: taxes[i] != null ? taxes[i] : null,
+      payment_type: paymentTypes[i] != null ? String(paymentTypes[i]).trim() : '',
+      minimum_deposit: minimumDeposits[i] != null ? minimumDeposits[i] : null,
+      is_active: true,
+      category_is_active: true,
     });
   }
   return rows;
@@ -211,8 +269,16 @@ const normalizePartnerSubscriptionPayload = (payload) => {
   return {
     partner_id: parsed.partner_id ?? parsed.partner ?? null,
     subscription_plan_id: parsed.subscription_plan_id ?? parsed.subscription_plan ?? null,
-    started_at: parsed.started_at ?? parsed.subscription_start_date ?? null,
-    expires_at: parsed.expires_at ?? parsed.subscription_end_date ?? null,
+    started_at:
+      parsed.started_at ??
+      parsed.subscription_start_date ??
+      parsed.start_date ??
+      null,
+    expires_at:
+      parsed.expires_at ??
+      parsed.subscription_end_date ??
+      parsed.end_date ??
+      null,
     status: parsed.status ?? null,
     notes: parsed.notes ?? '',
   };
@@ -469,11 +535,25 @@ const getAll = async (req, res) => {
       const sanitizedKeyword = sanitizeInput(searchTerm);
       regex = new RegExp(sanitizedKeyword, 'i');
     }
+
+    let partnerListVerificationStatus;
+    if (type === 2) {
+      const vr = resolvePartnerListVerificationStatus(req.query.is_verified);
+      if (!vr.ok) {
+        return res.status(400).json({
+          success: false,
+          status: 400,
+          message: vr.message,
+        });
+      }
+      partnerListVerificationStatus = vr.verification_status;
+    }
+
     const filter = {
       ...roleFilter,
       deleted_at: null,
       ...(req.query.type && { type: type }),
-      ...(type === 2 && { verification_status: 2 }),
+      ...(type === 2 && { verification_status: partnerListVerificationStatus }),
       ...(req.query.is_active && { is_active: is_active }),
       ...(req.query.is_blocked !== undefined && { is_blocked: is_blocked }),
       ...(searchTerm && {
@@ -745,6 +825,7 @@ const create = async (req, res) => {
       address,
       state_id,
       city_id,
+      area_id,
       pincode,
       profile_url,
       password,
@@ -772,11 +853,15 @@ const create = async (req, res) => {
     if (type === 2) {
       const psArr = Array.isArray(partner_services) ? partner_services : [];
       const hasPartnerServicesPayload = psArr.length > 0;
+      const pcArr = Array.isArray(req.body.partner_categories) ? req.body.partner_categories : [];
+      const hasPartnerCategoriesPayload = pcArr.length > 0;
       const hasParallelIds =
         (Array.isArray(req.body.service_ids) && req.body.service_ids.length > 0) ||
         (typeof req.body.service_ids === 'string' && String(req.body.service_ids).trim() !== '');
       if (!hasPartnerServicesPayload && hasParallelIds) {
         resolvedPartnerServicesInput = buildPartnerServicesFromParallelFields(req.body);
+      } else if (!hasPartnerServicesPayload && !hasParallelIds && hasPartnerCategoriesPayload) {
+        resolvedPartnerServicesInput = pcArr;
       }
     }
     let resolvedProfileUrl = profile_url;
@@ -833,7 +918,11 @@ const create = async (req, res) => {
         message,
       });
     }
-    if ([1, 3].includes(type) && franchise_id) {
+    if (
+      franchise_id != null &&
+      String(franchise_id).trim() !== '' &&
+      mongoose.Types.ObjectId.isValid(String(franchise_id))
+    ) {
       const franchise = await Franchise.findOne({ _id: franchise_id, deleted_at: null }).lean();
       if (!franchise) {
         return res.status(404).json({
@@ -887,6 +976,11 @@ const create = async (req, res) => {
       address,
       state_id,
       city_id,
+      ...(area_id != null &&
+      String(area_id).trim() !== '' &&
+      mongoose.Types.ObjectId.isValid(String(area_id))
+        ? { area_id }
+        : {}),
       pincode,
       profile_url: resolvedProfileUrl,
       is_from_web,
@@ -988,8 +1082,10 @@ const create = async (req, res) => {
           subscription_plan_id: req.body.subscription_plan_id,
           subscription_start_date: req.body.subscription_start_date,
           started_at: req.body.started_at,
+          start_date: req.body.start_date,
           subscription_end_date: req.body.subscription_end_date,
           expires_at: req.body.expires_at,
+          end_date: req.body.end_date,
           status: req.body.status,
           notes: req.body.notes,
         }
@@ -1026,6 +1122,7 @@ const create = async (req, res) => {
         address: savedUser.address,
         stateId: savedUser.state_id,
         cityId: savedUser.city_id,
+        areaId: savedUser.area_id,
         pincode: savedUser.pincode,
       });
       const notificationSettings = new notificationSetting({
@@ -1049,6 +1146,7 @@ const create = async (req, res) => {
       address: savedUser.address,
       stateId: savedUser.state_id,
       cityId: savedUser.city_id,
+      areaId: savedUser.area_id,
       pincode: savedUser.pincode,
     });
     const notificationSettings = new notificationSetting({
@@ -1138,6 +1236,7 @@ const update = async (req, res) => {
         address: updateData.address,
         stateId: updateData.state_id,
         cityId: updateData.city_id,
+        areaId: updateData.area_id,
         pincode: updateData.pincode,
         addressStatus: updateData.address_status,
       });
@@ -1282,6 +1381,7 @@ const update = async (req, res) => {
       'address',
       'state_id',
       'city_id',
+      'area_id',
       'pincode',
       'profile_url',
       'is_from_web',
@@ -1319,6 +1419,7 @@ const update = async (req, res) => {
           primaryAddress.address = updatedUser.address ?? '';
           primaryAddress.state_id = updatedUser.state_id ?? null;
           primaryAddress.city_id = updatedUser.city_id ?? null;
+          primaryAddress.area_id = updatedUser.area_id ?? null;
           primaryAddress.pincode = updatedUser.pincode ?? '';
         }
         if (hasAddressStatusPayload) {
@@ -1333,6 +1434,7 @@ const update = async (req, res) => {
           address: updatedUser.address,
           stateId: updatedUser.state_id,
           cityId: updatedUser.city_id,
+          areaId: updatedUser.area_id,
           pincode: updatedUser.pincode,
           addressStatus: updateData.address_status,
         });

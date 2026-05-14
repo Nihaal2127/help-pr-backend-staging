@@ -12,6 +12,7 @@ var userSchema = new schema(
     address: { type: String, trim: true, default: null },
     state_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: 'state' },
     city_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: 'city' },
+    area_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: 'area' },
     pincode: { type: String, trim: true, default: null },
     franchise_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: 'franchise' },
     profile_url: { type: String, trim: true, default: null },
@@ -80,6 +81,7 @@ userSchema.index({ email: 1, phone_number: 1, deleted_at: 1 }, { unique: true })
 userSchema.index({ type: 1 });
 userSchema.index({ state_id: 1 });
 userSchema.index({ city_id: 1 });
+userSchema.index({ area_id: 1 });
 userSchema.index({ franchise_id: 1 });
 userSchema.index({ created_by_id: 1 });
 

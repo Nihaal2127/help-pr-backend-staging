@@ -2,7 +2,13 @@ const mongoose = require("mongoose");
 const { checkObjectIdExists } = require('../validator/id_validator');
 const Service = require('../models/service');
 const User = require('../models/user');
-const { parseJSONField, parseBooleanField, parseNumberField } = require("../utils/multipart_parser");
+const {
+  parseJSONField,
+  parseBooleanField,
+  parseNumberField,
+  parseOptionalDateField,
+  trimOptionalStringField,
+} = require("../utils/multipart_parser");
 
 const validateAccessibleScreens = (items, res) => {
   if (items === undefined) return true;
@@ -54,6 +60,7 @@ const createUserMiddleware = (req, res, next) => {
   parseBooleanField(req, "chat");
   parseJSONField(req, "accessible_screens");
   parseJSONField(req, "partner_services");
+  parseJSONField(req, "partner-services");
   parseJSONField(req, "partner_categories");
   parseJSONField(req, "category_ids");
   parseJSONField(req, "service_ids");
@@ -66,6 +73,28 @@ const createUserMiddleware = (req, res, next) => {
   parseJSONField(req, "partner_documents");
   parseJSONField(req, "bank_account");
   parseJSONField(req, "partner_subscription");
+  parseOptionalDateField(req, "date_of_birth");
+  trimOptionalStringField(req, "experience");
+
+  const partnerServicesAlias = req.body["partner-services"];
+  if (
+    partnerServicesAlias !== undefined &&
+    partnerServicesAlias !== null &&
+    (!Array.isArray(req.body.partner_services) || req.body.partner_services.length === 0)
+  ) {
+    req.body.partner_services = partnerServicesAlias;
+  }
+
+  const coerceSingleOidToArray = (field) => {
+    const v = req.body[field];
+    if (v === undefined || v === null || Array.isArray(v)) return;
+    if (typeof v === 'string') {
+      const t = v.trim();
+      if (t && mongoose.Types.ObjectId.isValid(t)) req.body[field] = [t];
+    }
+  };
+  coerceSingleOidToArray('service_ids');
+  coerceSingleOidToArray('category_ids');
 
   const {
     name,
@@ -604,6 +633,8 @@ const updateUserMiddleware = (req, res, next) => {
   parseBooleanField(req, "chat");
   parseJSONField(req, "accessible_screens");
   parseJSONField(req, "partner_documents");
+  parseOptionalDateField(req, "date_of_birth");
+  trimOptionalStringField(req, "experience");
 
   const {
     name,

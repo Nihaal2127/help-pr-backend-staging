@@ -1,0 +1,493 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "Help PR — Orders module (orders, line items, charges, payments, Razorpay)",
+    "description": "Order APIs for help-pr-backend-staging.\n\n**Documentation:** `docs/ORDER_MODULE_FRONTEND.md`\n\n**Setup:** Set `baseUrl` and `accessToken` (Bearer JWT). After **Create order**, copy `orderId` and `orderServiceId` from the response into collection variables for dependent requests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5001" },
+    { "key": "accessToken", "value": "" },
+    { "key": "orderId", "value": "" },
+    { "key": "orderServiceId", "value": "" },
+    { "key": "customerUserId", "value": "" },
+    { "key": "additionalChargeId", "value": "" },
+    { "key": "orderPaymentId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "Create order (single service, no Razorpay link)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n  \"user_unique_id\": \"CUST001\",\n  \"city_id\": \"REPLACE_WITH_CITY_OBJECT_ID\",\n  \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n  \"is_paid\": false,\n  \"payment_mode_id\": \"\",\n  \"transaction_id\": \"\",\n  \"created_by_id\": \"REPLACE_WITH_SAME_OR_STAFF_USER_OBJECT_ID\",\n  \"order_status\": 1,\n  \"order_date\": \"2026-06-01\",\n  \"address\": \"123 Sample Street, City\",\n  \"sub_total\": 1000,\n  \"tax\": 0,\n  \"discount_amount\": null,\n  \"user_paltform_fee\": 0,\n  \"partner_commison_platform_fee\": 0,\n  \"total_price\": 1000,\n  \"admin_earning\": 0,\n  \"type\": 2,\n  \"partner_id\": \"REPLACE_WITH_PARTNER_USER_OBJECT_ID\",\n  \"payment_schedule_type\": \"single\",\n  \"customer_payment_method\": \"upi\",\n  \"service_items\": [\n    {\n      \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n      \"partner_id\": \"REPLACE_WITH_PARTNER_USER_OBJECT_ID\",\n      \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n      \"service_id\": \"REPLACE_WITH_SERVICE_OBJECT_ID\",\n      \"service_date\": \"2026-06-01T00:00:00.000Z\",\n      \"service_from_time\": \"2026-06-01T09:00:00.000Z\",\n      \"service_to_time\": \"2026-06-01T17:00:00.000Z\",\n      \"sub_total\": 1000,\n      \"tax\": 0,\n      \"service_price\": 1000,\n      \"user_paltform_fee\": 0,\n      \"partner_commison_platform_fee\": 0,\n      \"partner_earning\": 1000,\n      \"total_price\": 1000,\n      \"admin_earning\": 0\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/order/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order", "create"]
+            },
+            "description": "POST /api/order/create — `service_items` must be **exactly one** object. Middleware requires prices and `order_status`. Server recomputes `total_price` after save. Copy `record.order_id` and resolve `orderServiceId` from GET order by id (`service_items[0]._id`)."
+          },
+          "response": []
+        },
+        {
+          "name": "Create order (Razorpay payment link — payment_mode_id 2)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n  \"user_unique_id\": \"CUST001\",\n  \"city_id\": \"REPLACE_WITH_CITY_OBJECT_ID\",\n  \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n  \"is_paid\": false,\n  \"payment_mode_id\": \"2\",\n  \"transaction_id\": \"\",\n  \"created_by_id\": \"REPLACE_WITH_STAFF_USER_OBJECT_ID\",\n  \"order_status\": 1,\n  \"order_date\": \"2026-06-01\",\n  \"address\": \"123 Sample Street\",\n  \"sub_total\": 1500,\n  \"tax\": 0,\n  \"discount_amount\": null,\n  \"user_paltform_fee\": 0,\n  \"partner_commison_platform_fee\": 0,\n  \"total_price\": 1500,\n  \"admin_earning\": 0,\n  \"type\": 2,\n  \"name\": \"Customer Name\",\n  \"email\": \"customer@example.com\",\n  \"contact\": \"9999999999\",\n  \"service_items\": [\n    {\n      \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n      \"partner_id\": \"REPLACE_WITH_PARTNER_USER_OBJECT_ID\",\n      \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n      \"service_id\": \"REPLACE_WITH_SERVICE_OBJECT_ID\",\n      \"service_date\": \"2026-06-01T00:00:00.000Z\",\n      \"service_from_time\": \"2026-06-01T09:00:00.000Z\",\n      \"service_to_time\": \"2026-06-01T17:00:00.000Z\",\n      \"sub_total\": 1500,\n      \"tax\": 0,\n      \"service_price\": 1500,\n      \"user_paltform_fee\": 0,\n      \"partner_commison_platform_fee\": 0,\n      \"partner_earning\": 1500,\n      \"total_price\": 1500,\n      \"admin_earning\": 0\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/order/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order", "create"]
+            },
+            "description": "When `payment_mode_id` is `\"2\"`, backend creates a Razorpay payment link. Response includes `payment_url` and `order_id`. Requires valid Razorpay env on server."
+          },
+          "response": []
+        },
+        {
+          "name": "Get order by id (full detail)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/order/get/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order", "get", "{{orderId}}"]
+            },
+            "description": "GET /api/order/get/:id — includes `additional_charges`, `order_payments`, populated refs."
+          },
+          "response": []
+        },
+        {
+          "name": "Get all orders (paginated)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/order/getAll?page=1&limit=10&is_paid=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order", "getAll"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "order_status", "value": "", "disabled": true },
+                { "key": "is_paid", "value": "false" },
+                { "key": "keyword", "value": "", "disabled": true },
+                { "key": "sort", "value": "-1", "disabled": true }
+              ]
+            },
+            "description": "Query `is_paid` supports `true` / `false`. Optional: `order_status`, `keyword` (user_unique_id, unique_id), `sort`."
+          },
+          "response": []
+        },
+        {
+          "name": "Get customer orders",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/order/getCustomerOrder?user_id={{customerUserId}}&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order", "getCustomerOrder"],
+              "query": [
+                { "key": "user_id", "value": "{{customerUserId}}" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            },
+            "description": "Requires `user_id` query param (Mongo ObjectId string)."
+          },
+          "response": []
+        },
+        {
+          "name": "Update order (status / paid)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_status\": 2,\n  \"is_paid\": true\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/order/update/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order", "update", "{{orderId}}"]
+            },
+            "description": "`order_status` only moves forward vs current. `is_paid` propagates to non-cancelled line items."
+          },
+          "response": []
+        },
+        {
+          "name": "Update order service line",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"partner_id\": \"REPLACE_WITH_PARTNER_OBJECT_ID\",\n  \"service_status\": 2,\n  \"service_date\": \"2026-06-02\",\n  \"service_from_time\": \"2026-06-02T10:00:00.000Z\",\n  \"service_to_time\": \"2026-06-02T18:00:00.000Z\",\n  \"is_paid\": false\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/order/serviceUpdate/{{orderServiceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order", "serviceUpdate", "{{orderServiceId}}"]
+            },
+            "description": "URL param is **order_service** `_id`, not order id. Middleware validates partner/service_status/date fields when present."
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel service on order",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"service_items_id\": \"{{orderServiceId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/order/cancleService/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order", "cancleService", "{{orderId}}"]
+            },
+            "description": "Path = order id. Body `service_items_id` = order_service id."
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel whole order",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cancellation_reasone\": \"Customer requested cancellation\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/order/cancle/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order", "cancle", "{{orderId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Soft-delete order",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/order/delete/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order", "delete", "{{orderId}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Order additional charges",
+      "item": [
+        {
+          "name": "Create additional charge",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"{{orderId}}\",\n  \"label\": \"Transport\",\n  \"description\": \"Extra visit\",\n  \"amount\": 150,\n  \"payment_method\": \"upi\",\n  \"charge_type\": \"transport\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/order-additional-charges/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order-additional-charges", "create"]
+            },
+            "description": "JWT user must be order participant (customer, partner, created_by, or employee). Recalculates order `total_price`."
+          },
+          "response": []
+        },
+        {
+          "name": "List charges by order",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/order-additional-charges/by-order/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order-additional-charges", "by-order", "{{orderId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update additional charge",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 200,\n  \"label\": \"Transport (updated)\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/order-additional-charges/update/{{additionalChargeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order-additional-charges", "update", "{{additionalChargeId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete additional charge (soft)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/order-additional-charges/delete/{{additionalChargeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order-additional-charges", "delete", "{{additionalChargeId}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Order payments (ledger)",
+      "item": [
+        {
+          "name": "Create customer payment row",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"{{orderId}}\",\n  \"payer_type\": \"customer\",\n  \"amount\": 500,\n  \"payment_method\": \"upi\",\n  \"status\": \"completed\",\n  \"transaction_reference\": \"UPIREF123\",\n  \"installment_index\": null,\n  \"notes\": \"Partial payment\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/order-payments/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order-payments", "create"]
+            },
+            "description": "Does not by itself change `order.is_paid`; use for installment / ledger tracking."
+          },
+          "response": []
+        },
+        {
+          "name": "Create partner payment row",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"{{orderId}}\",\n  \"payer_type\": \"partner\",\n  \"amount\": 800,\n  \"payment_method\": \"bank_transfer\",\n  \"status\": \"pending\",\n  \"due_date\": \"2026-06-15T00:00:00.000Z\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/order-payments/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order-payments", "create"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List payments by order",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/order-payments/by-order/{{orderId}}?payer_type=customer",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order-payments", "by-order", "{{orderId}}"],
+              "query": [{ "key": "payer_type", "value": "customer", "disabled": true }]
+            },
+            "description": "Optional query `payer_type`: `customer` or `partner`."
+          },
+          "response": []
+        },
+        {
+          "name": "Update order payment",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"completed\",\n  \"paid_at\": \"2026-06-10T12:00:00.000Z\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/order-payments/update/{{orderPaymentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order-payments", "update", "{{orderPaymentId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete order payment (soft)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/order-payments/delete/{{orderPaymentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order-payments", "delete", "{{orderPaymentId}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Order services (line items)",
+      "item": [
+        {
+          "name": "List order services",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/order_service/getAll?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order_service", "getAll"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "user_id", "value": "", "disabled": true },
+                { "key": "partner_id", "value": "", "disabled": true },
+                { "key": "is_paid", "value": "false", "disabled": true },
+                { "key": "unique_id", "value": "", "disabled": true, "description": "Matches order_unique_id on line item" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get order service by id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/order_service/get/{{orderServiceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order_service", "get", "{{orderServiceId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Pay commission (partner_paid_status)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_service_ids\": [\"{{orderServiceId}}\"],\n  \"partner_paid_status\": 2\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/order_service/payComission",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order_service", "payComission"]
+            },
+            "description": "`partner_paid_status`: 1 Pending, 2 Paid, 3 return."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Razorpay (reference)",
+      "item": [
+        {
+          "name": "Razorpay webhook (server only)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json", "type": "text" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"payment_link.paid\",\n  \"payload\": {\n    \"payment_link\": {\n      \"entity\": {\n        \"id\": \"plink_xxx\"\n      }\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/razorpay/razorpayWebhook",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "razorpay", "razorpayWebhook"]
+            },
+            "description": "Configured by Razorpay dashboard; requires valid `x-razorpay-signature`. Not for manual testing without real payload + secret."
+          },
+          "response": []
+        },
+        {
+          "name": "Razorpay customer callback (browser)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/razorpay/callback",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "razorpay", "callback"]
+            },
+            "description": "GET success HTML after payment link flow."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

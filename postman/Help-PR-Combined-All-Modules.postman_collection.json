@@ -2820,11 +2820,11 @@
     },
     {
       "name": "12 — User",
-      "description": "**/api/user** — deduplicated across source collections. **Partners (`type` 2)**: use folder **Partner (type 2)** for create (web), list (`getAll?type=2`), get/update/delete, and change password; **Register partner (public)** is mobile self-signup (no JWT). **Get partner dropdown** and **Get verification all (partners)** are partner-specific utilities below.",
+      "description": "**/api/user** — deduplicated across source collections. **Partners (`type` 2)**: folder **Partner (type 2)** — create (**multipart**: **`partner_services`** or **`partner-services`**, optional **`date_of_birth`**, **`experience`**), list **`getAll?type=2&is_verified=`** (`pending` / `approved` / `rejected`), get/update/delete, change password; **Register partner (public)** is mobile self-signup (no JWT). **Get partner dropdown** and **Get verification all** below.",
       "item": [
         {
           "name": "Partner (type 2)",
-          "description": "Partner CRUD uses **`/api/user`**. **`Create partner (web)`** uses **`multipart/form-data`**. Form key must be **`partner_services`** (underscore), not **`partner-services`**. Set **`categoryObjectId`** and **`serviceObjectId`** in your Environment to real 24-hex MongoDB IDs. For **`type` 2** create, the API loads the master **`Document`** catalog (active, not deleted); if it is empty, **`POST /api/user/create`** returns **400** with a summary **`message`** and per-field **`document_errors`** (e.g. **`aadhar_card`**, **`pan_card`**). Seed document types whose **`name`** matches those keys. Nested **`partner_services`**, optional parallel **`category_ids`** / **`service_ids`**, **`bank_account`**, verification **files**, **`profile_url`**, **`image`**. Set **`partnerId`** from create or **Register partner (public)**.",
+          "description": "Partner CRUD uses **`/api/user`**. **`Create partner (web)`** uses **`multipart/form-data`**. Use **`partner_services`** (underscore) **or** **`partner-services`** (hyphen); middleware copies the alias when **`partner_services`** is empty. Parallel **`category_ids`** / **`service_ids`** may be JSON arrays or a single 24-hex ObjectId string each. New partners are always saved **`verification_status`: 1** (pending) and **`is_active`: false**; body **`is_verified`** on create is ignored. Optional **`date_of_birth`** (ISO date), **`experience`** (string). Set **`categoryObjectId`** / **`serviceObjectId`** in Environment. Master **`Document`** catalog (active) drives **`partner_documents`** placeholders; empty catalog can cause **400** with **`document_errors`**. **`bank_account`**, verification **files** + **`partner_documents`**, **`profile_url`**, **`image`**. Set **`partnerId`** from create or **Register partner (public)**.",
           "item": [
             {
               "name": "Create partner (web)",
@@ -2917,12 +2917,27 @@
                     {
                       "key": "is_active",
                       "value": "true",
-                      "type": "text"
+                      "type": "text",
+                      "description": "Ignored for **`type` 2** create — API always saves **`is_active`: false** until approval."
                     },
                     {
                       "key": "is_blocked",
                       "value": "false",
                       "type": "text"
+                    },
+                    {
+                      "key": "date_of_birth",
+                      "value": "1990-05-15",
+                      "type": "text",
+                      "disabled": true,
+                      "description": "Optional ISO date string; stored as **`date_of_birth`**."
+                    },
+                    {
+                      "key": "experience",
+                      "value": "5 years residential services",
+                      "type": "text",
+                      "disabled": true,
+                      "description": "Optional partner experience (string)."
                     },
                     {
                       "key": "pincode",
@@ -2956,14 +2971,28 @@
                       "key": "partner_services",
                       "value": "[{\"category_id\":\"{{categoryObjectId}}\",\"services\":[{\"service_id\":\"{{serviceObjectId}}\",\"description\":\"legal documents\",\"price\":1234}]}]",
                       "type": "text",
-                      "description": "Form field name must be **partner_services** (underscore). JSON array: [{ category_id, services: [{ service_id, description, price }] }]. Resolve **{{categoryObjectId}}** / **{{serviceObjectId}}** in Environment. Add more `{ category_id, services }` objects for multiple categories."
+                      "description": "Preferred key: JSON array `[{ category_id, services: [{ service_id, description, price }] }]`. Same JSON may be sent as **`partner-services`** if **`partner_services`** is omitted."
+                    },
+                    {
+                      "key": "partner-services",
+                      "value": "[{\"category_id\":\"{{categoryObjectId}}\",\"services\":[{\"service_id\":\"{{serviceObjectId}}\",\"description\":\"legal documents\",\"price\":1234}]}]",
+                      "type": "text",
+                      "disabled": true,
+                      "description": "Alternate form-data key (hyphen). Enable only when **`partner_services`** is cleared — middleware merges into **`partner_services`**."
+                    },
+                    {
+                      "key": "is_verified",
+                      "value": "pending",
+                      "type": "text",
+                      "disabled": true,
+                      "description": "Ignored on create — partner is always created pending; use **`PUT .../update/:id`** with **`is_verified`**: **`approved`** / **`rejected`**."
                     },
                     {
                       "key": "category_ids",
                       "value": "[\"{{categoryObjectId}}\",\"{{categoryObjectId}}\"]",
                       "type": "text",
                       "disabled": true,
-                      "description": "Alternate path: enable and clear **partner_services** to build rows from parallel arrays."
+                      "description": "Alternate path: enable and clear **partner_services** (and **partner-services**). JSON array or single ObjectId string per field."
                     },
                     {
                       "key": "service_ids",
@@ -3034,10 +3063,10 @@
                     },
                     {
                       "key": "partner_subscription",
-                      "value": "{\"subscription_plan_id\":\"{{id}}\",\"status\":1,\"notes\":\"\"}",
+                      "value": "{\"subscription_plan_id\":\"{{id}}\",\"subscription_start_date\":\"2026-04-30\",\"subscription_end_date\":\"2026-05-30\",\"status\":\"active\",\"notes\":\"\"}",
                       "type": "text",
                       "disabled": true,
-                      "description": "Enable when you have a real **subscription_plan_id**."
+                      "description": "JSON string. **`status`** must be string **`active`**, **`expired`**, or **`cancelled`** (not numeric). Legacy **`1`** is accepted server-side as **`active`**. **`subscription_start_date`** / **`subscription_end_date`** (or **`started_at`** / **`expires_at`**) set the window. Enable when **`{{id}}`** is a real plan. Top-level form keys may be used if **`partner_subscription`** is omitted."
                     },
                     {
                       "key": "is_business",
@@ -3063,7 +3092,7 @@
                     "create"
                   ]
                 },
-                "description": "**`POST /api/user/create`** — **`multipart/form-data`** (or raw JSON without files). Fields: **`type`**, **`is_from_web`**, **`registration_type`**, **`created_by_id`**, identity/address, **`is_blocked`**, **`profile_url`**, nested **`partner_services`** (underscore key) or parallel **`category_ids`** / **`service_ids`**, **`bank_account`**, optional **`partner_subscription`**, verification **files** + **`partner_documents`**, **`image`**. Do not set **`Content-Type`** manually for multipart. **Prerequisites:** active **`Document`** rows for partner verification (empty catalog → **400** with **`message`** + **`document_errors`** per upload key). **Postman Console** logs **`document_errors`** on **400** when present."
+                "description": "**`POST /api/user/create`** — **`multipart/form-data`** (or JSON without files). Partners: **`partner_services`** or **`partner-services`**, parallel **`category_ids`** / **`service_ids`** (JSON arrays or single ObjectId string), **`bank_account`**, optional **`date_of_birth`**, **`experience`**, **`partner_subscription`** (JSON: **`subscription_plan_id`**, **`subscription_start_date`**, **`subscription_end_date`**, or **`started_at`** / **`expires_at`**), verification file fields + **`partner_documents`**, **`image`**, **`profile_url`**. **`type` 2**: always **`verification_status` 1** + **`is_active` false**; **`is_verified`** in body is ignored. Do not set **`Content-Type`** manually for multipart. **Document** catalog for **`document_errors`** on **400**; Postman test script logs **`document_errors`**."
               },
               "description": "Web/admin partner create — dashboard-shaped **form-data**; see request description for catalog and **`partner_services`** key."
             },
@@ -3078,7 +3107,7 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/user/getAll?page={{page}}&limit={{limit}}&type=2&keyword=&is_active=&is_blocked=&sort_by=&sort_order=&franchise_id=",
+                  "raw": "{{baseUrl}}/api/user/getAll?page={{page}}&limit={{limit}}&type=2&keyword=&is_active=&is_blocked=&is_verified=&sort_by=&sort_order=&franchise_id=",
                   "host": [
                     "{{baseUrl}}"
                   ],
@@ -3115,6 +3144,11 @@
                       "value": ""
                     },
                     {
+                      "key": "is_verified",
+                      "value": "",
+                      "description": "Partners only: **`approved`** | **`pending`** | **`rejected`**. Omitted → **`approved`** list only (`verification_status` 2)."
+                    },
+                    {
                       "key": "sort_by",
                       "value": "",
                       "description": "Optional: name, email, created_at, no_of_services."
@@ -3131,7 +3165,7 @@
                     }
                   ]
                 },
-                "description": "With **`type=2`**, server also applies **`verification_status`: 2** (verified partners). Partner (2) and user (4) callers get **403** on `getAll`."
+                "description": "With **`type=2`**, omit **`is_verified`** → only **`verification_status` 2** (approved) partners. Use **`is_verified=pending`** / **`rejected`** for verification queues. Response rows include **`is_verified`** string and **`date_of_birth`** / **`experience`** when set. Partner (2) and user (4) callers get **403**."
               },
               "description": "Paginated partner list for back office."
             },
@@ -3157,7 +3191,7 @@
                     "{{partnerId}}"
                   ]
                 },
-                "description": "**`GET /api/user/get/:id`**. For **`type`**: **2**, response includes **`documents`**, **`bank_account`**, service aggregates, and business fields when applicable."
+                "description": "**`GET /api/user/get/:id`**. For **`type`**: **2**, response includes **`documents`**, **`bank_account`**, **`date_of_birth`**, **`experience`**, service aggregates, and business fields when applicable. For **`type`**: **4**, includes **`date_of_birth`** on the user record."
               },
               "description": "Fetch one partner; set **`partnerId`** first."
             },
@@ -3233,6 +3267,27 @@
                       "description": "Optional; not stored on user."
                     },
                     {
+                      "key": "date_of_birth",
+                      "value": "1990-05-15",
+                      "type": "text",
+                      "disabled": true,
+                      "description": "Optional; ISO date string."
+                    },
+                    {
+                      "key": "experience",
+                      "value": "5 years residential services",
+                      "type": "text",
+                      "disabled": true,
+                      "description": "Optional partner experience (string)."
+                    },
+                    {
+                      "key": "is_verified",
+                      "value": "approved",
+                      "type": "text",
+                      "disabled": true,
+                      "description": "**`approved`**: sets **`verification_status` 2**, **`verified_at`**, **`is_active` true**. **`rejected`**: status 3, **`is_active` false**. **`pending`**: status 1."
+                    },
+                    {
                       "key": "is_active",
                       "value": "true",
                       "type": "text"
@@ -3276,7 +3331,7 @@
                       "value": "[{\"category_id\":\"{{categoryObjectId}}\",\"services\":[{\"service_id\":\"{{serviceObjectId}}\",\"description\":\"legal documents\",\"price\":1234}]}]",
                       "type": "text",
                       "disabled": true,
-                      "description": "Partner service rows are not replaced by this route by default; enable only if you extend the API."
+                      "description": "Same JSON shape as create (**`partner_services`** or **`partner-services`**). Partner service rows are not replaced by this route by default; enable only if you extend the API."
                     },
                     {
                       "key": "category_ids",
@@ -3346,9 +3401,10 @@
                     },
                     {
                       "key": "partner_subscription",
-                      "value": "{\"subscription_plan_id\":\"{{id}}\",\"status\":1,\"notes\":\"\"}",
+                      "value": "{\"subscription_plan_id\":\"{{id}}\",\"subscription_start_date\":\"2026-04-30\",\"subscription_end_date\":\"2026-05-30\",\"status\":\"active\",\"notes\":\"\"}",
                       "type": "text",
-                      "disabled": true
+                      "disabled": true,
+                      "description": "Same shape as **Create partner**; **`status`** = **`active`** | **`expired`** | **`cancelled`** (string)."
                     },
                     {
                       "key": "is_business",
@@ -3375,7 +3431,7 @@
                     "{{partnerId}}"
                   ]
                 },
-                "description": "**`PUT /api/user/update/:id`** — same **`multipart`** field names as create; most service/bank rows disabled by default. Verification **files** + **`partner_documents`** apply for **`type`**: **2**; master **`Document`** catalog must exist so partner_document rows can be updated by name."
+                "description": "**`PUT /api/user/update/:id`** — same **`multipart`** field names as create; optional **`date_of_birth`**, **`experience`**, **`is_verified`** (`approved` / `rejected` / `pending`). Verification **files** + **`partner_documents`** for **`type`**: **2**; master **`Document`** catalog must exist so **`partner_document`** rows update by name."
               },
               "description": "Multipart **`partnerId`** update — form keys aligned with create (optional fields disabled)."
             },
@@ -3518,7 +3574,7 @@
                 "create"
               ]
             },
-            "description": "**`POST /api/user/create`** — Bearer required. Route uses **`uploadImages.single(\"image\")`**; JSON works when no file is sent (Express JSON body). For profile upload use **form-data** with field **`image`** (file) plus text fields. Super admin (5) / staff (6): any type. Franchise admin (1) / employee (3): only partner (2), employee (3), user (4); **`franchise_id`** forced for partner/employee when omitted."
+            "description": "**`POST /api/user/create`** — Bearer required. JSON body when **`Content-Type: application/json`** (no multipart). For **`type` 4** (customer), optional **`date_of_birth`** (ISO string). For **`type` 2** use **Partner (type 2) → Create partner (web)** (**multipart**). Franchise admin (1) / employee (3): only partner (2), employee (3), user (4); **`franchise_id`** forced for partner/employee when omitted."
           },
           "description": "Source path: 07 — User management → User → Create user (content-expense-expense-category-management.postman_collection (1).json)"
         },
@@ -3864,7 +3920,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated Name\"\n}"
+              "raw": "{\n  \"name\": \"Updated Name\",\n  \"date_of_birth\": \"1992-03-20\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/user/update/{{userId}}",
@@ -3878,7 +3934,7 @@
                 "{{userId}}"
               ]
             },
-            "description": "Uses **`uploadImages.single(\"image\")`** — same note as Create for multipart."
+            "description": "JSON **`PUT`**. Optional **`date_of_birth`**, **`experience`** (partners), **`is_verified`** — same rules as **Partner → Update partner** when updating **`type` 2**."
           },
           "description": "Source path: 07 — User management → User → Update user (content-expense-expense-category-management.postman_collection (1).json)"
         }

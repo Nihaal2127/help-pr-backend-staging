@@ -13,6 +13,7 @@ const {
     addMyServices,
     updateMyService,
     toggleMyServiceStatus,
+    getFranchiseCategoryServicesIntersection,
 } = require('../controllers/partner_service_controller');
 const authMiddleware = require('../middleware/auth_middleware');
 const rateLimiter = require('../middleware/rate_middleware');
@@ -26,6 +27,12 @@ router.use(rateLimiter);
 router.post('/create', authMiddleware, requireBackoffice, checkServiceMiddleware, create);
 router.get('/getAll', authMiddleware, requireBackoffice, getAll);
 router.get('/getDropDown', authMiddleware, requireBackoffice, getDropDown);
+router.post(
+  '/franchiseCategoryServices',
+  authMiddleware,
+  requireBackoffice,
+  getFranchiseCategoryServicesIntersection
+);
 router.post('/updateStatus/:id', authMiddleware, requireBackoffice, updateStatus);
 router.delete('/delete/:id', authMiddleware, requireBackoffice, deleteState);
 

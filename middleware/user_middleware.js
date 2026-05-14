@@ -52,14 +52,17 @@ const createUserMiddleware = (req, res, next) => {
   parseBooleanField(req, "is_blocked");
   parseBooleanField(req, "is_business");
   parseBooleanField(req, "chat");
-  parseBooleanField(req, "is_verified");
   parseJSONField(req, "accessible_screens");
   parseJSONField(req, "partner_services");
+  parseJSONField(req, "partner_categories");
   parseJSONField(req, "category_ids");
   parseJSONField(req, "service_ids");
   parseJSONField(req, "service_names");
   parseJSONField(req, "service_descriptions");
   parseJSONField(req, "service_prices");
+  parseJSONField(req, "service_taxes");
+  parseJSONField(req, "service_payment_types");
+  parseJSONField(req, "service_minimum_deposits");
   parseJSONField(req, "partner_documents");
   parseJSONField(req, "bank_account");
   parseJSONField(req, "partner_subscription");
@@ -90,14 +93,26 @@ const createUserMiddleware = (req, res, next) => {
   } = req.body;
   if (accessible_screens !== undefined && !validateAccessibleScreens(accessible_screens, res)) return;
   if (type === 2) {
-    if (req.body.partner_services !== undefined) {
-      if (!Array.isArray(req.body.partner_services)) {
-        return res.status(400).json({
-          success: false,
-          status: 400,
-          message: 'partner_services must be an array.',
-        });
-      }
+    if (req.body.partner_services !== undefined && !Array.isArray(req.body.partner_services)) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'partner_services must be an array.',
+      });
+    }
+    if (req.body.partner_categories !== undefined && !Array.isArray(req.body.partner_categories)) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'partner_categories must be an array.',
+      });
+    }
+    const hasPartnerServicesPayload =
+      Array.isArray(req.body.partner_services) && req.body.partner_services.length > 0;
+    const hasPartnerCategoriesPayload =
+      Array.isArray(req.body.partner_categories) && req.body.partner_categories.length > 0;
+
+    if (hasPartnerServicesPayload) {
       for (let i = 0; i < req.body.partner_services.length; i++) {
         const item = req.body.partner_services[i];
         if (!item || typeof item !== 'object' || Array.isArray(item)) {
@@ -117,11 +132,29 @@ const createUserMiddleware = (req, res, next) => {
           }
           for (let j = 0; j < item.services.length; j++) {
             const svc = item.services[j];
-            if (!svc || typeof svc !== 'object' || Array.isArray(svc)) {
+            if (svc === undefined || svc === null) {
               return res.status(400).json({
                 success: false,
                 status: 400,
-                message: `partner_services[${i}].services[${j}] must be an object.`,
+                message: `partner_services[${i}].services[${j}] is required.`,
+              });
+            }
+            if (typeof svc === 'string' || typeof svc === 'number') {
+              const sid = String(svc).trim();
+              if (!mongoose.Types.ObjectId.isValid(sid)) {
+                return res.status(400).json({
+                  success: false,
+                  status: 400,
+                  message: `partner_services[${i}].services[${j}] must be a valid service ObjectId.`,
+                });
+              }
+              continue;
+            }
+            if (typeof svc !== 'object' || Array.isArray(svc)) {
+              return res.status(400).json({
+                success: false,
+                status: 400,
+                message: `partner_services[${i}].services[${j}] must be an object or service id string.`,
               });
             }
             const sid = svc.service_id ?? svc.serviceId;
@@ -153,6 +186,67 @@ const createUserMiddleware = (req, res, next) => {
               success: false,
               status: 400,
               message: `partner_services[${i}].category_id must be a valid ObjectId.`,
+            });
+          }
+        }
+      }
+    } else if (hasPartnerCategoriesPayload) {
+      for (let i = 0; i < req.body.partner_categories.length; i++) {
+        const item = req.body.partner_categories[i];
+        if (!item || typeof item !== 'object' || Array.isArray(item)) {
+          return res.status(400).json({
+            success: false,
+            status: 400,
+            message: `partner_categories[${i}] must be an object.`,
+          });
+        }
+        if (!Array.isArray(item.services)) {
+          return res.status(400).json({
+            success: false,
+            status: 400,
+            message: `partner_categories[${i}].services must be an array.`,
+          });
+        }
+        if (!item.category_id || !mongoose.Types.ObjectId.isValid(String(item.category_id))) {
+          return res.status(400).json({
+            success: false,
+            status: 400,
+            message: `partner_categories[${i}].category_id must be a valid ObjectId.`,
+          });
+        }
+        for (let j = 0; j < item.services.length; j++) {
+          const svc = item.services[j];
+          if (svc === undefined || svc === null) {
+            return res.status(400).json({
+              success: false,
+              status: 400,
+              message: `partner_categories[${i}].services[${j}] is required.`,
+            });
+          }
+          if (typeof svc === 'string' || typeof svc === 'number') {
+            const sid = String(svc).trim();
+            if (!mongoose.Types.ObjectId.isValid(sid)) {
+              return res.status(400).json({
+                success: false,
+                status: 400,
+                message: `partner_categories[${i}].services[${j}] must be a valid service ObjectId.`,
+              });
+            }
+            continue;
+          }
+          if (typeof svc !== 'object' || Array.isArray(svc)) {
+            return res.status(400).json({
+              success: false,
+              status: 400,
+              message: `partner_categories[${i}].services[${j}] must be an object or service id string.`,
+            });
+          }
+          const sid = svc.service_id ?? svc.serviceId;
+          if (!sid || !mongoose.Types.ObjectId.isValid(String(sid))) {
+            return res.status(400).json({
+              success: false,
+              status: 400,
+              message: `partner_categories[${i}].services[${j}].service_id must be a valid ObjectId.`,
             });
           }
         }
@@ -197,6 +291,19 @@ const createUserMiddleware = (req, res, next) => {
         }
       }
     }
+  }
+
+  if (
+    req.body.area_id !== undefined &&
+    req.body.area_id !== null &&
+    String(req.body.area_id).trim() !== '' &&
+    !mongoose.Types.ObjectId.isValid(String(req.body.area_id))
+  ) {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Invalid area id.',
+    });
   }
 
 
@@ -335,14 +442,17 @@ const createUserMiddleware = (req, res, next) => {
       message: 'Blocked status must be boolean.'
     });
   }
-  if ([1, 3].includes(type) && franchise_id !== undefined && franchise_id !== null && String(franchise_id).trim() !== '') {
-    if (!mongoose.Types.ObjectId.isValid(franchise_id)) {
-      return res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'Invalid franchise id.'
-      });
-    }
+  if (
+    franchise_id !== undefined &&
+    franchise_id !== null &&
+    String(franchise_id).trim() !== '' &&
+    !mongoose.Types.ObjectId.isValid(String(franchise_id))
+  ) {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Invalid franchise id.',
+    });
   }
   if (![1, 3, 5, 6].includes(type)) {
     if (is_from_web === true) {

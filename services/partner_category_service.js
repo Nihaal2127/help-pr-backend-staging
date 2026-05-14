@@ -9,6 +9,12 @@ const toOid = (id) => {
   return new mongoose.Types.ObjectId(String(id));
 };
 
+function coerceNumber(v, defaultVal = 0) {
+  if (v === undefined || v === null || v === '') return defaultVal;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : defaultVal;
+}
+
 /**
  * Build desired partner_service rows from partner_category documents
  * (not deleted, is_active). Skips services whose global category_id does not match the row.
@@ -181,34 +187,77 @@ async function mergeServicesIntoPartnerCategories(partnerId, entries) {
 }
 
 /**
- * Partner signup: one document per category with all service ids for that category.
+ * Partner signup: one document per category with all service ids for that category,
+ * plus one partner_service row per service with description, price, tax, payment_type, minimum_deposit.
+ * Does not call syncPartnerServicesFromPartnerCategories (that would drop pricing fields).
+ *
  * @param {mongoose.Types.ObjectId} partnerId
- * @param {{ category_id: any, service_id: any }[]} normalizedRows from normalizePartnerServices
+ * @param {object[]} normalizedRows from normalizePartnerServices
  */
 async function replacePartnerCategoriesFromSignupRows(partnerId, normalizedRows) {
+  const partnerOid = toOid(partnerId);
   const byCat = new Map();
   for (const r of normalizedRows) {
     if (!r.category_id || !r.service_id) continue;
     const c = String(r.category_id);
+    const s = String(r.service_id);
     if (!byCat.has(c)) byCat.set(c, new Set());
-    byCat.get(c).add(String(r.service_id));
+    byCat.get(c).add(s);
   }
-  const docs = [];
+
+  const catActiveByCat = new Map();
+  for (const r of normalizedRows) {
+    if (!r.category_id) continue;
+    const c = String(r.category_id);
+    if (r.category_is_active !== undefined) {
+      catActiveByCat.set(c, r.category_is_active !== false);
+    }
+  }
+
+  const pcDocs = [];
   for (const [catStr, set] of byCat) {
-    docs.push({
-      partner_id: partnerId,
+    pcDocs.push({
+      partner_id: partnerOid,
       category_id: toOid(catStr),
       services: [...set].map((id) => toOid(id)),
-      is_active: true,
+      is_active: catActiveByCat.has(catStr) ? catActiveByCat.get(catStr) : true,
       created_at: new Date(),
       updated_at: new Date(),
       deleted_at: null,
     });
   }
-  if (docs.length > 0) {
-    await PartnerCategory.insertMany(docs);
+  if (pcDocs.length > 0) {
+    await PartnerCategory.insertMany(pcDocs);
   }
-  await syncPartnerServicesFromPartnerCategories(partnerId);
+
+  const detailLastByService = new Map();
+  for (const r of normalizedRows) {
+    if (!r.category_id || !r.service_id) continue;
+    detailLastByService.set(String(r.service_id), r);
+  }
+
+  const psRows = [];
+  for (const [sidStr, r] of detailLastByService) {
+    const catStr = String(r.category_id);
+    psRows.push({
+      partner_id: partnerOid,
+      category_id: toOid(catStr),
+      service_id: toOid(sidStr),
+      description: r.description != null ? String(r.description) : '',
+      price: coerceNumber(r.price, 0),
+      payment_type: r.payment_type != null ? String(r.payment_type).trim() : '',
+      tax: coerceNumber(r.tax, 0),
+      minimum_deposit: coerceNumber(r.minimum_deposit, 0),
+      is_active: r.is_active !== false,
+      is_accept_request: true,
+      created_at: new Date(),
+      updated_at: new Date(),
+      deleted_at: null,
+    });
+  }
+  if (psRows.length > 0) {
+    await PartnerService.insertMany(psRows);
+  }
 }
 
 module.exports = {

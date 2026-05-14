@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const PartnerCategory = require('../models/partner_category');
 const PartnerService = require('../models/partner_service');
 const Category = require('../models/category');
+const FranchiseCategory = require('../models/franchise_category');
 const { applyPagination } = require('../utils/pagination');
 const { parseBoolean } = require('../utils/parser');
 const { validateObjectId } = require('../validator/form_validator');
@@ -205,4 +206,74 @@ const getAll = async (req, res) => {
   }
 };
 
-module.exports = { getMyCategories, getAll };
+// POST /api/partner_category/franchiseActiveCategories
+// Body: { franchise_id } — categories listed in franchise_category.active_categories for that franchise.
+const getFranchiseActiveCategories = async (req, res) => {
+  try {
+    const franchiseIdRaw =
+      req.body.franchise_id !== undefined && req.body.franchise_id !== null
+        ? String(req.body.franchise_id).trim()
+        : '';
+    if (!franchiseIdRaw) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'franchise_id is required.',
+      });
+    }
+    const fr = validateObjectId(franchiseIdRaw, 'franchise');
+    if (!fr.valid) {
+      return res.status(400).json({ success: false, status: 400, message: fr.message });
+    }
+    const fid = new mongoose.Types.ObjectId(franchiseIdRaw);
+    const fc = await FranchiseCategory.findOne({ franchise_id: fid, deleted_at: null })
+      .sort({ created_at: -1 })
+      .select('active_categories')
+      .lean();
+
+    const ids =
+      fc && Array.isArray(fc.active_categories) ? fc.active_categories.filter(Boolean) : [];
+    if (ids.length === 0) {
+      return res.status(200).json({
+        success: true,
+        status: 200,
+        message: 'No active categories for this franchise.',
+        records: [],
+      });
+    }
+
+    const categories = await Category.find({
+      _id: { $in: ids },
+      deleted_at: null,
+    })
+      .select('name desc image_url is_active approval_status')
+      .lean();
+
+    const byId = new Map(categories.map((c) => [String(c._id), c]));
+    const ordered = ids.map((id) => byId.get(String(id))).filter(Boolean);
+    const records = ordered.map((c) => ({
+      _id: c._id,
+      name: c.name,
+      desc: c.desc,
+      image_url: c.image_url,
+      is_active: c.is_active,
+      approval_status: c.approval_status,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: 'Franchise active categories fetched successfully.',
+      records,
+    });
+  } catch (err) {
+    console.error('getFranchiseActiveCategories error:', err.message);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Internal server error.',
+    });
+  }
+};
+
+module.exports = { getMyCategories, getAll, getFranchiseActiveCategories };

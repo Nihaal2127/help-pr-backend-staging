@@ -7,6 +7,7 @@ const { validateObjectId } = require('../validator/form_validator');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
 const Service = require("../models/service");
 const Category = require("../models/category");
+const FranchiseService = require('../models/franchise_service');
 const {
   syncPartnerServicesFromPartnerCategories,
   rebuildPartnerCategoriesFromPartnerServices,
@@ -1140,6 +1141,116 @@ const toggleMyServiceStatus = async (req, res) => {
   }
 };
 
+// POST /api/partner_service/franchiseCategoryServices
+// Body: { franchise_id, category_id } — intersection of category.services and franchise_service.active_services.
+const getFranchiseCategoryServicesIntersection = async (req, res) => {
+  try {
+    const franchiseIdRaw =
+      req.body.franchise_id !== undefined && req.body.franchise_id !== null
+        ? String(req.body.franchise_id).trim()
+        : '';
+    const categoryIdRaw =
+      req.body.category_id !== undefined && req.body.category_id !== null
+        ? String(req.body.category_id).trim()
+        : '';
+
+    if (!franchiseIdRaw) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'franchise_id is required.',
+      });
+    }
+    if (!categoryIdRaw) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'category_id is required.',
+      });
+    }
+
+    const fv = validateObjectId(franchiseIdRaw, 'franchise');
+    if (!fv.valid) {
+      return res.status(400).json({ success: false, status: 400, message: fv.message });
+    }
+    const cv = validateObjectId(categoryIdRaw, 'category');
+    if (!cv.valid) {
+      return res.status(400).json({ success: false, status: 400, message: cv.message });
+    }
+
+    const fid = new mongoose.Types.ObjectId(franchiseIdRaw);
+    const cid = new mongoose.Types.ObjectId(categoryIdRaw);
+
+    const [category, fsRow] = await Promise.all([
+      Category.findOne({ _id: cid, deleted_at: null }).select('services').lean(),
+      FranchiseService.findOne({ franchise_id: fid, deleted_at: null })
+        .sort({ created_at: -1 })
+        .select('active_services')
+        .lean(),
+    ]);
+
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        status: 404,
+        message: 'Category not found.',
+      });
+    }
+
+    const catServices = Array.isArray(category.services) ? category.services : [];
+    const activeFranchiseServices =
+      fsRow && Array.isArray(fsRow.active_services) ? fsRow.active_services.filter(Boolean) : [];
+
+    const allow = new Set(activeFranchiseServices.map((x) => String(x)));
+    const intersectionIds = catServices.filter((sid) => sid && allow.has(String(sid)));
+
+    if (intersectionIds.length === 0) {
+      return res.status(200).json({
+        success: true,
+        status: 200,
+        message: 'No common services between category and franchise.',
+        records: [],
+      });
+    }
+
+    const services = await Service.find({
+      _id: { $in: intersectionIds },
+      deleted_at: null,
+    })
+      .select('name desc price tax image_url category_id is_active approval_status')
+      .lean();
+
+    const byId = new Map(services.map((s) => [String(s._id), s]));
+    const ordered = intersectionIds.map((id) => byId.get(String(id))).filter(Boolean);
+
+    const records = ordered.map((s) => ({
+      _id: s._id,
+      name: s.name,
+      desc: s.desc,
+      price: s.price,
+      tax: s.tax,
+      image_url: s.image_url,
+      category_id: s.category_id,
+      is_active: s.is_active,
+      approval_status: s.approval_status,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: 'Common franchise and category services fetched successfully.',
+      records,
+    });
+  } catch (err) {
+    console.error('getFranchiseCategoryServicesIntersection error:', err.message);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Internal server error.',
+    });
+  }
+};
+
 module.exports = {
   getAll,
   create,
@@ -1153,4 +1264,5 @@ module.exports = {
   addMyServices,
   updateMyService,
   toggleMyServiceStatus,
+  getFranchiseCategoryServicesIntersection,
 };

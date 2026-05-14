@@ -602,7 +602,25 @@ const getVerificationAll = async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
 
-    const verification_status = req.query.verification_status !== undefined ? parseInt(req.query.verification_status) : null;
+    const verificationStatusRaw = req.query.verification_status;
+    let verificationFilter;
+    if (
+      verificationStatusRaw !== undefined &&
+      verificationStatusRaw !== null &&
+      String(verificationStatusRaw).trim() !== ''
+    ) {
+      const vs = parseInt(String(verificationStatusRaw).trim(), 10);
+      if (![1, 2, 3].includes(vs)) {
+        return res.status(400).json({
+          success: false,
+          status: 400,
+          message: 'verification_status must be 1, 2, or 3.',
+        });
+      }
+      verificationFilter = { verification_status: vs };
+    } else {
+      verificationFilter = { verification_status: { $in: [1, 3] } };
+    }
 
     const searchTerm = req.query.keyword ?? req.query.search;
     let regex;
@@ -613,7 +631,7 @@ const getVerificationAll = async (req, res) => {
     const filter = {
       deleted_at: null,
       type: 2,
-      ...(req.query.verification_status && { verification_status: verification_status }),
+      ...verificationFilter,
       ...(searchTerm && { name: regex })
     };
     
@@ -643,11 +661,49 @@ const getVerificationAll = async (req, res) => {
       { path: "city_id" },
     ]);
 
+    const partnerIds = populatedUser.map((u) => u._id);
+    const partnerServiceRows =
+      partnerIds.length === 0
+        ? []
+        : await PartnerServices.find({
+            partner_id: { $in: partnerIds },
+            deleted_at: null,
+          })
+            .populate([
+              { path: 'category_id', select: 'name' },
+              { path: 'service_id', select: 'name' },
+            ])
+            .lean();
 
+    const partnerIdToServiceRows = new Map();
+    for (const row of partnerServiceRows) {
+      const key = row.partner_id.toString();
+      if (!partnerIdToServiceRows.has(key)) partnerIdToServiceRows.set(key, []);
+      partnerIdToServiceRows.get(key).push(row);
+    }
 
     const processedUsers = await Promise.all(populatedUser.map(async user => {
       const document_uploaded_count = await getVerificationCountData(user._id);
       const { state_id, city_id, ...rest } = user;
+      const rows = partnerIdToServiceRows.get(user._id.toString()) || [];
+      const categoriesById = new Map();
+      const servicesById = new Map();
+      for (const r of rows) {
+        const cat = r.category_id;
+        if (cat && typeof cat === 'object' && cat._id) {
+          categoriesById.set(cat._id.toString(), {
+            category_id: cat._id,
+            category_name: cat.name ?? null,
+          });
+        }
+        const svc = r.service_id;
+        if (svc && typeof svc === 'object' && svc._id) {
+          servicesById.set(svc._id.toString(), {
+            service_id: svc._id,
+            service_name: svc.name ?? null,
+          });
+        }
+      }
       return {
         ...rest,
         state_id: user.state_id._id,
@@ -656,6 +712,8 @@ const getVerificationAll = async (req, res) => {
         city_id: user.city_id._id,
         city_name: user.city_id.name,
         document_uploaded_count,
+        categories: [...categoriesById.values()],
+        services: [...servicesById.values()],
       };
     }));
 
@@ -739,13 +797,18 @@ const create = async (req, res) => {
     if (type === 2) {
       const raw = req.body.is_verified;
       if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
-        const isTrue =
-          raw === true ||
-          raw === 1 ||
-          String(raw).trim().toLowerCase() === 'true';
-        partnerVerificationFields = isTrue
-          ? { verification_status: 2, verified_at: new Date() }
-          : { verification_status: 1, verified_at: null };
+        const key = String(raw).trim().toLowerCase();
+        if (key === 'approved') {
+          partnerVerificationFields = { verification_status: 2, verified_at: new Date() };
+        } else if (key === 'rejected') {
+          partnerVerificationFields = { verification_status: 3, verified_at: null };
+        } else if (key === 'pending') {
+          partnerVerificationFields = { verification_status: 1, verified_at: null };
+        } else {
+          partnerVerificationFields = { verification_status: 1, verified_at: null };
+        }
+      } else {
+        partnerVerificationFields = { verification_status: 1, verified_at: null };
       }
     }
     const existingUser = await User.findOne({
@@ -1100,6 +1163,20 @@ const update = async (req, res) => {
         });
       }
     }
+    if (Number(user.type) === 2 && updateData.is_verified !== undefined && updateData.is_verified !== null && String(updateData.is_verified).trim() !== '') {
+      const vKey = String(updateData.is_verified).trim().toLowerCase();
+      if (vKey === 'approved') {
+        updateData.verification_status = 2;
+        updateData.verified_at = new Date();
+      } else if (vKey === 'rejected') {
+        updateData.verification_status = 3;
+        updateData.verified_at = null;
+      } else if (vKey === 'pending') {
+        updateData.verification_status = 1;
+        updateData.verified_at = null;
+      }
+      delete updateData.is_verified;
+    }
     if (effectiveType === 4) {
       const finalName = updateData.name !== undefined ? updateData.name : user.name;
       const finalEmail = updateData.email !== undefined ? updateData.email : user.email;
@@ -1225,6 +1302,7 @@ const update = async (req, res) => {
       'chat',
       'verification_status',
       'verification_id',
+      'verified_at',
       'provided_service',
       'business_info_id',
       'password',

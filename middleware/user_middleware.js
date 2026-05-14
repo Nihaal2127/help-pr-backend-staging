@@ -52,7 +52,6 @@ const createUserMiddleware = (req, res, next) => {
   parseBooleanField(req, "is_blocked");
   parseBooleanField(req, "is_business");
   parseBooleanField(req, "chat");
-  parseBooleanField(req, "is_verified");
   parseJSONField(req, "accessible_screens");
   parseJSONField(req, "partner_services");
   parseJSONField(req, "category_ids");

@@ -275,7 +275,14 @@ const listFranchises = async (query) => {
         if (nameSearchRaw !== undefined && nameSearchRaw !== null) {
             const s = String(Array.isArray(nameSearchRaw) ? nameSearchRaw[0] : nameSearchRaw).trim();
             if (s) {
-                filter.name = { $regex: new RegExp(sanitizeInput(s), 'i') };
+                const pattern = new RegExp(sanitizeInput(s), 'i');
+                filter.$or = [
+                    { name: { $regex: pattern } },
+                    { admin_name: { $regex: pattern } },
+                    { state_name: { $regex: pattern } },
+                    { city_name: { $regex: pattern } },
+                    { area_name: { $regex: pattern } },
+                ];
             }
         }
         if (query.state_id) {

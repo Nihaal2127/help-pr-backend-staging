@@ -15,6 +15,119 @@ const { getOrderStatusKey, getOrderStatus } = require('../enum/order_status_enum
 const { sendPushNotification } = require('../service/firebase/push_service');
 const { generatePaymentLink } = require('./razorpay_controller');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
+const OrderAdditionalCharge = require('../models/order_additional_charge');
+const OrderPayment = require('../models/order_payment');
+const { computeOrderTotal, recalculateOrderTotals } = require('../utils/order_financials');
+
+const ORDER_DETAIL_POPULATE = [
+  {
+    path: "user_id",
+    select: 'name user_id email phone_number profile_url city_id',
+    populate: [{ path: "city_id", select: 'name' }],
+  },
+  { path: "city_id", select: 'name city_service_price' },
+  { path: "category_id", select: 'name category_id desc image_url' },
+  { path: "created_by_id", select: 'name user_id email phone_number profile_url' },
+  {
+    path: "partner_id",
+    select: 'name user_id email phone_number profile_url city_id',
+    populate: [{ path: "city_id", select: 'name' }],
+  },
+  { path: "employee_id", select: 'name user_id email phone_number profile_url' },
+  { path: "franchise_id", select: 'name city_name state_name' },
+  { path: "address_id" },
+  { path: "service_id", select: 'name service_id desc image_url' },
+  {
+    path: "service_items",
+    populate: [
+      {
+        path: "partner_id",
+        select: 'name user_id email phone_number profile_url city_id',
+        populate: [{ path: "city_id", select: 'name' }],
+      },
+      { path: "service_id", select: 'name service_id desc image_url' },
+    ],
+  },
+];
+
+function shapeOrderDetailResponse(populatedOrderData, additional_charges, order_payments) {
+  return {
+    ...populatedOrderData,
+    created_by_id: populatedOrderData.created_by_id?._id ?? populatedOrderData.created_by_id,
+    created_by_info: populatedOrderData.created_by_id,
+    created_by_name: populatedOrderData.created_by_id?.name,
+
+    user_id: populatedOrderData.user_id?._id ?? populatedOrderData.user_id,
+    user_info: populatedOrderData.user_id
+      ? {
+          ...populatedOrderData.user_id,
+          city_name: populatedOrderData.user_id.city_id?.name || null,
+          city_id: populatedOrderData.user_id.city_id?._id || null,
+        }
+      : null,
+
+    city_id: populatedOrderData.city_id?._id ?? populatedOrderData.city_id,
+    city_info: populatedOrderData.city_id,
+
+    category_id: populatedOrderData.category_id?._id ?? populatedOrderData.category_id,
+    category_info: populatedOrderData.category_id,
+
+    partner_id: populatedOrderData.partner_id?._id ?? populatedOrderData.partner_id,
+    partner_info:
+      populatedOrderData.partner_id && populatedOrderData.partner_id._id
+        ? {
+            ...populatedOrderData.partner_id,
+            city_name: populatedOrderData.partner_id.city_id?.name || null,
+            city_id: populatedOrderData.partner_id.city_id?._id || null,
+          }
+        : null,
+
+    employee_id: populatedOrderData.employee_id?._id ?? populatedOrderData.employee_id,
+    employee_info: populatedOrderData.employee_id?._id ? populatedOrderData.employee_id : null,
+
+    franchise_id: populatedOrderData.franchise_id?._id ?? populatedOrderData.franchise_id,
+    franchise_info: populatedOrderData.franchise_id?._id ? populatedOrderData.franchise_id : null,
+
+    address_id: populatedOrderData.address_id?._id ?? populatedOrderData.address_id,
+    address_info: populatedOrderData.address_id?._id ? populatedOrderData.address_id : null,
+
+    service_id: populatedOrderData.service_id?._id ?? populatedOrderData.service_id,
+    service_info: populatedOrderData.service_id?._id ? populatedOrderData.service_id : null,
+
+    service_items: (populatedOrderData.service_items || []).map((serviceItem) => {
+      const hasValidPartner = serviceItem.partner_id && serviceItem.partner_id._id;
+
+      return {
+        ...serviceItem,
+        ...(hasValidPartner && {
+          partner_info: {
+            ...serviceItem.partner_id,
+            city_name: serviceItem.partner_id.city_id?.name || null,
+            city_id: serviceItem.partner_id.city_id?._id || null,
+          },
+        }),
+        service_info: serviceItem.service_id,
+        partner_id: undefined,
+        service_id: undefined,
+      };
+    }),
+
+    additional_charges,
+    order_payments,
+  };
+}
+
+async function loadOrderDetailLean(orderMongoId) {
+  const populatedOrderData = await Order.findById(orderMongoId).populate(ORDER_DETAIL_POPULATE).lean();
+  if (!populatedOrderData) return null;
+  const [additional_charges, order_payments] = await Promise.all([
+    OrderAdditionalCharge.find({ order_id: orderMongoId, deleted_at: null })
+      .sort({ created_at: -1 })
+      .lean(),
+    OrderPayment.find({ order_id: orderMongoId, deleted_at: null }).sort({ created_at: -1 }).lean(),
+  ]);
+  return shapeOrderDetailResponse(populatedOrderData, additional_charges, order_payments);
+}
 
 const getAll = async (req, res) => {
 
@@ -36,12 +149,10 @@ const getAll = async (req, res) => {
     const filter = {
       deleted_at: null,
       ...(req.query.order_status && { order_status: order_status }),
-      ...(req.query.is_paid && { is_paid: is_paid }),
+      ...(req.query.is_paid !== undefined && req.query.is_paid !== '' && { is_paid: is_paid }),
       ...(req.query.keyword && {
         $or: [
-          { name: regex },
           { user_unique_id: regex },
-          { partner_unique_id: regex },
           { unique_id: regex },
         ]
       })
@@ -71,13 +182,15 @@ const getAll = async (req, res) => {
     );
     const processedOrders = populatedOrder.map(order => {
       const { ...rest } = order;
+      const city = order.city_id;
+      const cat = order.category_id;
 
       return {
         ...rest,
-        city_id: order.city_id._id,
-        city_name: order.city_id.name,
-        category_id: order.category_id._id,
-        category_name: order.category_id.name,
+        city_id: city?._id ?? city,
+        city_name: city?.name ?? '',
+        category_id: cat?._id ?? cat,
+        category_name: cat?.name ?? '',
       };
     })
 
@@ -174,22 +287,20 @@ const getCustomerOrderDetails = async (req, res) => {
       });
     }
 
-    const populatedOrderData = await Order.findById(order._id).populate([
-      { path: "payment_id" },
-      { path: "order_items" },
-    ]).lean();
-
-    const response = {
-      ...populatedOrderData,
-      payment_info: populatedOrderData.payment_id,
-      payment_id: populatedOrderData.payment_id._id,
-    };
+    const record = await loadOrderDetailLean(order._id);
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        status: 404,
+        message: 'No record found'
+      });
+    }
 
     res.status(200).json({
       success: true,
-      status: 201,
+      status: 200,
       message: 'Order details fetched successfully',
-      record: response,
+      record,
     });
   } catch (error) {
     console.error('Error fetching Order details:', error);
@@ -226,12 +337,45 @@ const create = async (req, res) => {
       name,
       email,
       contact,
+      partner_id,
+      employee_id,
+      franchise_id,
+      address_id,
+      service_id,
+      from_date,
+      to_date,
+      work_hours_per_day,
+      total_work_hours,
+      work_start_time,
+      work_end_time,
+      service_price,
+      customer_description,
+      rejection_reason,
+      admin_commission,
+      discount_percent,
+      discount_code,
+      discount_reason,
+      min_deposit,
+      payment_schedule_type,
+      customer_payment_method,
     } = req.body;
     const order_id = new mongoose.Types.ObjectId();
 
+    if (!Array.isArray(service_items) || service_items.length !== 1) {
+      return res.status(409).json({
+        success: false,
+        status: 409,
+        message: 'Each order must contain exactly one service; service_items must be an array of length 1.',
+      });
+    }
+
+    const single = service_items[0];
     const unique_id = await getOrderId();
     const orderItemsWithOrderId = await Promise.all(service_items.map(async (option) => {
       const user = await User.findById(new mongoose.Types.ObjectId(option.user_id));
+      if (!user) {
+        throw new Error('INVALID_SERVICE_USER');
+      }
       const item = {
         _id: new mongoose.Types.ObjectId(),
         ...option,
@@ -265,6 +409,13 @@ const create = async (req, res) => {
       }
     ];
 
+    const resolvedPartnerId = partner_id ?? single.partner_id ?? null;
+    const resolvedServiceId = service_id ?? single.service_id ?? null;
+    const resolvedServicePrice =
+      service_price !== undefined && service_price !== null
+        ? Number(service_price)
+        : Number(single.service_price ?? single.sub_total ?? 0);
+
     const newOrder = new Order({
       _id: order_id,
       unique_id,
@@ -287,16 +438,39 @@ const create = async (req, res) => {
       total_price,
       admin_earning,
       address,
-      type
+      type,
+      partner_id: resolvedPartnerId,
+      employee_id: employee_id ?? null,
+      franchise_id: franchise_id ?? null,
+      address_id: address_id ?? null,
+      service_id: resolvedServiceId,
+      from_date: from_date ? new Date(from_date) : null,
+      to_date: to_date ? new Date(to_date) : null,
+      work_hours_per_day: work_hours_per_day !== undefined ? Number(work_hours_per_day) : 0,
+      total_work_hours: total_work_hours !== undefined ? Number(total_work_hours) : 0,
+      work_start_time: work_start_time ?? '',
+      work_end_time: work_end_time ?? '',
+      service_price: resolvedServicePrice,
+      customer_description: customer_description ?? '',
+      rejection_reason: rejection_reason ?? '',
+      admin_commission: admin_commission !== undefined ? Number(admin_commission) : 0,
+      discount_percent: discount_percent !== undefined && discount_percent !== null ? Number(discount_percent) : null,
+      discount_code: discount_code ?? '',
+      discount_reason: discount_reason ?? '',
+      min_deposit: min_deposit !== undefined ? Number(min_deposit) : 0,
+      payment_schedule_type: payment_schedule_type === 'installments' ? 'installments' : 'single',
+      customer_payment_method: customer_payment_method ?? '',
+      additional_charges_total: 0,
     });
 
-
+    newOrder.total_price = computeOrderTotal(newOrder, 0);
 
     if (newOrder.payment_mode_id === "2") {
-      const responsePaymentLink = await generatePaymentLink(name, email, contact, total_price);
+      const responsePaymentLink = await generatePaymentLink(name, email, contact, newOrder.total_price);
       if (responsePaymentLink.success === true) {
         newOrder.transaction_id = responsePaymentLink.transaction_id;
         await newOrder.save();
+        await recalculateOrderTotals(order_id);
         await Promise.all(
           service_items.map(async (service) => {
             try {
@@ -340,9 +514,15 @@ const create = async (req, res) => {
           record: result,
         });
       }
+      return res.status(502).json({
+        success: false,
+        status: 502,
+        message: responsePaymentLink.error || 'Failed to create payment link.',
+      });
 
     } else {
       await newOrder.save();
+      await recalculateOrderTotals(order_id);
       await Promise.all(
         service_items.map(async (service) => {
           try {
@@ -388,6 +568,13 @@ const create = async (req, res) => {
     }
 
   } catch (error) {
+    if (error.message === 'INVALID_SERVICE_USER') {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Invalid user_id on service_items.',
+      });
+    }
     console.error('Error creating Order:', error.message);
     return res.status(500).json({
       success: false,
@@ -452,21 +639,21 @@ const update = async (req, res) => {
 
 
     const notificationSetting = await NotificationSettings.findOne({ user_id: order.user_id });
-    if (notificationSetting.is_update_allow) {
+    if (notificationSetting?.is_update_allow) {
       const user = await User.findById(order.user_id);
-      const deviceToken = user.device_token
+      const deviceToken = user?.device_token
       const title = `Order Status Update`
-      const body = `Your Order #${order.unique_id} status changed to ${getOrderStatus(order.status)}`
+      const body = `Your Order #${order.unique_id} status changed to ${getOrderStatus(order.order_status)}`
       const data = {
         order_id: order.id,
-        order_status: `${order.status}`,
+        order_status: `${order.order_status}`,
         type: "Order"
       }
       if (deviceToken !== null && deviceToken !== '') {
         await sendPushNotification({ deviceToken, title, body, data });
       }
     }
-    if (notificationSetting.is_sms_allow) {
+    if (notificationSetting?.is_sms_allow) {
       // Put logic for sent sms update
     }
 
@@ -528,6 +715,13 @@ const serviceUpdate = async (req, res) => {
       }
     });
     const partner = await User.findById(new mongoose.Types.ObjectId(service.partner_id));
+    if (!partner) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Partner user not found for this service.',
+      });
+    }
     service.partner_unique_id = partner.user_id;
     const updatedService = await service.save();
 
@@ -545,7 +739,7 @@ const serviceUpdate = async (req, res) => {
         const body = `Service for order #${service.order_unique_id} has been cancelled from your list.`;
         const data = { order_id: service.order_id.toString(), type: "Order" };
         await sendPushNotification({
-          oldDeviceToken,
+          deviceToken: oldDeviceToken,
           title,
           body,
           data
@@ -583,8 +777,8 @@ const serviceUpdate = async (req, res) => {
         });
       }
     }else if (partner && service.service_status === 1) {
-      const notificationSetting = await NotificationSettings.findOne({ user_id: service.partner_id });
-      if (notificationSetting.is_update_allow) {
+      const partnerNotifySettings = await NotificationSettings.findOne({ user_id: service.partner_id });
+      if (partnerNotifySettings?.is_update_allow) {
         const serviceData = await Service.findById(service.service_id);
         const deviceToken = partner.device_token
         const title = `New Service Request Received`
@@ -597,15 +791,15 @@ const serviceUpdate = async (req, res) => {
           await sendPushNotification({ deviceToken, title, body, data });
         }
       }
-      if (notificationSetting.is_sms_allow) {
+      if (partnerNotifySettings?.is_sms_allow) {
         // Put logic for sent sms update
       }
     }
-    const notificationSetting = await NotificationSettings.findOne({ user_id: service.user_id });
-    if (notificationSetting.is_update_allow) {
+    const userNotifySettings = await NotificationSettings.findOne({ user_id: service.user_id });
+    if (userNotifySettings?.is_update_allow) {
       const user = await User.findById(service.user_id);
       const serviceData = await Service.findById(service.service_id);
-      const deviceToken = user.device_token
+      const deviceToken = user?.device_token
       const title = `Service Update`
       const body = `Your ${serviceData.name} status changed to ${getOrderStatus(service.service_status)} for order #${service.order_unique_id}`
       const data = {
@@ -616,7 +810,7 @@ const serviceUpdate = async (req, res) => {
         await sendPushNotification({ deviceToken, title, body, data });
       }
     }
-    if (notificationSetting.is_sms_allow) {
+    if (userNotifySettings?.is_sms_allow) {
       // Put logic for sent sms update
     }
 
@@ -672,36 +866,47 @@ const cancleService = async (req, res) => {
     }
     let body;
     let partner;
-    if (order.service_items.some(id => id.equals(service_items_id))) {
-      // order.service_items = order.service_items.filter(id => !id.equals(service_items_id));
-      const serviceData = await OrderService.findById(service_items_id);
-      if (serviceData) {
-        partner = await User.findById(serviceData.partner_id);
-        order.sub_total -= serviceData.sub_total;
-        order.tax -= serviceData.tax;
-        order.user_paltform_fee -= serviceData.user_paltform_fee;
-        order.partner_commison_platform_fee -= serviceData.partner_commison_platform_fee;
-        order.total_price -= serviceData.total_price;
-        order.admin_earning -= serviceData.admin_earning;
-        await OrderService.findByIdAndUpdate(service_items_id,
-          { service_status: getOrderStatusKey('Cancelled') },
-          { new: true, runValidators: true }
-        )
-      }
-      const serviceInfo = await Service.findById(serviceData.service_id);
-      body = `Your ${serviceInfo.name} for order #${order.unique_id} has been cancelled`
-    } else {
+    if (!order.service_items.some((sid) => sid.equals(service_items_id))) {
       return res.status(404).json({
         success: false,
         status: 404,
         message: 'Service id not found'
       });
     }
+
+    const serviceData = await OrderService.findById(service_items_id);
+    if (!serviceData) {
+      return res.status(404).json({
+        success: false,
+        status: 404,
+        message: 'Service line not found'
+      });
+    }
+
+    partner = await User.findById(serviceData.partner_id);
+    order.sub_total -= serviceData.sub_total;
+    order.tax -= serviceData.tax;
+    order.user_paltform_fee -= serviceData.user_paltform_fee;
+    order.partner_commison_platform_fee -= serviceData.partner_commison_platform_fee;
+    order.total_price -= serviceData.total_price;
+    order.admin_earning -= serviceData.admin_earning;
+    await OrderService.findByIdAndUpdate(service_items_id,
+      { service_status: getOrderStatusKey('Cancelled') },
+      { new: true, runValidators: true }
+    );
+
+    const serviceInfo = serviceData.service_id
+      ? await Service.findById(serviceData.service_id)
+      : null;
+    body = serviceInfo
+      ? `Your ${serviceInfo.name} for order #${order.unique_id} has been cancelled`
+      : `A service for order #${order.unique_id} has been cancelled`;
     const updatedOrder = await order.save();
+    await recalculateOrderTotals(order._id);
 
     if (partner) {
       const notificationSetting = await NotificationSettings.findOne({ user_id: partner._id });
-      if (notificationSetting.is_update_allow) {
+      if (notificationSetting?.is_update_allow) {
         const deviceToken = partner.device_token
         const title = `Service cancel`
         const data = {
@@ -712,15 +917,15 @@ const cancleService = async (req, res) => {
           await sendPushNotification({ deviceToken, title, body, data });
         }
       }
-      if (notificationSetting.is_sms_allow) {
+      if (notificationSetting?.is_sms_allow) {
         // Put logic for sent sms update
       }
     }
 
-    const notificationSetting = await NotificationSettings.findOne({ user_id: order.user_id });
-    if (notificationSetting.is_update_allow) {
+    const notificationSettingUser = await NotificationSettings.findOne({ user_id: order.user_id });
+    if (notificationSettingUser?.is_update_allow) {
       const user = await User.findById(order.user_id);
-      const deviceToken = user.device_token
+      const deviceToken = user?.device_token
       const title = `Service cancel`
       const data = {
         order_id: order.id,
@@ -730,7 +935,7 @@ const cancleService = async (req, res) => {
         await sendPushNotification({ deviceToken, title, body, data });
       }
     }
-    if (notificationSetting.is_sms_allow) {
+    if (notificationSettingUser?.is_sms_allow) {
       // Put logic for sent sms update
     }
 
@@ -831,9 +1036,9 @@ const cancleOrder = async (req, res) => {
     console.log('Notification sent.......');
 
     const notificationSetting = await NotificationSettings.findOne({ user_id: order.user_id });
-    if (notificationSetting.is_update_allow) {
+    if (notificationSetting?.is_update_allow) {
       const user = await User.findById(order.user_id);
-      const deviceToken = user.device_token
+      const deviceToken = user?.device_token
       const title = `Order cancel`
       const body = `Your Order #${order.unique_id} has been cancelled`
       const data = {
@@ -844,7 +1049,7 @@ const cancleOrder = async (req, res) => {
         await sendPushNotification({ deviceToken, title, body, data });
       }
     }
-    if (notificationSetting.is_sms_allow) {
+    if (notificationSetting?.is_sms_allow) {
       // Put logic for sent sms update
     }
     return res.status(200).json({
@@ -856,96 +1061,6 @@ const cancleOrder = async (req, res) => {
   }
   catch (error) {
     console.error('Error cancelled Order:', error);
-    res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.'
-    });
-  }
-};
-
-const getByIdOld = async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const order = await Order.findById(id);
-
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        status: 404,
-        message: 'No record found'
-      });
-    }
-
-
-    const populatedOrderData = await Order.findById(id).populate([
-      {
-        path: "user_id", select: 'name user_id email phone_number profile_url city_id',
-        populate: [
-          { path: "city_id", select: 'name' },
-        ]
-      },
-      { path: "city_id", select: 'name city_service_price' },
-      { path: "category_id", select: 'name category_id desc image_url' },
-      { path: "created_by_id", select: 'name user_id email phone_number profile_url' },
-      {
-        path: "service_items",
-        populate: [
-          {
-            path: "partner_id", select: 'name user_id email phone_number profile_url',
-            populate: [
-              { path: "city_id", select: 'name' },
-            ]
-          },
-          { path: "service_id", select: 'name service_id desc image_url' },
-        ]
-      },
-    ]).lean();
-
-    const response = {
-      ...populatedOrderData,
-      created_by_id: populatedOrderData.created_by_id._id,
-      created_by_info: populatedOrderData.created_by_id,
-      created_by_name: populatedOrderData.created_by_id.name,
-
-      user_id: populatedOrderData.user_id._id,
-      user_info: {
-        ...populatedOrderData.user_id,
-        city_name: populatedOrderData.user_id.city_id.name,
-        city_id: populatedOrderData.user_id.city_id._id,
-      },
-
-      city_id: populatedOrderData.city_id._id,
-      city_info: populatedOrderData.city_id,
-
-      category_id: populatedOrderData.category_id._id,
-      category_info: populatedOrderData.category_id,
-
-      service_items: populatedOrderData.service_items.map(serviceItem => {
-        return {
-          ...serviceItem,
-          partner_info: {
-            ...serviceItem.partner_id,
-            city_name: serviceItem.partner_id.city_id.name,
-            city_id: serviceItem.partner_id.city_id._id,
-          },
-          service_info: serviceItem.service_id,
-          partner_id: undefined,
-          service_id: undefined,
-        };
-      })
-
-    };
-
-    res.status(200).json({
-      success: true,
-      status: 201,
-      message: 'Order fetched successfully',
-      record: response,
-    });
-  } catch (error) {
-    console.error('Error fetching Order:', error);
     res.status(500).json({
       success: false,
       status: 500,
@@ -968,75 +1083,20 @@ const getById = async (req, res) => {
       });
     }
 
-    const populatedOrderData = await Order.findById(id).populate([
-      {
-        path: "user_id",
-        select: 'name user_id email phone_number profile_url city_id',
-        populate: [
-          { path: "city_id", select: 'name' },
-        ]
-      },
-      { path: "city_id", select: 'name city_service_price' },
-      { path: "category_id", select: 'name category_id desc image_url' },
-      { path: "created_by_id", select: 'name user_id email phone_number profile_url' },
-      {
-        path: "service_items",
-        populate: [
-          {
-            path: "partner_id",
-            select: 'name user_id email phone_number profile_url city_id',
-            populate: [
-              { path: "city_id", select: 'name' },
-            ]
-          },
-          { path: "service_id", select: 'name service_id desc image_url' },
-        ]
-      },
-    ]).lean();
-
-    const response = {
-      ...populatedOrderData,
-      created_by_id: populatedOrderData.created_by_id._id,
-      created_by_info: populatedOrderData.created_by_id,
-      created_by_name: populatedOrderData.created_by_id.name,
-
-      user_id: populatedOrderData.user_id._id,
-      user_info: {
-        ...populatedOrderData.user_id,
-        city_name: populatedOrderData.user_id.city_id?.name || null,
-        city_id: populatedOrderData.user_id.city_id?._id || null,
-      },
-
-      city_id: populatedOrderData.city_id._id,
-      city_info: populatedOrderData.city_id,
-
-      category_id: populatedOrderData.category_id._id,
-      category_info: populatedOrderData.category_id,
-
-      service_items: populatedOrderData.service_items.map(serviceItem => {
-        const hasValidPartner = serviceItem.partner_id && serviceItem.partner_id._id;
-
-        return {
-          ...serviceItem,
-          ...(hasValidPartner && {
-            partner_info: {
-              ...serviceItem.partner_id,
-              city_name: serviceItem.partner_id.city_id?.name || null,
-              city_id: serviceItem.partner_id.city_id?._id || null,
-            },
-          }),
-          service_info: serviceItem.service_id,
-          partner_id: undefined, // remove raw partner_id
-          service_id: undefined, // remove raw service_id
-        };
-      })
-    };
+    const record = await loadOrderDetailLean(order._id);
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        status: 404,
+        message: 'No record found'
+      });
+    }
 
     res.status(200).json({
       success: true,
       status: 201,
       message: 'Order fetched successfully',
-      record: response,
+      record,
     });
 
   } catch (error) {

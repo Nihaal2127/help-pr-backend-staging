@@ -994,7 +994,7 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
                 deleted_at: null,
             })
                 .select(
-                    'partner_id category_id service_id is_accept_request description tax minimum_deposit payment_type price is_active created_at updated_at'
+                    'partner_id category_id service_id is_accept_request description tax minimum_deposit payment_type price commission is_active created_at updated_at'
                 )
                 .lean();
         }
@@ -1019,6 +1019,7 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
                 minimum_deposit: row.minimum_deposit ?? 0,
                 payment_type: row.payment_type ?? '',
                 price: row.price ?? 0,
+                commission: Number.isFinite(Number(row.commission)) ? Number(row.commission) : 0,
                 is_active: row.is_active !== undefined ? Boolean(row.is_active) : true,
                 created_at: row.created_at ?? null,
                 updated_at: row.updated_at ?? null,

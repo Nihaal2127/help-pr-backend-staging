@@ -700,7 +700,7 @@ const USER_LIST_SELECT =
 
 /** Matches user_controller getAll shape for type-4 address rows; includes user_id so rows can be grouped by customer. */
 const CUSTOMER_ADDRESS_LIST_SELECT =
-    '_id user_id contact_name contact_number address landmark area state_id city_id state city pincode address_status created_at updated_at';
+    '_id user_id contact_name contact_number address landmark area area_id state_id city_id state city pincode address_status created_at updated_at';
 
 const isCatalogCategoryActive = (doc) =>
     Boolean(

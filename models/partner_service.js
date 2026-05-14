@@ -14,6 +14,7 @@ var partnerServiceSchema = new schema(
         minimum_deposit: { type: Number, default: 0 },
         payment_type: { type: String, default: '', trim: true },
         price: { type: Number, default: 0 },
+        commission: { type: Number, default: 0 },
         is_active: { type: Boolean, default: true },
 
         created_at: { type: Date, default: Date.now },

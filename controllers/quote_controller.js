@@ -13,6 +13,7 @@ const { applyPagination } = require("../utils/pagination");
 const { getOrderId, getQuoteSequenceId } = require("../helper/id_generator");
 const { checkObjectIdExists } = require("../validator/id_validator");
 const { sanitizeInput } = require("../validator/search_keyword_validator");
+const { recalculateOrderTotals } = require("../utils/order_financials");
 
 const STATUS_PENDING = 1;
 const STATUS_APPROVED = 2;
@@ -423,6 +424,8 @@ const getAll = async (req, res) => {
                   { "_created_by.user_id": regex },
                   { "_category.name": regex },
                   { "_service.name": regex },
+                  { "_service.rejection_reason": regex },
+                  { "_category.rejection_reason": regex },
                   { "_franchise.name": regex },
                 ],
               },
@@ -508,6 +511,10 @@ const getAll = async (req, res) => {
                 category_id: "$_category.category_id",
                 desc: "$_category.desc",
                 image_url: "$_category.image_url",
+                approval_status: "$_category.approval_status",
+                is_request: "$_category.is_request",
+                is_active: "$_category.is_active",
+                rejection_reason: "$_category.rejection_reason",
               },
               null,
             ],
@@ -522,6 +529,10 @@ const getAll = async (req, res) => {
                 desc: "$_service.desc",
                 image_url: "$_service.image_url",
                 price: "$_service.price",
+                approval_status: "$_service.approval_status",
+                is_request: "$_service.is_request",
+                is_active: "$_service.is_active",
+                rejection_reason: "$_service.rejection_reason",
               },
               null,
             ],
@@ -710,8 +721,16 @@ const getById = async (req, res) => {
         { path: "partner_id", select: "name user_id email phone_number profile_url type" },
         { path: "employee_id", select: "name user_id email phone_number profile_url type" },
         { path: "created_by_id", select: "name user_id email phone_number profile_url type" },
-        { path: "category_id", select: "name category_id desc image_url" },
-        { path: "service_id", select: "name service_id desc image_url price" },
+        {
+          path: "category_id",
+          select:
+            "name category_id desc image_url approval_status is_request is_active rejection_reason",
+        },
+        {
+          path: "service_id",
+          select:
+            "name service_id desc image_url price approval_status is_request is_active rejection_reason",
+        },
         { path: "franchise_id", select: "name city_name state_name" },
         {
           path: "address_id",
@@ -778,8 +797,35 @@ const getCustomerQuotes = async (req, res) => {
     };
     const sort = { created_at: -1 };
 
+    const customerQuotePopulate = [
+      { path: "user_id", select: "name user_id email phone_number profile_url type" },
+      { path: "partner_id", select: "name user_id email phone_number profile_url type" },
+      { path: "employee_id", select: "name user_id email phone_number profile_url type" },
+      { path: "created_by_id", select: "name user_id email phone_number profile_url type" },
+      {
+        path: "category_id",
+        select:
+          "name category_id desc image_url approval_status is_request is_active rejection_reason",
+      },
+      {
+        path: "service_id",
+        select:
+          "name service_id desc image_url price approval_status is_request is_active rejection_reason",
+      },
+      { path: "franchise_id", select: "name city_name state_name" },
+      {
+        path: "address_id",
+        select: "address landmark area city_id state_id pincode contact_name contact_number",
+        populate: [
+          { path: "city_id", select: "name" },
+          { path: "state_id", select: "name" },
+        ],
+      },
+      { path: "order_id", select: "unique_id order_status total_price user_id" },
+    ];
+
     const { data: quotes, totalCount, totalPages, currentPage } =
-      await applyPagination(Quote, filter, page, limit, sort);
+      await applyPagination(Quote, filter, page, limit, sort, {}, customerQuotePopulate);
 
     res.status(200).json({
       success: true,
@@ -1187,22 +1233,45 @@ const convertToOrder = async (req, res) => {
       order_status: 1,
       order_status_info: buildOrderStatusInfo(),
       address: addressStr,
+      address_id: quote.address_id,
       is_paid: false,
       payment_mode_id: "",
       transaction_id: "",
+      payment_schedule_type: "single",
+      customer_payment_method: "",
       created_by_id,
       service_items: [orderServiceDoc._id],
       order_date: quote.from_date,
+      from_date: quote.from_date,
+      to_date: quote.to_date,
+      work_hours_per_day: quote.work_hours_per_day ?? 0,
+      total_work_hours: quote.total_work_hours ?? 0,
+      work_start_time: quote.work_start_time || "",
+      work_end_time: quote.work_end_time || "",
+      partner_id: quote.partner_id,
+      employee_id: quote.employee_id ?? null,
+      franchise_id: quote.franchise_id ?? null,
+      service_id: quote.service_id,
+      service_price: price,
+      customer_description: quote.customer_description || "",
+      rejection_reason: "",
       sub_total: price,
       tax: 0,
       discount_amount: null,
+      discount_percent: null,
+      discount_code: "",
+      discount_reason: "",
       user_paltform_fee: 0,
       partner_commison_platform_fee: 0,
       total_price: price,
       admin_earning: 0,
+      admin_commission: 0,
+      min_deposit: 0,
+      additional_charges_total: 0,
     });
 
     await newOrder.save();
+    await recalculateOrderTotals(order_id);
 
     const oldStatus = quote.status;
     const oldOrderId = quote.order_id;

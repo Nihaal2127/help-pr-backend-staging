@@ -16,8 +16,15 @@ const getAll = async (req, res) => {
     const service_status = req.query.service_status !== undefined ? parseInt(req.query.service_status) : null;
     const is_paid = req.query.is_paid !== undefined ? parseBoolean(req.query.is_paid) : null;
 
+    const filter = {
+      deleted_at: null,
+      ...(req.query.service_status && { service_status: service_status }),
+      ...(req.query.is_paid !== undefined && req.query.is_paid !== '' && { is_paid: is_paid }),
+      ...(req.query.partner_paid_status && { partner_paid_status: partner_paid_status }),
+    };
+
     if (req.query.unique_id) {
-      filter.unique_id = { $regex: new RegExp(req.query.unique_id, "i") }; // Case-insensitive match
+      filter.order_unique_id = { $regex: new RegExp(req.query.unique_id, "i") }; // Case-insensitive match
     }
 
     let regex;
@@ -25,11 +32,7 @@ const getAll = async (req, res) => {
       const sanitizedKeyword = sanitizeInput(req.query.keyword);
       regex = new RegExp(sanitizedKeyword, 'i'); // Case-insensitive regex search
     }
-    const filter = {
-      deleted_at: null,
-      ...(req.query.service_status && { service_status: service_status }),
-      ...(req.query.is_paid && { is_paid: is_paid }),
-      ...(req.query.partner_paid_status && { partner_paid_status: partner_paid_status }),
+    Object.assign(filter, {
       ...(req.query.keyword && {
         $or: [
           { name: regex },
@@ -38,7 +41,7 @@ const getAll = async (req, res) => {
           { partner_unique_id: regex },
         ]
       })
-    };
+    });
 
     if (req.query.user_id) {
 

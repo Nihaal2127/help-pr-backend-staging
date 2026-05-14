@@ -135,7 +135,8 @@ const ensureServices = async (serviceIds) => {
     return count === serviceIds.length;
 };
 
-const categoryPopulateSelect = 'name desc image_url is_active is_request category_id';
+const categoryPopulateSelect =
+    'name desc image_url is_active is_request category_id approval_status rejection_reason';
 
 const listPopulateFields = [
     { path: 'franchise_id', select: 'name admin_name is_active' },
@@ -143,7 +144,8 @@ const listPopulateFields = [
         path: 'services_list',
         populate: {
             path: 'service_id',
-            select: 'name desc image_url category_id is_active is_request',
+            select:
+                'name desc image_url category_id is_active is_request approval_status rejection_reason',
             populate: {
                 path: 'category_id',
                 select: categoryPopulateSelect,

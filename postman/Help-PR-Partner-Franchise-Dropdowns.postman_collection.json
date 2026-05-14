@@ -1,0 +1,113 @@
+{
+  "info": {
+    "_postman_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "name": "Help PR — Partner add (franchise category & service dropdowns)",
+    "description": "Backoffice POST APIs for admin Add Partner dropdowns. Set collection variables: baseUrl, accessToken, franchiseId, categoryObjectId.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5001"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "franchiseId",
+      "value": ""
+    },
+    {
+      "key": "categoryObjectId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Partner franchise dropdown APIs",
+      "item": [
+        {
+          "name": "POST franchiseActiveCategories",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"franchise_id\": \"{{franchiseId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/partner_category/franchiseActiveCategories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "partner_category",
+                "franchiseActiveCategories"
+              ]
+            },
+            "description": "POST /api/partner_category/franchiseActiveCategories — body franchise_id. requireBackoffice JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST franchiseCategoryServices",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"franchise_id\": \"{{franchiseId}}\",\n  \"category_id\": \"{{categoryObjectId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/partner_service/franchiseCategoryServices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "partner_service",
+                "franchiseCategoryServices"
+              ]
+            },
+            "description": "POST /api/partner_service/franchiseCategoryServices — body franchise_id + category_id. requireBackoffice JWT."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

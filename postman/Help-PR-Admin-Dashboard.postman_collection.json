@@ -6196,6 +6196,84 @@
           }
         },
         {
+          "name": "Partner category — franchiseActiveCategories (backoffice)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"franchise_id\": \"{{franchiseId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Admin **Add Partner** category dropdown. `POST /api/partner_category/franchiseActiveCategories`. JSON body: `franchise_id`. Response `records` = `franchise_category.active_categories` order. **requireBackoffice** JWT.",
+            "url": {
+              "raw": "{{baseUrl}}/api/partner_category/franchiseActiveCategories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "partner_category",
+                "franchiseActiveCategories"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Partner service — franchiseCategoryServices (backoffice)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"franchise_id\": \"{{franchiseId}}\",\n  \"category_id\": \"{{categoryObjectId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Admin **Add Partner** service dropdown. `POST /api/partner_service/franchiseCategoryServices`. Intersection of **category.services** and **franchise_service.active_services**. Set `categoryObjectId` from `_id` returned by franchiseActiveCategories.",
+            "url": {
+              "raw": "{{baseUrl}}/api/partner_service/franchiseCategoryServices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "partner_service",
+                "franchiseCategoryServices"
+              ]
+            }
+          }
+        },
+        {
           "name": "Partner service — updateStatus",
           "request": {
             "method": "POST",

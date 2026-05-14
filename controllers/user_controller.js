@@ -23,6 +23,7 @@ const { handleImageUpload } = require('../helper/image_uploader');
 const { getUploadType } = require('../enum/upload_type_enum');
 const PartnerDocument = require('../models/partner_document');
 const PartnerBankAccount = require('../models/partner_bank_account');
+const PartnerSubscription = require('../models/partner_subscription');
 const { replacePartnerCategoriesFromSignupRows } = require('../services/partner_category_service');
 const partnerSubscriptionService = require('../services/partner_subscription_service');
 
@@ -69,6 +70,49 @@ function resolvePartnerListVerificationStatus(isVerifiedRaw) {
   return {
     ok: false,
     message: 'is_verified must be one of: approved, pending, rejected.',
+  };
+}
+
+/** Response field for partners: mirrors create/update body `is_verified` strings. */
+function verificationStatusToIsVerified(verificationStatus) {
+  const n = Number(verificationStatus);
+  if (n === 2) return 'approved';
+  if (n === 3) return 'rejected';
+  return 'pending';
+}
+
+function mapPartnerDocumentsForResponse(documents) {
+  if (!documents || !Array.isArray(documents)) return [];
+  return documents.map((doc) => ({
+    ...doc,
+    document_id: doc.document_id?._id || null,
+    name: doc.document_id?.name || null,
+    is_optional: doc.document_id?.is_optional || null,
+  }));
+}
+
+function partnerServiceRowsToCategoriesAndServices(rows) {
+  const categoriesById = new Map();
+  const servicesById = new Map();
+  for (const r of rows || []) {
+    const cat = r.category_id;
+    if (cat && typeof cat === 'object' && cat._id) {
+      categoriesById.set(cat._id.toString(), {
+        category_id: cat._id,
+        category_name: cat.name ?? null,
+      });
+    }
+    const svc = r.service_id;
+    if (svc && typeof svc === 'object' && svc._id) {
+      servicesById.set(svc._id.toString(), {
+        service_id: svc._id,
+        service_name: svc.name ?? null,
+      });
+    }
+  }
+  return {
+    categories: [...categoriesById.values()],
+    services: [...servicesById.values()],
   };
 }
 
@@ -594,7 +638,59 @@ const getAll = async (req, res) => {
       { path: "city_id" },
     ]);
 
+    const partnerIdsInPage = populatedUser.filter((u) => Number(u.type) === 2).map((u) => u._id);
+    const partnerIdToServiceRows = new Map();
+    const partnerIdToRichUser = new Map();
+    const partnerIdToBank = new Map();
+    const partnerIdToSubs = new Map();
 
+    if (partnerIdsInPage.length > 0) {
+      const partnerServiceRows = await PartnerServices.find({
+        partner_id: { $in: partnerIdsInPage },
+        deleted_at: null,
+      })
+        .populate([
+          { path: 'category_id', select: 'name' },
+          { path: 'service_id', select: 'name' },
+        ])
+        .lean();
+
+      for (const row of partnerServiceRows) {
+        const key = row.partner_id.toString();
+        if (!partnerIdToServiceRows.has(key)) partnerIdToServiceRows.set(key, []);
+        partnerIdToServiceRows.get(key).push(row);
+      }
+
+      const richPartners = await User.find({ _id: { $in: partnerIdsInPage } })
+        .populate({ path: 'documents', populate: { path: 'document_id', model: 'document' } })
+        .populate({ path: 'business_info_id' })
+        .lean();
+      for (const rp of richPartners) {
+        partnerIdToRichUser.set(rp._id.toString(), rp);
+      }
+
+      const banks = await PartnerBankAccount.find({
+        partner_id: { $in: partnerIdsInPage },
+        is_primary: true,
+        deleted_at: null,
+      }).lean();
+      for (const b of banks) {
+        partnerIdToBank.set(String(b.partner_id), b);
+      }
+
+      const subs = await PartnerSubscription.find({
+        partner_id: { $in: partnerIdsInPage },
+        deleted_at: null,
+      })
+        .populate({ path: 'subscription_plan_id' })
+        .sort({ created_at: -1 })
+        .lean();
+      for (const s of subs) {
+        const key = s.partner_id.toString();
+        if (!partnerIdToSubs.has(key)) partnerIdToSubs.set(key, []);
+        partnerIdToSubs.get(key).push(s);
+      }
+    }
 
     const processedUsers = await Promise.all(populatedUser.map(async user => {
       const service_count_data = await getServiceCountData(user._id);
@@ -609,7 +705,7 @@ const getAll = async (req, res) => {
           .select('contact_name contact_number address landmark area area_id state_id city_id state city pincode address_status created_at updated_at')
           .lean();
       }
-      return {
+      const row = {
         ...rest,
         address: addressField,
         state_id: user?.state_id?._id || null,
@@ -632,6 +728,38 @@ const getAll = async (req, res) => {
         total_earnings: 0,
         bal_payment: 0,
       };
+
+      if (Number(user.type) === 2) {
+        const pid = user._id.toString();
+        row.last_service_date = await getLastServiceDate(user._id);
+
+        const rich = partnerIdToRichUser.get(pid);
+        if (rich) {
+          row.documents = mapPartnerDocumentsForResponse(rich.documents);
+          if (user.is_business === true && rich.business_info_id) {
+            const bi = rich.business_info_id;
+            row.business_info_id = bi?._id ?? user.business_info_id ?? null;
+            row.business_info_name = bi?.name ?? null;
+            row.business_info_phone_number = bi?.phone_number ?? null;
+            row.business_info_email = bi?.email ?? null;
+            row.business_info_provided_service = bi?.provided_service ?? null;
+          }
+        }
+
+        row.bank_account = partnerIdToBank.get(pid) ?? null;
+
+        const psRows = partnerIdToServiceRows.get(pid) || [];
+        row.partner_services = psRows;
+        const agg = partnerServiceRowsToCategoriesAndServices(psRows);
+        row.categories = agg.categories;
+        row.services = agg.services;
+
+        row.partner_subscriptions = partnerIdToSubs.get(pid) ?? [];
+
+        row.is_verified = verificationStatusToIsVerified(row.verification_status);
+      }
+
+      return row;
     }));
 
 

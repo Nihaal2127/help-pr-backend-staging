@@ -6,5 +6,7 @@ module.exports = {
   AWS_REGION: process.env.AWS_REGION,
   AWS_S3_BUCKET: process.env.AWS_S3_BUCKET,
   LOCAL_IMAGE_DIR: process.env.LOCAL_IMAGE_DIR,
+  /** No trailing slash. Used to turn stored keys/paths into full image URLs in API JSON. */
+  IMAGE_CDN_BASE_URL: process.env.IMAGE_CDN_BASE_URL || process.env.CDN_BASE_URL,
   NODE_ENV: process.env.NODE_ENV,  // 'production' or 'development'
 };

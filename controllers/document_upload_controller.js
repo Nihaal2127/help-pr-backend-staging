@@ -1,5 +1,6 @@
 const { handleImageUpload } = require('../helper/image_uploader');
 const { getUploadType } = require('../enum/upload_type_enum');
+const { toPublicImageUrl } = require('../helper/publicImageUrl');
 const uploadDocument = async (req, res) => {
     const type = parseInt(req.body.type);
 
@@ -29,7 +30,7 @@ const uploadDocument = async (req, res) => {
             success: true,
             status: 200,
             message: 'File uploaded successfully',
-            records: image_urls,
+            records: image_urls.map(toPublicImageUrl),
         });
 
     } catch (error) {
@@ -83,7 +84,7 @@ const updateDocument = async (req, res) => {
             success: true,
             status: 200,
             message: 'File uploaded successfully',
-            records: image_urls,
+            records: image_urls.map(toPublicImageUrl),
         });
 
     } catch (error) {

@@ -85,8 +85,12 @@ const create = async (req, res) => {
       address,
       landmark,
       area,
+      area_id,
+      state_id,
       city_id,
       pincode,
+      city,
+      state,
     } = req.body;
 
     const newAddress = new Address({
@@ -96,8 +100,12 @@ const create = async (req, res) => {
       address,
       landmark,
       area,
+      area_id,
+      state_id,
       city_id,
       pincode,
+      city,
+      state,
     });
     await newAddress.save();
 

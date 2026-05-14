@@ -10,6 +10,7 @@ const Address = require('../models/address');
 const FranchiseCategory = require('../models/franchise_category');
 const FranchiseService = require('../models/franchise_service');
 const PartnerService = require('../models/partner_service');
+const { resolveFranchiseCatalogByFranchiseId } = require('../utils/partner_franchise_catalog');
 const { applyPagination, applyDropDownFilter } = require('../utils/pagination');
 const { parseBoolean } = require('../utils/parser');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
@@ -707,7 +708,7 @@ const USER_LIST_SELECT =
 
 /** Matches user_controller getAll shape for type-4 address rows; includes user_id so rows can be grouped by customer. */
 const CUSTOMER_ADDRESS_LIST_SELECT =
-    '_id user_id contact_name contact_number address landmark area state_id city_id pincode address_status created_at updated_at';
+    '_id user_id contact_name contact_number address landmark area area_id state_id city_id state city pincode address_status created_at updated_at';
 
 const isCatalogCategoryActive = (doc) =>
     Boolean(
@@ -999,7 +1000,9 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
                 service_id: { $in: activeFranchiseServiceOids },
                 deleted_at: null,
             })
-                .select('partner_id category_id service_id is_accept_request')
+                .select(
+                    'partner_id category_id service_id is_accept_request description tax minimum_deposit payment_type price is_active created_at updated_at'
+                )
                 .lean();
         }
 
@@ -1014,9 +1017,18 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
             const pid = row.partner_id.toString();
             if (!partnerServiceMap.has(pid)) partnerServiceMap.set(pid, []);
             partnerServiceMap.get(pid).push({
+                _id: row._id,
                 service_id: row.service_id,
                 category_id: row.category_id,
                 is_accept_request: Boolean(row.is_accept_request),
+                description: row.description ?? '',
+                tax: row.tax ?? 0,
+                minimum_deposit: row.minimum_deposit ?? 0,
+                payment_type: row.payment_type ?? '',
+                price: row.price ?? 0,
+                is_active: row.is_active !== undefined ? Boolean(row.is_active) : true,
+                created_at: row.created_at ?? null,
+                updated_at: row.updated_at ?? null,
                 service: {
                     _id: svc._id,
                     service_id: svc.service_id,
@@ -1039,9 +1051,31 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
             );
         }
 
+        const franchisePartnerCatalog = await resolveFranchiseCatalogByFranchiseId(parsed.oid);
+        let availableCategoriesPayload = [];
+        if (franchisePartnerCatalog.ok && franchisePartnerCatalog.categoryIds.length > 0) {
+            const catDocs = await Category.find({
+                _id: { $in: franchisePartnerCatalog.categoryIds },
+                deleted_at: null,
+                is_active: true,
+                is_request: false,
+                approval_status: 'approve',
+            })
+                .select('_id name desc image_url')
+                .sort({ created_at: -1 })
+                .lean();
+            availableCategoriesPayload = catDocs.map((c) => ({
+                _id: c._id,
+                name: c.name,
+                desc: c.desc,
+                image_url: c.image_url,
+            }));
+        }
+
         const partnersWithServices = partners.map((p) => ({
             ...p,
             active_services_providing: partnerServiceMap.get(p._id.toString()) || [],
+            available_categories: availableCategoriesPayload,
         }));
 
         return ok(200, {

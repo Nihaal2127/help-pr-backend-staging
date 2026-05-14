@@ -10,8 +10,11 @@ var addressSchema = new schema(
     address: { type: String, default: '' },
     landmark: { type: String, default: '' },
     area: { type: String, default: '' },
+    area_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: 'area' },
     city_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: 'city' },
     state_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: 'state' },
+    city: { type: String, default: '' },
+    state: { type: String, default: '' },
     pincode: { type: String, default: '' },
     address_status: { type: Boolean, default: true },
     created_at: { type: Date, default: Date.now },
@@ -25,5 +28,6 @@ var addressSchema = new schema(
 
 addressSchema.index({ user_id: 1 });
 addressSchema.index({ city_id: 1 });
+addressSchema.index({ area_id: 1 });
 
 module.exports = mongoose.model("address", addressSchema);

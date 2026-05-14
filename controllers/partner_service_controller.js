@@ -1,9 +1,5 @@
 const mongoose = require("mongoose");
 const PartnerService = require('../models/partner_service');
-const User = require('../models/user');
-const Franchise = require('../models/franchise');
-const FranchiseCategory = require('../models/franchise_category');
-const FranchiseService = require('../models/franchise_service');
 const { applyPagination, applyDropDownFilter } = require('../utils/pagination');
 const { parseBoolean } = require('../utils/parser');
 const { validationResult } = require('express-validator');
@@ -11,74 +7,12 @@ const { validateObjectId } = require('../validator/form_validator');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
 const Service = require("../models/service");
 const Category = require("../models/category");
-
-/**
- * Categories / services allowed for a partner: franchise document lists intersected with
- * mapping active_categories / active_services when present; services whose category is inactive are excluded.
- * @returns {{ ok: true, categoryIds: mongoose.Types.ObjectId[], serviceIds: mongoose.Types.ObjectId[] } | { ok: false, status: number, message: string }}
- */
-const resolvePartnerFranchiseCatalog = async (partnerId) => {
-  const user = await User.findOne({ _id: partnerId, deleted_at: null }).select('franchise_id');
-  if (!user) {
-    return { ok: false, status: 401, message: 'User not found.' };
-  }
-  if (!user.franchise_id) {
-    return { ok: false, status: 400, message: 'Partner account is not linked to a franchise.' };
-  }
-  const franchise = await Franchise.findOne({
-    _id: user.franchise_id,
-    deleted_at: null,
-  }).select('categories services');
-  if (!franchise) {
-    return { ok: false, status: 404, message: 'Franchise not found.' };
-  }
-  const franchiseCatIds = Array.isArray(franchise.categories) ? franchise.categories : [];
-  const franchiseSvcIds = Array.isArray(franchise.services) ? franchise.services : [];
-
-  const [fc, fsRow] = await Promise.all([
-    FranchiseCategory.findOne({ franchise_id: user.franchise_id, deleted_at: null })
-      .sort({ created_at: -1 })
-      .select('active_categories')
-      .lean(),
-    FranchiseService.findOne({ franchise_id: user.franchise_id, deleted_at: null })
-      .sort({ created_at: -1 })
-      .select('active_services')
-      .lean(),
-  ]);
-
-  let categoryIds;
-  if (fc && Array.isArray(fc.active_categories)) {
-    const allow = new Set(fc.active_categories.map((x) => x.toString()));
-    categoryIds = franchiseCatIds.filter((cid) => allow.has(cid.toString()));
-  } else {
-    categoryIds = franchiseCatIds;
-  }
-
-  let serviceIdsFromFranchise;
-  if (fsRow && Array.isArray(fsRow.active_services)) {
-    const allow = new Set(fsRow.active_services.map((x) => x.toString()));
-    serviceIdsFromFranchise = franchiseSvcIds.filter((sid) => allow.has(sid.toString()));
-  } else {
-    serviceIdsFromFranchise = franchiseSvcIds;
-  }
-
-  const categoryAllow = new Set(categoryIds.map((c) => c.toString()));
-  const svcDocs =
-    serviceIdsFromFranchise.length === 0
-      ? []
-      : await Service.find({
-          _id: { $in: serviceIdsFromFranchise },
-          deleted_at: null,
-        })
-          .select('category_id')
-          .lean();
-
-  const serviceIds = svcDocs
-    .filter((s) => s.category_id && categoryAllow.has(s.category_id.toString()))
-    .map((s) => s._id);
-
-  return { ok: true, categoryIds, serviceIds };
-};
+const {
+  syncPartnerServicesFromPartnerCategories,
+  rebuildPartnerCategoriesFromPartnerServices,
+  mergeServicesIntoPartnerCategories,
+} = require('../services/partner_category_service');
+const { resolvePartnerFranchiseCatalog } = require('../utils/partner_franchise_catalog');
 
 const getAll = async (req, res) => {
 
@@ -302,6 +236,10 @@ const create = async (req, res) => {
     // Insert only if there are new services
     if (servicesToInsert.length > 0) {
       await PartnerService.insertMany(servicesToInsert);
+      const partnerOidSet = new Set(servicesToInsert.map((r) => String(r.partner_id)));
+      for (const pid of partnerOidSet) {
+        await rebuildPartnerCategoriesFromPartnerServices(pid);
+      }
     }
 
     const insertedCount = servicesToInsert.length;
@@ -408,6 +346,8 @@ const deleteState = async (req, res) => {
 
 
     await partnerService.save();
+
+    await rebuildPartnerCategoriesFromPartnerServices(partnerService.partner_id);
 
     res.status(200).json({
       success: true,
@@ -1017,7 +957,29 @@ const addMyServices = async (req, res) => {
     }
 
     if (toInsert.length > 0) {
-      await PartnerService.insertMany(toInsert);
+      await mergeServicesIntoPartnerCategories(
+        partnerId,
+        toInsert.map((t) => ({
+          category_id: t.category_id,
+          service_id: t.service_id,
+        }))
+      );
+      await syncPartnerServicesFromPartnerCategories(partnerId);
+      for (const t of toInsert) {
+        await PartnerService.updateOne(
+          {
+            partner_id: partnerId,
+            service_id: t.service_id,
+            deleted_at: null,
+          },
+          {
+            $set: {
+              is_accept_request: t.is_accept_request,
+              updated_at: new Date(),
+            },
+          }
+        );
+      }
     }
 
     if (errorMessages.length > 0) {
@@ -1105,6 +1067,8 @@ const updateMyService = async (req, res) => {
 
     partnerService.updated_at = new Date();
     await partnerService.save();
+
+    await rebuildPartnerCategoriesFromPartnerServices(partnerId);
 
     return res.status(200).json({
       success: true,

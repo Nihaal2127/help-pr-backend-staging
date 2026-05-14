@@ -23,6 +23,7 @@ const { handleImageUpload } = require('../helper/image_uploader');
 const { getUploadType } = require('../enum/upload_type_enum');
 const PartnerDocument = require('../models/partner_document');
 const PartnerBankAccount = require('../models/partner_bank_account');
+const { replacePartnerCategoriesFromSignupRows } = require('../services/partner_category_service');
 const partnerSubscriptionService = require('../services/partner_subscription_service');
 
 const GET_ALL_SORT_FIELDS = ['name', 'email', 'created_at'];
@@ -525,7 +526,7 @@ const getAll = async (req, res) => {
           deleted_at: null,
         })
           .sort({ created_at: 1 })
-          .select('contact_name contact_number address landmark area state_id city_id pincode address_status created_at updated_at')
+          .select('contact_name contact_number address landmark area area_id state_id city_id state city pincode address_status created_at updated_at')
           .lean();
       }
       return {
@@ -937,16 +938,10 @@ const create = async (req, res) => {
       newUser.documents = partnerDocumentIds;
 
       const normalizedServiceRows = normalizePartnerServices(resolvedPartnerServicesInput);
-      const partnerServicesRows = normalizedServiceRows.map((serviceRow) => ({
-        _id: new mongoose.Types.ObjectId(),
-        partner_id: _id,
-        category_id: serviceRow.category_id,
-        service_id: serviceRow.service_id,
-      }));
 
       const savedUser = await newUser.save();
-      if (partnerServicesRows.length > 0) {
-        await PartnerServices.insertMany(partnerServicesRows, { ordered: false });
+      if (normalizedServiceRows.length > 0) {
+        await replacePartnerCategoriesFromSignupRows(_id, normalizedServiceRows);
       }
 
       const mergedPartnerDocs = await mergePartnerDocumentPayloadFromMultipart(req, partner_documents);
@@ -1434,7 +1429,7 @@ const getById = async (req, res) => {
         deleted_at: null,
       })
         .sort({ created_at: 1 })
-        .select('contact_name contact_number address landmark area state_id city_id pincode address_status created_at updated_at')
+        .select('contact_name contact_number address landmark area area_id state_id city_id state city pincode address_status created_at updated_at')
         .lean();
     }
     if (user.type === 4 || user.type === 2) {

@@ -23,6 +23,7 @@ const partnerSubscriptionRoutes = require('./routes/partner_subscription_routes'
 const categoryRoutes = require('./routes/category_routes');
 const serviceRoutes = require('./routes/service_routes');
 const partnerServiceRoutes = require('./routes/partner_service_routes');
+const partnerCategoryRoutes = require('./routes/partner_category_routes');
 const partnerDocumentRoutes = require('./routes/partner_document_routes');
 const documentRoutes = require('./routes/document_routes');
 const documentUploadRoutes = require('./routes/document_upload_routes');
@@ -43,6 +44,7 @@ const contentManagementRoutes = require('./routes/content_management_routes');
 const expenseCategoryManagementRoutes = require('./routes/expense_category_management_routes');
 const expenseManagementRoutes = require('./routes/expense_management_routes');
 const { chatRoutes, registerChatSocket } = require('./src/modules/chat');
+const { publicImageUrlsResponseMiddleware } = require('./middleware/public_image_urls_response_middleware');
 
 // Load environment variables
 dotenv.config();
@@ -72,6 +74,7 @@ const app = express();
 //   exposedHeaders: ['Content-Disposition']
 // }));
 app.use(express.json({ limit: '10mb' })); // Limit request body size for security
+app.use(publicImageUrlsResponseMiddleware);
 // app.use(compression()); // Compress response bodies for better performance
 
 // Serve static files from the "uploads" directory
@@ -109,6 +112,7 @@ app.use('/api/partner-subscription', partnerSubscriptionRoutes);
 app.use('/api/category', categoryRoutes);
 app.use('/api/service', serviceRoutes);
 app.use('/api/partner_service', partnerServiceRoutes);
+app.use('/api/partner_category', partnerCategoryRoutes);
 app.use('/api/partner_document', partnerDocumentRoutes);
 app.use('/api/document', documentRoutes);
 app.use('/api/document_upload', documentUploadRoutes);

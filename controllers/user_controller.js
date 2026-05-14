@@ -236,8 +236,22 @@ const buildPartnerServicesFromParallelFields = (body) => {
     if (val === undefined || val === null) return fallback;
     return parseJsonIfString(val, fallback);
   };
-  const ids = coerceArray(body.service_ids, []);
-  const cats = coerceArray(body.category_ids, []);
+  let ids = coerceArray(body.service_ids, []);
+  if (
+    ids.length === 0 &&
+    typeof body.service_ids === 'string' &&
+    mongoose.Types.ObjectId.isValid(String(body.service_ids).trim())
+  ) {
+    ids = [String(body.service_ids).trim()];
+  }
+  let cats = coerceArray(body.category_ids, []);
+  if (
+    cats.length === 0 &&
+    typeof body.category_ids === 'string' &&
+    mongoose.Types.ObjectId.isValid(String(body.category_ids).trim())
+  ) {
+    cats = [String(body.category_ids).trim()];
+  }
   if (!Array.isArray(ids) || ids.length === 0) return [];
   const names = coerceArray(body.service_names, []);
   const descs = coerceArray(body.service_descriptions, []);
@@ -992,6 +1006,8 @@ const create = async (req, res) => {
       partner_documents,
       bank_account,
       partner_subscription,
+      date_of_birth,
+      experience,
     } = req.body;
     let resolvedPartnerServicesInput = partner_services;
     if (type === 2) {
@@ -1125,6 +1141,8 @@ const create = async (req, res) => {
       created_by_id,
       franchise_id,
       accessible_screens: normalizedScreens,
+      ...(date_of_birth !== undefined ? { date_of_birth } : {}),
+      ...(experience !== undefined ? { experience } : {}),
     });
 
     if (is_business === true && type === 2) {
@@ -1533,6 +1551,8 @@ const update = async (req, res) => {
       'provided_service',
       'business_info_id',
       'password',
+      'date_of_birth',
+      'experience',
     ]);
 
     Object.keys(updateData).forEach((key) => {

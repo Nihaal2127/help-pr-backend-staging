@@ -12,6 +12,8 @@ var addressSchema = new schema(
     area: { type: String, default: '' },
     city_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: 'city' },
     state_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: 'state' },
+    city: { type: String, default: '' },
+    state: { type: String, default: '' },
     pincode: { type: String, default: '' },
     address_status: { type: Boolean, default: true },
     created_at: { type: Date, default: Date.now },

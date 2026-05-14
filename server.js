@@ -44,6 +44,7 @@ const contentManagementRoutes = require('./routes/content_management_routes');
 const expenseCategoryManagementRoutes = require('./routes/expense_category_management_routes');
 const expenseManagementRoutes = require('./routes/expense_management_routes');
 const { chatRoutes, registerChatSocket } = require('./src/modules/chat');
+const { publicImageUrlsResponseMiddleware } = require('./middleware/public_image_urls_response_middleware');
 
 // Load environment variables
 dotenv.config();
@@ -73,6 +74,7 @@ const app = express();
 //   exposedHeaders: ['Content-Disposition']
 // }));
 app.use(express.json({ limit: '10mb' })); // Limit request body size for security
+app.use(publicImageUrlsResponseMiddleware);
 // app.use(compression()); // Compress response bodies for better performance
 
 // Serve static files from the "uploads" directory

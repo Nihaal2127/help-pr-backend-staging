@@ -525,7 +525,7 @@ const getAll = async (req, res) => {
           deleted_at: null,
         })
           .sort({ created_at: 1 })
-          .select('contact_name contact_number address landmark area state_id city_id state city pincode address_status created_at updated_at')
+          .select('contact_name contact_number address landmark area area_id state_id city_id state city pincode address_status created_at updated_at')
           .lean();
       }
       return {
@@ -1356,7 +1356,7 @@ const getById = async (req, res) => {
         deleted_at: null,
       })
         .sort({ created_at: 1 })
-        .select('contact_name contact_number address landmark area state_id city_id state city pincode address_status created_at updated_at')
+        .select('contact_name contact_number address landmark area area_id state_id city_id state city pincode address_status created_at updated_at')
         .lean();
     }
     if (user.type === 4 || user.type === 2) {

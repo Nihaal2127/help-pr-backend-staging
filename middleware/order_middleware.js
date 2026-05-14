@@ -3,7 +3,6 @@ const City = require('../models/city')
 const Category = require('../models/category')
 const Service = require('../models/service')
 const { checkObjectIdExists } = require('../validator/id_validator')
-const { isArray } = require('../validator/array_validator')
 const { isValidPrice } = require('../validator/form_validator')
 const createOrderMiddleware = async (req, res, next) => {
     const body = req.body;
@@ -173,11 +172,18 @@ const createOrderMiddleware = async (req, res, next) => {
 const checkItemsMiddleware = async (req, res, next) => {
     const items = req.body.service_items;
     const type = req.body.type;
-    if (!isArray(items)) {
+    if (!Array.isArray(items)) {
         return res.status(409).json({
             success: false,
             status: 409,
-            message: 'Service items must be a non-empty array.',
+            message: 'service_items must be an array.',
+        });
+    }
+    if (items.length !== 1) {
+        return res.status(409).json({
+            success: false,
+            status: 409,
+            message: 'Each order must contain exactly one service; service_items must have length 1.',
         });
     }
 

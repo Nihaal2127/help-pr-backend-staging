@@ -1,6 +1,7 @@
 const axios = require('axios');
 const crypto = require('crypto');
 const Order = require('../models/order');
+const OrderService = require('../models/order_services');
 const path = require('path');
 
 const generatePaymentLink = async (name, email, contact, amount) => {
@@ -69,6 +70,12 @@ const handleRazorpayWebhook = async (req, res) => {
         if (order) {
             order.is_paid = true;
             await order.save();
+            if (order.service_items && order.service_items.length) {
+                await OrderService.updateMany(
+                    { _id: { $in: order.service_items } },
+                    { $set: { is_paid: true } }
+                );
+            }
             console.log(`✅ Marked order ${order._id} as paid`);
         } else {
             console.log('⚠️ No matching order found for payment link ID:', paymentLinkId);

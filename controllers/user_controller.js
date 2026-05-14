@@ -1141,8 +1141,11 @@ const create = async (req, res) => {
       created_by_id,
       franchise_id,
       accessible_screens: normalizedScreens,
-      ...(date_of_birth !== undefined ? { date_of_birth } : {}),
-      ...(experience !== undefined ? { experience } : {}),
+      date_of_birth: date_of_birth === undefined ? null : date_of_birth,
+      experience:
+        experience === undefined || experience === null || String(experience).trim() === ''
+          ? null
+          : String(experience).trim(),
     });
 
     if (is_business === true && type === 2) {

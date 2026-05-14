@@ -23,6 +23,7 @@ const partnerSubscriptionRoutes = require('./routes/partner_subscription_routes'
 const categoryRoutes = require('./routes/category_routes');
 const serviceRoutes = require('./routes/service_routes');
 const partnerServiceRoutes = require('./routes/partner_service_routes');
+const partnerCategoryRoutes = require('./routes/partner_category_routes');
 const partnerDocumentRoutes = require('./routes/partner_document_routes');
 const documentRoutes = require('./routes/document_routes');
 const documentUploadRoutes = require('./routes/document_upload_routes');
@@ -109,6 +110,7 @@ app.use('/api/partner-subscription', partnerSubscriptionRoutes);
 app.use('/api/category', categoryRoutes);
 app.use('/api/service', serviceRoutes);
 app.use('/api/partner_service', partnerServiceRoutes);
+app.use('/api/partner_category', partnerCategoryRoutes);
 app.use('/api/partner_document', partnerDocumentRoutes);
 app.use('/api/document', documentRoutes);
 app.use('/api/document_upload', documentUploadRoutes);

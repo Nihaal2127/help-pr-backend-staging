@@ -1,6 +1,4 @@
 const mongoose = require("mongoose");
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 
 var schema = mongoose.Schema;
 
@@ -10,6 +8,13 @@ var partnerServiceSchema = new schema(
         category_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: 'category' },
         service_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: 'service' },
         is_accept_request: { type: Boolean, default: false },
+
+        description: { type: String, default: '' },
+        tax: { type: Number, default: 0 },
+        minimum_deposit: { type: Number, default: 0 },
+        payment_type: { type: String, default: '', trim: true },
+        price: { type: Number, default: 0 },
+        is_active: { type: Boolean, default: true },
 
         created_at: { type: Date, default: Date.now },
         updated_at: { type: Date, default: Date.now },

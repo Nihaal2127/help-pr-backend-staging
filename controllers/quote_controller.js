@@ -134,6 +134,62 @@ const buildQuoteDateRangeFilter = (query) => {
   return { ok: true, filter };
 };
 
+/** Dashboard list buckets for GET /api/quote/getAll?status=<bucket> */
+const QUOTE_LIST_STATUS_BUCKETS = new Set([
+  "new",
+  "pending",
+  "accepted",
+  "success",
+  "failed",
+]);
+
+const buildQuoteBucketFilter = (bucket) => {
+  switch (bucket) {
+    case "new":
+      return { status: STATUS_PENDING, partner_id: null };
+    case "pending":
+      return { status: STATUS_PENDING, partner_id: { $ne: null } };
+    case "accepted":
+      return { status: { $in: [STATUS_APPROVED, STATUS_CONVERTED] } };
+    case "success":
+      return { status: STATUS_CONVERTED, order_id: { $ne: null } };
+    case "failed":
+      return { status: STATUS_APPROVED, order_id: null };
+    default:
+      return null;
+  }
+};
+
+const resolveQuoteListStatusFilter = (statusParam) => {
+  if (statusParam === undefined || statusParam === null) {
+    return { ok: true, filter: {} };
+  }
+
+  const raw = String(statusParam).trim();
+  if (raw === "") {
+    return { ok: true, filter: {} };
+  }
+
+  const bucketKey = raw.toLowerCase();
+  if (bucketKey === "fail") {
+    return { ok: true, filter: buildQuoteBucketFilter("failed") };
+  }
+  if (QUOTE_LIST_STATUS_BUCKETS.has(bucketKey)) {
+    return { ok: true, filter: buildQuoteBucketFilter(bucketKey) };
+  }
+
+  if (/^\d+$/.test(raw)) {
+    const numericStatus = parseInt(raw, 10);
+    return { ok: true, filter: { status: numericStatus } };
+  }
+
+  return {
+    ok: false,
+    message:
+      "Invalid status. Use new, pending, accepted, success, failed, or a numeric quote status (1-6).",
+  };
+};
+
 const buildOrderStatusInfo = () => [
   { status: 1, updated_at: Date.now() },
   { status: 2, updated_at: null },
@@ -321,8 +377,15 @@ const getAll = async (req, res) => {
     const limit = parseInt(req.query.limit, 10) || 10;
     const skip = (page - 1) * limit;
 
-    const status =
-      req.query.status !== undefined ? parseInt(req.query.status, 10) : null;
+    const statusFilterResult = resolveQuoteListStatusFilter(req.query.status);
+    if (!statusFilterResult.ok) {
+      return res.status(409).json({
+        success: false,
+        status: 409,
+        message: statusFilterResult.message,
+      });
+    }
+
     const includeHistory = ["true", "1"].includes(
       String(req.query.include_history || "").toLowerCase()
     );
@@ -348,7 +411,7 @@ const getAll = async (req, res) => {
     const baseFilter = {
       deleted_at: null,
       ...dateRangeResult.filter,
-      ...(req.query.status !== undefined && !Number.isNaN(status) && { status }),
+      ...statusFilterResult.filter,
       ...(req.query.user_id &&
         mongoose.Types.ObjectId.isValid(req.query.user_id) && {
           user_id: new mongoose.Types.ObjectId(req.query.user_id),
@@ -726,42 +789,13 @@ const getQuoteCounts = async (req, res) => {
       baseFilter.franchise_id = new mongoose.Types.ObjectId(req.query.franchise_id);
     }
 
-    const newFilter = {
-      ...baseFilter,
-      status: STATUS_PENDING,
-      partner_id: null,
-    };
-
-    const pendingFilter = {
-      ...baseFilter,
-      status: STATUS_PENDING,
-      partner_id: { $ne: null },
-    };
-
-    const acceptedFilter = {
-      ...baseFilter,
-      status: { $in: [STATUS_APPROVED, STATUS_CONVERTED] },
-    };
-
-    const successFilter = {
-      ...baseFilter,
-      status: STATUS_CONVERTED,
-      order_id: { $ne: null },
-    };
-
-    const failedFilter = {
-      ...baseFilter,
-      status: STATUS_APPROVED,
-      order_id: null,
-    };
-
     const [newCount, pendingCount, acceptedCount, successCount, failedCount] =
       await Promise.all([
-        Quote.countDocuments(newFilter),
-        Quote.countDocuments(pendingFilter),
-        Quote.countDocuments(acceptedFilter),
-        Quote.countDocuments(successFilter),
-        Quote.countDocuments(failedFilter),
+        Quote.countDocuments({ ...baseFilter, ...buildQuoteBucketFilter("new") }),
+        Quote.countDocuments({ ...baseFilter, ...buildQuoteBucketFilter("pending") }),
+        Quote.countDocuments({ ...baseFilter, ...buildQuoteBucketFilter("accepted") }),
+        Quote.countDocuments({ ...baseFilter, ...buildQuoteBucketFilter("success") }),
+        Quote.countDocuments({ ...baseFilter, ...buildQuoteBucketFilter("failed") }),
       ]);
 
     return res.status(200).json({

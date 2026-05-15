@@ -194,6 +194,13 @@
       "type": "string",
       "enabled": true,
       "description": "Free-text search for GET /api/quote/getAll (quote_sequence_id, quote_description, linked user/partner names, etc.)."
+    },
+    {
+      "key": "quote_status",
+      "value": "new",
+      "type": "string",
+      "enabled": true,
+      "description": "GET /api/quote/getAll list bucket: new | pending | accepted | success | failed (same as dashboard cards). Or numeric 1-6 for raw quote status."
     }
   ],
   "auth": {
@@ -3374,8 +3381,8 @@
             },
             "method": "GET",
             "header": [],
-            "description": "Paginated quote list. Query: page, limit, status (1=Pending, 2=Approved, 3=Rejected, 4=Converted, 5=Cancelled, 6=Expired), user_id, partner_id, employee_id, franchise_id, category_id, service_id, search, from_date, to_date (optional schedule overlap filter on quote from_date/to_date, ISO or YYYY-MM-DD), include_history (true|1), sort_by (created_at|updated_at|from_date|to_date|service_price|status|quote_sequence_id), sort_order (asc|desc) or sort (1=asc).",
-            "url": "{{base_url}}/api/quote/getAll?page=1&limit=10&status=&user_id={{user_id}}&partner_id={{partner_id}}&employee_id={{employee_id}}&franchise_id={{franchise_id}}&category_id={{category_id}}&service_id={{service_id}}&search={{search}}&from_date=2026-05-14&to_date=2026-05-14&include_history=false&sort_by=created_at&sort_order=desc"
+            "description": "Paginated quote list. status: new | pending | accepted | success | failed (dashboard buckets; matches getCounts), or numeric 1-6. Also: page, limit, user_id, partner_id, employee_id, franchise_id, category_id, service_id, search, from_date, to_date, include_history, sort_by, sort_order.",
+            "url": "{{base_url}}/api/quote/getAll?page=1&limit=10&status={{quote_status}}&user_id={{user_id}}&partner_id={{partner_id}}&employee_id={{employee_id}}&franchise_id={{franchise_id}}&category_id={{category_id}}&service_id={{service_id}}&search={{search}}&from_date=2026-05-14&to_date=2026-05-14&include_history=false&sort_by=created_at&sort_order=desc"
           }
         },
         {

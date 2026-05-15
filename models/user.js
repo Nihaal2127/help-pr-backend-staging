@@ -14,6 +14,8 @@ var userSchema = new schema(
     city_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: 'city' },
     area_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: 'area' },
     pincode: { type: String, trim: true, default: null },
+    date_of_birth: { type: Date, default: null },
+    experience: { type: String, trim: true, default: null },
     franchise_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: 'franchise' },
     profile_url: { type: String, trim: true, default: null },
     password: { type: String, select: false },

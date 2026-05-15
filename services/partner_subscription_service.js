@@ -326,7 +326,8 @@ const createPartnerSubscription = async (body, assignedByUserId) => {
             assignedOid = assignedBy.oid;
         }
 
-        const requestedStatus = String(status || 'active').toLowerCase();
+        let requestedStatus = String(status === undefined || status === null ? 'active' : status).toLowerCase();
+        if (requestedStatus === '1') requestedStatus = 'active';
         const normalizedStatus = requestedStatus === 'inactive' ? 'cancelled' : requestedStatus;
         if (!['active', 'expired', 'cancelled'].includes(normalizedStatus)) {
             return fail(400, 'status must be active, expired, or cancelled.');

@@ -236,8 +236,22 @@ const buildPartnerServicesFromParallelFields = (body) => {
     if (val === undefined || val === null) return fallback;
     return parseJsonIfString(val, fallback);
   };
-  const ids = coerceArray(body.service_ids, []);
-  const cats = coerceArray(body.category_ids, []);
+  let ids = coerceArray(body.service_ids, []);
+  if (
+    ids.length === 0 &&
+    typeof body.service_ids === 'string' &&
+    mongoose.Types.ObjectId.isValid(String(body.service_ids).trim())
+  ) {
+    ids = [String(body.service_ids).trim()];
+  }
+  let cats = coerceArray(body.category_ids, []);
+  if (
+    cats.length === 0 &&
+    typeof body.category_ids === 'string' &&
+    mongoose.Types.ObjectId.isValid(String(body.category_ids).trim())
+  ) {
+    cats = [String(body.category_ids).trim()];
+  }
   if (!Array.isArray(ids) || ids.length === 0) return [];
   const names = coerceArray(body.service_names, []);
   const descs = coerceArray(body.service_descriptions, []);
@@ -521,6 +535,19 @@ const getAll = async (req, res) => {
     const CALLER_TYPE_STAFF = 6;
     const franchiseIdFilter = typeof req.query.franchise_id === 'string' ? req.query.franchise_id.trim() : null;
 
+    let partnerListVerificationStatus;
+    if (type === 2) {
+      const vr = resolvePartnerListVerificationStatus(req.query.is_verified);
+      if (!vr.ok) {
+        return res.status(400).json({
+          success: false,
+          status: 400,
+          message: vr.message,
+        });
+      }
+      partnerListVerificationStatus = vr.verification_status;
+    }
+
     let roleFilter = {};
     if ([CALLER_TYPE_SUPER_ADMIN, CALLER_TYPE_STAFF].includes(caller.type)) {
       if (franchiseIdFilter) {
@@ -551,10 +578,26 @@ const getAll = async (req, res) => {
           message: 'You are not allowed to access this user type.',
         });
       }
-      roleFilter = {
-        type: { $in: allowedTypes },
-        franchise_id: caller.franchise_id ?? null,
-      };
+      const callerFranchise = caller.franchise_id ?? null;
+      const pendingPartnerList =
+        type === 2 &&
+        partnerListVerificationStatus === 1 &&
+        callerFranchise != null;
+      if (pendingPartnerList) {
+        roleFilter = {
+          type: { $in: allowedTypes },
+          $or: [
+            { franchise_id: callerFranchise },
+            { franchise_id: null },
+            { franchise_id: { $exists: false } },
+          ],
+        };
+      } else {
+        roleFilter = {
+          type: { $in: allowedTypes },
+          franchise_id: callerFranchise,
+        };
+      }
     } else if ([CALLER_TYPE_PARTNER, CALLER_TYPE_USER].includes(caller.type)) {
       return res.status(403).json({
         success: false,
@@ -578,19 +621,6 @@ const getAll = async (req, res) => {
     if (searchTerm) {
       const sanitizedKeyword = sanitizeInput(searchTerm);
       regex = new RegExp(sanitizedKeyword, 'i');
-    }
-
-    let partnerListVerificationStatus;
-    if (type === 2) {
-      const vr = resolvePartnerListVerificationStatus(req.query.is_verified);
-      if (!vr.ok) {
-        return res.status(400).json({
-          success: false,
-          status: 400,
-          message: vr.message,
-        });
-      }
-      partnerListVerificationStatus = vr.verification_status;
     }
 
     const filter = {
@@ -976,6 +1006,8 @@ const create = async (req, res) => {
       partner_documents,
       bank_account,
       partner_subscription,
+      date_of_birth,
+      experience,
     } = req.body;
     let resolvedPartnerServicesInput = partner_services;
     if (type === 2) {
@@ -997,34 +1029,20 @@ const create = async (req, res) => {
     if (profileUpload) {
       resolvedProfileUrl = await handleImageUpload(profileUpload, getUploadType(4), true, null);
     }
-    const resolvedIsActive =
-      type === 2
-        ? false
-        : (is_active !== undefined
-            ? is_active
-            : false);
     const resolvedChat =
       type === 3
         ? (chat !== undefined ? chat : true)
         : chat;
     let partnerVerificationFields = {};
     if (type === 2) {
-      const raw = req.body.is_verified;
-      if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
-        const key = String(raw).trim().toLowerCase();
-        if (key === 'approved') {
-          partnerVerificationFields = { verification_status: 2, verified_at: new Date() };
-        } else if (key === 'rejected') {
-          partnerVerificationFields = { verification_status: 3, verified_at: null };
-        } else if (key === 'pending') {
-          partnerVerificationFields = { verification_status: 1, verified_at: null };
-        } else {
-          partnerVerificationFields = { verification_status: 1, verified_at: null };
-        }
-      } else {
-        partnerVerificationFields = { verification_status: 1, verified_at: null };
-      }
+      partnerVerificationFields = { verification_status: 1, verified_at: null };
     }
+    const resolvedIsActive =
+      type === 2
+        ? false
+        : (is_active !== undefined
+            ? is_active
+            : false);
     const existingUser = await User.findOne({
       $or: [
         { phone_number },
@@ -1123,6 +1141,11 @@ const create = async (req, res) => {
       created_by_id,
       franchise_id,
       accessible_screens: normalizedScreens,
+      date_of_birth: date_of_birth === undefined ? null : date_of_birth,
+      experience:
+        experience === undefined || experience === null || String(experience).trim() === ''
+          ? null
+          : String(experience).trim(),
     });
 
     if (is_business === true && type === 2) {
@@ -1390,9 +1413,11 @@ const update = async (req, res) => {
       if (vKey === 'approved') {
         updateData.verification_status = 2;
         updateData.verified_at = new Date();
+        updateData.is_active = true;
       } else if (vKey === 'rejected') {
         updateData.verification_status = 3;
         updateData.verified_at = null;
+        updateData.is_active = false;
       } else if (vKey === 'pending') {
         updateData.verification_status = 1;
         updateData.verified_at = null;
@@ -1529,6 +1554,8 @@ const update = async (req, res) => {
       'provided_service',
       'business_info_id',
       'password',
+      'date_of_birth',
+      'experience',
     ]);
 
     Object.keys(updateData).forEach((key) => {

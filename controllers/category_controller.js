@@ -11,7 +11,11 @@ const { parseBoolean } = require('../utils/parser');
 const { checkObjectIdExists } = require('../validator/id_validator');
 const { getCategoryId } = require('../helper/id_generator');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
-const { USER_TYPE_ADMIN } = require('../middleware/role_middleware');
+const {
+  USER_TYPE_ADMIN,
+  USER_TYPE_SUPER_ADMIN,
+  USER_TYPE_STAFF,
+} = require('../middleware/role_middleware');
 
 const asBodyBool = (value, defaultValue) => {
   if (value === undefined) return defaultValue;
@@ -318,6 +322,16 @@ const getAll = async (req, res) => {
         }).distinct('_id');
         filter.requested_by = { $in: franchiseUserIds };
       }
+    }
+
+    // Align with POST /api/getCount type 2 (service-management) global totals:
+    // total_category counts only is_request: false unless the client filters explicitly.
+    if (
+      (caller.type === USER_TYPE_SUPER_ADMIN || caller.type === USER_TYPE_STAFF) &&
+      is_request === null &&
+      filter.is_request === undefined
+    ) {
+      filter.is_request = false;
     }
 
     const sortOrder = req.query.sort !== undefined ? parseInt(req.query.sort) : 1;

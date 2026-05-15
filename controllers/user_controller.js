@@ -1052,6 +1052,7 @@ const create = async (req, res) => {
       bank_account,
       partner_subscription,
       date_of_birth,
+      gender,
       experience,
     } = req.body;
     const userType = Number(type);
@@ -1188,6 +1189,10 @@ const create = async (req, res) => {
       franchise_id,
       accessible_screens: normalizedScreens,
       date_of_birth: date_of_birth === undefined ? null : date_of_birth,
+      gender:
+        gender === undefined || gender === null || String(gender).trim() === ''
+          ? null
+          : String(gender).trim().toLowerCase(),
       experience:
         experience === undefined || experience === null || String(experience).trim() === ''
           ? null
@@ -1612,6 +1617,7 @@ const update = async (req, res) => {
       'business_info_id',
       'password',
       'date_of_birth',
+      'gender',
       'experience',
     ]);
 

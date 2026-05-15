@@ -1,8 +1,10 @@
 const mongoose = require('mongoose');
-const { ObjectId } = require('mongodb');
 const Order = require('../models/order');
 const User = require('../models/user');
 const Service = require('../models/service');
+const Category = require('../models/category');
+const City = require('../models/city');
+const Franchise = require('../models/franchise');
 const NotificationSettings = require('../models/notification_settings');
 const OrderService = require('../models/order_services');
 const { applyPagination } = require('../utils/pagination');
@@ -129,82 +131,246 @@ async function loadOrderDetailLean(orderMongoId) {
   return shapeOrderDetailResponse(populatedOrderData, additional_charges, order_payments);
 }
 
+/** Same pattern as quote getAll: `sort_by` whitelist + `sort_order` or legacy `sort` (1 | -1). */
+const ORDER_SORT_WHITELIST = new Set([
+  'created_at',
+  'updated_at',
+  'order_date',
+  'order_status',
+  'total_price',
+  'sub_total',
+  'unique_id',
+  'is_paid',
+  'tax',
+  'min_deposit',
+]);
+
+const resolveOrderSortField = (sortBy) => {
+  const sb = String(sortBy || '').trim();
+  return ORDER_SORT_WHITELIST.has(sb) ? sb : 'created_at';
+};
+
+const resolveOrderSortDir = (req) => {
+  const so = String(req.query.sort_order || '').toLowerCase();
+  if (so === 'asc') return 1;
+  if (so === 'desc') return -1;
+  if (req.query.sort !== undefined) {
+    const s = parseInt(req.query.sort, 10);
+    return s === 1 ? 1 : -1;
+  }
+  return -1;
+};
+
 const getAll = async (req, res) => {
-
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+    const skip = (page - 1) * limit;
 
-    const order_status = req.query.order_status !== undefined ? parseInt(req.query.order_status) : null;
+    const order_status =
+      req.query.order_status !== undefined ? parseInt(req.query.order_status, 10) : null;
     const is_paid = req.query.is_paid !== undefined ? parseBoolean(req.query.is_paid) : null;
-    // if (req.query.unique_id) {
-    //   filter.unique_id = { $regex: new RegExp(req.query.unique_id, "i") }; // Case-insensitive match
-    // }
 
-    let regex;
-    if (req.query.keyword) {
-      const sanitizedKeyword = sanitizeInput(req.query.keyword);
-      regex = new RegExp(sanitizedKeyword, 'i'); // Case-insensitive regex search
-    }
-    const filter = {
+    const rawSearch =
+      req.query.search !== undefined && req.query.search !== null && String(req.query.search).trim() !== ''
+        ? String(req.query.search).trim()
+        : req.query.keyword !== undefined &&
+            req.query.keyword !== null &&
+            String(req.query.keyword).trim() !== ''
+          ? String(req.query.keyword).trim()
+          : '';
+    const searchTerm = rawSearch ? sanitizeInput(rawSearch) : '';
+    const regex = searchTerm ? new RegExp(searchTerm, 'i') : null;
+
+    const baseFilter = {
       deleted_at: null,
-      ...(req.query.order_status && { order_status: order_status }),
-      ...(req.query.is_paid !== undefined && req.query.is_paid !== '' && { is_paid: is_paid }),
-      ...(req.query.keyword && {
-        $or: [
-          { user_unique_id: regex },
-          { unique_id: regex },
-        ]
-      })
+      ...(req.query.order_status !== undefined &&
+        !Number.isNaN(order_status) && { order_status }),
+      ...(req.query.is_paid !== undefined && req.query.is_paid !== '' && { is_paid }),
+      ...(req.query.user_id &&
+        mongoose.Types.ObjectId.isValid(req.query.user_id) && {
+          user_id: new mongoose.Types.ObjectId(req.query.user_id),
+        }),
+      ...(req.query.partner_id &&
+        mongoose.Types.ObjectId.isValid(req.query.partner_id) && {
+          partner_id: new mongoose.Types.ObjectId(req.query.partner_id),
+        }),
+      ...(req.query.employee_id &&
+        mongoose.Types.ObjectId.isValid(req.query.employee_id) && {
+          employee_id: new mongoose.Types.ObjectId(req.query.employee_id),
+        }),
+      ...(req.query.franchise_id &&
+        mongoose.Types.ObjectId.isValid(req.query.franchise_id) && {
+          franchise_id: new mongoose.Types.ObjectId(req.query.franchise_id),
+        }),
+      ...(req.query.city_id &&
+        mongoose.Types.ObjectId.isValid(req.query.city_id) && {
+          city_id: new mongoose.Types.ObjectId(req.query.city_id),
+        }),
+      ...(req.query.category_id &&
+        mongoose.Types.ObjectId.isValid(req.query.category_id) && {
+          category_id: new mongoose.Types.ObjectId(req.query.category_id),
+        }),
     };
 
-    const sort = { created_at: req.query.sort !== undefined ? parseInt(req.query.sort) : -1 };
+    const sortField = resolveOrderSortField(req.query.sort_by);
+    const sortDir = resolveOrderSortDir(req);
+    const sortStage = { [sortField]: sortDir };
 
-    const { data: orders, totalCount, totalPages, currentPage } = await applyPagination(
-      Order,
-      filter,
-      page,
-      limit,
-      sort
-    );
+    const usersColl = User.collection.name;
+    const categoriesColl = Category.collection.name;
+    const citiesColl = City.collection.name;
+    const franchiseColl = Franchise.collection.name;
 
-    const populateOptions = orders.map((order) => {
-      return [
-        { path: "city_id" },
-        { path: "category_id" },
-      ];
+    const pipeline = [
+      { $match: baseFilter },
+      {
+        $lookup: {
+          from: usersColl,
+          localField: 'user_id',
+          foreignField: '_id',
+          as: '_user',
+        },
+      },
+      {
+        $lookup: {
+          from: usersColl,
+          localField: 'partner_id',
+          foreignField: '_id',
+          as: '_partner',
+        },
+      },
+      {
+        $lookup: {
+          from: usersColl,
+          localField: 'employee_id',
+          foreignField: '_id',
+          as: '_employee',
+        },
+      },
+      {
+        $lookup: {
+          from: usersColl,
+          localField: 'created_by_id',
+          foreignField: '_id',
+          as: '_created_by',
+        },
+      },
+      {
+        $lookup: {
+          from: categoriesColl,
+          localField: 'category_id',
+          foreignField: '_id',
+          as: '_category',
+        },
+      },
+      {
+        $lookup: {
+          from: citiesColl,
+          localField: 'city_id',
+          foreignField: '_id',
+          as: '_city',
+        },
+      },
+      {
+        $lookup: {
+          from: franchiseColl,
+          localField: 'franchise_id',
+          foreignField: '_id',
+          as: '_franchise',
+        },
+      },
+      { $unwind: { path: '$_user', preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: '$_partner', preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: '$_employee', preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: '$_created_by', preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: '$_category', preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: '$_city', preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: '$_franchise', preserveNullAndEmptyArrays: true } },
+      ...(regex
+        ? [
+            {
+              $match: {
+                $or: [
+                  { unique_id: regex },
+                  { user_unique_id: regex },
+                  { address: regex },
+                  { comments: regex },
+                  { transaction_id: regex },
+                  { payment_mode_id: regex },
+                  { discount_code: regex },
+                  { customer_description: regex },
+                  { '_user.name': regex },
+                  { '_user.user_id': regex },
+                  { '_user.email': regex },
+                  { '_user.phone_number': regex },
+                  { '_partner.name': regex },
+                  { '_partner.user_id': regex },
+                  { '_partner.email': regex },
+                  { '_partner.phone_number': regex },
+                  { '_employee.name': regex },
+                  { '_employee.user_id': regex },
+                  { '_created_by.name': regex },
+                  { '_created_by.user_id': regex },
+                  { '_category.name': regex },
+                  { '_category.category_id': regex },
+                  { '_city.name': regex },
+                  { '_franchise.name': regex },
+                ],
+              },
+            },
+          ]
+        : []),
+      { $sort: sortStage },
+      {
+        $addFields: {
+          city_name: { $ifNull: ['$_city.name', ''] },
+          category_name: { $ifNull: ['$_category.name', ''] },
+          user_name: { $ifNull: ['$_user.name', ''] },
+          partner_name: { $ifNull: ['$_partner.name', ''] },
+        },
+      },
+      {
+        $project: {
+          _user: 0,
+          _partner: 0,
+          _employee: 0,
+          _created_by: 0,
+          _category: 0,
+          _city: 0,
+          _franchise: 0,
+        },
+      },
+      {
+        $facet: {
+          data: [{ $skip: skip }, { $limit: limit }],
+          totalCount: [{ $count: 'totalCount' }],
+        },
+      },
+    ];
+
+    const agg = Order.aggregate(pipeline).collation({
+      locale: 'en',
+      strength: 2,
     });
 
-    const populatedOrder = await Promise.all(
-      orders.map((order, index) =>
-        Order.populate(order, populateOptions[index])
-      )
-    );
-    const processedOrders = populatedOrder.map(order => {
-      const { ...rest } = order;
-      const city = order.city_id;
-      const cat = order.category_id;
-
-      return {
-        ...rest,
-        city_id: city?._id ?? city,
-        city_name: city?.name ?? '',
-        category_id: cat?._id ?? cat,
-        category_name: cat?.name ?? '',
-      };
-    })
+    const result = await agg.exec();
+    const facet = result[0] || { data: [], totalCount: [] };
+    const orders = facet.data || [];
+    const totalCount =
+      facet.totalCount && facet.totalCount[0] ? facet.totalCount[0].totalCount : 0;
+    const totalPages = Math.ceil(totalCount / limit) || 0;
 
     res.status(200).json({
       success: true,
       status: 200,
-      message: "Order list fetched successfully.",
+      message: 'Order list fetched successfully.',
       totalItems: totalCount,
       totalPages,
-      currentPage,
-      records: processedOrders,
+      currentPage: page,
+      records: orders,
     });
   } catch (err) {
-
     res.status(500).json({
       success: false,
       status: 500,

@@ -82,19 +82,26 @@
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
             "url": {
-              "raw": "{{baseUrl}}/api/order/getAll?page=1&limit=10&is_paid=false",
+              "raw": "{{baseUrl}}/api/order/getAll?page=1&limit=10&search=&sort_by=created_at&sort_order=desc",
               "host": ["{{baseUrl}}"],
               "path": ["api", "order", "getAll"],
               "query": [
                 { "key": "page", "value": "1" },
                 { "key": "limit", "value": "10" },
                 { "key": "order_status", "value": "", "disabled": true },
-                { "key": "is_paid", "value": "false" },
-                { "key": "keyword", "value": "", "disabled": true },
-                { "key": "sort", "value": "-1", "disabled": true }
+                { "key": "is_paid", "value": "false", "disabled": true },
+                { "key": "search", "value": "", "description": "Same as quotes getAll; matches order + related user/partner/category/city/franchise text" },
+                { "key": "keyword", "value": "", "disabled": true, "description": "Legacy alias for search" },
+                { "key": "sort_by", "value": "created_at", "description": "created_at|updated_at|order_date|order_status|total_price|sub_total|unique_id|is_paid|tax|min_deposit" },
+                { "key": "sort_order", "value": "desc", "description": "asc or desc" },
+                { "key": "sort", "value": "-1", "disabled": true, "description": "Legacy: 1 asc, else desc when sort_order omitted" },
+                { "key": "user_id", "value": "", "disabled": true },
+                { "key": "partner_id", "value": "", "disabled": true },
+                { "key": "city_id", "value": "", "disabled": true },
+                { "key": "category_id", "value": "", "disabled": true }
               ]
             },
-            "description": "Query `is_paid` supports `true` / `false`. Optional: `order_status`, `keyword` (user_unique_id, unique_id), `sort`."
+            "description": "GET /api/order/getAll — search/sort aligned with GET /api/quote/getAll: `search` + `sort_by` + `sort_order` (or legacy `keyword` + `sort`)."
           },
           "response": []
         },

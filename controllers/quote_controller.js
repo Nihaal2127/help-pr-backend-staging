@@ -223,9 +223,9 @@ const create = async (req, res) => {
       total_work_hours: parseFloat(body.total_work_hours),
       work_start_time: String(body.work_start_time).trim(),
       work_end_time: String(body.work_end_time).trim(),
-      customer_description:
-        typeof body.customer_description === "string"
-          ? body.customer_description.trim()
+      quote_description:
+        typeof body.quote_description === "string"
+          ? body.quote_description.trim()
           : "",
     });
 
@@ -261,14 +261,14 @@ const getAll = async (req, res) => {
       String(req.query.include_history || "").toLowerCase()
     );
 
-    const rawKeyword = req.query.keyword;
-    const keyword =
-      rawKeyword !== undefined &&
-      rawKeyword !== null &&
-      String(rawKeyword).trim() !== ""
-        ? sanitizeInput(String(rawKeyword).trim())
+    const rawSearch = req.query.search;
+    const searchTerm =
+      rawSearch !== undefined &&
+      rawSearch !== null &&
+      String(rawSearch).trim() !== ""
+        ? sanitizeInput(String(rawSearch).trim())
         : "";
-    const regex = keyword ? new RegExp(keyword, "i") : null;
+    const regex = searchTerm ? new RegExp(searchTerm, "i") : null;
 
     const baseFilter = {
       deleted_at: null,
@@ -409,7 +409,7 @@ const getAll = async (req, res) => {
               $match: {
                 $or: [
                   { quote_sequence_id: regex },
-                  { customer_description: regex },
+                  { quote_description: regex },
                   { "_user.name": regex },
                   { "_user.user_id": regex },
                   { "_user.email": regex },
@@ -884,7 +884,7 @@ const update = async (req, res) => {
       "work_start_time",
       "work_end_time",
       "created_by_id",
-      "customer_description",
+      "quote_description",
     ];
 
     const body = req.body;
@@ -905,8 +905,8 @@ const update = async (req, res) => {
           ["service_price", "work_hours_per_day", "total_work_hours"].includes(key)
         ) {
           quote[key] = parseFloat(body[key]);
-        } else if (key === "customer_description") {
-          quote.customer_description =
+        } else if (key === "quote_description") {
+          quote.quote_description =
             typeof body[key] === "string" ? body[key].trim() : "";
         } else {
           quote[key] = body[key];
@@ -1253,7 +1253,7 @@ const convertToOrder = async (req, res) => {
       franchise_id: quote.franchise_id ?? null,
       service_id: quote.service_id,
       service_price: price,
-      customer_description: quote.customer_description || "",
+      customer_description: quote.quote_description || "",
       rejection_reason: "",
       sub_total: price,
       tax: 0,

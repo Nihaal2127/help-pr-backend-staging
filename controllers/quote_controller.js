@@ -1254,6 +1254,8 @@ const convertToOrder = async (req, res) => {
       service_id: quote.service_id,
       service_price: price,
       customer_description: quote.quote_description || "",
+      order_description: (quote.quote_description || "").trim(),
+      quote_id: quote._id,
       rejection_reason: "",
       sub_total: price,
       tax: 0,

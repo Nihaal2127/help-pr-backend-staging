@@ -42,6 +42,10 @@ var orderSchema = new schema(
     cancellation_reasone: { type: String, default: "", require: false },
     rejection_reason: { type: String, default: "", trim: true },
     customer_description: { type: String, default: "", trim: true },
+    /** Free-text job / order notes (parallel to quote.quote_description). */
+    order_description: { type: String, default: "", trim: true },
+    /** Set when this order was created from a quote (convert flow or explicit link on create). */
+    quote_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "quote" },
 
     is_paid: { type: Boolean, default: false },
     /** Legacy / integration id (e.g. Razorpay flow uses "2") */
@@ -108,5 +112,6 @@ orderSchema.index({ order_status: 1 });
 orderSchema.index({ is_paid: 1 });
 orderSchema.index({ address_id: 1 });
 orderSchema.index({ service_id: 1 });
+orderSchema.index({ quote_id: 1 });
 
 module.exports = mongoose.model("order", orderSchema);

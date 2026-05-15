@@ -19,6 +19,7 @@ const { generatePaymentLink } = require('./razorpay_controller');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
 const OrderAdditionalCharge = require('../models/order_additional_charge');
 const OrderPayment = require('../models/order_payment');
+const Quote = require('../models/quote');
 const { computeOrderTotal, recalculateOrderTotals } = require('../utils/order_financials');
 
 const ORDER_DETAIL_POPULATE = [
@@ -39,6 +40,11 @@ const ORDER_DETAIL_POPULATE = [
   { path: "franchise_id", select: 'name city_name state_name' },
   { path: "address_id" },
   { path: "service_id", select: 'name service_id desc image_url' },
+  {
+    path: "quote_id",
+    select:
+      "quote_sequence_id status quote_description service_price from_date to_date created_at",
+  },
   {
     path: "service_items",
     populate: [
@@ -96,6 +102,9 @@ function shapeOrderDetailResponse(populatedOrderData, additional_charges, order_
     service_id: populatedOrderData.service_id?._id ?? populatedOrderData.service_id,
     service_info: populatedOrderData.service_id?._id ? populatedOrderData.service_id : null,
 
+    quote_id: populatedOrderData.quote_id?._id ?? populatedOrderData.quote_id,
+    quote_info: populatedOrderData.quote_id?._id ? populatedOrderData.quote_id : null,
+
     service_items: (populatedOrderData.service_items || []).map((serviceItem) => {
       const hasValidPartner = serviceItem.partner_id && serviceItem.partner_id._id;
 
@@ -143,6 +152,7 @@ const ORDER_SORT_WHITELIST = new Set([
   'is_paid',
   'tax',
   'min_deposit',
+  'order_description',
 ]);
 
 const resolveOrderSortField = (sortBy) => {
@@ -221,6 +231,7 @@ const getAll = async (req, res) => {
     const categoriesColl = Category.collection.name;
     const citiesColl = City.collection.name;
     const franchiseColl = Franchise.collection.name;
+    const quotesColl = Quote.collection.name;
 
     const pipeline = [
       { $match: baseFilter },
@@ -287,6 +298,15 @@ const getAll = async (req, res) => {
       { $unwind: { path: '$_category', preserveNullAndEmptyArrays: true } },
       { $unwind: { path: '$_city', preserveNullAndEmptyArrays: true } },
       { $unwind: { path: '$_franchise', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: quotesColl,
+          localField: 'quote_id',
+          foreignField: '_id',
+          as: '_quote',
+        },
+      },
+      { $unwind: { path: '$_quote', preserveNullAndEmptyArrays: true } },
       ...(regex
         ? [
             {
@@ -300,6 +320,9 @@ const getAll = async (req, res) => {
                   { payment_mode_id: regex },
                   { discount_code: regex },
                   { customer_description: regex },
+                  { order_description: regex },
+                  { '_quote.quote_sequence_id': regex },
+                  { '_quote.quote_description': regex },
                   { '_user.name': regex },
                   { '_user.user_id': regex },
                   { '_user.email': regex },
@@ -339,6 +362,7 @@ const getAll = async (req, res) => {
           _category: 0,
           _city: 0,
           _franchise: 0,
+          _quote: 0,
         },
       },
       {
@@ -524,8 +548,61 @@ const create = async (req, res) => {
       min_deposit,
       payment_schedule_type,
       customer_payment_method,
+      order_description,
+      quote_id,
     } = req.body;
     const order_id = new mongoose.Types.ObjectId();
+
+    let resolvedQuoteId = null;
+    let quoteDescriptionWhenLinked = '';
+    if (quote_id !== undefined && quote_id !== null && String(quote_id).trim() !== '') {
+      const qid = String(quote_id).trim();
+      if (!mongoose.Types.ObjectId.isValid(qid)) {
+        return res.status(400).json({
+          success: false,
+          status: 400,
+          message: 'Invalid quote_id.',
+        });
+      }
+      const qDoc = await Quote.findOne({ _id: qid, deleted_at: null })
+        .select('quote_description order_id')
+        .lean();
+      if (!qDoc) {
+        return res.status(404).json({
+          success: false,
+          status: 404,
+          message: 'Quote not found.',
+        });
+      }
+      if (qDoc.order_id != null) {
+        return res.status(409).json({
+          success: false,
+          status: 409,
+          message: 'Quote is already linked to an order.',
+        });
+      }
+      const quoteObjectId = new mongoose.Types.ObjectId(qid);
+      const existingOrderForQuote = await Order.findOne({
+        quote_id: quoteObjectId,
+        deleted_at: null,
+      })
+        .select('_id')
+        .lean();
+      if (existingOrderForQuote) {
+        return res.status(409).json({
+          success: false,
+          status: 409,
+          message: 'Another order already references this quote.',
+        });
+      }
+      resolvedQuoteId = quoteObjectId;
+      quoteDescriptionWhenLinked = (qDoc.quote_description || '').trim();
+    }
+    const orderDescFromBody =
+      order_description !== undefined && order_description !== null
+        ? String(order_description).trim()
+        : '';
+    const finalOrderDescription = orderDescFromBody || quoteDescriptionWhenLinked;
 
     if (!Array.isArray(service_items) || service_items.length !== 1) {
       return res.status(409).json({
@@ -618,6 +695,8 @@ const create = async (req, res) => {
       work_end_time: work_end_time ?? '',
       service_price: resolvedServicePrice,
       customer_description: customer_description ?? '',
+      order_description: finalOrderDescription,
+      quote_id: resolvedQuoteId,
       rejection_reason: rejection_reason ?? '',
       admin_commission: admin_commission !== undefined ? Number(admin_commission) : 0,
       discount_percent: discount_percent !== undefined && discount_percent !== null ? Number(discount_percent) : null,

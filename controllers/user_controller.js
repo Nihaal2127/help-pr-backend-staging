@@ -17,7 +17,6 @@ const { getServiceCountData, getVerificationCountData } = require('./count_contr
 
 const { getDocumentList } = require('./document_controller');
 const { createMultiple, getPartnerDocumentList } = require('./partner_document_controller');
-const { getPartnerPrimaryAccount } = require('./partner_bank_account_controller');
 const { getLastServiceDate } = require('./order_service_controller');
 const { getUserTypeKey } = require('../enum/user_type_enum')
 const { handleImageUpload } = require('../helper/image_uploader');
@@ -1813,9 +1812,12 @@ const getById = async (req, res) => {
         .sort({ created_at: -1 })
         .lean();
 
-      const bank_account = await getPartnerPrimaryAccount(user._id);
-
-      response.bank_account = bank_account;
+      response.bank_accounts = await PartnerBankAccount.find({
+        partner_id: user._id,
+        deleted_at: null,
+      })
+        .sort({ is_primary: -1, created_at: -1 })
+        .lean();
 
     }
     return res.status(200).json({

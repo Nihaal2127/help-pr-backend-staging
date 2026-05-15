@@ -63,6 +63,7 @@ var userSchema = new schema(
       3 for Reject
     */
     verification_id: { type: String, default: '' },
+    rejected_reasone: { type: String, default: '', trim: true },
     accessible_screens: {
       type: [
         {

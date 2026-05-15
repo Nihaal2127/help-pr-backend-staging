@@ -88,6 +88,14 @@ const categoryEntryMatchesCatalogFilters = (entry, isActiveFilter, isRequestFilt
     return true;
 };
 
+const categoryIdFromMappingEntry = (entry) => {
+    const cid = entry && entry.category_id;
+    if (!cid) return null;
+    if (cid instanceof mongoose.Types.ObjectId) return cid.toString();
+    if (typeof cid === 'object' && cid._id) return cid._id.toString();
+    return String(cid);
+};
+
 const applyCategoryCatalogFiltersToRecords = (records, isActiveFilter, isRequestFilter) => {
     if (isActiveFilter === undefined && isRequestFilter === undefined) return records;
     return records.map((row) => {
@@ -96,8 +104,28 @@ const applyCategoryCatalogFiltersToRecords = (records, isActiveFilter, isRequest
         plain.categories_list = list.filter((e) =>
             categoryEntryMatchesCatalogFilters(e, isActiveFilter, isRequestFilter)
         );
+        const allowedIds = new Set(
+            plain.categories_list.map((e) => categoryIdFromMappingEntry(e)).filter(Boolean)
+        );
+        const pruneIdArray = (arr) =>
+            Array.isArray(arr) ? arr.filter((id) => allowedIds.has(id.toString())) : arr;
+        plain.active_categories = pruneIdArray(plain.active_categories);
+        plain.inactive_categories = pruneIdArray(plain.inactive_categories);
+        plain.categories_order = pruneIdArray(plain.categories_order);
         return plain;
     });
+};
+
+const hasFranchiseIdQueryParam = (query) => {
+    const raw = query?.franchise_id;
+    return raw !== undefined && raw !== null && String(raw).trim() !== '';
+};
+
+/** When franchise_id is omitted, hide pending catalog requests unless is_request is explicit. */
+const resolveEffectiveIsRequestFilter = (query, listFlags) => {
+    if (listFlags.isRequestFilter !== undefined) return listFlags.isRequestFilter;
+    if (!hasFranchiseIdQueryParam(query)) return false;
+    return undefined;
 };
 
 /**
@@ -463,6 +491,7 @@ const list = async (query, userId) => {
 
         const listFlags = resolveFranchiseMappingListQuery(query);
         if (!listFlags.ok) return fail(400, listFlags.message);
+        const isRequestFilter = resolveEffectiveIsRequestFilter(query, listFlags);
 
         let { data, totalCount, totalPages, currentPage } = await applyPagination(
             FranchiseCategory,
@@ -492,7 +521,7 @@ const list = async (query, userId) => {
             applyCategoryCatalogFiltersToRecords(
                 data,
                 undefined,
-                listFlags.isRequestFilter
+                isRequestFilter
             ).map((row) => coerceLegacyCategoryMappingArrays(row)),
             listFlags.mappingActiveFilter,
             'categories_list',
@@ -509,6 +538,11 @@ const list = async (query, userId) => {
             if (!sortOpts.ok) return fail(400, sortOpts.message);
 
             all_categories = await buildAllCategoriesWithFranchiseMappingStatus(filter.franchise_id);
+            if (isRequestFilter !== undefined) {
+                all_categories = all_categories.filter(
+                    (cat) => Boolean(cat.is_request) === isRequestFilter
+                );
+            }
             const searchTerm = query.search ?? query.q;
             all_categories = filterAllCategoriesBySearch(all_categories, searchTerm);
             all_categories = sortAllCategoriesRows(

@@ -187,6 +187,13 @@
       "type": "string",
       "enabled": true,
       "description": "Quote document _id."
+    },
+    {
+      "key": "search",
+      "value": "",
+      "type": "string",
+      "enabled": true,
+      "description": "Free-text search for GET /api/quote/getAll (quote_sequence_id, quote_description, linked user/partner names, etc.)."
     }
   ],
   "auth": {
@@ -3323,13 +3330,14 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"category_id\": \"{{category_id}}\",\n  \"service_id\": \"{{service_id}}\",\n  \"partner_id\": \"{{partner_id}}\",\n  \"employee_id\": \"{{employee_id}}\",\n  \"service_price\": 1000,\n  \"franchise_id\": \"{{franchise_id}}\",\n  \"address_id\": \"{{address_id}}\",\n  \"created_by_id\": \"{{id}}\",\n  \"from_date\": \"2026-05-08\",\n  \"to_date\": \"2026-05-10\",\n  \"work_hours_per_day\": 8,\n  \"total_work_hours\": 24,\n  \"work_start_time\": \"09:00\",\n  \"work_end_time\": \"17:00\"\n}",
+              "raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"category_id\": \"{{category_id}}\",\n  \"service_id\": \"{{service_id}}\",\n  \"partner_id\": \"{{partner_id}}\",\n  \"employee_id\": \"{{employee_id}}\",\n  \"service_price\": 1000,\n  \"franchise_id\": \"{{franchise_id}}\",\n  \"address_id\": \"{{address_id}}\",\n  \"created_by_id\": \"{{id}}\",\n  \"from_date\": \"2026-05-08\",\n  \"to_date\": \"2026-05-10\",\n  \"work_hours_per_day\": 8,\n  \"total_work_hours\": 24,\n  \"work_start_time\": \"09:00\",\n  \"work_end_time\": \"17:00\",\n  \"quote_description\": \"Sample quote description for the requested work\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
+            "description": "Creates a quote. Required: user_id, partner_id, category_id, service_id, franchise_id, address_id, service_price, from_date, to_date, work_hours_per_day, total_work_hours, work_start_time, work_end_time. Optional: employee_id, created_by_id, quote_description (max 1000 chars).",
             "url": "{{base_url}}/api/quote/create"
           }
         },
@@ -3366,7 +3374,8 @@
             },
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/api/quote/getAll"
+            "description": "Paginated quote list. Query: page, limit, status (1=Pending, 2=Approved, 3=Rejected, 4=Converted, 5=Cancelled, 6=Expired), user_id, partner_id, employee_id, franchise_id, category_id, service_id, search, from_date, to_date (optional schedule overlap filter on quote from_date/to_date, ISO or YYYY-MM-DD), include_history (true|1), sort_by (created_at|updated_at|from_date|to_date|service_price|status|quote_sequence_id), sort_order (asc|desc) or sort (1=asc).",
+            "url": "{{base_url}}/api/quote/getAll?page=1&limit=10&status=&user_id={{user_id}}&partner_id={{partner_id}}&employee_id={{employee_id}}&franchise_id={{franchise_id}}&category_id={{category_id}}&service_id={{service_id}}&search={{search}}&from_date=2026-05-14&to_date=2026-05-14&include_history=false&sort_by=created_at&sort_order=desc"
           }
         },
         {
@@ -3413,13 +3422,14 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"partner_id\": \"{{partner_id}}\",\n  \"employee_id\": \"{{employee_id}}\",\n  \"service_price\": 1200,\n  \"from_date\": \"2026-05-09\",\n  \"to_date\": \"2026-05-11\",\n  \"work_hours_per_day\": 6,\n  \"total_work_hours\": 18,\n  \"work_start_time\": \"10:00\",\n  \"work_end_time\": \"16:00\"\n}",
+              "raw": "{\n  \"partner_id\": \"{{partner_id}}\",\n  \"employee_id\": \"{{employee_id}}\",\n  \"category_id\": \"{{category_id}}\",\n  \"service_id\": \"{{service_id}}\",\n  \"franchise_id\": \"{{franchise_id}}\",\n  \"address_id\": \"{{address_id}}\",\n  \"service_price\": 1200,\n  \"from_date\": \"2026-05-09\",\n  \"to_date\": \"2026-05-11\",\n  \"work_hours_per_day\": 6,\n  \"total_work_hours\": 18,\n  \"work_start_time\": \"10:00\",\n  \"work_end_time\": \"16:00\",\n  \"quote_description\": \"Updated quote description\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
+            "description": "Updates a pending quote. Allowed fields include partner_id, employee_id, category_id, service_id, franchise_id, address_id, service_price, schedule fields, created_by_id, quote_description (customer, assigned employee, or franchise admin only).",
             "url": "{{base_url}}/api/quote/update/{{quote_id}}"
           }
         },
@@ -3529,6 +3539,25 @@
             "method": "POST",
             "header": [],
             "url": "{{base_url}}/api/quote/convert/{{quote_id}}"
+          }
+        },
+        {
+          "name": "Get counts",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "description": "Dashboard buckets (new, pending, accepted, success, failed). Optional franchise_id filter. Same counts as POST /api/getCount with type quote-management.",
+            "url": "{{base_url}}/api/quote/getCounts?franchise_id={{franchise_id}}"
           }
         },
         {

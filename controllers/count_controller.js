@@ -708,47 +708,20 @@ const getCountData = async (req, res) => {
             }
         } else if (resolvedType === 11) {
             // Quote Management
-            const STATUS_PENDING = 1;
-            const STATUS_APPROVED = 2;
-            const STATUS_CONVERTED = 4;
+            const { buildQuoteBucketFilter } = require('../enum/quote_status_enum');
 
             const baseFilter = { deleted_at: null };
             if (franchiseScopeOid) {
                 baseFilter.franchise_id = franchiseScopeOid;
             }
 
-            const newFilter = {
-                ...baseFilter,
-                status: STATUS_PENDING,
-                partner_id: null,
-            };
-            const pendingFilter = {
-                ...baseFilter,
-                status: STATUS_PENDING,
-                partner_id: { $ne: null },
-            };
-            const acceptedFilter = {
-                ...baseFilter,
-                status: { $in: [STATUS_APPROVED, STATUS_CONVERTED] },
-            };
-            const successFilter = {
-                ...baseFilter,
-                status: STATUS_CONVERTED,
-                order_id: { $ne: null },
-            };
-            const failedFilter = {
-                ...baseFilter,
-                status: STATUS_APPROVED,
-                order_id: null,
-            };
-
             const [newCount, pendingCount, acceptedCount, successCount, failedCount] =
                 await Promise.all([
-                    Quote.countDocuments(newFilter),
-                    Quote.countDocuments(pendingFilter),
-                    Quote.countDocuments(acceptedFilter),
-                    Quote.countDocuments(successFilter),
-                    Quote.countDocuments(failedFilter),
+                    Quote.countDocuments({ ...baseFilter, ...buildQuoteBucketFilter('new') }),
+                    Quote.countDocuments({ ...baseFilter, ...buildQuoteBucketFilter('pending') }),
+                    Quote.countDocuments({ ...baseFilter, ...buildQuoteBucketFilter('accepted') }),
+                    Quote.countDocuments({ ...baseFilter, ...buildQuoteBucketFilter('success') }),
+                    Quote.countDocuments({ ...baseFilter, ...buildQuoteBucketFilter('failed') }),
                 ]);
 
             response.new = newCount;

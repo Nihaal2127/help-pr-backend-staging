@@ -18,12 +18,17 @@ const {
   attachPartnerServiceToQuote,
   attachPartnerServiceToQuotes,
 } = require("../utils/quote_partner_service");
-
-const STATUS_PENDING = 1;
-const STATUS_APPROVED = 2;
-const STATUS_REJECTED = 3;
-const STATUS_CONVERTED = 4;
-const STATUS_CANCELLED = 5;
+const {
+  STATUS_PENDING,
+  STATUS_APPROVED,
+  STATUS_REJECTED,
+  STATUS_CONVERTED,
+  STATUS_CANCELLED,
+  QUOTE_DASHBOARD_BUCKETS,
+  buildQuoteBucketFilter,
+  formatQuoteForApi,
+  formatQuoteRecords,
+} = require("../enum/quote_status_enum");
 
 const USER_TYPE_ADMIN = 1;
 const USER_TYPE_PARTNER = 2;
@@ -138,32 +143,6 @@ const buildQuoteDateRangeFilter = (query) => {
   return { ok: true, filter };
 };
 
-/** Dashboard list buckets for GET /api/quote/getAll?status=<bucket> */
-const QUOTE_LIST_STATUS_BUCKETS = new Set([
-  "new",
-  "pending",
-  "accepted",
-  "success",
-  "failed",
-]);
-
-const buildQuoteBucketFilter = (bucket) => {
-  switch (bucket) {
-    case "new":
-      return { status: STATUS_PENDING, partner_id: null };
-    case "pending":
-      return { status: STATUS_PENDING, partner_id: { $ne: null } };
-    case "accepted":
-      return { status: { $in: [STATUS_APPROVED, STATUS_CONVERTED] } };
-    case "success":
-      return { status: STATUS_CONVERTED, order_id: { $ne: null } };
-    case "failed":
-      return { status: STATUS_APPROVED, order_id: null };
-    default:
-      return null;
-  }
-};
-
 const resolveQuoteListStatusFilter = (statusParam) => {
   if (statusParam === undefined || statusParam === null) {
     return { ok: true, filter: {} };
@@ -178,7 +157,7 @@ const resolveQuoteListStatusFilter = (statusParam) => {
   if (bucketKey === "fail") {
     return { ok: true, filter: buildQuoteBucketFilter("failed") };
   }
-  if (QUOTE_LIST_STATUS_BUCKETS.has(bucketKey)) {
+  if (QUOTE_DASHBOARD_BUCKETS.includes(bucketKey)) {
     return { ok: true, filter: buildQuoteBucketFilter(bucketKey) };
   }
 
@@ -751,7 +730,7 @@ const getAll = async (req, res) => {
 
     const result = await agg.exec();
     const facet = result[0] || { data: [], totalCount: [] };
-    const quotes = facet.data || [];
+    const quotes = formatQuoteRecords(facet.data || []);
     const totalCount =
       facet.totalCount && facet.totalCount[0]
         ? facet.totalCount[0].totalCount
@@ -867,7 +846,7 @@ const getById = async (req, res) => {
       success: true,
       status: 200,
       message: "Quote fetched successfully",
-      record: quote,
+      record: formatQuoteForApi(quote),
     });
   } catch (error) {
     console.error("Error fetching quote:", error);
@@ -942,7 +921,7 @@ const getCustomerQuotes = async (req, res) => {
       totalItems: totalCount,
       totalPages,
       currentPage,
-      records: quotes,
+      records: formatQuoteRecords(quotes),
     });
   } catch (err) {
     console.error("Error fetching customer quotes:", err);
@@ -1035,7 +1014,7 @@ const update = async (req, res) => {
       success: true,
       status: 200,
       message: "Quote updated successfully",
-      record: updated,
+      record: formatQuoteForApi(updated),
     });
   } catch (error) {
     console.error("Error updating quote:", error);
@@ -1081,7 +1060,7 @@ const approve = async (req, res) => {
       success: true,
       status: 200,
       message: "Quote approved successfully",
-      record: quote,
+      record: formatQuoteForApi(quote),
     });
   } catch (error) {
     console.error("Error approving quote:", error);
@@ -1143,7 +1122,7 @@ const reject = async (req, res) => {
       success: true,
       status: 200,
       message: "Quote rejected successfully",
-      record: quote,
+      record: formatQuoteForApi(quote),
     });
   } catch (error) {
     console.error("Error rejecting quote:", error);
@@ -1205,7 +1184,7 @@ const cancelQuote = async (req, res) => {
       success: true,
       status: 200,
       message: "Quote cancelled successfully",
-      record: quote,
+      record: formatQuoteForApi(quote),
     });
   } catch (error) {
     console.error("Error cancelling quote:", error);

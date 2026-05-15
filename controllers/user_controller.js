@@ -368,9 +368,18 @@ async function applyPartnerDocumentImageUpdates(partnerId, normalizedDocumentPay
     return;
   }
   const documentList = await getDocumentList();
-  const documentNameToId = new Map(
-    documentList.map((doc) => [String(doc.name || '').trim().toLowerCase(), String(doc._id)])
-  );
+  /** Match multipart slugs (e.g. pan_card) and JSON keys to Document.name whether stored with spaces or underscores. */
+  const documentNameToId = new Map();
+  for (const doc of documentList) {
+    const id = String(doc._id);
+    const lower = String(doc.name || '').trim().toLowerCase();
+    if (!lower) continue;
+    const slug = lower.replace(/\s+/g, '_');
+    const spaced = lower.replace(/_/g, ' ');
+    for (const key of new Set([lower, slug, spaced])) {
+      if (key) documentNameToId.set(key, id);
+    }
+  }
   const documentImageById = {};
   Object.entries(normalizedDocumentPayload).forEach(([key, value]) => {
     const normalizedKey = String(key).trim().toLowerCase();
@@ -1009,8 +1018,9 @@ const create = async (req, res) => {
       date_of_birth,
       experience,
     } = req.body;
+    const userType = Number(type);
     let resolvedPartnerServicesInput = partner_services;
-    if (type === 2) {
+    if (userType === 2) {
       const psArr = Array.isArray(partner_services) ? partner_services : [];
       const hasPartnerServicesPayload = psArr.length > 0;
       const pcArr = Array.isArray(req.body.partner_categories) ? req.body.partner_categories : [];
@@ -1030,15 +1040,15 @@ const create = async (req, res) => {
       resolvedProfileUrl = await handleImageUpload(profileUpload, getUploadType(4), true, null);
     }
     const resolvedChat =
-      type === 3
+      userType === 3
         ? (chat !== undefined ? chat : true)
         : chat;
     let partnerVerificationFields = {};
-    if (type === 2) {
+    if (userType === 2) {
       partnerVerificationFields = { verification_status: 1, verified_at: null };
     }
     const resolvedIsActive =
-      type === 2
+      userType === 2
         ? false
         : (is_active !== undefined
             ? is_active
@@ -1079,7 +1089,7 @@ const create = async (req, res) => {
       }
     }
 
-    if (is_business === true && type === 2) {
+    if (is_business === true && userType === 2) {
       const existingBusiness = await BusinessInfo.findOne({
         $or: [
           { business_phone_number },
@@ -1103,7 +1113,7 @@ const create = async (req, res) => {
       }
     }
     const registration_id = await getNewId(0);
-    const user_id = await getNewId(type);
+    const user_id = await getNewId(Number.isFinite(userType) ? userType : type);
     const _id = new mongoose.Types.ObjectId();
     const normalizedScreens =
       Array.isArray(accessible_screens) && accessible_screens.length > 0
@@ -1135,7 +1145,7 @@ const create = async (req, res) => {
       ...(is_blocked !== undefined ? { is_blocked } : {}),
       chat: resolvedChat,
       is_business,
-      type,
+      type: Number.isFinite(userType) ? userType : type,
       registration_type,
       device_token,
       created_by_id,
@@ -1148,7 +1158,7 @@ const create = async (req, res) => {
           : String(experience).trim(),
     });
 
-    if (is_business === true && type === 2) {
+    if (is_business === true && userType === 2) {
       const business_info_id = new mongoose.Types.ObjectId();
       const business_info = new BusinessInfo({
         _id: business_info_id,
@@ -1165,8 +1175,15 @@ const create = async (req, res) => {
     newUser.last_signin = new Date();
     newUser.auth_token = newUser.generateAuthToken();
 
-    if (type === 2) {
+    if (userType === 2) {
       const documentList = await getDocumentList();
+      const filesForPartnerDocs = req.files || {};
+      const hasVerificationUploads = PARTNER_DOCUMENT_FILE_FIELDS.some((f) => filesForPartnerDocs[f]?.[0]);
+      if (documentList.length === 0 && hasVerificationUploads) {
+        console.warn(
+          '[user/create] Verification files were sent but the master Document catalog has no active rows (is_active: true). No partner_document rows are inserted; uploads cannot be linked.'
+        );
+      }
       let partnerDocumentIds = [];
       if (documentList.length > 0) {
         const documents = documentList.map((document) => ({
@@ -1207,9 +1224,13 @@ const create = async (req, res) => {
           is_primary: req.body.is_primary,
         }
       );
-      if (normalizedBankAccount && normalizedBankAccount.account_number) {
+      const bankAccountNumber =
+        normalizedBankAccount && normalizedBankAccount.account_number != null
+          ? String(normalizedBankAccount.account_number).trim()
+          : '';
+      if (normalizedBankAccount && bankAccountNumber) {
         const existingAccount = await PartnerBankAccount.findOne({
-          account_number: normalizedBankAccount.account_number,
+          account_number: bankAccountNumber,
           deleted_at: null,
         });
         if (!existingAccount) {
@@ -1217,7 +1238,7 @@ const create = async (req, res) => {
             partner_id: savedUser._id,
             bank_name: normalizedBankAccount.bank_name,
             account_holder_name: normalizedBankAccount.account_holder_name,
-            account_number: normalizedBankAccount.account_number,
+            account_number: bankAccountNumber,
             ifsc_code: normalizedBankAccount.ifsc_code,
             branch_name: normalizedBankAccount.branch_name,
             is_primary: normalizedBankAccount.is_primary === true,

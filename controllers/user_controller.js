@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const { ObjectId } = require('mongodb');
 const User = require('../models/user');
 const Address = require('../models/address');
+const Area = require('../models/area');
 const PartnerServices = require('../models/partner_service');
 const notificationSetting = require('../models/notification_settings');
 const { validationResult } = require('express-validator');
@@ -56,6 +57,33 @@ function getSortDirection(query, fallback = -1) {
   if (orderRaw === 'asc' || orderRaw === '1') return 1;
   if (orderRaw === 'desc' || orderRaw === '-1') return -1;
   return fallback;
+}
+
+async function buildAreaIdToNameMap(areaIds) {
+  const oids = [
+    ...new Set(
+      (areaIds || [])
+        .filter((id) => id != null && String(id).trim() !== '' && mongoose.Types.ObjectId.isValid(String(id)))
+        .map((id) => String(id)),
+    ),
+  ].map((id) => new mongoose.Types.ObjectId(id));
+  if (oids.length === 0) return new Map();
+  const areas = await Area.find({ _id: { $in: oids }, deleted_at: null }).select('name').lean();
+  const map = new Map();
+  for (const a of areas) map.set(String(a._id), a.name);
+  return map;
+}
+
+function resolveAreaName(areaId, areaMap) {
+  if (areaId == null || String(areaId).trim() === '') return null;
+  return areaMap.get(String(areaId)) ?? null;
+}
+
+function attachAreaNamesToAddresses(addresses, areaMap) {
+  return (addresses || []).map((addr) => ({
+    ...addr,
+    area_name: resolveAreaName(addr.area_id, areaMap),
+  }));
 }
 
 /** GET /user/getAll ?is_verified= for type=2. Omitted → verified only (2), matching previous hardcoded filter. */
@@ -735,6 +763,7 @@ const getAll = async (req, res) => {
       const service_count_data = await getServiceCountData(user._id);
       const { state_id, city_id, ...rest } = user;
       let addressField = rest.address;
+      let type4AreaMap = null;
       if (user.type === 4) {
         addressField = await Address.find({
           user_id: user._id,
@@ -743,6 +772,11 @@ const getAll = async (req, res) => {
           .sort({ created_at: 1 })
           .select('contact_name contact_number address landmark area area_id state_id city_id state city pincode address_status created_at updated_at')
           .lean();
+        type4AreaMap = await buildAreaIdToNameMap([
+          rest.area_id,
+          ...addressField.map((a) => a.area_id),
+        ]);
+        addressField = attachAreaNamesToAddresses(addressField, type4AreaMap);
       }
       const row = {
         ...rest,
@@ -752,6 +786,9 @@ const getAll = async (req, res) => {
 
         city_id: user?.city_id?._id || null,
         city_name: user?.city_id?.name || null,
+        ...(user.type === 4 && {
+          area_name: resolveAreaName(rest.area_id, type4AreaMap),
+        }),
 
         total_service: service_count_data.total_service,
         service_paid: service_count_data.service_paid,
@@ -1702,13 +1739,19 @@ const getById = async (req, res) => {
 
     };
     if (user.type === 4) {
-      response.address = await Address.find({
+      const addresses = await Address.find({
         user_id: user._id,
         deleted_at: null,
       })
         .sort({ created_at: 1 })
         .select('contact_name contact_number address landmark area area_id state_id city_id state city pincode address_status created_at updated_at')
         .lean();
+      const areaMap = await buildAreaIdToNameMap([
+        user.area_id,
+        ...addresses.map((a) => a.area_id),
+      ]);
+      response.address = attachAreaNamesToAddresses(addresses, areaMap);
+      response.area_name = resolveAreaName(user.area_id, areaMap);
     }
     if (user.type === 4 || user.type === 2) {
       const last_service_date = await getLastServiceDate(user._id);

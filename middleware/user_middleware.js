@@ -50,7 +50,14 @@ const validateAccessibleScreens = (items, res) => {
   return true;
 };
 
-const createUserMiddleware = (req, res, next) => {
+const isUserCreateRoute = (req) =>
+  String(req.baseUrl || '') === '/api/user' &&
+  (String(req.path || '') === '/create' || String(req.path || '') === '/register-partner');
+
+const isUserUpdateRoute = (req) =>
+  String(req.baseUrl || '') === '/api/user' && String(req.path || '').startsWith('/update/');
+
+const createUserMiddleware = async (req, res, next) => {
   parseNumberField(req, "type");
   parseNumberField(req, "registration_type");
   parseBooleanField(req, "is_from_web");
@@ -371,6 +378,38 @@ const createUserMiddleware = (req, res, next) => {
       message: 'Invalid phone number format.'
     });
   }
+  if (isUserCreateRoute(req)) {
+    try {
+      const existingUser = await User.findOne({
+        $or: [{ phone_number }, { email }],
+        deleted_at: null,
+      })
+        .select('email phone_number')
+        .lean();
+      if (existingUser) {
+        let message = '';
+        if (existingUser.phone_number === phone_number) {
+          message = 'Phone number already exists.';
+        } else if (existingUser.email === email) {
+          message = 'Email already exists.';
+        } else {
+          message = 'Email or phone number already exists.';
+        }
+        return res.status(409).json({
+          success: false,
+          status: 409,
+          message,
+        });
+      }
+    } catch (err) {
+      console.error('createUserMiddleware duplicate check', err.message);
+      return res.status(500).json({
+        success: false,
+        status: 500,
+        message: 'Internal server error.',
+      });
+    }
+  }
   if (type === undefined) {
     return res.status(400).json({
       success: false,
@@ -623,7 +662,7 @@ const createUserMiddleware = (req, res, next) => {
   next();
 };
 
-const updateUserMiddleware = (req, res, next) => {
+const updateUserMiddleware = async (req, res, next) => {
   parseNumberField(req, "type");
   parseNumberField(req, "registration_type");
   parseBooleanField(req, "is_from_web");
@@ -698,6 +737,54 @@ const updateUserMiddleware = (req, res, next) => {
       status: 400,
       message: 'Invalid phone number format.'
     });
+  }
+
+  if (isUserUpdateRoute(req)) {
+    const userId = req.params?.id != null ? String(req.params.id).trim() : '';
+    const orConditions = [];
+    if (email !== undefined && String(email).trim() !== '' && emailRegex.test(email)) {
+      orConditions.push({ email });
+    }
+    if (
+      phone_number !== undefined &&
+      String(phone_number).trim() !== '' &&
+      phoneRegex.test(phone_number)
+    ) {
+      orConditions.push({ phone_number });
+    }
+    if (orConditions.length > 0 && mongoose.Types.ObjectId.isValid(userId)) {
+      try {
+        const existingUser = await User.findOne({
+          $or: orConditions,
+          deleted_at: null,
+          _id: { $ne: new mongoose.Types.ObjectId(userId) },
+        })
+          .select('email phone_number')
+          .lean();
+        if (existingUser) {
+          let message = '';
+          if (phone_number !== undefined && existingUser.phone_number === phone_number) {
+            message = 'Phone number already exists.';
+          } else if (email !== undefined && existingUser.email === email) {
+            message = 'Email already exists.';
+          } else {
+            message = 'Email or phone number already exists.';
+          }
+          return res.status(409).json({
+            success: false,
+            status: 409,
+            message,
+          });
+        }
+      } catch (err) {
+        console.error('updateUserMiddleware duplicate check', err.message);
+        return res.status(500).json({
+          success: false,
+          status: 500,
+          message: 'Internal server error.',
+        });
+      }
+    }
   }
 
   // if (type === undefined) {

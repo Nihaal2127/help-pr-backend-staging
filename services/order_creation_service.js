@@ -9,10 +9,7 @@ const NotificationSettings = require("../models/notification_settings");
 const { getOrderId } = require("../helper/id_generator");
 const { computeOrderTotal, recalculateOrderTotals } = require("../utils/order_financials");
 const { combineDateAndTime } = require("../utils/order_schedule");
-const {
-  STATUS_APPROVED,
-  STATUS_CONVERTED,
-} = require("../enum/quote_status_enum");
+const { resolveQuoteStatus } = require("../enum/quote_status_enum");
 
 const ORDER_TYPE_DEFAULT = 2;
 
@@ -52,11 +49,11 @@ const resolveQuoteForOrderLink = async (quoteIdRaw) => {
   if (qDoc.order_id != null) {
     return { ok: false, status: 409, message: "Quote is already linked to an order." };
   }
-  if (Number(qDoc.status) !== STATUS_APPROVED) {
+  if (resolveQuoteStatus(qDoc) !== "accepted") {
     return {
       ok: false,
       status: 409,
-      message: "Only approved quotes can be converted to an order.",
+      message: "Only accepted quotes can be converted to an order.",
     };
   }
 
@@ -83,7 +80,7 @@ const resolveQuoteForOrderLink = async (quoteIdRaw) => {
 };
 
 /**
- * Sets quote.order_id and quote.status = converted after order is persisted.
+ * Sets quote.order_id and quote.status = success after order is persisted.
  */
 const linkQuoteToOrder = async (quoteId, orderId) => {
   const quote = await Quote.findOne({ _id: quoteId, deleted_at: null });
@@ -93,15 +90,15 @@ const linkQuoteToOrder = async (quoteId, orderId) => {
   if (quote.order_id != null) {
     throw new OrderCreationError("Quote is already linked to an order.", 409);
   }
-  if (Number(quote.status) !== STATUS_APPROVED) {
+  if (resolveQuoteStatus(quote) !== "accepted") {
     throw new OrderCreationError(
-      "Only approved quotes can be converted to an order.",
+      "Only accepted quotes can be converted to an order.",
       409
     );
   }
 
   quote.order_id = orderId;
-  quote.status = STATUS_CONVERTED;
+  quote.status = "success";
   quote.updated_at = new Date();
   await quote.save();
   return quote;

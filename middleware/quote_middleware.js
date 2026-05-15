@@ -6,6 +6,7 @@ const Service = require("../models/service");
 const Franchise = require("../models/franchise");
 const Address = require("../models/address");
 const { checkObjectIdExists } = require("../validator/id_validator");
+const { QUOTE_STATUSES, normalizeQuoteStatus } = require("../enum/quote_status_enum");
 
 const USER_TYPE_ADMIN = 1;
 const USER_TYPE_PARTNER = 2;
@@ -35,6 +36,9 @@ const FIELD_LABELS = {
   work_start_time: "Work start time",
   work_end_time: "Work end time",
   quote_description: "Quote description",
+  status: "Status",
+  rejection_reason: "Rejection reason",
+  cancellation_reason: "Cancellation reason",
 };
 
 const fieldLabel = (key) =>
@@ -264,6 +268,9 @@ const updateQuoteMiddleware = async (req, res, next) => {
     "work_end_time",
     "created_by_id",
     "quote_description",
+    "status",
+    "rejection_reason",
+    "cancellation_reason",
   ]);
 
   const unknown = Object.keys(body).filter((k) => !allowedKeys.has(k));
@@ -286,6 +293,18 @@ const updateQuoteMiddleware = async (req, res, next) => {
       status: 409,
       message: "No updatable fields provided.",
     });
+  }
+
+  if (partialBody.status !== undefined) {
+    const normalized = normalizeQuoteStatus(partialBody.status);
+    if (!normalized) {
+      return res.status(409).json({
+        success: false,
+        status: 409,
+        message: `Invalid status. Use one of: ${QUOTE_STATUSES.join(", ")}.`,
+      });
+    }
+    req.body.status = normalized;
   }
 
   const merged = { ...req.body };
@@ -354,20 +373,7 @@ const updateQuoteMiddleware = async (req, res, next) => {
   next();
 };
 
-const convertQuoteMiddleware = async (req, res, next) => {
-  const { id } = req.params;
-  if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(409).json({
-      success: false,
-      status: 409,
-      message: "Invalid quote id.",
-    });
-  }
-  next();
-};
-
 module.exports = {
   createQuoteMiddleware,
   updateQuoteMiddleware,
-  convertQuoteMiddleware,
 };

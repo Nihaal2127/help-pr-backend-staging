@@ -1,27 +1,8 @@
-const STATUS_PENDING = 1;
-const STATUS_APPROVED = 2;
-const STATUS_REJECTED = 3;
-const STATUS_CONVERTED = 4;
-const STATUS_CANCELLED = 5;
-const STATUS_EXPIRED = 6;
+const QUOTE_STATUSES = ["new", "pending", "accepted", "success", "failed"];
 
-const QuoteStatus = new Map([
-  [STATUS_PENDING, "Pending"],
-  [STATUS_APPROVED, "Approved"],
-  [STATUS_REJECTED, "Rejected"],
-  [STATUS_CONVERTED, "Converted"],
-  [STATUS_CANCELLED, "Cancelled"],
-  [STATUS_EXPIRED, "Expired"],
-]);
+const QUOTE_DASHBOARD_BUCKETS = [...QUOTE_STATUSES];
 
-/** Dashboard list / getCount buckets (GET /api/quote/getAll?status=...) */
-const QUOTE_DASHBOARD_BUCKETS = [
-  "new",
-  "pending",
-  "accepted",
-  "success",
-  "failed",
-];
+const TERMINAL_QUOTE_STATUSES = new Set(["success", "failed"]);
 
 const hasRef = (val) => {
   if (val == null || val === "") return false;
@@ -36,60 +17,91 @@ const hasRef = (val) => {
   return false;
 };
 
-/**
- * UI bucket for a quote row — same rules as POST /api/getCount type quote-management
- * and GET /api/quote/getCounts.
- */
-const getQuoteDashboardStatus = (quote = {}) => {
-  const status = Number(quote.status);
+/** Legacy numeric DB values (1–6) → string status for reads and filters. */
+const legacyNumericToStatus = (code, quote = {}) => {
+  const n = Number(code);
   const partnerSet = hasRef(quote.partner_id);
   const orderSet = hasRef(quote.order_id);
 
-  if (status === STATUS_PENDING) {
-    return partnerSet ? "pending" : "new";
+  switch (n) {
+    case 1:
+      return partnerSet ? "pending" : "new";
+    case 2:
+      return orderSet ? "success" : "accepted";
+    case 3:
+    case 5:
+    case 6:
+      return "failed";
+    case 4:
+      return orderSet ? "success" : "accepted";
+    default:
+      return "";
   }
-  if (status === STATUS_CONVERTED && orderSet) {
-    return "success";
+};
+
+const normalizeQuoteStatus = (status, quote = {}) => {
+  if (status === undefined || status === null) return "";
+
+  if (typeof status === "string") {
+    const key = status.trim().toLowerCase();
+    if (key === "fail") return "failed";
+    if (QUOTE_STATUSES.includes(key)) return key;
+    if (/^\d+$/.test(key)) {
+      return legacyNumericToStatus(parseInt(key, 10), quote);
+    }
+    return "";
   }
-  if (status === STATUS_APPROVED && !orderSet) {
-    return "failed";
+
+  if (typeof status === "number" && !Number.isNaN(status)) {
+    return legacyNumericToStatus(status, quote);
   }
-  if (status === STATUS_APPROVED || status === STATUS_CONVERTED) {
-    return "accepted";
-  }
-  if (status === STATUS_REJECTED) return "rejected";
-  if (status === STATUS_CANCELLED) return "cancelled";
-  if (status === STATUS_EXPIRED) return "expired";
+
   return "";
 };
 
+const resolveQuoteStatus = (quote = {}) =>
+  normalizeQuoteStatus(quote.status, quote);
+
 const buildQuoteBucketFilter = (bucket) => {
-  switch (bucket) {
-    case "new":
-      return { status: STATUS_PENDING, partner_id: null };
-    case "pending":
-      return { status: STATUS_PENDING, partner_id: { $ne: null } };
-    case "accepted":
-      return { status: { $in: [STATUS_APPROVED, STATUS_CONVERTED] } };
-    case "success":
-      return { status: STATUS_CONVERTED, order_id: { $ne: null } };
-    case "failed":
-      return { status: STATUS_APPROVED, order_id: null };
-    default:
-      return null;
+  const key = bucket === "fail" ? "failed" : String(bucket || "").toLowerCase();
+  if (!QUOTE_STATUSES.includes(key)) return null;
+
+  const legacyFilters = {
+    new: { status: 1, partner_id: null },
+    pending: { status: 1, partner_id: { $ne: null } },
+    accepted: { status: { $in: [2, 4] }, order_id: null },
+    success: { status: 4, order_id: { $ne: null } },
+    failed: {
+      $or: [
+        { status: { $in: [3, 5, 6] } },
+        { status: 2, order_id: null },
+      ],
+    },
+  };
+
+  const legacy = legacyFilters[key];
+  if (legacy) {
+    return { $or: [{ status: key }, legacy] };
   }
+  return { status: key };
 };
 
-const getQuoteStatus = (key) => QuoteStatus.get(Number(key)) || "";
+const canTransitionQuoteStatus = (fromStatus, toStatus) => {
+  const from = normalizeQuoteStatus(fromStatus);
+  const to = normalizeQuoteStatus(toStatus);
+  if (!from || !to) return false;
+  if (from === to) return true;
+  if (TERMINAL_QUOTE_STATUSES.has(from)) return false;
 
-const getQuoteStatusKey = (value) => {
-  for (const [key, val] of QuoteStatus.entries()) {
-    if (val === value) return key;
-  }
-  return null;
+  const allowed = {
+    new: ["pending", "accepted", "failed"],
+    pending: ["new", "accepted", "failed"],
+    accepted: ["success", "failed"],
+  };
+
+  return (allowed[from] || []).includes(to);
 };
 
-/** Shape quote records for API: string dashboard status + numeric status_code. */
 const formatQuoteForApi = (quote) => {
   if (!quote || typeof quote !== "object") return quote;
 
@@ -98,10 +110,9 @@ const formatQuoteForApi = (quote) => {
       ? quote.toObject({ virtuals: true })
       : { ...quote };
 
-  const statusCode = Number(plain.status);
-  if (!Number.isNaN(statusCode)) {
-    plain.status_code = statusCode;
-    plain.status = getQuoteDashboardStatus(plain);
+  const resolved = resolveQuoteStatus(plain);
+  if (resolved) {
+    plain.status = resolved;
   }
 
   return plain;
@@ -113,19 +124,13 @@ const formatQuoteRecords = (records) => {
 };
 
 module.exports = {
-  STATUS_PENDING,
-  STATUS_APPROVED,
-  STATUS_REJECTED,
-  STATUS_CONVERTED,
-  STATUS_CANCELLED,
-  STATUS_EXPIRED,
+  QUOTE_STATUSES,
   QUOTE_DASHBOARD_BUCKETS,
-  QuoteStatus,
-  getQuoteStatus,
-  getQuoteStatusKey,
-  getQuoteDashboardStatus,
+  TERMINAL_QUOTE_STATUSES,
+  normalizeQuoteStatus,
+  resolveQuoteStatus,
   buildQuoteBucketFilter,
-  hasRef,
+  canTransitionQuoteStatus,
   formatQuoteForApi,
   formatQuoteRecords,
 };

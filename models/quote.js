@@ -47,7 +47,7 @@ var quoteSchema = new schema(
     order_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "order" },
     cancellation_reason: { type: String, default: "", trim: true },
     rejection_reason: { type: String, default: "", trim: true },
-    customer_description: { type: String, default: "", trim: true },
+    quote_description: { type: String, default: "", trim: true },
     history: { type: [quoteHistoryEventSchema], default: [] },
     created_at: { type: Date, default: Date.now },
     updated_at: { type: Date, default: Date.now },

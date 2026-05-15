@@ -164,17 +164,35 @@ async function getFranchiseCustomerUserIdsByPincode(franchiseLean) {
   return rows.map((r) => r._id).filter(Boolean);
 }
 
-function resolveEffectiveFranchiseOid(caller, franchiseIdFilter) {
-  if ([USER_TYPE_SUPER_ADMIN, USER_TYPE_STAFF].includes(caller.type) && franchiseIdFilter) {
-    return new mongoose.Types.ObjectId(franchiseIdFilter);
-  }
-  if ([USER_TYPE_FRANCHISE_ADMIN, USER_TYPE_EMPLOYEE].includes(caller.type) && caller.franchise_id) {
+/** Franchise admin may be linked via user.franchise_id or Franchise.admin_id (JWT user id). */
+async function resolveCallerFranchiseOid(caller, userId) {
+  if (caller?.franchise_id) {
     return caller.franchise_id;
+  }
+  if (Number(caller?.type) === USER_TYPE_FRANCHISE_ADMIN && userId) {
+    const franchise = await Franchise.findOne({
+      admin_id: userId,
+      deleted_at: null,
+    })
+      .select('_id')
+      .lean();
+    return franchise?._id ?? null;
   }
   return null;
 }
 
-function buildUserListRoleFilter(caller, { franchiseIdFilter, type, partnerListVerificationStatus }) {
+function resolveEffectiveFranchiseOid(caller, franchiseIdFilter, callerFranchiseOid) {
+  if ([USER_TYPE_SUPER_ADMIN, USER_TYPE_STAFF].includes(caller.type) && franchiseIdFilter) {
+    return new mongoose.Types.ObjectId(franchiseIdFilter);
+  }
+  const franchiseOid = callerFranchiseOid ?? caller.franchise_id ?? null;
+  if ([USER_TYPE_FRANCHISE_ADMIN, USER_TYPE_EMPLOYEE].includes(caller.type) && franchiseOid) {
+    return franchiseOid;
+  }
+  return null;
+}
+
+function buildUserListRoleFilter(caller, { franchiseIdFilter, type, partnerListVerificationStatus, callerFranchiseOid }) {
   if ([USER_TYPE_PARTNER, USER_TYPE_CUSTOMER].includes(caller.type)) {
     return {
       ok: false,
@@ -207,10 +225,20 @@ function buildUserListRoleFilter(caller, { franchiseIdFilter, type, partnerListV
     return { ok: true, roleFilter: {} };
   }
 
+  const callerFranchise = callerFranchiseOid ?? caller.franchise_id ?? null;
+
+  if ([USER_TYPE_FRANCHISE_ADMIN, USER_TYPE_EMPLOYEE].includes(caller.type) && !callerFranchise) {
+    return {
+      ok: false,
+      status: 403,
+      message: 'Franchise not found for your account.',
+    };
+  }
+
   if (
     franchiseIdFilter &&
-    caller.franchise_id &&
-    String(franchiseIdFilter) !== String(caller.franchise_id)
+    callerFranchise &&
+    String(franchiseIdFilter) !== String(callerFranchise)
   ) {
     return {
       ok: false,
@@ -227,8 +255,6 @@ function buildUserListRoleFilter(caller, { franchiseIdFilter, type, partnerListV
       message: 'You are not allowed to access this user type.',
     };
   }
-
-  const callerFranchise = caller.franchise_id ?? null;
   const pendingPartnerList =
     type === USER_TYPE_PARTNER &&
     partnerListVerificationStatus === 1 &&
@@ -300,6 +326,24 @@ function verificationStatusToIsVerified(verificationStatus) {
   if (n === 2) return 'approved';
   if (n === 3) return 'rejected';
   return 'pending';
+}
+
+/** Accept `verification_rejection_reason` in body; persist as `rejected_reasone`. */
+function applyVerificationRejectionReasonInput(data) {
+  if (!data || data.verification_rejection_reason === undefined) {
+    return;
+  }
+  const trimmed = String(data.verification_rejection_reason).trim();
+  data.rejected_reasone = trimmed;
+  delete data.verification_rejection_reason;
+}
+
+function partnerRejectionReasonFields(record) {
+  const reason = record?.rejected_reasone ?? '';
+  return {
+    verification_rejection_reason: reason,
+    rejected_reasone: reason,
+  };
 }
 
 function mapPartnerDocumentsForResponse(documents) {
@@ -758,6 +802,7 @@ const getAll = async (req, res) => {
     }
 
     const franchiseIdFilter = typeof req.query.franchise_id === 'string' ? req.query.franchise_id.trim() : null;
+    const callerFranchiseOid = await resolveCallerFranchiseOid(caller, req.user.id);
 
     let partnerListVerificationStatus;
     if (type === USER_TYPE_PARTNER) {
@@ -776,6 +821,7 @@ const getAll = async (req, res) => {
       franchiseIdFilter,
       type,
       partnerListVerificationStatus,
+      callerFranchiseOid,
     });
     if (!roleResult.ok) {
       return res.status(roleResult.status).json({
@@ -786,7 +832,7 @@ const getAll = async (req, res) => {
     }
     let roleFilter = roleResult.roleFilter;
 
-    const effectiveFranchiseOid = resolveEffectiveFranchiseOid(caller, franchiseIdFilter);
+    const effectiveFranchiseOid = resolveEffectiveFranchiseOid(caller, franchiseIdFilter, callerFranchiseOid);
     if (type === USER_TYPE_CUSTOMER && effectiveFranchiseOid) {
       const type4Scope = await applyType4FranchiseScope(roleFilter, effectiveFranchiseOid);
       if (!type4Scope.ok) {
@@ -982,7 +1028,7 @@ const getAll = async (req, res) => {
         row.partner_subscriptions = partnerIdToSubs.get(pid) ?? [];
 
         row.is_verified = verificationStatusToIsVerified(row.verification_status);
-        row.rejected_reasone = row.rejected_reasone ?? '';
+        Object.assign(row, partnerRejectionReasonFields(row));
       }
 
       return row;
@@ -1047,6 +1093,7 @@ const getVerificationAll = async (req, res) => {
     }
 
     const franchiseIdFilter = typeof req.query.franchise_id === 'string' ? req.query.franchise_id.trim() : null;
+    const callerFranchiseOid = await resolveCallerFranchiseOid(caller, req.user.id);
 
     const verificationStatusRaw = req.query.verification_status;
     let verificationFilter;
@@ -1076,6 +1123,7 @@ const getVerificationAll = async (req, res) => {
       franchiseIdFilter,
       type: USER_TYPE_PARTNER,
       partnerListVerificationStatus: includesPendingVerification ? 1 : verificationStatuses[0],
+      callerFranchiseOid,
     });
     if (!roleResult.ok) {
       return res.status(roleResult.status).json({
@@ -1235,6 +1283,7 @@ const create = async (req, res) => {
       gender,
       experience,
       rejected_reasone,
+      verification_rejection_reason,
     } = req.body;
     const userType = Number(type);
     let resolvedPartnerServicesInput = partner_services;
@@ -1379,9 +1428,11 @@ const create = async (req, res) => {
           ? null
           : String(experience).trim(),
       rejected_reasone:
-        rejected_reasone !== undefined && rejected_reasone !== null
-          ? String(rejected_reasone).trim()
-          : '',
+        verification_rejection_reason !== undefined && verification_rejection_reason !== null
+          ? String(verification_rejection_reason).trim()
+          : rejected_reasone !== undefined && rejected_reasone !== null
+            ? String(rejected_reasone).trim()
+            : '',
     });
 
     if (is_business === true && userType === 2) {
@@ -1578,6 +1629,7 @@ const update = async (req, res) => {
 
   const { id } = req.params;
   const updateData = { ...req.body };
+  applyVerificationRejectionReasonInput(updateData);
 
   try {
     if (!id || !mongoose.Types.ObjectId.isValid(id)) {
@@ -1882,7 +1934,7 @@ const update = async (req, res) => {
       responseRecord = {
         ...(responseRecord.toObject ? responseRecord.toObject() : responseRecord),
         is_verified: verificationStatusToIsVerified(updatedUser.verification_status),
-        rejected_reasone: updatedUser.rejected_reasone ?? '',
+        ...partnerRejectionReasonFields(updatedUser),
       };
     }
 
@@ -2024,7 +2076,7 @@ const getById = async (req, res) => {
         .lean();
 
       response.is_verified = verificationStatusToIsVerified(user.verification_status);
-      response.rejected_reasone = user.rejected_reasone ?? '';
+      Object.assign(response, partnerRejectionReasonFields(user));
     }
     return res.status(200).json({
       success: true,

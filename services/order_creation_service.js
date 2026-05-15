@@ -1,0 +1,476 @@
+const mongoose = require("mongoose");
+const Order = require("../models/order");
+const OrderService = require("../models/order_services");
+const User = require("../models/user");
+const Service = require("../models/service");
+const Address = require("../models/address");
+const Quote = require("../models/quote");
+const NotificationSettings = require("../models/notification_settings");
+const { getOrderId } = require("../helper/id_generator");
+const { computeOrderTotal, recalculateOrderTotals } = require("../utils/order_financials");
+const { combineDateAndTime } = require("../utils/order_schedule");
+const {
+  STATUS_APPROVED,
+  STATUS_CONVERTED,
+} = require("../enum/quote_status_enum");
+
+const ORDER_TYPE_DEFAULT = 2;
+
+const buildOrderStatusInfo = () => [
+  { status: 1, updated_at: Date.now() },
+  { status: 2, updated_at: null },
+  { status: 3, updated_at: null },
+  { status: 4, updated_at: null },
+];
+
+class OrderCreationError extends Error {
+  constructor(message, status = 409) {
+    super(message);
+    this.name = "OrderCreationError";
+    this.status = status;
+  }
+}
+
+/**
+ * Validates quote can be linked to a new order (same rules as POST /api/order/create).
+ */
+const resolveQuoteForOrderLink = async (quoteIdRaw) => {
+  const qid = String(quoteIdRaw || "").trim();
+  if (!qid) {
+    return { ok: true, quoteObjectId: null, quoteDescription: "" };
+  }
+  if (!mongoose.Types.ObjectId.isValid(qid)) {
+    return { ok: false, status: 400, message: "Invalid quote_id." };
+  }
+
+  const qDoc = await Quote.findOne({ _id: qid, deleted_at: null })
+    .select("quote_description order_id status")
+    .lean();
+  if (!qDoc) {
+    return { ok: false, status: 404, message: "Quote not found." };
+  }
+  if (qDoc.order_id != null) {
+    return { ok: false, status: 409, message: "Quote is already linked to an order." };
+  }
+  if (Number(qDoc.status) !== STATUS_APPROVED) {
+    return {
+      ok: false,
+      status: 409,
+      message: "Only approved quotes can be converted to an order.",
+    };
+  }
+
+  const quoteObjectId = new mongoose.Types.ObjectId(qid);
+  const existingOrderForQuote = await Order.findOne({
+    quote_id: quoteObjectId,
+    deleted_at: null,
+  })
+    .select("_id")
+    .lean();
+  if (existingOrderForQuote) {
+    return {
+      ok: false,
+      status: 409,
+      message: "Another order already references this quote.",
+    };
+  }
+
+  return {
+    ok: true,
+    quoteObjectId,
+    quoteDescription: (qDoc.quote_description || "").trim(),
+  };
+};
+
+/**
+ * Sets quote.order_id and quote.status = converted after order is persisted.
+ */
+const linkQuoteToOrder = async (quoteId, orderId) => {
+  const quote = await Quote.findOne({ _id: quoteId, deleted_at: null });
+  if (!quote) {
+    throw new OrderCreationError("Quote not found.", 404);
+  }
+  if (quote.order_id != null) {
+    throw new OrderCreationError("Quote is already linked to an order.", 409);
+  }
+  if (Number(quote.status) !== STATUS_APPROVED) {
+    throw new OrderCreationError(
+      "Only approved quotes can be converted to an order.",
+      409
+    );
+  }
+
+  quote.order_id = orderId;
+  quote.status = STATUS_CONVERTED;
+  quote.updated_at = new Date();
+  await quote.save();
+  return quote;
+};
+
+const notifyPartnersForNewOrder = async (serviceItems, unique_id, orderId) => {
+  await Promise.all(
+    serviceItems.map(async (service) => {
+      try {
+        const partner = await User.findById(
+          new mongoose.Types.ObjectId(service.partner_id)
+        );
+        if (!partner) return;
+
+        const notificationSetting = await NotificationSettings.findOne({
+          user_id: partner._id,
+        });
+        if (!notificationSetting || notificationSetting.is_update_allow === false) {
+          return;
+        }
+
+        const serviceData = await Service.findById(service.service_id);
+        const title = "New Service Request Received";
+        const body = `You received request for ${serviceData?.name || "service"} for order #${unique_id}`;
+        const deviceToken = partner.device_token;
+        const data = {
+          order_id: orderId.toString(),
+          type: "Order",
+        };
+
+        if (deviceToken !== null && deviceToken !== "") {
+          const { sendPushNotification } = require("../service/firebase/push_service");
+          await sendPushNotification({ deviceToken, title, body, data });
+        }
+      } catch (err) {
+        console.error(`Error notifying partner ${service.partner_id}:`, err);
+      }
+    })
+  );
+};
+
+/**
+ * Shared order + order_service creation used by POST /api/order/create and POST /api/quote/convert/:id.
+ */
+const createOrderFromBody = async (body, options = {}) => {
+  const {
+    linkQuote = true,
+    notifyPartners = true,
+    order_id: presetOrderId = null,
+  } = options;
+
+  const {
+    user_id,
+    user_unique_id,
+    city_id,
+    category_id,
+    is_paid,
+    payment_mode_id,
+    transaction_id,
+    created_by_id,
+    service_items,
+    order_date,
+    sub_total,
+    tax,
+    discount_amount,
+    user_paltform_fee,
+    partner_commison_platform_fee,
+    total_price,
+    admin_earning,
+    address,
+    type,
+    partner_id,
+    employee_id,
+    franchise_id,
+    address_id,
+    service_id,
+    from_date,
+    to_date,
+    work_hours_per_day,
+    total_work_hours,
+    work_start_time,
+    work_end_time,
+    service_price,
+    customer_description,
+    rejection_reason,
+    admin_commission,
+    discount_percent,
+    discount_code,
+    discount_reason,
+    min_deposit,
+    payment_schedule_type,
+    customer_payment_method,
+    order_description,
+    quote_id,
+  } = body;
+
+  const order_id =
+    presetOrderId && mongoose.Types.ObjectId.isValid(presetOrderId)
+      ? new mongoose.Types.ObjectId(presetOrderId)
+      : new mongoose.Types.ObjectId();
+
+  let resolvedQuoteId = null;
+  let quoteDescriptionWhenLinked = "";
+  if (linkQuote && quote_id !== undefined && quote_id !== null && String(quote_id).trim() !== "") {
+    const quoteResult = await resolveQuoteForOrderLink(quote_id);
+    if (!quoteResult.ok) {
+      throw new OrderCreationError(quoteResult.message, quoteResult.status);
+    }
+    resolvedQuoteId = quoteResult.quoteObjectId;
+    quoteDescriptionWhenLinked = quoteResult.quoteDescription;
+  }
+
+  const orderDescFromBody =
+    order_description !== undefined && order_description !== null
+      ? String(order_description).trim()
+      : "";
+  const finalOrderDescription = orderDescFromBody || quoteDescriptionWhenLinked;
+
+  if (!Array.isArray(service_items) || service_items.length !== 1) {
+    throw new OrderCreationError(
+      "Each order must contain exactly one service; service_items must be an array of length 1."
+    );
+  }
+
+  const single = service_items[0];
+  const unique_id = await getOrderId();
+
+  const orderItemsWithOrderId = await Promise.all(
+    service_items.map(async (option) => {
+      const user = await User.findById(new mongoose.Types.ObjectId(option.user_id));
+      if (!user) {
+        throw new Error("INVALID_SERVICE_USER");
+      }
+      const partner = option.partner_id
+        ? await User.findById(new mongoose.Types.ObjectId(option.partner_id))
+        : null;
+      return {
+        _id: new mongoose.Types.ObjectId(),
+        ...option,
+        order_id,
+        order_unique_id: unique_id,
+        user_unique_id: user.user_id,
+        partner_unique_id: partner?.user_id || option.partner_unique_id || "",
+        payment_mode_id,
+        transaction_id,
+      };
+    })
+  );
+
+  const savedDataOptions = await OrderService.insertMany(orderItemsWithOrderId);
+  const order_items = savedDataOptions.map((doc) => doc._id);
+
+  const resolvedPartnerId = partner_id ?? single.partner_id ?? null;
+  const resolvedServiceId = service_id ?? single.service_id ?? null;
+  const resolvedServicePrice =
+    service_price !== undefined && service_price !== null
+      ? Number(service_price)
+      : Number(single.service_price ?? single.sub_total ?? 0);
+
+  const newOrder = new Order({
+    _id: order_id,
+    unique_id,
+    user_id,
+    user_unique_id,
+    city_id,
+    category_id,
+    is_paid,
+    payment_mode_id,
+    transaction_id,
+    created_by_id,
+    service_items: order_items,
+    order_status: 1,
+    order_status_info: buildOrderStatusInfo(),
+    order_date,
+    sub_total,
+    tax,
+    discount_amount,
+    user_paltform_fee,
+    partner_commison_platform_fee,
+    total_price,
+    admin_earning,
+    address,
+    type,
+    partner_id: resolvedPartnerId,
+    employee_id: employee_id ?? null,
+    franchise_id: franchise_id ?? null,
+    address_id: address_id ?? null,
+    service_id: resolvedServiceId,
+    from_date: from_date ? new Date(from_date) : null,
+    to_date: to_date ? new Date(to_date) : null,
+    work_hours_per_day:
+      work_hours_per_day !== undefined ? Number(work_hours_per_day) : 0,
+    total_work_hours:
+      total_work_hours !== undefined ? Number(total_work_hours) : 0,
+    work_start_time: work_start_time ?? "",
+    work_end_time: work_end_time ?? "",
+    service_price: resolvedServicePrice,
+    customer_description: customer_description ?? "",
+    order_description: finalOrderDescription,
+    quote_id: resolvedQuoteId,
+    rejection_reason: rejection_reason ?? "",
+    admin_commission: admin_commission !== undefined ? Number(admin_commission) : 0,
+    discount_percent:
+      discount_percent !== undefined && discount_percent !== null
+        ? Number(discount_percent)
+        : null,
+    discount_code: discount_code ?? "",
+    discount_reason: discount_reason ?? "",
+    min_deposit: min_deposit !== undefined ? Number(min_deposit) : 0,
+    payment_schedule_type:
+      payment_schedule_type === "installments" ? "installments" : "single",
+    customer_payment_method: customer_payment_method ?? "",
+    additional_charges_total: 0,
+  });
+
+  newOrder.total_price = computeOrderTotal(newOrder, 0);
+
+  return {
+    newOrder,
+    order_id,
+    unique_id,
+    service_items,
+    resolvedQuoteId,
+  };
+};
+
+const persistOrderAndLinkQuote = async (
+  { newOrder, order_id, service_items, resolvedQuoteId },
+  { notifyPartners = true } = {}
+) => {
+  await newOrder.save();
+  await recalculateOrderTotals(order_id);
+
+  if (resolvedQuoteId) {
+    await linkQuoteToOrder(resolvedQuoteId, order_id);
+  }
+
+  if (notifyPartners) {
+    await notifyPartnersForNewOrder(service_items, newOrder.unique_id, order_id);
+  }
+
+  return newOrder;
+};
+
+/**
+ * Build POST /api/order/create body from an approved quote document.
+ */
+const buildCreateInputFromQuote = async (quote) => {
+  const addressDoc = await Address.findById(quote.address_id);
+  if (!addressDoc) {
+    throw new OrderCreationError("Address not found for this quote.");
+  }
+
+  const customer = await User.findById(quote.user_id);
+  const partner = await User.findById(quote.partner_id);
+  if (!customer || !partner) {
+    throw new OrderCreationError("Customer or partner user record missing.");
+  }
+
+  const service_from_time = combineDateAndTime(
+    quote.from_date,
+    quote.work_start_time
+  );
+  const service_to_time = combineDateAndTime(quote.from_date, quote.work_end_time);
+  if (!service_from_time || !service_to_time) {
+    throw new OrderCreationError(
+      "Could not build service times from from date, work start time, and work end time."
+    );
+  }
+
+  const price = parseFloat(quote.service_price) || 0;
+  const addressStr =
+    addressDoc.address ||
+    [addressDoc.landmark, addressDoc.area].filter(Boolean).join(", ") ||
+    "";
+  const quoteDescription = (quote.quote_description || "").trim();
+
+  return {
+    user_id: quote.user_id,
+    user_unique_id: customer.user_id || "",
+    city_id: addressDoc.city_id,
+    category_id: quote.category_id,
+    is_paid: false,
+    payment_mode_id: "",
+    transaction_id: "",
+    created_by_id:
+      quote.created_by_id != null ? quote.created_by_id : quote.user_id,
+    order_date: quote.from_date,
+    sub_total: price,
+    tax: 0,
+    discount_amount: null,
+    user_paltform_fee: 0,
+    partner_commison_platform_fee: 0,
+    total_price: price,
+    admin_earning: 0,
+    address: addressStr,
+    type: ORDER_TYPE_DEFAULT,
+    partner_id: quote.partner_id,
+    employee_id: quote.employee_id ?? null,
+    franchise_id: quote.franchise_id ?? null,
+    address_id: quote.address_id,
+    service_id: quote.service_id,
+    from_date: quote.from_date,
+    to_date: quote.to_date,
+    work_hours_per_day: quote.work_hours_per_day ?? 0,
+    total_work_hours: quote.total_work_hours ?? 0,
+    work_start_time: quote.work_start_time || "",
+    work_end_time: quote.work_end_time || "",
+    service_price: price,
+    customer_description: quoteDescription,
+    order_description: quoteDescription,
+    quote_id: quote._id,
+    rejection_reason: "",
+    admin_commission: 0,
+    discount_percent: null,
+    discount_code: "",
+    discount_reason: "",
+    min_deposit: 0,
+    payment_schedule_type: "single",
+    customer_payment_method: "",
+    service_items: [
+      {
+        user_id: quote.user_id,
+        partner_id: quote.partner_id,
+        category_id: quote.category_id,
+        service_id: quote.service_id,
+        service_date: quote.from_date,
+        service_from_time,
+        service_to_time,
+        sub_total: price,
+        tax: 0,
+        user_paltform_fee: 0,
+        partner_commison_platform_fee: 0,
+        service_price: price,
+        total_price: price,
+        partner_earning: price,
+        admin_earning: 0,
+        is_paid: false,
+        partner_paid_status: 1,
+        rating: 0,
+      },
+    ],
+  };
+};
+
+/**
+ * Creates order from quote using the same path as POST /api/order/create, then links quote.
+ */
+const createOrderFromQuote = async (quote, options = {}) => {
+  const body = await buildCreateInputFromQuote(quote);
+  const draft = await createOrderFromBody(body, {
+    linkQuote: true,
+    ...options,
+  });
+  const order = await persistOrderAndLinkQuote(draft, {
+    notifyPartners: options.notifyPartners !== false,
+  });
+  return { order, unique_id: draft.unique_id, order_id: draft.order_id };
+};
+
+module.exports = {
+  OrderCreationError,
+  ORDER_TYPE_DEFAULT,
+  buildOrderStatusInfo,
+  resolveQuoteForOrderLink,
+  linkQuoteToOrder,
+  createOrderFromBody,
+  persistOrderAndLinkQuote,
+  buildCreateInputFromQuote,
+  createOrderFromQuote,
+  notifyPartnersForNewOrder,
+};

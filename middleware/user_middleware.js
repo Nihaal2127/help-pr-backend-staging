@@ -9,6 +9,26 @@ const {
   parseOptionalDateField,
   trimOptionalStringField,
 } = require("../utils/multipart_parser");
+const { isValidGender, normalizeGender } = require("../enum/gender_enum");
+
+const validateOptionalGender = (req, res) => {
+  const value = req.body.gender;
+  if (value === undefined) return true;
+  if (value === null || (typeof value === "string" && value.trim() === "")) {
+    req.body.gender = null;
+    return true;
+  }
+  if (!isValidGender(value)) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'gender must be "male", "female", or "other".',
+    });
+    return false;
+  }
+  req.body.gender = normalizeGender(value);
+  return true;
+};
 
 const validateAccessibleScreens = (items, res) => {
   if (items === undefined) return true;
@@ -82,6 +102,7 @@ const createUserMiddleware = async (req, res, next) => {
   parseJSONField(req, "partner_subscription");
   parseOptionalDateField(req, "date_of_birth");
   trimOptionalStringField(req, "experience");
+  if (!validateOptionalGender(req, res)) return;
 
   const partnerServicesAlias = req.body["partner-services"];
   if (
@@ -674,6 +695,7 @@ const updateUserMiddleware = async (req, res, next) => {
   parseJSONField(req, "partner_documents");
   parseOptionalDateField(req, "date_of_birth");
   trimOptionalStringField(req, "experience");
+  if (!validateOptionalGender(req, res)) return;
 
   const {
     name,

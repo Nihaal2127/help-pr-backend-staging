@@ -261,14 +261,14 @@ const getAll = async (req, res) => {
       String(req.query.include_history || "").toLowerCase()
     );
 
-    const rawKeyword = req.query.keyword;
-    const keyword =
-      rawKeyword !== undefined &&
-      rawKeyword !== null &&
-      String(rawKeyword).trim() !== ""
-        ? sanitizeInput(String(rawKeyword).trim())
+    const rawSearch = req.query.search;
+    const searchTerm =
+      rawSearch !== undefined &&
+      rawSearch !== null &&
+      String(rawSearch).trim() !== ""
+        ? sanitizeInput(String(rawSearch).trim())
         : "";
-    const regex = keyword ? new RegExp(keyword, "i") : null;
+    const regex = searchTerm ? new RegExp(searchTerm, "i") : null;
 
     const baseFilter = {
       deleted_at: null,

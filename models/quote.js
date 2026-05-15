@@ -37,7 +37,7 @@ var quoteSchema = new schema(
     franchise_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "franchise" },
     address_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "address" },
     service_price: { type: Number, default: 0 },
-    status: { type: Number, default: 1 },
+    status: { type: String, default: "new", trim: true, lowercase: true },
     from_date: { type: Date, default: null },
     to_date: { type: Date, default: null },
     work_hours_per_day: { type: Number, default: 0 },

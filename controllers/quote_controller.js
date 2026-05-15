@@ -20,12 +20,13 @@ const {
   attachPartnerServiceToQuotes,
 } = require("../utils/quote_partner_service");
 const {
-  STATUS_PENDING,
-  STATUS_APPROVED,
-  STATUS_REJECTED,
-  STATUS_CANCELLED,
   QUOTE_DASHBOARD_BUCKETS,
+  QUOTE_STATUSES,
+  TERMINAL_QUOTE_STATUSES,
   buildQuoteBucketFilter,
+  canTransitionQuoteStatus,
+  normalizeQuoteStatus,
+  resolveQuoteStatus,
   formatQuoteForApi,
   formatQuoteRecords,
 } = require("../enum/quote_status_enum");
@@ -147,15 +148,9 @@ const resolveQuoteListStatusFilter = (statusParam) => {
     return { ok: true, filter: buildQuoteBucketFilter(bucketKey) };
   }
 
-  if (/^\d+$/.test(raw)) {
-    const numericStatus = parseInt(raw, 10);
-    return { ok: true, filter: { status: numericStatus } };
-  }
-
   return {
     ok: false,
-    message:
-      "Invalid status. Use new, pending, accepted, success, failed, or a numeric quote status (1-6).",
+    message: `Invalid status. Use one of: ${QUOTE_STATUSES.join(", ")}.`,
   };
 };
 
@@ -300,7 +295,7 @@ const create = async (req, res) => {
       franchise_id: body.franchise_id,
       address_id: body.address_id,
       service_price: parseFloat(body.service_price),
-      status: STATUS_PENDING,
+      status: body.partner_id ? "pending" : "new",
       from_date: body.from_date,
       to_date: body.to_date,
       work_hours_per_day: parseFloat(body.work_hours_per_day),
@@ -913,6 +908,66 @@ const getCustomerQuotes = async (req, res) => {
   }
 };
 
+const QUOTE_FIELD_UPDATE_KEYS = [
+  "partner_id",
+  "employee_id",
+  "category_id",
+  "service_id",
+  "franchise_id",
+  "address_id",
+  "service_price",
+  "from_date",
+  "to_date",
+  "work_hours_per_day",
+  "total_work_hours",
+  "work_start_time",
+  "work_end_time",
+  "created_by_id",
+  "quote_description",
+];
+
+const applyQuoteFieldUpdates = (quote, body) => {
+  const previousValues = {};
+
+  for (const key of QUOTE_FIELD_UPDATE_KEYS) {
+    if (body[key] !== undefined) {
+      previousValues[key] = quote[key];
+    }
+  }
+
+  for (const key of QUOTE_FIELD_UPDATE_KEYS) {
+    if (body[key] === undefined) continue;
+
+    if (key === "employee_id" && (body[key] === null || body[key] === "")) {
+      quote.employee_id = null;
+    } else if (key === "created_by_id" && (body[key] === null || body[key] === "")) {
+      quote.created_by_id = null;
+    } else if (
+      ["service_price", "work_hours_per_day", "total_work_hours"].includes(key)
+    ) {
+      quote[key] = parseFloat(body[key]);
+    } else if (key === "quote_description") {
+      quote.quote_description =
+        typeof body[key] === "string" ? body[key].trim() : "";
+    } else {
+      quote[key] = body[key];
+    }
+  }
+
+  return previousValues;
+};
+
+const applyQuoteStatusSideEffects = (quote, body, nextStatus) => {
+  if (nextStatus === "failed") {
+    if (body.rejection_reason !== undefined) {
+      quote.rejection_reason = String(body.rejection_reason).trim();
+    }
+    if (body.cancellation_reason !== undefined) {
+      quote.cancellation_reason = String(body.cancellation_reason).trim();
+    }
+  }
+};
+
 const update = async (req, res) => {
   const { id } = req.params;
 
@@ -927,312 +982,184 @@ const update = async (req, res) => {
       });
     }
 
-    if (quote.status !== STATUS_PENDING) {
+    const body = req.body;
+    const normalizedStored = normalizeQuoteStatus(quote.status, quote);
+    if (normalizedStored && normalizedStored !== quote.status) {
+      quote.status = normalizedStored;
+    }
+    const currentStatus = resolveQuoteStatus(quote);
+    const hasStatusUpdate = body.status !== undefined;
+    const hasFieldUpdates = QUOTE_FIELD_UPDATE_KEYS.some(
+      (key) => body[key] !== undefined
+    );
+
+    if (hasFieldUpdates && !["new", "pending"].includes(currentStatus)) {
       return res.status(409).json({
         success: false,
         status: 409,
-        message: "Only pending quotes can be updated.",
+        message: "Only new or pending quotes can have their details updated.",
       });
     }
 
-    const allowed = [
-      "partner_id",
-      "employee_id",
-      "category_id",
-      "service_id",
-      "franchise_id",
-      "address_id",
-      "service_price",
-      "from_date",
-      "to_date",
-      "work_hours_per_day",
-      "total_work_hours",
-      "work_start_time",
-      "work_end_time",
-      "created_by_id",
-      "quote_description",
-    ];
+    const historyChanges = [];
 
-    const body = req.body;
-    const previousValues = {};
-    for (const key of allowed) {
-      if (body[key] !== undefined) {
-        previousValues[key] = quote[key];
+    if (hasFieldUpdates) {
+      const previousValues = applyQuoteFieldUpdates(quote, body);
+      for (const key of Object.keys(previousValues)) {
+        const change = buildHistoryChange(
+          key,
+          previousValues[key],
+          quote[key]
+        );
+        if (change) historyChanges.push(change);
+      }
+
+      if (
+        currentStatus === "new" &&
+        quote.partner_id &&
+        !hasStatusUpdate
+      ) {
+        historyChanges.push(
+          buildHistoryChange("status", currentStatus, "pending")
+        );
+        quote.status = "pending";
       }
     }
 
-    for (const key of allowed) {
-      if (body[key] !== undefined) {
-        if (key === "employee_id" && (body[key] === null || body[key] === "")) {
-          quote.employee_id = null;
-        } else if (key === "created_by_id" && (body[key] === null || body[key] === "")) {
-          quote.created_by_id = null;
-        } else if (
-          ["service_price", "work_hours_per_day", "total_work_hours"].includes(key)
-        ) {
-          quote[key] = parseFloat(body[key]);
-        } else if (key === "quote_description") {
-          quote.quote_description =
-            typeof body[key] === "string" ? body[key].trim() : "";
-        } else {
-          quote[key] = body[key];
-        }
+    if (hasStatusUpdate) {
+      const nextStatus = normalizeQuoteStatus(body.status, quote);
+      if (!nextStatus) {
+        return res.status(409).json({
+          success: false,
+          status: 409,
+          message: `Invalid status. Use one of: ${QUOTE_STATUSES.join(", ")}.`,
+        });
       }
+
+      const effectiveCurrent =
+        hasFieldUpdates && quote.status === "pending" && currentStatus === "new"
+          ? "pending"
+          : currentStatus;
+
+      if (nextStatus === "success") {
+        if (quote.order_id) {
+          const refreshed = await Quote.findById(quote._id);
+          return res.status(200).json({
+            success: true,
+            status: 200,
+            message: "Quote is already linked to an order.",
+            record: formatQuoteForApi(refreshed),
+            order: {
+              order_id: refreshed.order_id,
+            },
+          });
+        }
+
+        if (effectiveCurrent !== "accepted") {
+          return res.status(409).json({
+            success: false,
+            status: 409,
+            message: "Only accepted quotes can be marked as success (order is created on success).",
+          });
+        }
+
+        const oldStatus = quote.status;
+        const oldOrderId = quote.order_id;
+        const { order, unique_id } = await createOrderFromQuote(quote);
+        const linkedQuote = await Quote.findById(quote._id);
+
+        await appendQuoteHistory(
+          linkedQuote,
+          req,
+          "status_updated",
+          [
+            buildHistoryChange("status", oldStatus, linkedQuote.status),
+            buildHistoryChange("order_id", oldOrderId, linkedQuote.order_id),
+          ],
+          `Status set to success. Order ${unique_id} created.`
+        );
+        await linkedQuote.save();
+
+        return res.status(200).json({
+          success: true,
+          status: 200,
+          message: "Quote updated and order created successfully.",
+          record: formatQuoteForApi(linkedQuote),
+          order: {
+            order_id: order._id,
+            unique_id: order.unique_id || unique_id,
+          },
+        });
+      }
+
+      if (
+        TERMINAL_QUOTE_STATUSES.has(effectiveCurrent) &&
+        nextStatus !== effectiveCurrent
+      ) {
+        return res.status(409).json({
+          success: false,
+          status: 409,
+          message: `Quotes with status "${effectiveCurrent}" cannot be changed.`,
+        });
+      }
+
+      if (
+        !canTransitionQuoteStatus(effectiveCurrent, nextStatus)
+      ) {
+        return res.status(409).json({
+          success: false,
+          status: 409,
+          message: `Cannot change quote status from "${effectiveCurrent}" to "${nextStatus}".`,
+        });
+      }
+
+      const oldStatus = quote.status;
+      const oldRejectionReason = quote.rejection_reason;
+      const oldCancellationReason = quote.cancellation_reason;
+
+      applyQuoteStatusSideEffects(quote, body, nextStatus);
+      quote.status = nextStatus;
+
+      const statusChanges = [
+        buildHistoryChange("status", oldStatus, quote.status),
+      ];
+      if (nextStatus === "failed") {
+        statusChanges.push(
+          buildHistoryChange(
+            "rejection_reason",
+            oldRejectionReason,
+            quote.rejection_reason
+          ),
+          buildHistoryChange(
+            "cancellation_reason",
+            oldCancellationReason,
+            quote.cancellation_reason
+          )
+        );
+      }
+      historyChanges.push(...statusChanges.filter(Boolean));
     }
 
     quote.updated_at = new Date();
-    const changes = Object.keys(previousValues)
-      .map((key) => buildHistoryChange(key, previousValues[key], quote[key]))
-      .filter(Boolean);
-    if (changes.length > 0) {
-      await appendQuoteHistory(quote, req, "updated", changes);
+
+    if (historyChanges.length > 0) {
+      const eventType = hasStatusUpdate ? "status_updated" : "updated";
+      const notes =
+        hasStatusUpdate && body.status
+          ? `Status set to ${normalizeQuoteStatus(body.status, quote)}.`
+          : "";
+      await appendQuoteHistory(quote, req, eventType, historyChanges, notes);
     }
+
     const updated = await quote.save();
 
     return res.status(200).json({
       success: true,
       status: 200,
-      message: "Quote updated successfully",
+      message: hasStatusUpdate
+        ? "Quote status updated successfully"
+        : "Quote updated successfully",
       record: formatQuoteForApi(updated),
-    });
-  } catch (error) {
-    console.error("Error updating quote:", error);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: "Internal server error.",
-    });
-  }
-};
-
-const approve = async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const quote = await Quote.findOne({ _id: id, deleted_at: null });
-
-    if (!quote) {
-      return res.status(404).json({
-        success: false,
-        status: 404,
-        message: "No record found",
-      });
-    }
-
-    if (quote.status !== STATUS_PENDING) {
-      return res.status(409).json({
-        success: false,
-        status: 409,
-        message: "Only pending quotes can be approved.",
-      });
-    }
-
-    const oldStatus = quote.status;
-    quote.status = STATUS_APPROVED;
-    quote.updated_at = new Date();
-    await appendQuoteHistory(quote, req, "approved", [
-      buildHistoryChange("status", oldStatus, quote.status),
-    ]);
-    await quote.save();
-
-    return res.status(200).json({
-      success: true,
-      status: 200,
-      message: "Quote approved successfully",
-      record: formatQuoteForApi(quote),
-    });
-  } catch (error) {
-    console.error("Error approving quote:", error);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: "Internal server error.",
-    });
-  }
-};
-
-const reject = async (req, res) => {
-  const { id } = req.params;
-  const { rejection_reason } = req.body;
-
-  try {
-    const quote = await Quote.findOne({ _id: id, deleted_at: null });
-
-    if (!quote) {
-      return res.status(404).json({
-        success: false,
-        status: 404,
-        message: "No record found",
-      });
-    }
-
-    if (quote.status !== STATUS_PENDING) {
-      return res.status(409).json({
-        success: false,
-        status: 409,
-        message: "Only pending quotes can be rejected.",
-      });
-    }
-
-    const oldStatus = quote.status;
-    const oldRejectionReason = quote.rejection_reason;
-    quote.status = STATUS_REJECTED;
-    if (rejection_reason !== undefined) {
-      quote.rejection_reason = String(rejection_reason).trim();
-    }
-    quote.updated_at = new Date();
-    await appendQuoteHistory(
-      quote,
-      req,
-      "rejected",
-      [
-        buildHistoryChange("status", oldStatus, quote.status),
-        buildHistoryChange(
-          "rejection_reason",
-          oldRejectionReason,
-          quote.rejection_reason
-        ),
-      ],
-      quote.rejection_reason
-    );
-    await quote.save();
-
-    return res.status(200).json({
-      success: true,
-      status: 200,
-      message: "Quote rejected successfully",
-      record: formatQuoteForApi(quote),
-    });
-  } catch (error) {
-    console.error("Error rejecting quote:", error);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: "Internal server error.",
-    });
-  }
-};
-
-const cancelQuote = async (req, res) => {
-  const { id } = req.params;
-  const { cancellation_reason } = req.body;
-
-  try {
-    const quote = await Quote.findOne({ _id: id, deleted_at: null });
-
-    if (!quote) {
-      return res.status(404).json({
-        success: false,
-        status: 404,
-        message: "No record found",
-      });
-    }
-
-    if (quote.status !== STATUS_PENDING && quote.status !== STATUS_APPROVED) {
-      return res.status(409).json({
-        success: false,
-        status: 409,
-        message: "Only pending or approved quotes can be cancelled.",
-      });
-    }
-
-    const oldStatus = quote.status;
-    const oldCancellationReason = quote.cancellation_reason;
-    quote.status = STATUS_CANCELLED;
-    if (cancellation_reason !== undefined) {
-      quote.cancellation_reason = String(cancellation_reason).trim();
-    }
-    quote.updated_at = new Date();
-    await appendQuoteHistory(
-      quote,
-      req,
-      "cancelled",
-      [
-        buildHistoryChange("status", oldStatus, quote.status),
-        buildHistoryChange(
-          "cancellation_reason",
-          oldCancellationReason,
-          quote.cancellation_reason
-        ),
-      ],
-      quote.cancellation_reason
-    );
-    await quote.save();
-
-    return res.status(200).json({
-      success: true,
-      status: 200,
-      message: "Quote cancelled successfully",
-      record: formatQuoteForApi(quote),
-    });
-  } catch (error) {
-    console.error("Error cancelling quote:", error);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: "Internal server error.",
-    });
-  }
-};
-
-const convertToOrder = async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const quote = await Quote.findOne({ _id: id, deleted_at: null });
-
-    if (!quote) {
-      return res.status(404).json({
-        success: false,
-        status: 404,
-        message: "No record found",
-      });
-    }
-
-    if (quote.status !== STATUS_APPROVED) {
-      return res.status(409).json({
-        success: false,
-        status: 409,
-        message: "Only approved quotes can be converted to an order.",
-      });
-    }
-
-    if (quote.order_id) {
-      return res.status(409).json({
-        success: false,
-        status: 409,
-        message: "Quote has already been converted.",
-      });
-    }
-
-    const oldStatus = quote.status;
-    const oldOrderId = quote.order_id;
-
-    const { order, unique_id } = await createOrderFromQuote(quote);
-
-    const linkedQuote = await Quote.findById(quote._id);
-    await appendQuoteHistory(
-      linkedQuote,
-      req,
-      "converted",
-      [
-        buildHistoryChange("status", oldStatus, linkedQuote.status),
-        buildHistoryChange("order_id", oldOrderId, linkedQuote.order_id),
-      ],
-      `Converted to order ${unique_id}.`
-    );
-    await linkedQuote.save();
-
-    return res.status(200).json({
-      success: true,
-      status: 200,
-      message: "Quote converted to order successfully.",
-      record: {
-        order_id: order._id,
-        unique_id: order.unique_id || unique_id,
-        quote_id: linkedQuote._id,
-        quote_sequence_id: linkedQuote.quote_sequence_id,
-      },
     });
   } catch (error) {
     if (error instanceof OrderCreationError) {
@@ -1249,7 +1176,7 @@ const convertToOrder = async (req, res) => {
         message: "Invalid user_id on service_items.",
       });
     }
-    console.error("Error converting quote:", error);
+    console.error("Error updating quote:", error);
     return res.status(500).json({
       success: false,
       status: 500,
@@ -1303,9 +1230,5 @@ module.exports = {
   getById,
   getCustomerQuotes,
   update,
-  approve,
-  reject,
-  cancelQuote,
-  convertToOrder,
   deleteQuote,
 };

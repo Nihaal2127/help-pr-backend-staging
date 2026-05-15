@@ -5,6 +5,11 @@ const User = require('../models/user');
 const Franchise = require('../models/franchise');
 const { applyPagination, applyDropDownFilter } = require('../utils/pagination');
 const { parseBoolean } = require('../utils/parser');
+const {
+    pickFranchiseIdRaw,
+    parseFranchiseObjectId,
+    assertFranchiseAccess,
+} = require('../utils/franchise_access');
 
 const escapeRegExp = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const areaNameExistsInCity = (trimmedName, cityObjectId) => ({
@@ -145,22 +150,30 @@ const listAreas = async (query, authUser) => {
             }
             const areaIds = await getMyFranchiseAreaIds(authUser.id);
             filter._id = { $in: areaIds };
-        } else if (
-            query.franchise_id !== undefined &&
-            query.franchise_id !== null &&
-            String(query.franchise_id).trim() !== ''
-        ) {
-            const parsedFranchise = parseObjectId(query.franchise_id, 'franchise_id');
-            if (!parsedFranchise.ok) return fail(400, parsedFranchise.message);
-            const franchise = await Franchise.findOne({
-                _id: parsedFranchise.oid,
-                deleted_at: null,
-            })
-                .select('area_id')
-                .lean();
-            if (!franchise) return fail(404, 'Franchise not found.');
-            const areaIds = collectFranchiseAreaIds([franchise]);
-            filter._id = { $in: areaIds };
+        } else {
+            const franchiseIdRaw = pickFranchiseIdRaw(query);
+            if (franchiseIdRaw) {
+                const parsedFranchise = parseFranchiseObjectId(franchiseIdRaw, 'franchise_id');
+                if (!parsedFranchise.ok) return fail(400, parsedFranchise.message);
+
+                if (!authUser || authUser.id == null) {
+                    return fail(401, 'Unauthorized.');
+                }
+                const access = await assertFranchiseAccess(authUser, parsedFranchise.oid);
+                if (!access.ok) {
+                    return fail(access.status, access.message);
+                }
+
+                const franchise = await Franchise.findOne({
+                    _id: parsedFranchise.oid,
+                    deleted_at: null,
+                })
+                    .select('area_id')
+                    .lean();
+                if (!franchise) return fail(404, 'Franchise not found.');
+                const areaIds = collectFranchiseAreaIds([franchise]);
+                filter._id = { $in: areaIds };
+            }
         }
         const areaNameSearch = query.areaname || query.name;
         const trimmedAreaSearch =

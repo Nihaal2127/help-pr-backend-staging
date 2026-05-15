@@ -68,6 +68,72 @@ const combineDateAndTime = (dateValue, timeStr) => {
   return d;
 };
 
+const parseQuoteFilterDate = (value) => {
+  if (value === undefined || value === null) return null;
+  const trimmed = String(value).trim();
+  if (trimmed === "") return null;
+  const d = new Date(trimmed);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+const startOfUtcDay = (date) => {
+  const d = new Date(date);
+  d.setUTCHours(0, 0, 0, 0);
+  return d;
+};
+
+const endOfUtcDay = (date) => {
+  const d = new Date(date);
+  d.setUTCHours(23, 59, 59, 999);
+  return d;
+};
+
+/** getAll query from_date / to_date — quotes whose schedule overlaps the filter window. */
+const buildQuoteDateRangeFilter = (query) => {
+  const hasFrom =
+    query.from_date !== undefined &&
+    query.from_date !== null &&
+    String(query.from_date).trim() !== "";
+  const hasTo =
+    query.to_date !== undefined &&
+    query.to_date !== null &&
+    String(query.to_date).trim() !== "";
+
+  if (!hasFrom && !hasTo) {
+    return { ok: true, filter: {} };
+  }
+
+  const parsedFrom = hasFrom ? parseQuoteFilterDate(query.from_date) : null;
+  const parsedTo = hasTo ? parseQuoteFilterDate(query.to_date) : null;
+
+  if (hasFrom && !parsedFrom) {
+    return { ok: false, message: "Invalid from_date filter." };
+  }
+  if (hasTo && !parsedTo) {
+    return { ok: false, message: "Invalid to_date filter." };
+  }
+
+  const rangeFrom = parsedFrom ? startOfUtcDay(parsedFrom) : null;
+  const rangeTo = parsedTo ? endOfUtcDay(parsedTo) : null;
+
+  if (rangeFrom && rangeTo && rangeTo < rangeFrom) {
+    return {
+      ok: false,
+      message: "to_date filter must be on or after from_date filter.",
+    };
+  }
+
+  const filter = {};
+  if (rangeFrom) {
+    filter.to_date = { $gte: rangeFrom };
+  }
+  if (rangeTo) {
+    filter.from_date = { $lte: rangeTo };
+  }
+
+  return { ok: true, filter };
+};
+
 const buildOrderStatusInfo = () => [
   { status: 1, updated_at: Date.now() },
   { status: 2, updated_at: null },
@@ -270,8 +336,18 @@ const getAll = async (req, res) => {
         : "";
     const regex = searchTerm ? new RegExp(searchTerm, "i") : null;
 
+    const dateRangeResult = buildQuoteDateRangeFilter(req.query);
+    if (!dateRangeResult.ok) {
+      return res.status(409).json({
+        success: false,
+        status: 409,
+        message: dateRangeResult.message,
+      });
+    }
+
     const baseFilter = {
       deleted_at: null,
+      ...dateRangeResult.filter,
       ...(req.query.status !== undefined && !Number.isNaN(status) && { status }),
       ...(req.query.user_id &&
         mongoose.Types.ObjectId.isValid(req.query.user_id) && {

@@ -14,6 +14,10 @@ const { getOrderId, getQuoteSequenceId } = require("../helper/id_generator");
 const { checkObjectIdExists } = require("../validator/id_validator");
 const { sanitizeInput } = require("../validator/search_keyword_validator");
 const { recalculateOrderTotals } = require("../utils/order_financials");
+const {
+  attachPartnerServiceToQuote,
+  attachPartnerServiceToQuotes,
+} = require("../utils/quote_partner_service");
 
 const STATUS_PENDING = 1;
 const STATUS_APPROVED = 2;
@@ -836,11 +840,6 @@ const getById = async (req, res) => {
           select:
             "name category_id desc image_url approval_status is_request is_active rejection_reason",
         },
-        {
-          path: "service_id",
-          select:
-            "name service_id desc image_url price approval_status is_request is_active rejection_reason",
-        },
         { path: "franchise_id", select: "name city_name state_name" },
         {
           path: "address_id",
@@ -861,6 +860,8 @@ const getById = async (req, res) => {
         message: "No record found",
       });
     }
+
+    await attachPartnerServiceToQuote(quote);
 
     res.status(200).json({
       success: true,
@@ -917,11 +918,6 @@ const getCustomerQuotes = async (req, res) => {
         select:
           "name category_id desc image_url approval_status is_request is_active rejection_reason",
       },
-      {
-        path: "service_id",
-        select:
-          "name service_id desc image_url price approval_status is_request is_active rejection_reason",
-      },
       { path: "franchise_id", select: "name city_name state_name" },
       {
         path: "address_id",
@@ -936,6 +932,8 @@ const getCustomerQuotes = async (req, res) => {
 
     const { data: quotes, totalCount, totalPages, currentPage } =
       await applyPagination(Quote, filter, page, limit, sort, {}, customerQuotePopulate);
+
+    await attachPartnerServiceToQuotes(quotes);
 
     res.status(200).json({
       success: true,

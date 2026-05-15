@@ -62,9 +62,9 @@ OPTIONAL — franchise scope
 FRANCHISE PARAMETER — WHAT CHANGES PER "type"
 --------------------------------------------------------------------------------
 
-  When franchise / franchise_id is OMITTED: behaviour is the previous “global”
-  or caller-scoped logic (e.g. franchise admin sees only their franchise for
-  some modules without sending the id).
+  When franchise / franchise_id is OMITTED: behaviour is global or caller-scoped
+  depending on "type" (e.g. type 2 service-management uses global Category/Service
+  counts; type 2 no longer auto-scopes franchise admins without sending the id).
 
   When franchise / franchise_id is SENT (and access OK):
 
@@ -72,7 +72,10 @@ FRANCHISE PARAMETER — WHAT CHANGES PER "type"
      Counts only that franchise’s state, city, and linked areas.
 
   2  service-management
-     Category/service counts use users belonging to that franchise (requested_by).
+     Same category/service fields as my-franchise (global catalogue totals,
+     mapping-based active/inactive, requested_* from franchise users) — no
+     employees or areas. If franchise is omitted, counts are global Category/Service
+     rows (is_request / is_active), same as the former unscoped service-management.
 
   3  user-management
      User counts filtered by user.franchise_id = that franchise.

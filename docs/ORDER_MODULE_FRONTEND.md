@@ -76,7 +76,9 @@ Order (1) ──has──▶ service_items[] ──▶ OrderService (1 per order
 | `work_start_time`, `work_end_time` | Strings |
 | `service_price` | Mirror / base service price |
 | `order_date` | Fitting / primary date |
-| `customer_description`, `rejection_reason` | Text |
+| `customer_description`, `rejection_reason` | Text (legacy / extra customer notes) |
+| **`order_description`** | Free-text summary of the job — same role as **`quote.quote_description`** on quotes |
+| **`quote_id`** | Reference to **`quote`** when the order was created from a quote (**`convertToOrder`** sets this); populated in **`GET /api/order/get/:id`** as **`quote_info`** |
 
 ### Money and payment (order-level)
 
@@ -120,7 +122,13 @@ Prefix **`/api/order`** unless noted.
 |--------|------|-------------|
 | POST | `/api/order/create` | Create order + exactly one `order_service` |
 | GET | `/api/order/get/:id` | Full order detail (populated + `additional_charges` + `order_payments`) |
-| GET | `/api/order/getAll` | Paginated list — see **§ getAll query parameters** below |
+| GET | `/api/order/getAll` | Paginated list — see **getAll query parameters** below |
+| GET | `/api/order/getCustomerOrder` | Customer orders — **query** `user_id` required |
+| PUT | `/api/order/update/:id` | Update `order_status`, `is_paid` (and sync `is_paid` to non-cancelled line items) |
+| PUT | `/api/order/serviceUpdate/:orderServiceId` | Update line item fields (see middleware) |
+| PUT | `/api/order/cancleService/:orderId` | Cancel one line — body `service_items_id` |
+| PUT | `/api/order/cancle/:id` | Cancel whole order — body `cancellation_reasone` |
+| DELETE | `/api/order/delete/:id` | Soft-delete order (`deleted_at`) |
 
 #### `GET /api/order/getAll` query parameters
 
@@ -129,20 +137,14 @@ Prefix **`/api/order`** unless noted.
 | `page`, `limit` | Pagination (defaults 1, 10) |
 | `order_status` | Filter by numeric order status (1–4) |
 | `is_paid` | `true` / `false` |
-| **`search`** | Free-text search (sanitized), same role as quotes — matches `unique_id`, `user_unique_id`, address, comments, transaction/payment ids, discount code, customer description, linked **user / partner / employee / created_by** names & codes & email & phone, **category** name/code, **city** name, **franchise** name |
+| **`search`** | Free-text search (sanitized), same role as quotes — matches `unique_id`, `user_unique_id`, address, comments, **`order_description`**, transaction/payment ids, discount code, customer description, linked **quote** (`quote_sequence_id`, `quote_description` when `quote_id` is set), **user / partner / employee / created_by** names & codes & email & phone, **category** name/code, **city** name, **franchise** name |
 | `keyword` | **Legacy alias** for `search` (if `search` is empty) |
-| **`sort_by`** | One of: `created_at`, `updated_at`, `order_date`, `order_status`, `total_price`, `sub_total`, `unique_id`, `is_paid`, `tax`, `min_deposit` (invalid values fall back to `created_at`) |
+| **`sort_by`** | One of: `created_at`, `updated_at`, `order_date`, `order_status`, `total_price`, `sub_total`, `unique_id`, `is_paid`, `tax`, `min_deposit`, **`order_description`** (invalid values fall back to `created_at`) |
 | **`sort_order`** | `asc` or `desc` (preferred for string sort fields) |
 | `sort` | Legacy numeric direction: **`1`** = ascending, anything else = descending (used when `sort_order` is omitted; same as quotes) |
 | `user_id`, `partner_id`, `employee_id`, `franchise_id`, `city_id`, `category_id` | Optional ObjectId filters (same idea as quote list filters) |
 
 List responses use **case-insensitive collation** for sort (locale `en`, strength 2), matching quotes. Each record includes **`city_name`**, **`category_name`**, **`user_name`**, **`partner_name`** for display.
-| GET | `/api/order/getCustomerOrder` | Customer orders — **query** `user_id` required |
-| PUT | `/api/order/update/:id` | Update `order_status`, `is_paid` (and sync `is_paid` to non-cancelled line items) |
-| PUT | `/api/order/serviceUpdate/:orderServiceId` | Update line item fields (see middleware) |
-| PUT | `/api/order/cancleService/:orderId` | Cancel one line — body `service_items_id` |
-| PUT | `/api/order/cancle/:id` | Cancel whole order — body `cancellation_reasone` |
-| DELETE | `/api/order/delete/:id` | Soft-delete order (`deleted_at`) |
 
 > **Note:** `getCustomerOrderDetails` exists in `order_controller.js` but is **not** registered on `order_routes.js` today. Use **`GET /api/order/get/:id`** (or wire the handler if you need SOS-style `unique_id` lookup separately).
 
@@ -207,7 +209,11 @@ Top-level fields validated by **`createOrderMiddleware`** (in addition to **`ser
 
 **`service_items[0]`** must include (among others validated): `user_id`, `category_id`, `service_id`, `service_date`, `service_from_time`, `service_to_time`, price fields (`sub_total`, `tax`, `service_price`, fees, `partner_earning`, `total_price`, `admin_earning`), and **`partner_id`** when `type === 1`.
 
-**Optional order extensions** (stored if sent): `partner_id`, `employee_id`, `franchise_id`, `address_id`, `service_id`, `from_date`, `to_date`, `work_*`, `service_price`, `customer_description`, `rejection_reason`, `admin_commission`, `discount_percent`, `discount_code`, `discount_reason`, `min_deposit`, `payment_schedule_type`, `customer_payment_method`.
+**Optional order extensions** (stored if sent): `partner_id`, `employee_id`, `franchise_id`, `address_id`, `service_id`, `from_date`, `to_date`, `work_*`, `service_price`, `customer_description`, **`order_description`**, **`quote_id`** (must reference a non-deleted quote with no `order_id` yet and not already used on another order), `rejection_reason`, `admin_commission`, `discount_percent`, `discount_code`, `discount_reason`, `min_deposit`, `payment_schedule_type`, `customer_payment_method`.
+
+When **`quote_id`** is sent and **`order_description`** is omitted, the server copies **`quote.quote_description`** into **`order_description`** if present.
+
+**Quote conversion:** `POST /api/quote/.../convert` sets **`quote_id`** to the source quote and **`order_description`** from **`quote.quote_description`** (and keeps **`customer_description`** in sync with that text for older clients).
 
 **Razorpay create:** `payment_mode_id === "2"` requires **`name`**, **`email`**, **`contact`** on the body for the payment link.
 
@@ -217,7 +223,7 @@ Top-level fields validated by **`createOrderMiddleware`** (in addition to **`ser
 
 `GET /api/order/get/:id` returns **`record`** with:
 
-- Flat order fields + populated **`user_info`**, **`city_info`**, **`category_info`**, **`partner_info`**, **`employee_info`**, **`franchise_info`**, **`address_info`**, **`service_info`**
+- Flat order fields + populated **`user_info`**, **`city_info`**, **`category_info`**, **`partner_info`**, **`employee_info`**, **`franchise_info`**, **`address_info`**, **`service_info`**, **`quote_info`** (when `quote_id` is set)
 - **`service_items`**: each element includes **`service_info`** and optional **`partner_info`**
 - **`additional_charges`**: array from `order_additional_charge`
 - **`order_payments`**: array from `order_payment`

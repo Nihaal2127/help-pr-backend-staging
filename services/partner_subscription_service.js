@@ -60,11 +60,24 @@ const loadActivePlan = async (planOid) => {
     });
 };
 
+const DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
 const parseOptionalDateQuery = (raw, fieldLabel) => {
     if (raw === undefined || raw === null || String(raw).trim() === '') {
         return { ok: true, instant: null };
     }
-    const d = new Date(raw);
+    const s = String(raw).trim();
+    const dateOnly = s.match(DATE_ONLY_RE);
+    if (dateOnly) {
+        const instant = new Date(
+            Date.UTC(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+        );
+        if (Number.isNaN(instant.getTime())) {
+            return { ok: false, message: `${fieldLabel} must be a valid date.` };
+        }
+        return { ok: true, instant };
+    }
+    const d = new Date(s);
     if (Number.isNaN(d.getTime())) {
         return { ok: false, message: `${fieldLabel} must be a valid date.` };
     }
@@ -83,7 +96,66 @@ const endOfUtcDay = (instant) => {
     return x;
 };
 
+/** Filters on subscription started_at: from-only (open end), to-only (open start), or closed range. */
+const applyStartedAtDateFilter = (match, fromStart, toEnd) => {
+    if (fromStart && toEnd) {
+        match.started_at = { $gte: fromStart, $lte: toEnd };
+        return;
+    }
+    if (fromStart) {
+        match.started_at = { $gte: fromStart };
+        return;
+    }
+    if (toEnd) {
+        match.started_at = { $lte: toEnd };
+    }
+};
+
 const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const emptyPartnerSubscriptionList = (page) =>
+    ok(200, {
+        message: 'Partner subscription list fetched successfully.',
+        totalItems: 0,
+        totalPages: 0,
+        currentPage: page,
+        records: [],
+    });
+
+/** Narrow match.partner_id to partners in candidateIds; returns false if intersection is empty. */
+const restrictPartnerIds = (match, candidateIds) => {
+    if (!candidateIds.length) {
+        return false;
+    }
+    const candidateSet = new Set(candidateIds.map((id) => String(id)));
+
+    if (!match.partner_id) {
+        match.partner_id = { $in: candidateIds };
+        return true;
+    }
+
+    let existingIds;
+    if (match.partner_id instanceof mongoose.Types.ObjectId) {
+        existingIds = [String(match.partner_id)];
+    } else if (match.partner_id.$in) {
+        existingIds = match.partner_id.$in.map((id) => String(id));
+    } else {
+        existingIds = [String(match.partner_id)];
+    }
+
+    const intersected = existingIds.filter((id) => candidateSet.has(id));
+    if (!intersected.length) {
+        return false;
+    }
+    if (intersected.length === 1) {
+        match.partner_id = new mongoose.Types.ObjectId(intersected[0]);
+    } else {
+        match.partner_id = {
+            $in: intersected.map((id) => new mongoose.Types.ObjectId(id)),
+        };
+    }
+    return true;
+};
 
 const listPartnerSubscriptions = async (query) => {
     try {
@@ -106,6 +178,50 @@ const listPartnerSubscriptions = async (query) => {
             match.subscription_plan_id = p.oid;
         }
 
+        const rawPlanName = query.plan_name ?? query.subscription_plan;
+        if (
+            rawPlanName !== undefined &&
+            rawPlanName !== null &&
+            String(rawPlanName).trim() !== ''
+        ) {
+            const planName = String(rawPlanName).trim().toLowerCase();
+            if (!SubscriptionPlan.PLAN_NAMES.includes(planName)) {
+                return fail(
+                    400,
+                    `plan_name must be one of: ${SubscriptionPlan.PLAN_NAMES.join(', ')}.`
+                );
+            }
+            const planIds = await SubscriptionPlan.find({
+                plan_name: planName,
+                deleted_at: null,
+            }).distinct('_id');
+            if (!planIds.length) {
+                return emptyPartnerSubscriptionList(page);
+            }
+            if (match.subscription_plan_id) {
+                const fixedPlanId = match.subscription_plan_id;
+                const matchesPlan = planIds.some((id) => id.equals(fixedPlanId));
+                if (!matchesPlan) {
+                    return emptyPartnerSubscriptionList(page);
+                }
+            } else {
+                match.subscription_plan_id = { $in: planIds };
+            }
+        }
+
+        if (query.area_id) {
+            const pArea = parseObjectId(query.area_id, 'area_id');
+            if (!pArea.ok) return fail(400, pArea.message);
+            const areaPartnerIds = await User.find({
+                type: USER_TYPE_PARTNER,
+                deleted_at: null,
+                area_id: pArea.oid,
+            }).distinct('_id');
+            if (!restrictPartnerIds(match, areaPartnerIds)) {
+                return emptyPartnerSubscriptionList(page);
+            }
+        }
+
         const fromParsed = parseOptionalDateQuery(query.from_date, 'from_date');
         if (!fromParsed.ok) return fail(400, fromParsed.message);
         const toParsed = parseOptionalDateQuery(query.to_date, 'to_date');
@@ -118,13 +234,7 @@ const listPartnerSubscriptions = async (query) => {
             return fail(400, 'from_date must be on or before to_date.');
         }
 
-        if (fromStart && toEnd) {
-            match.started_at = { $gte: fromStart, $lte: toEnd };
-        } else if (fromStart) {
-            match.started_at = { $gte: fromStart };
-        } else if (toEnd) {
-            match.started_at = { $lte: toEnd };
-        }
+        applyStartedAtDateFilter(match, fromStart, toEnd);
 
         const rawSearch = query.search ?? query.partner_name;
         if (rawSearch !== undefined && rawSearch !== null && String(rawSearch).trim() !== '') {
@@ -134,29 +244,8 @@ const listPartnerSubscriptions = async (query) => {
                 deleted_at: null,
                 name: { $regex: pattern, $options: 'i' },
             }).distinct('_id');
-            if (matchedPartnerIds.length === 0) {
-                return ok(200, {
-                    message: 'Partner subscription list fetched successfully.',
-                    totalItems: 0,
-                    totalPages: 0,
-                    currentPage: page,
-                    records: [],
-                });
-            }
-            if (match.partner_id) {
-                const fixedPid = match.partner_id;
-                const matchesSearch = matchedPartnerIds.some((id) => id.equals(fixedPid));
-                if (!matchesSearch) {
-                    return ok(200, {
-                        message: 'Partner subscription list fetched successfully.',
-                        totalItems: 0,
-                        totalPages: 0,
-                        currentPage: page,
-                        records: [],
-                    });
-                }
-            } else {
-                match.partner_id = { $in: matchedPartnerIds };
+            if (!restrictPartnerIds(match, matchedPartnerIds)) {
+                return emptyPartnerSubscriptionList(page);
             }
         }
 

@@ -85,6 +85,200 @@ function attachAreaNamesToAddresses(addresses, areaMap) {
   }));
 }
 
+const USER_TYPE_FRANCHISE_ADMIN = 1;
+const USER_TYPE_PARTNER = 2;
+const USER_TYPE_EMPLOYEE = 3;
+const USER_TYPE_CUSTOMER = 4;
+const USER_TYPE_SUPER_ADMIN = 5;
+const USER_TYPE_STAFF = 6;
+
+function collectFranchiseAreaIds(franchiseLean) {
+  const seen = new Set();
+  const oids = [];
+  if (!franchiseLean || franchiseLean.area_id == null) return oids;
+  const arr = Array.isArray(franchiseLean.area_id) ? franchiseLean.area_id : [franchiseLean.area_id];
+  for (const item of arr) {
+    let oid = null;
+    if (item instanceof mongoose.Types.ObjectId) {
+      oid = item;
+    } else if (item && typeof item === 'object' && item._id) {
+      oid = item._id;
+    } else if (typeof item === 'string' && /^[a-fA-F0-9]{24}$/i.test(item.trim())) {
+      oid = new mongoose.Types.ObjectId(item.trim());
+    }
+    if (!oid) continue;
+    const k = oid.toString();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    oids.push(oid);
+  }
+  return oids;
+}
+
+/** Type-4 user ids with an address pincode in the franchise's linked areas. */
+async function getFranchiseCustomerUserIdsByPincode(franchiseLean) {
+  const areaIds = collectFranchiseAreaIds(franchiseLean);
+  if (areaIds.length === 0) return [];
+
+  const areas = await Area.find({
+    _id: { $in: areaIds },
+    deleted_at: null,
+  })
+    .select('pincodes')
+    .lean();
+
+  const allowedPins = [];
+  const pinSeen = new Set();
+  for (const a of areas) {
+    for (const p of a.pincodes || []) {
+      const t = String(p).trim();
+      if (!t || pinSeen.has(t)) continue;
+      pinSeen.add(t);
+      allowedPins.push(t);
+    }
+  }
+  if (allowedPins.length === 0) return [];
+
+  const rows = await Address.aggregate([
+    {
+      $match: {
+        deleted_at: null,
+        user_id: { $exists: true, $ne: null },
+      },
+    },
+    {
+      $addFields: {
+        pinNorm: {
+          $trim: {
+            input: {
+              $toString: { $ifNull: ['$pincode', ''] },
+            },
+          },
+        },
+      },
+    },
+    { $match: { pinNorm: { $in: allowedPins } } },
+    { $group: { _id: '$user_id' } },
+  ]);
+
+  return rows.map((r) => r._id).filter(Boolean);
+}
+
+function resolveEffectiveFranchiseOid(caller, franchiseIdFilter) {
+  if ([USER_TYPE_SUPER_ADMIN, USER_TYPE_STAFF].includes(caller.type) && franchiseIdFilter) {
+    return new mongoose.Types.ObjectId(franchiseIdFilter);
+  }
+  if ([USER_TYPE_FRANCHISE_ADMIN, USER_TYPE_EMPLOYEE].includes(caller.type) && caller.franchise_id) {
+    return caller.franchise_id;
+  }
+  return null;
+}
+
+function buildUserListRoleFilter(caller, { franchiseIdFilter, type, partnerListVerificationStatus }) {
+  if ([USER_TYPE_PARTNER, USER_TYPE_CUSTOMER].includes(caller.type)) {
+    return {
+      ok: false,
+      status: 403,
+      message: 'You are not allowed to access users list.',
+    };
+  }
+  if (![USER_TYPE_FRANCHISE_ADMIN, USER_TYPE_EMPLOYEE, USER_TYPE_SUPER_ADMIN, USER_TYPE_STAFF].includes(caller.type)) {
+    return {
+      ok: false,
+      status: 403,
+      message: 'You are not allowed to access users list.',
+    };
+  }
+
+  if ([USER_TYPE_SUPER_ADMIN, USER_TYPE_STAFF].includes(caller.type)) {
+    if (franchiseIdFilter) {
+      if (!mongoose.Types.ObjectId.isValid(franchiseIdFilter)) {
+        return {
+          ok: false,
+          status: 400,
+          message: 'franchise_id must be a valid MongoDB ObjectId.',
+        };
+      }
+      return {
+        ok: true,
+        roleFilter: { franchise_id: new mongoose.Types.ObjectId(franchiseIdFilter) },
+      };
+    }
+    return { ok: true, roleFilter: {} };
+  }
+
+  if (
+    franchiseIdFilter &&
+    caller.franchise_id &&
+    String(franchiseIdFilter) !== String(caller.franchise_id)
+  ) {
+    return {
+      ok: false,
+      status: 403,
+      message: 'You are not allowed to view users for this franchise.',
+    };
+  }
+
+  const allowedTypes = [1, 2, 3, 4];
+  if (Number.isInteger(type) && !allowedTypes.includes(type)) {
+    return {
+      ok: false,
+      status: 403,
+      message: 'You are not allowed to access this user type.',
+    };
+  }
+
+  const callerFranchise = caller.franchise_id ?? null;
+  const pendingPartnerList =
+    type === USER_TYPE_PARTNER &&
+    partnerListVerificationStatus === 1 &&
+    callerFranchise != null;
+
+  if (pendingPartnerList) {
+    return {
+      ok: true,
+      roleFilter: {
+        type: { $in: allowedTypes },
+        $or: [
+          { franchise_id: callerFranchise },
+          { franchise_id: null },
+          { franchise_id: { $exists: false } },
+        ],
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    roleFilter: {
+      type: { $in: allowedTypes },
+      franchise_id: callerFranchise,
+    },
+  };
+}
+
+async function applyType4FranchiseScope(roleFilter, franchiseOid) {
+  const franchise = await Franchise.findOne({ _id: franchiseOid, deleted_at: null })
+    .select('area_id')
+    .lean();
+  if (!franchise) {
+    return { ok: false, status: 404, message: 'Franchise not found.' };
+  }
+
+  const pincodeUserIds = await getFranchiseCustomerUserIdsByPincode(franchise);
+  const { franchise_id, ...restRole } = roleFilter;
+  return {
+    ok: true,
+    roleFilter: {
+      ...restRole,
+      $or: [
+        { franchise_id: franchiseOid },
+        { _id: { $in: pincodeUserIds } },
+      ],
+    },
+  };
+}
+
 /** GET /user/getAll ?is_verified= for type=2. Omitted → verified only (2), matching previous hardcoded filter. */
 function resolvePartnerListVerificationStatus(isVerifiedRaw) {
   if (isVerifiedRaw === undefined || isVerifiedRaw === null || String(isVerifiedRaw).trim() === '') {
@@ -563,16 +757,10 @@ const getAll = async (req, res) => {
       });
     }
 
-    const CALLER_TYPE_ADMIN = 1;
-    const CALLER_TYPE_PARTNER = 2;
-    const CALLER_TYPE_EMPLOYEE = 3;
-    const CALLER_TYPE_USER = 4;
-    const CALLER_TYPE_SUPER_ADMIN = 5;
-    const CALLER_TYPE_STAFF = 6;
     const franchiseIdFilter = typeof req.query.franchise_id === 'string' ? req.query.franchise_id.trim() : null;
 
     let partnerListVerificationStatus;
-    if (type === 2) {
+    if (type === USER_TYPE_PARTNER) {
       const vr = resolvePartnerListVerificationStatus(req.query.is_verified);
       if (!vr.ok) {
         return res.status(400).json({
@@ -584,75 +772,32 @@ const getAll = async (req, res) => {
       partnerListVerificationStatus = vr.verification_status;
     }
 
-    let roleFilter = {};
-    if ([CALLER_TYPE_SUPER_ADMIN, CALLER_TYPE_STAFF].includes(caller.type)) {
-      if (franchiseIdFilter) {
-        if (!mongoose.Types.ObjectId.isValid(franchiseIdFilter)) {
-          return res.status(400).json({
-            success: false,
-            status: 400,
-            message: 'franchise_id must be a valid MongoDB ObjectId.',
-          });
-        }
-        roleFilter = { franchise_id: new mongoose.Types.ObjectId(franchiseIdFilter) };
-      } else {
-        roleFilter = {};
-      }
-    } else if ([CALLER_TYPE_ADMIN, CALLER_TYPE_EMPLOYEE].includes(caller.type)) {
-      // franchise_id query is ignored for franchise admin/employee; scope is always caller.franchise_id
-      if (
-        franchiseIdFilter &&
-        caller.franchise_id &&
-        String(franchiseIdFilter) !== String(caller.franchise_id)
-      ) {
-        return res.status(403).json({
-          success: false,
-          status: 403,
-          message: 'You are not allowed to view users for this franchise.',
-        });
-      }
-      const allowedTypes = [1, 2, 3, 4];
-      if (Number.isInteger(type) && !allowedTypes.includes(type)) {
-        return res.status(403).json({
-          success: false,
-          status: 403,
-          message: 'You are not allowed to access this user type.',
-        });
-      }
-      const callerFranchise = caller.franchise_id ?? null;
-      const pendingPartnerList =
-        type === 2 &&
-        partnerListVerificationStatus === 1 &&
-        callerFranchise != null;
-      if (pendingPartnerList) {
-        roleFilter = {
-          type: { $in: allowedTypes },
-          $or: [
-            { franchise_id: callerFranchise },
-            { franchise_id: null },
-            { franchise_id: { $exists: false } },
-          ],
-        };
-      } else {
-        roleFilter = {
-          type: { $in: allowedTypes },
-          franchise_id: callerFranchise,
-        };
-      }
-    } else if ([CALLER_TYPE_PARTNER, CALLER_TYPE_USER].includes(caller.type)) {
-      return res.status(403).json({
+    const roleResult = buildUserListRoleFilter(caller, {
+      franchiseIdFilter,
+      type,
+      partnerListVerificationStatus,
+    });
+    if (!roleResult.ok) {
+      return res.status(roleResult.status).json({
         success: false,
-        status: 403,
-        message: 'You are not allowed to access users list.',
-      });
-    } else {
-      return res.status(403).json({
-        success: false,
-        status: 403,
-        message: 'You are not allowed to access users list.',
+        status: roleResult.status,
+        message: roleResult.message,
       });
     }
+    let roleFilter = roleResult.roleFilter;
 
+    const effectiveFranchiseOid = resolveEffectiveFranchiseOid(caller, franchiseIdFilter);
+    if (type === USER_TYPE_CUSTOMER && effectiveFranchiseOid) {
+      const type4Scope = await applyType4FranchiseScope(roleFilter, effectiveFranchiseOid);
+      if (!type4Scope.ok) {
+        return res.status(type4Scope.status).json({
+          success: false,
+          status: type4Scope.status,
+          message: type4Scope.message,
+        });
+      }
+      roleFilter = type4Scope.roleFilter;
+    }
 
     const is_active = req.query.is_active !== undefined ? parseBoolean(req.query.is_active) : null;
     const is_blocked = req.query.is_blocked !== undefined ? parseBoolean(req.query.is_blocked) : null;
@@ -837,6 +982,7 @@ const getAll = async (req, res) => {
         row.partner_subscriptions = partnerIdToSubs.get(pid) ?? [];
 
         row.is_verified = verificationStatusToIsVerified(row.verification_status);
+        row.rejected_reasone = row.rejected_reasone ?? '';
       }
 
       return row;
@@ -890,6 +1036,17 @@ const getVerificationAll = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
+    const caller = await User.findOne({ _id: req.user.id, deleted_at: null }).select('type franchise_id');
+
+    if (!caller) {
+      return res.status(401).json({
+        success: false,
+        status: 401,
+        message: 'Invalid token.',
+      });
+    }
+
+    const franchiseIdFilter = typeof req.query.franchise_id === 'string' ? req.query.franchise_id.trim() : null;
 
     const verificationStatusRaw = req.query.verification_status;
     let verificationFilter;
@@ -911,6 +1068,23 @@ const getVerificationAll = async (req, res) => {
       verificationFilter = { verification_status: { $in: [1, 3] } };
     }
 
+    const verificationStatuses =
+      verificationFilter.verification_status?.$in ?? [verificationFilter.verification_status];
+    const includesPendingVerification = verificationStatuses.includes(1);
+
+    const roleResult = buildUserListRoleFilter(caller, {
+      franchiseIdFilter,
+      type: USER_TYPE_PARTNER,
+      partnerListVerificationStatus: includesPendingVerification ? 1 : verificationStatuses[0],
+    });
+    if (!roleResult.ok) {
+      return res.status(roleResult.status).json({
+        success: false,
+        status: roleResult.status,
+        message: roleResult.message,
+      });
+    }
+
     const searchTerm = req.query.keyword ?? req.query.search;
     let regex;
     if (searchTerm) {
@@ -919,7 +1093,8 @@ const getVerificationAll = async (req, res) => {
     }
     const filter = {
       deleted_at: null,
-      type: 2,
+      type: USER_TYPE_PARTNER,
+      ...roleResult.roleFilter,
       ...verificationFilter,
       ...(searchTerm && { name: regex })
     };
@@ -1059,6 +1234,7 @@ const create = async (req, res) => {
       date_of_birth,
       gender,
       experience,
+      rejected_reasone,
     } = req.body;
     const userType = Number(type);
     let resolvedPartnerServicesInput = partner_services;
@@ -1202,6 +1378,10 @@ const create = async (req, res) => {
         experience === undefined || experience === null || String(experience).trim() === ''
           ? null
           : String(experience).trim(),
+      rejected_reasone:
+        rejected_reasone !== undefined && rejected_reasone !== null
+          ? String(rejected_reasone).trim()
+          : '',
     });
 
     if (is_business === true && userType === 2) {
@@ -1481,13 +1661,18 @@ const update = async (req, res) => {
         updateData.verification_status = 2;
         updateData.verified_at = new Date();
         updateData.is_active = true;
+        updateData.rejected_reasone = '';
       } else if (vKey === 'rejected') {
         updateData.verification_status = 3;
         updateData.verified_at = null;
         updateData.is_active = false;
+        if (updateData.rejected_reasone !== undefined && updateData.rejected_reasone !== null) {
+          updateData.rejected_reasone = String(updateData.rejected_reasone).trim();
+        }
       } else if (vKey === 'pending') {
         updateData.verification_status = 1;
         updateData.verified_at = null;
+        updateData.rejected_reasone = '';
       }
       delete updateData.is_verified;
     }
@@ -1618,6 +1803,7 @@ const update = async (req, res) => {
       'verification_status',
       'verification_id',
       'verified_at',
+      'rejected_reasone',
       'provided_service',
       'business_info_id',
       'password',
@@ -1690,6 +1876,13 @@ const update = async (req, res) => {
         no_of_services: service_count_data.no_of_services,
         balance_amount: service_count_data.balance_amount,
         total_amount: service_count_data.total_amount,
+      };
+    }
+    if (Number(updatedUser.type) === 2) {
+      responseRecord = {
+        ...(responseRecord.toObject ? responseRecord.toObject() : responseRecord),
+        is_verified: verificationStatusToIsVerified(updatedUser.verification_status),
+        rejected_reasone: updatedUser.rejected_reasone ?? '',
       };
     }
 
@@ -1830,6 +2023,8 @@ const getById = async (req, res) => {
         .sort({ is_primary: -1, created_at: -1 })
         .lean();
 
+      response.is_verified = verificationStatusToIsVerified(user.verification_status);
+      response.rejected_reasone = user.rejected_reasone ?? '';
     }
     return res.status(200).json({
       success: true,

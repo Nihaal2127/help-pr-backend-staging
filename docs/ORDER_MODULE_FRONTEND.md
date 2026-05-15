@@ -120,7 +120,23 @@ Prefix **`/api/order`** unless noted.
 |--------|------|-------------|
 | POST | `/api/order/create` | Create order + exactly one `order_service` |
 | GET | `/api/order/get/:id` | Full order detail (populated + `additional_charges` + `order_payments`) |
-| GET | `/api/order/getAll` | Paginated list (`page`, `limit`, `order_status`, `is_paid`, `keyword`, `sort`) |
+| GET | `/api/order/getAll` | Paginated list — see **§ getAll query parameters** below |
+
+#### `GET /api/order/getAll` query parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `page`, `limit` | Pagination (defaults 1, 10) |
+| `order_status` | Filter by numeric order status (1–4) |
+| `is_paid` | `true` / `false` |
+| **`search`** | Free-text search (sanitized), same role as quotes — matches `unique_id`, `user_unique_id`, address, comments, transaction/payment ids, discount code, customer description, linked **user / partner / employee / created_by** names & codes & email & phone, **category** name/code, **city** name, **franchise** name |
+| `keyword` | **Legacy alias** for `search` (if `search` is empty) |
+| **`sort_by`** | One of: `created_at`, `updated_at`, `order_date`, `order_status`, `total_price`, `sub_total`, `unique_id`, `is_paid`, `tax`, `min_deposit` (invalid values fall back to `created_at`) |
+| **`sort_order`** | `asc` or `desc` (preferred for string sort fields) |
+| `sort` | Legacy numeric direction: **`1`** = ascending, anything else = descending (used when `sort_order` is omitted; same as quotes) |
+| `user_id`, `partner_id`, `employee_id`, `franchise_id`, `city_id`, `category_id` | Optional ObjectId filters (same idea as quote list filters) |
+
+List responses use **case-insensitive collation** for sort (locale `en`, strength 2), matching quotes. Each record includes **`city_name`**, **`category_name`**, **`user_name`**, **`partner_name`** for display.
 | GET | `/api/order/getCustomerOrder` | Customer orders — **query** `user_id` required |
 | PUT | `/api/order/update/:id` | Update `order_status`, `is_paid` (and sync `is_paid` to non-cancelled line items) |
 | PUT | `/api/order/serviceUpdate/:orderServiceId` | Update line item fields (see middleware) |

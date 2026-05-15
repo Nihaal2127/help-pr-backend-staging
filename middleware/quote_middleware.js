@@ -14,12 +14,12 @@ const USER_TYPE_CUSTOMER = 4;
 
 const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-const MAX_CUSTOMER_DESCRIPTION_LEN = 1000;
+const MAX_QUOTE_DESCRIPTION_LEN = 1000;
 
 const getCallerId = (req) =>
   (req && req.user && (req.user.id || req.user._id)) || null;
 
-const canEditCustomerDescription = async (quote, callerId) => {
+const canEditQuoteDescription = async (quote, callerId) => {
   if (!callerId || !quote) return false;
   const callerStr = String(callerId);
 
@@ -87,7 +87,7 @@ const validateCommonFields = async (body, { partial } = { partial: false }) => {
     total_work_hours,
     work_start_time,
     work_end_time,
-    customer_description,
+    quote_description,
   } = body;
 
   if (!partial || user_id !== undefined) {
@@ -190,14 +190,14 @@ const validateCommonFields = async (body, { partial } = { partial: false }) => {
     }
   }
 
-  if (customer_description !== undefined && customer_description !== null) {
-    if (typeof customer_description !== "string") {
-      return { ok: false, message: "customer_description must be a string." };
+  if (quote_description !== undefined && quote_description !== null) {
+    if (typeof quote_description !== "string") {
+      return { ok: false, message: "quote_description must be a string." };
     }
-    if (customer_description.trim().length > MAX_CUSTOMER_DESCRIPTION_LEN) {
+    if (quote_description.trim().length > MAX_QUOTE_DESCRIPTION_LEN) {
       return {
         ok: false,
-        message: `customer_description must be ${MAX_CUSTOMER_DESCRIPTION_LEN} characters or fewer.`,
+        message: `quote_description must be ${MAX_QUOTE_DESCRIPTION_LEN} characters or fewer.`,
       };
     }
   }
@@ -234,7 +234,7 @@ const updateQuoteMiddleware = async (req, res, next) => {
     "work_start_time",
     "work_end_time",
     "created_by_id",
-    "customer_description",
+    "quote_description",
   ]);
 
   const unknown = Object.keys(body).filter((k) => !allowedKeys.has(k));
@@ -272,7 +272,7 @@ const updateQuoteMiddleware = async (req, res, next) => {
   const needsCrossValidation =
     partialBody.from_date !== undefined ||
     partialBody.to_date !== undefined;
-  const needsDescriptionAuth = partialBody.customer_description !== undefined;
+  const needsDescriptionAuth = partialBody.quote_description !== undefined;
 
   if (needsCrossValidation || needsDescriptionAuth) {
     const quoteId = req.params.id;
@@ -294,13 +294,13 @@ const updateQuoteMiddleware = async (req, res, next) => {
 
     if (needsDescriptionAuth) {
       const callerId = getCallerId(req);
-      const allowed = await canEditCustomerDescription(existing, callerId);
+      const allowed = await canEditQuoteDescription(existing, callerId);
       if (!allowed) {
         return res.status(403).json({
           success: false,
           status: 403,
           message:
-            "Only the customer, the assigned employee, or the franchise admin can edit customer_description.",
+            "Only the customer, the assigned employee, or the franchise admin can edit quote_description.",
         });
       }
     }

@@ -3383,7 +3383,7 @@
             },
             "method": "GET",
             "header": [],
-            "description": "Paginated list. Each row **`status`**: new | pending | accepted | success | failed. Query **`status`** filter uses same values (matches getCounts). Also: page, limit, user_id, partner_id, employee_id, franchise_id, category_id, service_id, search, from_date, to_date, include_history, sort_by, sort_order.",
+            "description": "Paginated list. Each row **`status`**: new | pending | accepted | success | failed.\n\n**Auth scope (from JWT, server-enforced):**\n- **Super admin (5) / Staff (6):** all franchises; optional `franchise_id` query narrows.\n- **Franchise admin (1) / Employee (3):** only quotes for their franchise (`user.franchise_id` or franchise where `admin_id` = caller). Other `franchise_id` query → **403**.\n- **Partner / Customer:** **403** — use role-appropriate endpoints.\n\nAlso: page, limit, user_id, partner_id, employee_id, category_id, service_id, search, from_date, to_date, include_history, sort_by, sort_order.",
             "url": "{{base_url}}/api/quote/getAll?page=1&limit=10&status={{quote_status}}&user_id={{user_id}}&partner_id={{partner_id}}&employee_id={{employee_id}}&franchise_id={{franchise_id}}&category_id={{category_id}}&service_id={{service_id}}&search={{search}}&from_date=2026-05-14&to_date=2026-05-14&include_history=false&sort_by=created_at&sort_order=desc"
           }
         },

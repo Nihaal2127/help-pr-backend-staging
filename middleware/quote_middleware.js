@@ -11,10 +11,34 @@ const USER_TYPE_ADMIN = 1;
 const USER_TYPE_PARTNER = 2;
 const USER_TYPE_EMPLOYEE = 3;
 const USER_TYPE_CUSTOMER = 4;
+const USER_TYPE_SUPER_ADMIN = 5;
+const USER_TYPE_STAFF = 6;
 
 const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 const MAX_QUOTE_DESCRIPTION_LEN = 1000;
+
+const FIELD_LABELS = {
+  user_id: "Customer",
+  partner_id: "Partner",
+  employee_id: "Employee",
+  created_by_id: "Created by",
+  category_id: "Category",
+  service_id: "Service",
+  franchise_id: "Franchise",
+  address_id: "Address",
+  service_price: "Service price",
+  from_date: "From date",
+  to_date: "To date",
+  work_hours_per_day: "Work hours per day",
+  total_work_hours: "Total work hours",
+  work_start_time: "Work start time",
+  work_end_time: "Work end time",
+  quote_description: "Quote description",
+};
+
+const fieldLabel = (key) =>
+  FIELD_LABELS[key] || String(key).replace(/_/g, " ");
 
 const getCallerId = (req) =>
   (req && req.user && (req.user.id || req.user._id)) || null;
@@ -37,8 +61,13 @@ const canEditQuoteDescription = async (quote, callerId) => {
   }).select("type franchise_id");
   if (!caller) return false;
 
+  const callerType = Number(caller.type);
+  if (callerType === USER_TYPE_SUPER_ADMIN || callerType === USER_TYPE_STAFF) {
+    return true;
+  }
+
   const isFranchiseAdmin =
-    Number(caller.type) === USER_TYPE_ADMIN &&
+    callerType === USER_TYPE_ADMIN &&
     caller.franchise_id &&
     quote.franchise_id &&
     String(caller.franchise_id) === String(quote.franchise_id);
@@ -91,17 +120,17 @@ const validateCommonFields = async (body, { partial } = { partial: false }) => {
   } = body;
 
   if (!partial || user_id !== undefined) {
-    const ur = await verifyUserType(user_id, USER_TYPE_CUSTOMER, "Customer (user_id)");
+    const ur = await verifyUserType(user_id, USER_TYPE_CUSTOMER, "Customer");
     if (!ur.ok) return ur;
   }
 
   if (!partial || partner_id !== undefined) {
-    const pr = await verifyUserType(partner_id, USER_TYPE_PARTNER, "Partner (partner_id)");
+    const pr = await verifyUserType(partner_id, USER_TYPE_PARTNER, "Partner");
     if (!pr.ok) return pr;
   }
 
   if (employee_id !== undefined && employee_id !== null && employee_id !== "") {
-    const er = await verifyUserType(employee_id, USER_TYPE_EMPLOYEE, "Employee (employee_id)");
+    const er = await verifyUserType(employee_id, USER_TYPE_EMPLOYEE, "Employee");
     if (!er.ok) return er;
   }
 
@@ -135,24 +164,24 @@ const validateCommonFields = async (body, { partial } = { partial: false }) => {
   if (!partial || service_price !== undefined) {
     const sp = parseFloat(service_price);
     if (service_price === undefined || Number.isNaN(sp) || sp < 0) {
-      return { ok: false, message: "service_price must be a number >= 0." };
+      return { ok: false, message: "Service price must be a number greater than or equal to 0." };
     }
   }
 
   if (!partial) {
     const from = parseDateEndOfDay(from_date);
     const to = parseDateEndOfDay(to_date);
-    if (!from) return { ok: false, message: "from_date is required and must be valid." };
-    if (!to) return { ok: false, message: "to_date is required and must be valid." };
-    if (to < from) return { ok: false, message: "to_date must be on or after from_date." };
+    if (!from) return { ok: false, message: "From date is required and must be valid." };
+    if (!to) return { ok: false, message: "To date is required and must be valid." };
+    if (to < from) return { ok: false, message: "To date must be on or after from date." };
   } else {
     if (from_date !== undefined) {
       const from = parseDateEndOfDay(from_date);
-      if (!from) return { ok: false, message: "from_date must be valid." };
+      if (!from) return { ok: false, message: "From date must be valid." };
     }
     if (to_date !== undefined) {
       const to = parseDateEndOfDay(to_date);
-      if (!to) return { ok: false, message: "to_date must be valid." };
+      if (!to) return { ok: false, message: "To date must be valid." };
     }
   }
 
@@ -163,7 +192,7 @@ const validateCommonFields = async (body, { partial } = { partial: false }) => {
       Number.isNaN(wh) ||
       wh <= 0
     ) {
-      return { ok: false, message: "work_hours_per_day must be greater than 0." };
+      return { ok: false, message: "Work hours per day must be greater than 0." };
     }
   }
 
@@ -174,30 +203,30 @@ const validateCommonFields = async (body, { partial } = { partial: false }) => {
       Number.isNaN(tw) ||
       tw <= 0
     ) {
-      return { ok: false, message: "total_work_hours must be greater than 0." };
+      return { ok: false, message: "Total work hours must be greater than 0." };
     }
   }
 
   if (!partial || work_start_time !== undefined) {
     if (!work_start_time || typeof work_start_time !== "string" || !TIME_REGEX.test(work_start_time.trim())) {
-      return { ok: false, message: "work_start_time must be in HH:mm format." };
+      return { ok: false, message: "Work start time must be in HH:mm format." };
     }
   }
 
   if (!partial || work_end_time !== undefined) {
     if (!work_end_time || typeof work_end_time !== "string" || !TIME_REGEX.test(work_end_time.trim())) {
-      return { ok: false, message: "work_end_time must be in HH:mm format." };
+      return { ok: false, message: "Work end time must be in HH:mm format." };
     }
   }
 
   if (quote_description !== undefined && quote_description !== null) {
     if (typeof quote_description !== "string") {
-      return { ok: false, message: "quote_description must be a string." };
+      return { ok: false, message: "Quote description must be a string." };
     }
     if (quote_description.trim().length > MAX_QUOTE_DESCRIPTION_LEN) {
       return {
         ok: false,
-        message: `quote_description must be ${MAX_QUOTE_DESCRIPTION_LEN} characters or fewer.`,
+        message: `Quote description must be ${MAX_QUOTE_DESCRIPTION_LEN} characters or fewer.`,
       };
     }
   }
@@ -242,7 +271,7 @@ const updateQuoteMiddleware = async (req, res, next) => {
     return res.status(409).json({
       success: false,
       status: 409,
-      message: `Cannot update fields: ${unknown.join(", ")}`,
+      message: `Cannot update fields: ${unknown.map(fieldLabel).join(", ")}`,
     });
   }
 
@@ -300,7 +329,7 @@ const updateQuoteMiddleware = async (req, res, next) => {
           success: false,
           status: 403,
           message:
-            "Only the customer, the assigned employee, or the franchise admin can edit quote_description.",
+            "Only the customer, the assigned employee, the franchise admin, super admin, or staff can edit the quote description.",
         });
       }
     }
@@ -316,7 +345,7 @@ const updateQuoteMiddleware = async (req, res, next) => {
         return res.status(409).json({
           success: false,
           status: 409,
-          message: "to_date must be on or after from_date.",
+          message: "To date must be on or after from date.",
         });
       }
     }

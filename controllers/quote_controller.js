@@ -1,7 +1,5 @@
 const mongoose = require("mongoose");
 const Quote = require("../models/quote");
-const Order = require("../models/order");
-const OrderService = require("../models/order_services");
 const User = require("../models/user");
 const Category = require("../models/category");
 const Service = require("../models/service");
@@ -10,10 +8,13 @@ const Franchise = require("../models/franchise");
 const City = require("../models/city");
 const State = require("../models/state");
 const { applyPagination } = require("../utils/pagination");
-const { getOrderId, getQuoteSequenceId } = require("../helper/id_generator");
+const { getQuoteSequenceId } = require("../helper/id_generator");
 const { checkObjectIdExists } = require("../validator/id_validator");
 const { sanitizeInput } = require("../validator/search_keyword_validator");
-const { recalculateOrderTotals } = require("../utils/order_financials");
+const {
+  OrderCreationError,
+  createOrderFromQuote,
+} = require("../services/order_creation_service");
 const {
   attachPartnerServiceToQuote,
   attachPartnerServiceToQuotes,
@@ -22,7 +23,6 @@ const {
   STATUS_PENDING,
   STATUS_APPROVED,
   STATUS_REJECTED,
-  STATUS_CONVERTED,
   STATUS_CANCELLED,
   QUOTE_DASHBOARD_BUCKETS,
   buildQuoteBucketFilter,
@@ -36,8 +36,6 @@ const USER_TYPE_EMPLOYEE = 3;
 const USER_TYPE_CUSTOMER = 4;
 const USER_TYPE_SUPER_ADMIN = 5;
 const USER_TYPE_STAFF = 6;
-
-const ORDER_TYPE_DEFAULT = 2;
 
 const QUOTE_SORT_WHITELIST = new Set([
   "created_at",
@@ -63,18 +61,6 @@ const resolveQuoteSortDir = (req) => {
     return s === 1 ? 1 : -1;
   }
   return -1;
-};
-
-const combineDateAndTime = (dateValue, timeStr) => {
-  if (!dateValue || !timeStr || typeof timeStr !== "string") return null;
-  const d = new Date(dateValue);
-  if (Number.isNaN(d.getTime())) return null;
-  const parts = timeStr.trim().split(":");
-  const h = parseInt(parts[0], 10);
-  const m = parseInt(parts[1], 10);
-  if (Number.isNaN(h) || Number.isNaN(m)) return null;
-  d.setHours(h, m, 0, 0);
-  return d;
 };
 
 const parseQuoteFilterDate = (value) => {
@@ -172,13 +158,6 @@ const resolveQuoteListStatusFilter = (statusParam) => {
       "Invalid status. Use new, pending, accepted, success, failed, or a numeric quote status (1-6).",
   };
 };
-
-const buildOrderStatusInfo = () => [
-  { status: 1, updated_at: Date.now() },
-  { status: 2, updated_at: null },
-  { status: 3, updated_at: null },
-  { status: 4, updated_at: null },
-];
 
 const getCallerId = (req) =>
   (req && req.user && (req.user.id || req.user._id)) || null;
@@ -1226,171 +1205,50 @@ const convertToOrder = async (req, res) => {
       });
     }
 
-    const addressDoc = await Address.findById(quote.address_id);
-    if (!addressDoc) {
-      return res.status(409).json({
-        success: false,
-        status: 409,
-        message: "Address not found for this quote.",
-      });
-    }
-
-    const customer = await User.findById(quote.user_id);
-    const partner = await User.findById(quote.partner_id);
-
-    if (!customer || !partner) {
-      return res.status(409).json({
-        success: false,
-        status: 409,
-        message: "Customer or partner user record missing.",
-      });
-    }
-
-    const city_id = addressDoc.city_id;
-    const addressStr =
-      addressDoc.address ||
-      [addressDoc.landmark, addressDoc.area].filter(Boolean).join(", ") ||
-      "";
-
-    const order_id = new mongoose.Types.ObjectId();
-    const unique_id = await getOrderId();
-
-    const service_from_time = combineDateAndTime(
-      quote.from_date,
-      quote.work_start_time
-    );
-    const service_to_time = combineDateAndTime(
-      quote.from_date,
-      quote.work_end_time
-    );
-
-    if (!service_from_time || !service_to_time) {
-      return res.status(409).json({
-        success: false,
-        status: 409,
-        message:
-          "Could not build service times from from_date, work_start_time, and work_end_time.",
-      });
-    }
-
-    const price = parseFloat(quote.service_price) || 0;
-
-    const orderServiceDoc = {
-      _id: new mongoose.Types.ObjectId(),
-      order_id,
-      user_id: quote.user_id,
-      partner_id: quote.partner_id,
-      order_unique_id: unique_id,
-      user_unique_id: customer.user_id || "",
-      partner_unique_id: partner.user_id || "",
-      payment_mode_id: "",
-      transaction_id: "",
-      category_id: quote.category_id,
-      service_id: quote.service_id,
-      service_status: 1,
-      service_date: quote.from_date,
-      service_from_time,
-      service_to_time,
-      sub_total: price,
-      tax: 0,
-      user_paltform_fee: 0,
-      partner_commison_platform_fee: 0,
-      service_price: price,
-      total_price: price,
-      partner_earning: price,
-      admin_earning: 0,
-      is_paid: false,
-      partner_paid_status: 1,
-      rating: 0,
-    };
-
-    await OrderService.insertMany([orderServiceDoc]);
-
-    const created_by_id =
-      quote.created_by_id != null ? quote.created_by_id : quote.user_id;
-
-    const newOrder = new Order({
-      _id: order_id,
-      unique_id,
-      user_id: quote.user_id,
-      user_unique_id: customer.user_id || "",
-      type: ORDER_TYPE_DEFAULT,
-      city_id,
-      category_id: quote.category_id,
-      order_status: 1,
-      order_status_info: buildOrderStatusInfo(),
-      address: addressStr,
-      address_id: quote.address_id,
-      is_paid: false,
-      payment_mode_id: "",
-      transaction_id: "",
-      payment_schedule_type: "single",
-      customer_payment_method: "",
-      created_by_id,
-      service_items: [orderServiceDoc._id],
-      order_date: quote.from_date,
-      from_date: quote.from_date,
-      to_date: quote.to_date,
-      work_hours_per_day: quote.work_hours_per_day ?? 0,
-      total_work_hours: quote.total_work_hours ?? 0,
-      work_start_time: quote.work_start_time || "",
-      work_end_time: quote.work_end_time || "",
-      partner_id: quote.partner_id,
-      employee_id: quote.employee_id ?? null,
-      franchise_id: quote.franchise_id ?? null,
-      service_id: quote.service_id,
-      service_price: price,
-      customer_description: quote.quote_description || "",
-      order_description: (quote.quote_description || "").trim(),
-      quote_id: quote._id,
-      rejection_reason: "",
-      sub_total: price,
-      tax: 0,
-      discount_amount: null,
-      discount_percent: null,
-      discount_code: "",
-      discount_reason: "",
-      user_paltform_fee: 0,
-      partner_commison_platform_fee: 0,
-      total_price: price,
-      admin_earning: 0,
-      admin_commission: 0,
-      min_deposit: 0,
-      additional_charges_total: 0,
-    });
-
-    await newOrder.save();
-    await recalculateOrderTotals(order_id);
-
     const oldStatus = quote.status;
     const oldOrderId = quote.order_id;
-    quote.order_id = order_id;
-    quote.status = STATUS_CONVERTED;
-    quote.updated_at = new Date();
+
+    const { order, unique_id } = await createOrderFromQuote(quote);
+
+    const linkedQuote = await Quote.findById(quote._id);
     await appendQuoteHistory(
-      quote,
+      linkedQuote,
       req,
       "converted",
       [
-        buildHistoryChange("status", oldStatus, quote.status),
-        buildHistoryChange("order_id", oldOrderId, quote.order_id),
+        buildHistoryChange("status", oldStatus, linkedQuote.status),
+        buildHistoryChange("order_id", oldOrderId, linkedQuote.order_id),
       ],
-      `Converted to order ${newOrder.unique_id}.`
+      `Converted to order ${unique_id}.`
     );
-    await quote.save();
+    await linkedQuote.save();
 
     return res.status(200).json({
       success: true,
       status: 200,
       message: "Quote converted to order successfully.",
       record: {
-        order_id: newOrder._id,
-        unique_id: newOrder.unique_id,
-        quote_id: quote._id,
-        quote_sequence_id: quote.quote_sequence_id,
+        order_id: order._id,
+        unique_id: order.unique_id || unique_id,
+        quote_id: linkedQuote._id,
+        quote_sequence_id: linkedQuote.quote_sequence_id,
       },
     });
   } catch (error) {
+    if (error instanceof OrderCreationError) {
+      return res.status(error.status).json({
+        success: false,
+        status: error.status,
+        message: error.message,
+      });
+    }
+    if (error.message === "INVALID_SERVICE_USER") {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: "Invalid user_id on service_items.",
+      });
+    }
     console.error("Error converting quote:", error);
     return res.status(500).json({
       success: false,

@@ -599,11 +599,16 @@ const getAll = async (req, res) => {
         roleFilter = {};
       }
     } else if ([CALLER_TYPE_ADMIN, CALLER_TYPE_EMPLOYEE].includes(caller.type)) {
-      if (franchiseIdFilter) {
+      // franchise_id query is ignored for franchise admin/employee; scope is always caller.franchise_id
+      if (
+        franchiseIdFilter &&
+        caller.franchise_id &&
+        String(franchiseIdFilter) !== String(caller.franchise_id)
+      ) {
         return res.status(403).json({
           success: false,
           status: 403,
-          message: 'You are not allowed to use franchise_id filter.',
+          message: 'You are not allowed to view users for this franchise.',
         });
       }
       const allowedTypes = [1, 2, 3, 4];

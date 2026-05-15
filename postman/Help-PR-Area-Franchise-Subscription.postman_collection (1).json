@@ -200,7 +200,7 @@
       "value": "new",
       "type": "string",
       "enabled": true,
-      "description": "GET /api/quote/getAll list bucket: new | pending | accepted | success | failed (same as dashboard cards). Or numeric 1-6 for raw quote status."
+      "description": "GET /api/quote/getAll filter: new | pending | accepted | success | failed (same as getCounts / POST getCount quote-management). Alias fail → failed. Or numeric 1-6 for DB status_code only."
     }
   ],
   "auth": {
@@ -3310,6 +3310,7 @@
     },
     {
       "name": "Quote",
+      "description": "Quote lifecycle: Create → (optional Update while pending) → Approve → Convert to order.\n\n**Response `status` (string):** dashboard bucket — `new`, `pending`, `accepted`, `success`, `failed`, or `rejected` / `cancelled` / `expired`. **`status_code` (number):** DB value 1–6 (Pending, Approved, Rejected, Converted, Cancelled, Expired).\n\n**Order creation:** Only `POST /api/quote/convert/:id` (or `POST /api/order/create` with `quote_id` on an approved quote) creates an order and sets quote `order_id` + converted. Approve/reject/cancel/update do **not** create orders.",
       "item": [
         {
           "name": "Create",
@@ -3363,6 +3364,7 @@
             },
             "method": "GET",
             "header": [],
+            "description": "Returns one quote with populated relations. **`record.status`** is the dashboard bucket string; **`record.status_code`** is the numeric DB status.",
             "url": "{{base_url}}/api/quote/get/{{quote_id}}"
           }
         },
@@ -3381,7 +3383,7 @@
             },
             "method": "GET",
             "header": [],
-            "description": "Paginated quote list. status: new | pending | accepted | success | failed (dashboard buckets; matches getCounts), or numeric 1-6. Also: page, limit, user_id, partner_id, employee_id, franchise_id, category_id, service_id, search, from_date, to_date, include_history, sort_by, sort_order.",
+            "description": "Paginated list. Each row: **`status`** (bucket string) + **`status_code`** (1–6). Query **`status`**: new | pending | accepted | success | failed (matches getCounts), or numeric 1–6. Also: page, limit, user_id, partner_id, employee_id, franchise_id, category_id, service_id, search, from_date, to_date, include_history, sort_by, sort_order.",
             "url": "{{base_url}}/api/quote/getAll?page=1&limit=10&status={{quote_status}}&user_id={{user_id}}&partner_id={{partner_id}}&employee_id={{employee_id}}&franchise_id={{franchise_id}}&category_id={{category_id}}&service_id={{service_id}}&search={{search}}&from_date=2026-05-14&to_date=2026-05-14&include_history=false&sort_by=created_at&sort_order=desc"
           }
         },
@@ -3400,6 +3402,7 @@
             },
             "method": "GET",
             "header": [],
+            "description": "Quotes for one customer. Each record includes **`status`** (bucket) and **`status_code`**.",
             "url": "{{base_url}}/api/quote/getCustomerQuotes?user_id={{user_id}}"
           }
         },
@@ -3436,7 +3439,7 @@
                 }
               }
             },
-            "description": "Updates a pending quote. Allowed fields include partner_id, employee_id, category_id, service_id, franchise_id, address_id, service_price, schedule fields, created_by_id, quote_description (customer, assigned employee, or franchise admin only).",
+            "description": "Partial update — pending quotes only. Send at least one allowed field (do **not** send user_id, status, or other read-only fields).\n\n**Allowed:** partner_id, employee_id, category_id, service_id, franchise_id, address_id, service_price, from_date, to_date, work_hours_per_day, total_work_hours, work_start_time, work_end_time, created_by_id, quote_description.\n\n**quote_description:** customer, assigned employee, franchise admin (same franchise), super admin, or staff only.",
             "url": "{{base_url}}/api/quote/update/{{quote_id}}"
           }
         },
@@ -3455,6 +3458,7 @@
             },
             "method": "PUT",
             "header": [],
+            "description": "Pending → approved (`status_code` 2, API `status` typically **failed** until convert — approved with no order). Does **not** create an order. Next step: **Convert to order**.",
             "url": "{{base_url}}/api/quote/approve/{{quote_id}}"
           }
         },
@@ -3491,6 +3495,7 @@
                 }
               }
             },
+            "description": "Pending → rejected. Optional body: rejection_reason. API `status`: **rejected**.",
             "url": "{{base_url}}/api/quote/reject/{{quote_id}}"
           }
         },
@@ -3527,6 +3532,7 @@
                 }
               }
             },
+            "description": "Pending or approved → cancelled. Optional body: cancellation_reason. API `status`: **cancelled**.",
             "url": "{{base_url}}/api/quote/cancel/{{quote_id}}"
           }
         },
@@ -3545,6 +3551,7 @@
             },
             "method": "POST",
             "header": [],
+            "description": "Approved quote only; no body. Creates order using same logic as **POST /api/order/create**, sets quote **order_id**, quote **status_code** 4 (API **`status`**: **success**). Returns order_id, unique_id, quote_id. Sends partner push notification.",
             "url": "{{base_url}}/api/quote/convert/{{quote_id}}"
           }
         },
@@ -3582,6 +3589,7 @@
             },
             "method": "DELETE",
             "header": [],
+            "description": "Soft-deletes the quote (deleted_at).",
             "url": "{{base_url}}/api/quote/delete/{{quote_id}}"
           }
         }

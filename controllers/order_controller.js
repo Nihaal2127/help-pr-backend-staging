@@ -21,6 +21,11 @@ const OrderAdditionalCharge = require('../models/order_additional_charge');
 const OrderPayment = require('../models/order_payment');
 const Quote = require('../models/quote');
 const { computeOrderTotal, recalculateOrderTotals } = require('../utils/order_financials');
+const {
+  OrderCreationError,
+  createOrderFromBody,
+  persistOrderAndLinkQuote,
+} = require('../services/order_creation_service');
 
 const ORDER_DETAIL_POPULATE = [
   {
@@ -504,327 +509,72 @@ const getCustomerOrderDetails = async (req, res) => {
 
 const create = async (req, res) => {
   try {
-    const {
-      user_id,
-      user_unique_id,
-      city_id,
-      category_id,
-      is_paid,
-      payment_mode_id,
-      transaction_id,
-      created_by_id,
-      service_items,
-      order_date,
-      sub_total,
-      tax,
-      discount_amount,
-      user_paltform_fee,
-      partner_commison_platform_fee,
-      total_price,
-      admin_earning,
-      address,
-      type,
-      name,
-      email,
-      contact,
-      partner_id,
-      employee_id,
-      franchise_id,
-      address_id,
-      service_id,
-      from_date,
-      to_date,
-      work_hours_per_day,
-      total_work_hours,
-      work_start_time,
-      work_end_time,
-      service_price,
-      customer_description,
-      rejection_reason,
-      admin_commission,
-      discount_percent,
-      discount_code,
-      discount_reason,
-      min_deposit,
-      payment_schedule_type,
-      customer_payment_method,
-      order_description,
-      quote_id,
-    } = req.body;
-    const order_id = new mongoose.Types.ObjectId();
+    const { name, email, contact } = req.body;
 
-    let resolvedQuoteId = null;
-    let quoteDescriptionWhenLinked = '';
-    if (quote_id !== undefined && quote_id !== null && String(quote_id).trim() !== '') {
-      const qid = String(quote_id).trim();
-      if (!mongoose.Types.ObjectId.isValid(qid)) {
-        return res.status(400).json({
+    let draft;
+    try {
+      draft = await createOrderFromBody(req.body, { linkQuote: true });
+    } catch (err) {
+      if (err instanceof OrderCreationError) {
+        return res.status(err.status).json({
           success: false,
-          status: 400,
-          message: 'Invalid quote_id.',
+          status: err.status,
+          message: err.message,
         });
       }
-      const qDoc = await Quote.findOne({ _id: qid, deleted_at: null })
-        .select('quote_description order_id')
-        .lean();
-      if (!qDoc) {
-        return res.status(404).json({
-          success: false,
-          status: 404,
-          message: 'Quote not found.',
-        });
-      }
-      if (qDoc.order_id != null) {
-        return res.status(409).json({
-          success: false,
-          status: 409,
-          message: 'Quote is already linked to an order.',
-        });
-      }
-      const quoteObjectId = new mongoose.Types.ObjectId(qid);
-      const existingOrderForQuote = await Order.findOne({
-        quote_id: quoteObjectId,
-        deleted_at: null,
-      })
-        .select('_id')
-        .lean();
-      if (existingOrderForQuote) {
-        return res.status(409).json({
-          success: false,
-          status: 409,
-          message: 'Another order already references this quote.',
-        });
-      }
-      resolvedQuoteId = quoteObjectId;
-      quoteDescriptionWhenLinked = (qDoc.quote_description || '').trim();
-    }
-    const orderDescFromBody =
-      order_description !== undefined && order_description !== null
-        ? String(order_description).trim()
-        : '';
-    const finalOrderDescription = orderDescFromBody || quoteDescriptionWhenLinked;
-
-    if (!Array.isArray(service_items) || service_items.length !== 1) {
-      return res.status(409).json({
-        success: false,
-        status: 409,
-        message: 'Each order must contain exactly one service; service_items must be an array of length 1.',
-      });
+      throw err;
     }
 
-    const single = service_items[0];
-    const unique_id = await getOrderId();
-    const orderItemsWithOrderId = await Promise.all(service_items.map(async (option) => {
-      const user = await User.findById(new mongoose.Types.ObjectId(option.user_id));
-      if (!user) {
-        throw new Error('INVALID_SERVICE_USER');
-      }
-      const item = {
-        _id: new mongoose.Types.ObjectId(),
-        ...option,
-        order_id,
-        order_unique_id: unique_id,
-        user_unique_id: user.user_id,
-        payment_mode_id,
-        transaction_id
-      };
-      return item;
-    }));
-    const savedDataOptions = await OrderService.insertMany(orderItemsWithOrderId);
-    const order_items = savedDataOptions.map((doc) => doc._id);
-
-    const order_status_info = [
-      {
-        status: 1,
-        updated_at: Date.now()
-      },
-      {
-        status: 2,
-        updated_at: null
-      },
-      {
-        status: 3,
-        updated_at: null
-      },
-      {
-        status: 4,
-        updated_at: null
-      }
-    ];
-
-    const resolvedPartnerId = partner_id ?? single.partner_id ?? null;
-    const resolvedServiceId = service_id ?? single.service_id ?? null;
-    const resolvedServicePrice =
-      service_price !== undefined && service_price !== null
-        ? Number(service_price)
-        : Number(single.service_price ?? single.sub_total ?? 0);
-
-    const newOrder = new Order({
-      _id: order_id,
-      unique_id,
-      user_id,
-      user_unique_id,
-      city_id,
-      category_id,
-      is_paid,
-      payment_mode_id,
-      transaction_id,
-      created_by_id,
-      service_items: order_items,
-      order_status_info,
-      order_date,
-      sub_total,
-      tax,
-      discount_amount,
-      user_paltform_fee,
-      partner_commison_platform_fee,
-      total_price,
-      admin_earning,
-      address,
-      type,
-      partner_id: resolvedPartnerId,
-      employee_id: employee_id ?? null,
-      franchise_id: franchise_id ?? null,
-      address_id: address_id ?? null,
-      service_id: resolvedServiceId,
-      from_date: from_date ? new Date(from_date) : null,
-      to_date: to_date ? new Date(to_date) : null,
-      work_hours_per_day: work_hours_per_day !== undefined ? Number(work_hours_per_day) : 0,
-      total_work_hours: total_work_hours !== undefined ? Number(total_work_hours) : 0,
-      work_start_time: work_start_time ?? '',
-      work_end_time: work_end_time ?? '',
-      service_price: resolvedServicePrice,
-      customer_description: customer_description ?? '',
-      order_description: finalOrderDescription,
-      quote_id: resolvedQuoteId,
-      rejection_reason: rejection_reason ?? '',
-      admin_commission: admin_commission !== undefined ? Number(admin_commission) : 0,
-      discount_percent: discount_percent !== undefined && discount_percent !== null ? Number(discount_percent) : null,
-      discount_code: discount_code ?? '',
-      discount_reason: discount_reason ?? '',
-      min_deposit: min_deposit !== undefined ? Number(min_deposit) : 0,
-      payment_schedule_type: payment_schedule_type === 'installments' ? 'installments' : 'single',
-      customer_payment_method: customer_payment_method ?? '',
-      additional_charges_total: 0,
-    });
-
-    newOrder.total_price = computeOrderTotal(newOrder, 0);
+    const { newOrder, order_id } = draft;
 
     if (newOrder.payment_mode_id === "2") {
-      const responsePaymentLink = await generatePaymentLink(name, email, contact, newOrder.total_price);
+      const responsePaymentLink = await generatePaymentLink(
+        name,
+        email,
+        contact,
+        newOrder.total_price
+      );
       if (responsePaymentLink.success === true) {
         newOrder.transaction_id = responsePaymentLink.transaction_id;
-        await newOrder.save();
-        await recalculateOrderTotals(order_id);
-        await Promise.all(
-          service_items.map(async (service) => {
-            try {
-              const partner = await User.findById(new mongoose.Types.ObjectId(service.partner_id));
-              if (!partner) return;
-
-              const notificationSetting = await NotificationSettings.findOne({ user_id: partner._id });
-              if (!notificationSetting) return;
-              if (notificationSetting.is_update_allow === false) return;
-
-              const serviceData = await Service.findById(service.service_id);
-              const title = `New Service Request Received`;
-              const body = `You received request for ${serviceData.name} for order #${unique_id}`;
-              const deviceToken = partner.device_token
-              const data = {
-                order_id: order_id.toString(),
-                type: "Order"
-              };
-
-              if (deviceToken !== null && deviceToken !== '') {
-                await sendPushNotification({ deviceToken, title, body, data });
-              }
-
-              if (notificationSetting.is_sms_allow) {
-                // Add SMS logic here
-              }
-
-            } catch (err) {
-              console.error(`Error notifying partner ${service.partner_id}:`, err);
-            }
-          })
-        );
+        await persistOrderAndLinkQuote(draft);
         const result = {
           payment_url: responsePaymentLink.payment_url,
-          order_id: newOrder._id
-        }
+          order_id: newOrder._id,
+        };
         return res.status(200).json({
           success: true,
           status: 200,
-          message: 'Order placed successfully and payment link send to customer.',
+          message: "Order placed successfully and payment link send to customer.",
           record: result,
         });
       }
       return res.status(502).json({
         success: false,
         status: 502,
-        message: responsePaymentLink.error || 'Failed to create payment link.',
-      });
-
-    } else {
-      await newOrder.save();
-      await recalculateOrderTotals(order_id);
-      await Promise.all(
-        service_items.map(async (service) => {
-          try {
-            const partner = await User.findById(new mongoose.Types.ObjectId(service.partner_id));
-            if (!partner) return;
-
-            const notificationSetting = await NotificationSettings.findOne({ user_id: partner._id });
-            if (!notificationSetting) return;
-            if (notificationSetting.is_update_allow === false) return;
-
-            const serviceData = await Service.findById(service.service_id);
-            const title = `New Service Request Received`;
-            const body = `You received request for ${serviceData.name} for order #${unique_id}`;
-            const deviceToken = partner.device_token
-            const data = {
-              order_id: order_id.toString(),
-              type: "Order"
-            };
-
-            if (deviceToken !== null && deviceToken !== '') {
-              await sendPushNotification({ deviceToken, title, body, data });
-            }
-
-            if (notificationSetting.is_sms_allow) {
-              // Add SMS logic here
-            }
-
-          } catch (err) {
-            console.error(`Error notifying partner ${service.partner_id}:`, err);
-          }
-        })
-      );
-
-      const result = {
-        order_id: newOrder._id
-      }
-      return res.status(200).json({
-        success: true,
-        status: 200,
-        message: 'Order placed successfully.',
-        record: result,
+        message: responsePaymentLink.error || "Failed to create payment link.",
       });
     }
 
+    await persistOrderAndLinkQuote(draft);
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: "Order placed successfully.",
+      record: { order_id: newOrder._id },
+    });
   } catch (error) {
-    if (error.message === 'INVALID_SERVICE_USER') {
+    if (error.message === "INVALID_SERVICE_USER") {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: 'Invalid user_id on service_items.',
+        message: "Invalid user_id on service_items.",
       });
     }
-    console.error('Error creating Order:', error.message);
+    console.error("Error creating Order:", error.message);
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.'
+      message: "Internal server error.",
     });
   }
 };

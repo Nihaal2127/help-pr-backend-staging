@@ -192,6 +192,25 @@ const listAreas = async (query, authUser) => {
             filter.state_name = { $regex: new RegExp(String(query.state).trim(), 'i') };
         }
 
+        if (query.city_id) {
+            let cityIds = query.city_id;
+            if (!Array.isArray(cityIds)) {
+                cityIds = String(cityIds).split(',');
+            }
+            const oids = [];
+            for (const raw of cityIds) {
+                const id = String(raw).trim();
+                if (!id) continue;
+                const p = parseObjectId(id, 'city_id');
+                if (!p.ok) return fail(400, p.message);
+                oids.push(p.oid);
+            }
+            if (oids.length === 0) {
+                return fail(400, 'Provide at least one valid city_id.');
+            }
+            filter.city_id = { $in: oids };
+        }
+
         const sortOrderRaw = (query.sort_order || query.sortOrder || query.order || 'desc')
             .toString()
             .toLowerCase();

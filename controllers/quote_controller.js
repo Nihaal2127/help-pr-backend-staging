@@ -20,6 +20,10 @@ const {
   attachPartnerServiceToQuotes,
 } = require("../utils/quote_partner_service");
 const {
+  resolveQuoteListScope,
+  assertQuoteRecordAccess,
+} = require("../utils/quote_access");
+const {
   QUOTE_DASHBOARD_BUCKETS,
   QUOTE_STATUSES,
   TERMINAL_QUOTE_STATUSES,
@@ -330,6 +334,17 @@ const create = async (req, res) => {
 
 const getAll = async (req, res) => {
   try {
+    const scopeResult = await resolveQuoteListScope(req, {
+      franchiseIdFromQuery: req.query.franchise_id,
+    });
+    if (!scopeResult.ok) {
+      return res.status(scopeResult.status).json({
+        success: false,
+        status: scopeResult.status,
+        message: scopeResult.message,
+      });
+    }
+
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 10;
     const skip = (page - 1) * limit;
@@ -367,6 +382,7 @@ const getAll = async (req, res) => {
 
     const baseFilter = {
       deleted_at: null,
+      ...scopeResult.filter,
       ...dateRangeResult.filter,
       ...statusFilterResult.filter,
       ...(req.query.user_id &&
@@ -380,10 +396,6 @@ const getAll = async (req, res) => {
       ...(req.query.employee_id &&
         mongoose.Types.ObjectId.isValid(req.query.employee_id) && {
           employee_id: new mongoose.Types.ObjectId(req.query.employee_id),
-        }),
-      ...(req.query.franchise_id &&
-        mongoose.Types.ObjectId.isValid(req.query.franchise_id) && {
-          franchise_id: new mongoose.Types.ObjectId(req.query.franchise_id),
         }),
       ...(req.query.category_id &&
         mongoose.Types.ObjectId.isValid(req.query.category_id) && {
@@ -733,18 +745,18 @@ const getAll = async (req, res) => {
 
 const getQuoteCounts = async (req, res) => {
   try {
-    const baseFilter = { deleted_at: null };
-
-    if (req.query.franchise_id) {
-      if (!mongoose.Types.ObjectId.isValid(req.query.franchise_id)) {
-        return res.status(409).json({
-          success: false,
-          status: 409,
-          message: "Invalid franchise id.",
-        });
-      }
-      baseFilter.franchise_id = new mongoose.Types.ObjectId(req.query.franchise_id);
+    const scopeResult = await resolveQuoteListScope(req, {
+      franchiseIdFromQuery: req.query.franchise_id,
+    });
+    if (!scopeResult.ok) {
+      return res.status(scopeResult.status).json({
+        success: false,
+        status: scopeResult.status,
+        message: scopeResult.message,
+      });
     }
+
+    const baseFilter = { deleted_at: null, ...scopeResult.filter };
 
     const [newCount, pendingCount, acceptedCount, successCount, failedCount] =
       await Promise.all([
@@ -814,6 +826,15 @@ const getById = async (req, res) => {
       });
     }
 
+    const access = await assertQuoteRecordAccess(req, quote);
+    if (!access.ok) {
+      return res.status(access.status).json({
+        success: false,
+        status: access.status,
+        message: access.message,
+      });
+    }
+
     await attachPartnerServiceToQuote(quote);
 
     res.status(200).json({
@@ -855,9 +876,21 @@ const getCustomerQuotes = async (req, res) => {
       });
     }
 
+    const scopeResult = await resolveQuoteListScope(req, {
+      franchiseIdFromQuery: req.query.franchise_id,
+    });
+    if (!scopeResult.ok) {
+      return res.status(scopeResult.status).json({
+        success: false,
+        status: scopeResult.status,
+        message: scopeResult.message,
+      });
+    }
+
     const filter = {
       deleted_at: null,
       user_id: new mongoose.Types.ObjectId(user_id),
+      ...scopeResult.filter,
     };
     const sort = { created_at: -1 };
 
@@ -979,6 +1012,15 @@ const update = async (req, res) => {
         success: false,
         status: 404,
         message: "No record found",
+      });
+    }
+
+    const access = await assertQuoteRecordAccess(req, quote);
+    if (!access.ok) {
+      return res.status(access.status).json({
+        success: false,
+        status: access.status,
+        message: access.message,
       });
     }
 
@@ -1197,6 +1239,15 @@ const deleteQuote = async (req, res) => {
         success: false,
         status: 404,
         message: quote ? "Quote is already deleted" : "No record found",
+      });
+    }
+
+    const access = await assertQuoteRecordAccess(req, quote);
+    if (!access.ok) {
+      return res.status(access.status).json({
+        success: false,
+        status: access.status,
+        message: access.message,
       });
     }
 

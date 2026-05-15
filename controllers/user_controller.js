@@ -368,9 +368,18 @@ async function applyPartnerDocumentImageUpdates(partnerId, normalizedDocumentPay
     return;
   }
   const documentList = await getDocumentList();
-  const documentNameToId = new Map(
-    documentList.map((doc) => [String(doc.name || '').trim().toLowerCase(), String(doc._id)])
-  );
+  /** Match multipart slugs (e.g. pan_card) and JSON keys to Document.name whether stored with spaces or underscores. */
+  const documentNameToId = new Map();
+  for (const doc of documentList) {
+    const id = String(doc._id);
+    const lower = String(doc.name || '').trim().toLowerCase();
+    if (!lower) continue;
+    const slug = lower.replace(/\s+/g, '_');
+    const spaced = lower.replace(/_/g, ' ');
+    for (const key of new Set([lower, slug, spaced])) {
+      if (key) documentNameToId.set(key, id);
+    }
+  }
   const documentImageById = {};
   Object.entries(normalizedDocumentPayload).forEach(([key, value]) => {
     const normalizedKey = String(key).trim().toLowerCase();

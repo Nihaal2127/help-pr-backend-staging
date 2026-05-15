@@ -1791,17 +1791,27 @@ const getById = async (req, res) => {
         })
         .lean();
 
-      if (user && user.documents) {
-        user.documents = user.documents.map(doc => ({
-          ...doc,
-          // ...doc.document_id,
-          document_id: doc.document_id?._id || null,
-          name: doc.document_id?.name || null,
-          is_optional: doc.document_id?.is_optional || null,
-        }));
-      }
+      const mappedDocuments = mapPartnerDocumentsForResponse(user?.documents);
+      response.documents = mappedDocuments;
+      response.partner_documents = mappedDocuments;
 
-      response.documents = user.documents;
+      response.partner_services = await PartnerServices.find({
+        partner_id: user._id,
+        deleted_at: null,
+      })
+        .populate([
+          { path: 'category_id', select: 'name' },
+          { path: 'service_id', select: 'name' },
+        ])
+        .lean();
+
+      response.partner_subscriptions = await PartnerSubscription.find({
+        partner_id: user._id,
+        deleted_at: null,
+      })
+        .populate({ path: 'subscription_plan_id' })
+        .sort({ created_at: -1 })
+        .lean();
 
       const bank_account = await getPartnerPrimaryAccount(user._id);
 

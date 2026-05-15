@@ -2824,7 +2824,7 @@
       "item": [
         {
           "name": "Partner (type 2)",
-          "description": "Partner CRUD uses **`/api/user`**. **`Create partner (web)`** uses **`multipart/form-data`**. Use **`partner_services`** (underscore) **or** **`partner-services`** (hyphen); middleware copies the alias when **`partner_services`** is empty. Parallel **`category_ids`** / **`service_ids`** may be JSON arrays or a single 24-hex ObjectId string each. New partners are always saved **`verification_status`: 1** (pending) and **`is_active`: false**; body **`is_verified`** on create is ignored. Optional **`date_of_birth`** (ISO date), **`experience`** (string). Set **`categoryObjectId`** / **`serviceObjectId`** in Environment. Master **`Document`** catalog (active) drives **`partner_documents`** placeholders; empty catalog can cause **400** with **`document_errors`**. **`bank_account`**, verification **files** + **`partner_documents`**, **`profile_url`**, **`image`**. Set **`partnerId`** from create or **Register partner (public)**.",
+          "description": "Partner CRUD uses **`/api/user`**. **`Create partner (web)`** uses **`multipart/form-data`**. Use **`partner_services`** (underscore) **or** **`partner-services`** (hyphen); middleware copies the alias when **`partner_services`** is empty. Parallel **`category_ids`** / **`service_ids`** may be JSON arrays or a single 24-hex ObjectId string each. New partners are always saved **`verification_status`: 1** (pending) and **`is_active`: false**; body **`is_verified`** on create is ignored. Optional **`date_of_birth`** (ISO date), **`experience`** (string). Set **`categoryObjectId`** / **`serviceObjectId`** in Environment. Master **`Document`** catalog (**`is_active`**: true) seeds **`partner_document`** rows; uploads write **`document_image`** when **`Document.name`** matches (spaces or underscores). Empty catalog → no rows to update (create may still **200**). **`POST /create`** response does **not** include expanded **`documents`** — use **`GET /api/user/get/:id`**. **`bank_account`**, verification **files** + **`partner_documents`**, **`profile_url`**, **`image`**. Set **`partnerId`** from create or **Register partner (public)**.",
           "item": [
             {
               "name": "Create partner (web)",
@@ -2838,8 +2838,8 @@
                       "  if (j && j.record && j.record._id) {",
                       "    pm.collectionVariables.set('partnerId', String(j.record._id));",
                       "  }",
-                      "  if (pm.response.code === 400 && j && j.document_errors) {",
-                      "    console.log('document_errors', j.document_errors);",
+                      "  if (pm.response.code === 400 && j) {",
+                      "    console.log('create partner 400', j);",
                       "  }",
                       "} catch (e) {}"
                     ],
@@ -2929,15 +2929,13 @@
                       "key": "date_of_birth",
                       "value": "1990-05-15",
                       "type": "text",
-                      "disabled": true,
-                      "description": "Optional ISO date string; stored as **`date_of_birth`**."
+                      "description": "Optional ISO date string; sent in **`multipart`** so **`req.body.date_of_birth`** is set (disable row to omit)."
                     },
                     {
                       "key": "experience",
                       "value": "5 years residential services",
                       "type": "text",
-                      "disabled": true,
-                      "description": "Optional partner experience (string)."
+                      "description": "Optional string; sent in **`multipart`** so **`req.body.experience`** is set (disable row to omit)."
                     },
                     {
                       "key": "pincode",
@@ -3023,37 +3021,37 @@
                       "key": "vehicle_registration",
                       "type": "file",
                       "src": [],
-                      "description": "Verification file (image or PDF). Master **Document** catalog must include **`name`**: **`vehicle_registration`** (and **`is_active`**: true) or create fails with **document_errors**."
+                      "description": "Verification file (image or PDF). Path stored on **`partner_document.document_image`**. Requires a matching active **Document** row; **`name`** may be spaced or underscored (e.g. **`vehicle registration`** / **`vehicle_registration`**)."
                     },
                     {
                       "key": "police_verification_certificate",
                       "type": "file",
                       "src": [],
-                      "description": "Master **Document.name** should match this key for URL mapping after create."
+                      "description": "Same as **`vehicle_registration`**: file → upload path → **`partner_document.document_image`** when **Document.name** matches (slug or spaced)."
                     },
                     {
                       "key": "pan_card",
                       "type": "file",
                       "src": [],
-                      "description": "Master **Document.name** should match this key for URL mapping after create."
+                      "description": "Same as **`vehicle_registration`**: file → **`document_image`** via **Document** name match."
                     },
                     {
                       "key": "driving_license",
                       "type": "file",
                       "src": [],
-                      "description": "Master **Document.name** should match this key for URL mapping after create."
+                      "description": "Same as **`vehicle_registration`**: file → **`document_image`** via **Document** name match."
                     },
                     {
                       "key": "aadhar_card",
                       "type": "file",
                       "src": [],
-                      "description": "Master **Document.name** should match this key for URL mapping after create."
+                      "description": "Same as **`vehicle_registration`**: file → **`document_image`** via **Document** name match."
                     },
                     {
                       "key": "partner_documents",
                       "value": "{}",
                       "type": "text",
-                      "description": "Optional JSON object: keys are slug names (same as file fields); values are URLs. Merged with uploaded files. Requires matching **Document** catalog rows."
+                      "description": "Optional JSON string: keys = same slugs as file fields; values = URL/path strings. Merged with uploads; persisted on **`partner_document.document_image`** (not on user). **`{}`** is fine when using file fields only."
                     },
                     {
                       "key": "bank_account",
@@ -3092,7 +3090,7 @@
                     "create"
                   ]
                 },
-                "description": "**`POST /api/user/create`** — **`multipart/form-data`** (or JSON without files). Partners: **`partner_services`** or **`partner-services`**, parallel **`category_ids`** / **`service_ids`** (JSON arrays or single ObjectId string), **`bank_account`**, optional **`date_of_birth`**, **`experience`**, **`partner_subscription`** (JSON: **`subscription_plan_id`**, **`subscription_start_date`**, **`subscription_end_date`**, or **`started_at`** / **`expires_at`**), verification file fields + **`partner_documents`**, **`image`**, **`profile_url`**. **`type` 2**: always **`verification_status` 1** + **`is_active` false**; **`is_verified`** in body is ignored. Do not set **`Content-Type`** manually for multipart. **Document** catalog for **`document_errors`** on **400**; Postman test script logs **`document_errors`**."
+                "description": "**`POST /api/user/create`** — **`multipart/form-data`** (or JSON without files). Partners: **`partner_services`** or **`partner-services`**, parallel **`category_ids`** / **`service_ids`** (JSON arrays or single ObjectId string), **`bank_account`** (JSON string; include **`is_primary`: true** so **`GET .../get/:id`** returns **`bank_account`**), optional **`date_of_birth`**, **`experience`**, **`partner_subscription`** (JSON: **`subscription_plan_id`**, **`subscription_start_date`**, **`subscription_end_date`**, or **`started_at`** / **`expires_at`**), verification file fields + **`partner_documents`**, **`image`**, **`profile_url`**. **`type` 2**: always **`verification_status` 1** + **`is_active` false**; **`is_verified`** in body is ignored. **200** **`record`** omits partner **`documents`** — call **`GET /api/user/get/:id`** for **`documents`** / **`document_image`**. Do not set **`Content-Type`** manually for multipart."
               },
               "description": "Web/admin partner create — dashboard-shaped **form-data**; see request description for catalog and **`partner_services`** key."
             },
@@ -3270,15 +3268,13 @@
                       "key": "date_of_birth",
                       "value": "1990-05-15",
                       "type": "text",
-                      "disabled": true,
-                      "description": "Optional; ISO date string."
+                      "description": "Optional; ISO date string. Disable row to omit from update."
                     },
                     {
                       "key": "experience",
                       "value": "5 years residential services",
                       "type": "text",
-                      "disabled": true,
-                      "description": "Optional partner experience (string)."
+                      "description": "Optional; disable row to omit from update."
                     },
                     {
                       "key": "is_verified",
@@ -3431,7 +3427,7 @@
                     "{{partnerId}}"
                   ]
                 },
-                "description": "**`PUT /api/user/update/:id`** — same **`multipart`** field names as create; optional **`date_of_birth`**, **`experience`**, **`is_verified`** (`approved` / `rejected` / `pending`). Verification **files** + **`partner_documents`** for **`type`**: **2**; master **`Document`** catalog must exist so **`partner_document`** rows update by name."
+                "description": "**`PUT /api/user/update/:id`** — same **`multipart`** field names as create; optional **`date_of_birth`**, **`experience`**, **`is_verified`** (`approved` / `rejected` / `pending`). Verification **files** + **`partner_documents`** for **`type`**: **2**; **`partner_document.document_image`** updates when **Document.name** matches (slug or spaced form, same as create)."
               },
               "description": "Multipart **`partnerId`** update — form keys aligned with create (optional fields disabled)."
             },

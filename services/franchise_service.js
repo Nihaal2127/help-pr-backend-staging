@@ -932,58 +932,26 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
             fetchCustomersMatchingFranchiseAreaPincodes(franchise),
         ]);
 
-        const mergedCatEntries = mergeFranchiseCategoryEntries(fcDocs);
         const mergedSvcEntries = mergeFranchiseServiceEntries(fsDocs);
 
-        const categoryIds = mergedCatEntries.map((e) => e.category_id);
         const serviceIds = mergedSvcEntries.map((e) => e.service_id);
 
-        const [categoryRows, serviceRows] = await Promise.all([
-            categoryIds.length === 0
-                ? []
-                : Category.find({
-                      _id: { $in: categoryIds },
-                      deleted_at: null,
-                  })
-                      .select('category_id name desc image_url is_active approval_status')
-                      .lean(),
+        const serviceRows =
             serviceIds.length === 0
                 ? []
-                : Service.find({
+                : await Service.find({
                       _id: { $in: serviceIds },
                       deleted_at: null,
                   })
                       .select(RELATED_CATALOG_SERVICE_SELECT)
-                      .lean(),
-        ]);
+                      .lean();
 
-        const catById = new Map(categoryRows.map((c) => [c._id.toString(), c]));
         const svcById = new Map(serviceRows.map((s) => [s._id.toString(), s]));
 
-        const categories = mergedCatEntries
-            .map((e) => {
-                const c = catById.get(e.category_id.toString()) || null;
-                return {
-                    category_id: e.category_id,
-                    is_active: e.is_active,
-                    category: c,
-                };
-            })
-            .filter(
-                (row) =>
-                    row.is_active === true &&
-                    row.category &&
-                    isCatalogCategoryActive(row.category)
-            );
-
-        const services = mergedSvcEntries
+        const activeFranchiseServices = mergedSvcEntries
             .map((e) => {
                 const s = svcById.get(e.service_id.toString()) || null;
-                return {
-                    service_id: e.service_id,
-                    is_active: e.is_active,
-                    service: s,
-                };
+                return { service_id: e.service_id, is_active: e.is_active, service: s };
             })
             .filter(
                 (row) =>
@@ -992,7 +960,7 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
                     isCatalogServiceActive(row.service)
             );
 
-        const activeFranchiseServiceOids = services.map((r) => r.service_id);
+        const activeFranchiseServiceOids = activeFranchiseServices.map((r) => r.service_id);
         const partnerIds = partners.map((p) => p._id);
 
         let psRows = [];
@@ -1009,7 +977,7 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
         }
 
         const serviceDetailById = new Map(
-            services.map((r) => [r.service_id.toString(), r.service])
+            activeFranchiseServices.map((r) => [r.service_id.toString(), r.service])
         );
 
         const partnerServiceMap = new Map();
@@ -1078,8 +1046,6 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
                 franchise: franchise,
                 franchise_categories: fcDocs,
                 franchise_services: fsDocs,
-                categories,
-                services,
                 partners: partnersWithServices,
                 employees,
                 customers,

@@ -10,7 +10,6 @@ const Address = require('../models/address');
 const FranchiseCategory = require('../models/franchise_category');
 const FranchiseService = require('../models/franchise_service');
 const PartnerService = require('../models/partner_service');
-const { resolveFranchiseCatalogByFranchiseId } = require('../utils/partner_franchise_catalog');
 const { applyPagination, applyDropDownFilter } = require('../utils/pagination');
 const { parseBoolean } = require('../utils/parser');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
@@ -932,19 +931,36 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
             fetchCustomersMatchingFranchiseAreaPincodes(franchise),
         ]);
 
+        const mergedCatEntries = mergeFranchiseCategoryEntries(fcDocs);
         const mergedSvcEntries = mergeFranchiseServiceEntries(fsDocs);
 
+        const activeCategoryIds = mergedCatEntries
+            .filter((e) => e.is_active === true)
+            .map((e) => e.category_id);
         const serviceIds = mergedSvcEntries.map((e) => e.service_id);
 
-        const serviceRows =
+        const [categoryRows, serviceRows] = await Promise.all([
+            activeCategoryIds.length === 0
+                ? []
+                : Category.find({
+                      _id: { $in: activeCategoryIds },
+                      deleted_at: null,
+                      is_active: true,
+                      is_request: false,
+                      approval_status: 'approve',
+                  })
+                      .select('_id name desc image_url is_active approval_status')
+                      .sort({ created_at: -1 })
+                      .lean(),
             serviceIds.length === 0
                 ? []
-                : await Service.find({
+                : Service.find({
                       _id: { $in: serviceIds },
                       deleted_at: null,
                   })
                       .select(RELATED_CATALOG_SERVICE_SELECT)
-                      .lean();
+                      .lean(),
+        ]);
 
         const svcById = new Map(serviceRows.map((s) => [s._id.toString(), s]));
 
@@ -1013,26 +1029,14 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
             );
         }
 
-        const franchisePartnerCatalog = await resolveFranchiseCatalogByFranchiseId(parsed.oid);
-        let availableCategoriesPayload = [];
-        if (franchisePartnerCatalog.ok && franchisePartnerCatalog.categoryIds.length > 0) {
-            const catDocs = await Category.find({
-                _id: { $in: franchisePartnerCatalog.categoryIds },
-                deleted_at: null,
-                is_active: true,
-                is_request: false,
-                approval_status: 'approve',
-            })
-                .select('_id name desc image_url')
-                .sort({ created_at: -1 })
-                .lean();
-            availableCategoriesPayload = catDocs.map((c) => ({
+        const availableCategoriesPayload = categoryRows
+            .filter(isCatalogCategoryActive)
+            .map((c) => ({
                 _id: c._id,
                 name: c.name,
                 desc: c.desc,
                 image_url: c.image_url,
             }));
-        }
 
         const partnersWithServices = partners.map((p) => ({
             ...p,

@@ -67,6 +67,19 @@ const ALLOWED_SORT_FIELDS = {
 
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+const findOfferByNameInsensitive = async (name, excludeObjectId = null) => {
+    const nameTrimmed = String(name).trim();
+    if (!nameTrimmed) return null;
+    const filter = {
+        deleted_at: null,
+        name: { $regex: `^${escapeRegex(nameTrimmed)}$`, $options: 'i' },
+    };
+    if (excludeObjectId) {
+        filter._id = { $ne: excludeObjectId };
+    }
+    return Offer.findOne(filter);
+};
+
 const parseOptionalQueryDate = (value, fieldName) => {
     if (value === undefined || value === null || String(value).trim() === '') {
         return { ok: true, d: null };
@@ -194,10 +207,7 @@ const createOffer = async (body) => {
         } = body;
         const type = String(body.type).trim().toLowerCase();
 
-        const existing = await Offer.findOne({
-            name: String(name).trim(),
-            deleted_at: null,
-        });
+        const existing = await findOfferByNameInsensitive(name);
         if (existing) {
             return fail(409, 'An offer with this name already exists.');
         }
@@ -258,11 +268,7 @@ const updateOffer = async (id, body) => {
 
         if (body.name !== undefined) {
             const nextName = String(body.name).trim();
-            const existing = await Offer.findOne({
-                name: nextName,
-                deleted_at: null,
-                _id: { $ne: offer._id },
-            });
+            const existing = await findOfferByNameInsensitive(nextName, offer._id);
             if (existing) {
                 return fail(409, 'An offer with this name already exists.');
             }

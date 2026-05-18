@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Order = require("../models/order");
 const OrderPayment = require("../models/order_payment");
 const { callerMatchesOrderParticipant } = require("../utils/order_access");
+const { syncOrderPaymentStatus } = require("../services/order_payment_status_service");
 
 const PAYER_TYPES = new Set(["customer", "partner"]);
 const STATUSES = new Set(["pending", "completed", "failed", "refunded"]);
@@ -79,11 +80,20 @@ const create = async (req, res) => {
     });
     await doc.save();
 
+    const { order: syncedOrder, breakdown } = await syncOrderPaymentStatus(order._id);
+
     return res.status(201).json({
       success: true,
       status: 201,
       message: "Order payment record created.",
       record: doc,
+      order_payment_status: breakdown.payment_status,
+      order: {
+        payment_status: syncedOrder.payment_status,
+        is_paid: syncedOrder.is_paid,
+        customer_due_amount: syncedOrder.customer_due_amount,
+        total_price: syncedOrder.total_price,
+      },
     });
   } catch (error) {
     console.error("order_payment create:", error);
@@ -231,11 +241,20 @@ const update = async (req, res) => {
     row.updated_at = new Date();
     await row.save();
 
+    const { order: syncedOrder, breakdown } = await syncOrderPaymentStatus(order._id);
+
     return res.status(200).json({
       success: true,
       status: 200,
       message: "Order payment updated.",
       record: row,
+      order_payment_status: breakdown.payment_status,
+      order: {
+        payment_status: syncedOrder.payment_status,
+        is_paid: syncedOrder.is_paid,
+        customer_due_amount: syncedOrder.customer_due_amount,
+        total_price: syncedOrder.total_price,
+      },
     });
   } catch (error) {
     console.error("order_payment update:", error);
@@ -287,10 +306,13 @@ const remove = async (req, res) => {
     row.updated_at = new Date();
     await row.save();
 
+    const { breakdown } = await syncOrderPaymentStatus(orderForAuth._id);
+
     return res.status(200).json({
       success: true,
       status: 200,
       message: "Order payment soft-deleted.",
+      order_payment_status: breakdown.payment_status,
     });
   } catch (error) {
     console.error("order_payment remove:", error);

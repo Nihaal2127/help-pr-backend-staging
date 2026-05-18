@@ -33,6 +33,7 @@ const OrderPayment = require('../models/order_payment');
 const OrderOffer = require('../models/order_offer');
 const Quote = require('../models/quote');
 const { computeOrderTotal, recalculateOrderTotals } = require('../utils/order_financials');
+const { isValidOrderPaymentStatus } = require('../enum/order_payment_status_enum');
 const {
   OrderCreationError,
   createOrderFromBody,
@@ -177,6 +178,7 @@ const ORDER_SORT_WHITELIST = new Set([
   'sub_total',
   'unique_id',
   'is_paid',
+  'payment_status',
   'tax',
   'min_deposit',
   'order_description',
@@ -338,6 +340,22 @@ const getAll = async (req, res) => {
         ? parseBoolean(req.query.is_paid)
         : null;
 
+    const payment_status_raw =
+      req.query.payment_status !== undefined &&
+      req.query.payment_status !== null &&
+      String(req.query.payment_status).trim() !== ''
+        ? String(req.query.payment_status).trim().toLowerCase()
+        : null;
+
+    if (payment_status_raw && !isValidOrderPaymentStatus(payment_status_raw)) {
+      return res.status(409).json({
+        success: false,
+        status: 409,
+        message:
+          'Invalid payment_status. Use: unpaid, paid, partially_paid, refund, partially_refund.',
+      });
+    }
+
     const rawSearch = req.query.search;
     const legacyKeyword =
       req.query.keyword !== undefined &&
@@ -370,6 +388,7 @@ const getAll = async (req, res) => {
       ...dateRangeResult.filter,
       ...statusFilterResult.filter,
       ...(is_paid !== null && { is_paid }),
+      ...(payment_status_raw && { payment_status: payment_status_raw }),
       ...(req.query.user_id &&
         mongoose.Types.ObjectId.isValid(req.query.user_id) && {
           user_id: new mongoose.Types.ObjectId(req.query.user_id),
@@ -993,7 +1012,7 @@ const update = async (req, res) => {
     }
 
     const orderToUpdate = repriceResult?.order ?? order;
-    const { order_status, is_paid } = req.body;
+    const { order_status } = req.body;
 
     const updateData = {};
 
@@ -1011,11 +1030,6 @@ const update = async (req, res) => {
         orderToUpdate.order_status = nextStatus;
         updateData.service_status = nextStatus;
       }
-    }
-
-    if (is_paid !== undefined) {
-      orderToUpdate.is_paid = is_paid;
-      updateData.is_paid = is_paid;
     }
 
     if (Object.keys(updateData).length > 0) {

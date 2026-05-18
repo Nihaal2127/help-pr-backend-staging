@@ -293,6 +293,13 @@ const applyPricingToOrder = (order, pricing) => {
     pricing.admin_earning !== undefined
       ? pricing.admin_earning
       : pricing.commission_amount;
+
+  if (order.payment_status === undefined || order.payment_status === null) {
+    order.payment_status = "unpaid";
+  }
+  if (order.customer_due_amount === undefined || order.customer_due_amount === null) {
+    order.customer_due_amount = pricing.total_price ?? 0;
+  }
 };
 
 const mapPricingToServiceLine = (pricing, overrides = {}) => ({

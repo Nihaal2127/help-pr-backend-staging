@@ -1,5 +1,6 @@
 const Order = require("../models/order");
 const OrderAdditionalCharge = require("../models/order_additional_charge");
+const { syncOrderPaymentStatus } = require("../services/order_payment_status_service");
 const {
   computeOrderTotal,
   aggregateAdditionalCharges,
@@ -73,7 +74,8 @@ const recalculateOrderTotals = async (orderId) => {
   order.min_deposit = finalized.minimum_deposit_amount;
   order.updated_at = new Date();
   await order.save();
-  return order;
+  await syncOrderPaymentStatus(orderId);
+  return Order.findById(orderId);
 };
 
 module.exports = { recalculateOrderTotals, computeOrderTotal };

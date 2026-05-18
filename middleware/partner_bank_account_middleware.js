@@ -13,7 +13,7 @@ const createBankAccountMiddleware = (req, res, next) => {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'Partner id is requiered.'
+      message: 'Partner id is required.'
     });
   } else {
     if (!mongoose.Types.ObjectId.isValid(partner_id)) {
@@ -28,35 +28,35 @@ const createBankAccountMiddleware = (req, res, next) => {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'Bank name id is requiered.'
+      message: 'Bank name id is required.'
     });
   }
   if (!account_holder_name || account_holder_name.trim() === '') {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'Account holder name id is requiered.'
+      message: 'Account holder name id is required.'
     });
   }
   if (!account_number || account_number.trim() === '') {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'Account number id is requiered.'
+      message: 'Account number id is required.'
     });
   }
   if (!ifsc_code || ifsc_code.trim() === '') {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'IFSC code id is requiered.'
+      message: 'IFSC code id is required.'
     });
   }
   if (!branch_name || branch_name.trim() === '') {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'Branch name id is requiered.'
+      message: 'Branch name id is required.'
     });
   }
   next();
@@ -85,35 +85,35 @@ const updateBankAccountMiddleware = (req, res, next) => {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'Bank name id is requiered.'
+      message: 'Bank name id is required.'
     });
   }
   if (account_holder_name !== undefined && account_holder_name.trim() === '') {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'Account holder name id is requiered.'
+      message: 'Account holder name id is required.'
     });
   }
   if (account_number !== undefined && account_number.trim() === '') {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'Account number id is requiered.'
+      message: 'Account number id is required.'
     });
   }
   if (ifsc_code !== undefined && ifsc_code.trim() === '') {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'IFSC code id is requiered.'
+      message: 'IFSC code id is required.'
     });
   }
   if (branch_name !== undefined && branch_name.trim() === '') {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'Branch name id is requiered.'
+      message: 'Branch name id is required.'
     });
   }
 

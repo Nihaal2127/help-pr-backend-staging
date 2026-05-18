@@ -1,47 +1,74 @@
 const Order = require("../models/order");
 const OrderAdditionalCharge = require("../models/order_additional_charge");
+const {
+  computeOrderTotal,
+  aggregateAdditionalCharges,
+  finalizeOrderPricing,
+  computeAdditionalChargeLine,
+} = require("./order_pricing");
 
 /**
- * Customer-facing total before persistence (e.g. Razorpay link before first save).
- * admin_commission does not reduce this total (reporting field).
- */
-const computeOrderTotal = (orderLike, additionalChargesSum = 0) => {
-  const sub = Number(orderLike.sub_total) || 0;
-  const tax = Number(orderLike.tax) || 0;
-  const userFee = Number(orderLike.user_paltform_fee) || 0;
-  const partnerFee = Number(orderLike.partner_commison_platform_fee) || 0;
-  const add = Number(additionalChargesSum) || 0;
-  const disc =
-    orderLike.discount_amount !== null && orderLike.discount_amount !== undefined
-      ? Number(orderLike.discount_amount)
-      : 0;
-  let total = sub + tax + userFee + partnerFee + add - disc;
-  if (total < 0) total = 0;
-  return total;
-};
-
-/**
- * Recomputes additional_charges_total from line items and sets order.total_price as:
- * sub_total + tax + user_paltform_fee + partner_commison_platform_fee + additional_charges_total - discount_amount
- * (admin_commission is stored for reporting; it does not change customer total here.)
+ * Recomputes additional charge rollups and order.total_price / minimum_deposit_amount.
  */
 const recalculateOrderTotals = async (orderId) => {
   const order = await Order.findById(orderId);
   if (!order || order.deleted_at) return null;
 
-  const agg = await OrderAdditionalCharge.aggregate([
-    {
-      $match: {
-        order_id: order._id,
-        $or: [{ deleted_at: null }, { deleted_at: { $exists: false } }],
-      },
-    },
-    { $group: { _id: null, sum: { $sum: "$amount" } } },
-  ]);
-  const additionalSum = agg.length ? agg[0].sum : 0;
-  order.additional_charges_total = additionalSum;
-  order.total_price = computeOrderTotal(order, additionalSum);
+  const rows = await OrderAdditionalCharge.find({
+    order_id: order._id,
+    $or: [{ deleted_at: null }, { deleted_at: { $exists: false } }],
+  }).lean();
 
+  const taxPercent =
+    order.tax_percent !== undefined && order.tax_percent !== null
+      ? Number(order.tax_percent)
+      : 0;
+
+  for (const row of rows) {
+    if (
+      row.total_amount !== undefined &&
+      row.total_amount !== null &&
+      row.tax_amount !== undefined &&
+      row.tax_amount !== null
+    ) {
+      continue;
+    }
+    const line = computeAdditionalChargeLine(row.amount, taxPercent);
+    await OrderAdditionalCharge.updateOne(
+      { _id: row._id },
+      {
+        $set: {
+          tax_percent: line.tax_percent,
+          tax_amount: line.tax_amount,
+          total_amount: line.total_amount,
+          updated_at: new Date(),
+        },
+      }
+    );
+    row.tax_amount = line.tax_amount;
+    row.total_amount = line.total_amount;
+  }
+
+  const additionalAgg = aggregateAdditionalCharges(rows);
+
+  const finalized = finalizeOrderPricing(
+    {
+      sub_total: order.sub_total,
+      tax_amount: order.tax_amount ?? order.tax,
+      tax_percent: order.tax_percent,
+      minimum_deposit_percent: order.minimum_deposit_percent,
+      discount_amount: order.discount_amount,
+    },
+    additionalAgg,
+    order.discount_amount
+  );
+
+  order.additional_charges_subtotal = finalized.additional_charges_subtotal;
+  order.additional_charges_tax = finalized.additional_charges_tax;
+  order.additional_charges_total = finalized.additional_charges_total;
+  order.total_price = finalized.total_price;
+  order.minimum_deposit_amount = finalized.minimum_deposit_amount;
+  order.min_deposit = finalized.minimum_deposit_amount;
   order.updated_at = new Date();
   await order.save();
   return order;

@@ -10,6 +10,7 @@ const Address = require('../models/address');
 const FranchiseCategory = require('../models/franchise_category');
 const FranchiseService = require('../models/franchise_service');
 const PartnerService = require('../models/partner_service');
+const PartnerCategory = require('../models/partner_category');
 const { applyPagination, applyDropDownFilter } = require('../utils/pagination');
 const { parseBoolean } = require('../utils/parser');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
@@ -888,9 +889,12 @@ const fetchCustomersMatchingFranchiseAreaPincodes = async (franchiseLean) => {
     }));
 };
 
-/** Global service fields for franchise related-catalog (commission comes from here, not partner_service). */
+/** Global catalog fields for franchise related-catalog partner hydration. */
 const RELATED_CATALOG_SERVICE_SELECT =
     'service_id name desc image_url category_id is_active is_request price helpers tax commission payment_type minimum_deposit approval_status rejection_reason requested_by created_at updated_at';
+
+const RELATED_CATALOG_CATEGORY_SELECT =
+    'category_id name desc image_url is_active is_request approval_status rejection_reason requested_by created_at updated_at';
 
 const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
     try {
@@ -931,74 +935,63 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
             fetchCustomersMatchingFranchiseAreaPincodes(franchise),
         ]);
 
-        const mergedCatEntries = mergeFranchiseCategoryEntries(fcDocs);
-        const mergedSvcEntries = mergeFranchiseServiceEntries(fsDocs);
+        const partnerIds = partners.map((p) => p._id);
 
-        const activeCategoryIds = mergedCatEntries
-            .filter((e) => e.is_active === true)
-            .map((e) => e.category_id);
-        const serviceIds = mergedSvcEntries.map((e) => e.service_id);
+        let psRows = [];
+        let pcRows = [];
+        if (partnerIds.length > 0) {
+            [psRows, pcRows] = await Promise.all([
+                PartnerService.find({
+                    partner_id: { $in: partnerIds },
+                    deleted_at: null,
+                    is_active: true,
+                })
+                    .select(
+                        'partner_id category_id service_id is_accept_request description tax minimum_deposit payment_type price is_active created_at updated_at'
+                    )
+                    .lean(),
+                PartnerCategory.find({
+                    partner_id: { $in: partnerIds },
+                    deleted_at: null,
+                    is_active: true,
+                })
+                    .select('partner_id category_id services is_active created_at updated_at')
+                    .lean(),
+            ]);
+        }
 
-        const [categoryRows, serviceRows] = await Promise.all([
-            activeCategoryIds.length === 0
-                ? []
-                : Category.find({
-                      _id: { $in: activeCategoryIds },
-                      deleted_at: null,
-                      is_active: true,
-                      is_request: false,
-                      approval_status: 'approve',
-                  })
-                      .select('_id name desc image_url is_active approval_status')
-                      .sort({ created_at: -1 })
-                      .lean(),
-            serviceIds.length === 0
+        const partnerServiceIds = [
+            ...new Set(psRows.map((r) => r.service_id?.toString()).filter(Boolean)),
+        ];
+        const partnerCategoryIds = [
+            ...new Set(pcRows.map((r) => r.category_id?.toString()).filter(Boolean)),
+        ];
+
+        const [serviceRows, categoryRows] = await Promise.all([
+            partnerServiceIds.length === 0
                 ? []
                 : Service.find({
-                      _id: { $in: serviceIds },
+                      _id: { $in: partnerServiceIds },
                       deleted_at: null,
                   })
                       .select(RELATED_CATALOG_SERVICE_SELECT)
                       .lean(),
+            partnerCategoryIds.length === 0
+                ? []
+                : Category.find({
+                      _id: { $in: partnerCategoryIds },
+                      deleted_at: null,
+                  })
+                      .select(RELATED_CATALOG_CATEGORY_SELECT)
+                      .lean(),
         ]);
 
         const svcById = new Map(serviceRows.map((s) => [s._id.toString(), s]));
-
-        const activeFranchiseServices = mergedSvcEntries
-            .map((e) => {
-                const s = svcById.get(e.service_id.toString()) || null;
-                return { service_id: e.service_id, is_active: e.is_active, service: s };
-            })
-            .filter(
-                (row) =>
-                    row.is_active === true &&
-                    row.service &&
-                    isCatalogServiceActive(row.service)
-            );
-
-        const activeFranchiseServiceOids = activeFranchiseServices.map((r) => r.service_id);
-        const partnerIds = partners.map((p) => p._id);
-
-        let psRows = [];
-        if (partnerIds.length > 0 && activeFranchiseServiceOids.length > 0) {
-            psRows = await PartnerService.find({
-                partner_id: { $in: partnerIds },
-                service_id: { $in: activeFranchiseServiceOids },
-                deleted_at: null,
-            })
-                .select(
-                    'partner_id category_id service_id is_accept_request description tax minimum_deposit payment_type price is_active created_at updated_at'
-                )
-                .lean();
-        }
-
-        const serviceDetailById = new Map(
-            activeFranchiseServices.map((r) => [r.service_id.toString(), r.service])
-        );
+        const catById = new Map(categoryRows.map((c) => [c._id.toString(), c]));
 
         const partnerServiceMap = new Map();
         for (const row of psRows) {
-            const svc = serviceDetailById.get(row.service_id.toString());
+            const svc = svcById.get(row.service_id?.toString());
             if (!svc) continue;
             const pid = row.partner_id.toString();
             if (!partnerServiceMap.has(pid)) partnerServiceMap.set(pid, []);
@@ -1021,6 +1014,23 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
             });
         }
 
+        const partnerCategoryMap = new Map();
+        for (const row of pcRows) {
+            const cat = catById.get(row.category_id?.toString());
+            if (!cat) continue;
+            const pid = row.partner_id.toString();
+            if (!partnerCategoryMap.has(pid)) partnerCategoryMap.set(pid, []);
+            partnerCategoryMap.get(pid).push({
+                _id: row._id,
+                category_id: row.category_id,
+                services: Array.isArray(row.services) ? row.services : [],
+                is_active: row.is_active !== undefined ? Boolean(row.is_active) : true,
+                created_at: row.created_at ?? null,
+                updated_at: row.updated_at ?? null,
+                category: cat,
+            });
+        }
+
         for (const [, list] of partnerServiceMap) {
             list.sort((a, b) =>
                 String(a.service?.name || '').localeCompare(String(b.service?.name || ''), 'en', {
@@ -1028,20 +1038,18 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
                 })
             );
         }
-
-        const availableCategoriesPayload = categoryRows
-            .filter(isCatalogCategoryActive)
-            .map((c) => ({
-                _id: c._id,
-                name: c.name,
-                desc: c.desc,
-                image_url: c.image_url,
-            }));
+        for (const [, list] of partnerCategoryMap) {
+            list.sort((a, b) =>
+                String(a.category?.name || '').localeCompare(String(b.category?.name || ''), 'en', {
+                    sensitivity: 'base',
+                })
+            );
+        }
 
         const partnersWithServices = partners.map((p) => ({
             ...p,
             active_services_providing: partnerServiceMap.get(p._id.toString()) || [],
-            available_categories: availableCategoriesPayload,
+            active_categories_providing: partnerCategoryMap.get(p._id.toString()) || [],
         }));
 
         return ok(200, {

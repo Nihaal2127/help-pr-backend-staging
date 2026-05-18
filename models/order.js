@@ -82,9 +82,20 @@ var orderSchema = new schema(
     work_start_time: { type: String, default: "", trim: true },
     work_end_time: { type: String, default: "", trim: true },
     service_price: { type: Number, default: 0 },
+    /** Base service charge for booked hours (from frontend). */
+    total_service_charge: { type: Number, default: 0 },
+    /** Snapshotted from service.commission at order time (%). */
+    commission_percent: { type: Number, default: 0 },
+    /** total_service_charge × commission_percent / 100 */
+    commission_amount: { type: Number, default: 0 },
 
     sub_total: { type: Number, default: 0, require: true },
+    /** Legacy: stores tax_amount for older clients; new orders use tax_percent + tax_amount. */
     tax: { type: Number, default: 0, require: true },
+    /** Snapshotted from service.tax at order time (%). */
+    tax_percent: { type: Number, default: 0 },
+    /** sub_total × tax_percent / 100 */
+    tax_amount: { type: Number, default: 0 },
     discount_amount: { type: Number, default: null },
     discount_percent: { type: Number, default: null },
     discount_code: { type: String, default: "", trim: true },
@@ -92,12 +103,21 @@ var orderSchema = new schema(
 
     user_paltform_fee: { type: Number, default: 0, require: true },
     partner_commison_platform_fee: { type: Number, default: 0, require: true },
-    /** Sum of active order_additional_charge rows; maintained by recalculateOrderTotals */
+    /** Sum of pre-tax additional charge amounts */
+    additional_charges_subtotal: { type: Number, default: 0 },
+    /** Sum of tax on additional charges */
+    additional_charges_tax: { type: Number, default: 0 },
+    /** Sum of active order_additional_charge total_amount; maintained by recalculateOrderTotals */
     additional_charges_total: { type: Number, default: 0 },
-    /** Platform commission amount for this order (reporting; not subtracted from total_price in helper) */
+    /** Alias of commission_amount (reporting). */
     admin_commission: { type: Number, default: 0 },
     total_price: { type: Number, default: 0, require: true },
     admin_earning: { type: Number, default: 0, require: true },
+    /** Snapshotted from service.minimum_deposit at order time (%). */
+    minimum_deposit_percent: { type: Number, default: 0 },
+    /** minimum_deposit_percent applied to final total_price */
+    minimum_deposit_amount: { type: Number, default: 0 },
+    /** Legacy alias of minimum_deposit_amount */
     min_deposit: { type: Number, default: 0 },
 
     created_at: { type: Date, default: Date.now },

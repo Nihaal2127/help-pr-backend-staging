@@ -2824,7 +2824,7 @@
       "item": [
         {
           "name": "Partner (type 2)",
-          "description": "Partner CRUD uses **`/api/user`**. **`Create partner (web)`** uses **`multipart/form-data`**. Use **`partner_services`** (underscore) **or** **`partner-services`** (hyphen); middleware copies the alias when **`partner_services`** is empty. Parallel **`category_ids`** / **`service_ids`** may be JSON arrays or a single 24-hex ObjectId string each. New partners are always saved **`verification_status`: 1** (pending) and **`is_active`: false**; body **`is_verified`** on create is ignored. Optional **`date_of_birth`** (ISO date), **`experience`** (string). Set **`categoryObjectId`** / **`serviceObjectId`** in Environment. Master **`Document`** catalog (**`is_active`**: true) seeds **`partner_document`** rows; uploads write **`document_image`** when **`Document.name`** matches (spaces or underscores). Empty catalog → no rows to update (create may still **200**). **`POST /create`** response does **not** include expanded **`documents`** — use **`GET /api/user/get/:id`**. **`bank_account`**, verification **files** + **`partner_documents`**, **`profile_url`**, **`image`**. Set **`partnerId`** from create or **Register partner (public)**.",
+          "description": "Partner CRUD uses **`/api/user`**. **`partner_services`** JSON: `{ category_id, is_active, services: [{ service_id, is_active, description, price }] }` — on **create** inserts catalog; on **update** replaces full catalog when sent (omit to leave catalog unchanged). Create also accepts **`partner-services`** alias or parallel **`category_ids`** / **`service_ids`**. New partners: **`verification_status` 1**, **`is_active` false** until **`is_verified`**: **approved** on update. **`PUT .../update/:id`**: profile fields, **`is_verified`**, verification files, **`partner_documents`**; not **`bank_account`** / **`partner_subscription`**. Use **`GET .../get/:id`** for **`partner_services`** after update.",
           "item": [
             {
               "name": "Create partner (web)",
@@ -2967,9 +2967,9 @@
                     },
                     {
                       "key": "partner_services",
-                      "value": "[{\"category_id\":\"{{categoryObjectId}}\",\"services\":[{\"service_id\":\"{{serviceObjectId}}\",\"description\":\"legal documents\",\"price\":1234}]}]",
+                      "value": "[{\"category_id\":\"{{categoryObjectId}}\",\"is_active\":true,\"services\":[{\"service_id\":\"{{serviceObjectId}}\",\"is_active\":true,\"description\":\"legal documents\",\"price\":1234}]}]",
                       "type": "text",
-                      "description": "Preferred key: JSON array `[{ category_id, services: [{ service_id, description, price }] }]`. Same JSON may be sent as **`partner-services`** if **`partner_services`** is omitted."
+                      "description": "JSON array: [{ category_id, is_active, services: [{ service_id, is_active, description, price, tax, payment_type, minimum_deposit }] }]. category is_active → partner_category; service is_active → partner_service."
                     },
                     {
                       "key": "partner-services",
@@ -3207,28 +3207,6 @@
                   "mode": "formdata",
                   "formdata": [
                     {
-                      "key": "type",
-                      "value": "2",
-                      "type": "text"
-                    },
-                    {
-                      "key": "is_from_web",
-                      "value": "true",
-                      "type": "text"
-                    },
-                    {
-                      "key": "registration_type",
-                      "value": "1",
-                      "type": "text"
-                    },
-                    {
-                      "key": "created_by_id",
-                      "value": "{{adminId}}",
-                      "type": "text",
-                      "disabled": true,
-                      "description": "Usually omitted on update; harmless if sent."
-                    },
-                    {
                       "key": "name",
                       "value": "Updated Partner Name",
                       "type": "text"
@@ -3261,36 +3239,6 @@
                     {
                       "key": "area_id",
                       "value": "{{areaId}}",
-                      "type": "text",
-                      "description": "Optional; not stored on user."
-                    },
-                    {
-                      "key": "date_of_birth",
-                      "value": "1990-05-15",
-                      "type": "text",
-                      "description": "Optional; ISO date string. Disable row to omit from update."
-                    },
-                    {
-                      "key": "experience",
-                      "value": "5 years residential services",
-                      "type": "text",
-                      "description": "Optional; disable row to omit from update."
-                    },
-                    {
-                      "key": "is_verified",
-                      "value": "approved",
-                      "type": "text",
-                      "disabled": true,
-                      "description": "**`approved`**: sets **`verification_status` 2**, **`verified_at`**, **`is_active` true**. **`rejected`**: status 3, **`is_active` false**. **`pending`**: status 1."
-                    },
-                    {
-                      "key": "is_active",
-                      "value": "true",
-                      "type": "text"
-                    },
-                    {
-                      "key": "is_blocked",
-                      "value": "false",
                       "type": "text"
                     },
                     {
@@ -3299,9 +3247,45 @@
                       "type": "text"
                     },
                     {
-                      "key": "profile_url",
-                      "value": "user_profile/3c8b7641-193a-44db-a3d4-b826a332f005_item-detail-btn-img.png",
+                      "key": "date_of_birth",
+                      "value": "1990-05-15",
+                      "type": "text",
+                      "description": "Optional ISO date. Disable row to omit."
+                    },
+                    {
+                      "key": "experience",
+                      "value": "5",
+                      "type": "text",
+                      "description": "Optional string. Disable row to omit."
+                    },
+                    {
+                      "key": "gender",
+                      "value": "male",
+                      "type": "text",
+                      "disabled": true,
+                      "description": "Optional: male | female | other"
+                    },
+                    {
+                      "key": "is_active",
+                      "value": "true",
+                      "type": "text",
+                      "description": "Partner user account active flag (not catalog is_active)."
+                    },
+                    {
+                      "key": "is_blocked",
+                      "value": "false",
                       "type": "text"
+                    },
+                    {
+                      "key": "is_business",
+                      "value": "false",
+                      "type": "text"
+                    },
+                    {
+                      "key": "chat",
+                      "value": "true",
+                      "type": "text",
+                      "disabled": true
                     },
                     {
                       "key": "franchise_id",
@@ -3314,104 +3298,75 @@
                       "value": "Test@1234",
                       "type": "text",
                       "disabled": true,
-                      "description": "Enable only to change password (same validation as create)."
+                      "description": "Optional; enable to change password."
                     },
                     {
-                      "key": "confirm_password",
-                      "value": "Test@1234",
+                      "key": "profile_url",
+                      "value": "user_profile/3c8b7641-193a-44db-a3d4-b826a332f005_item-detail-btn-img.png",
                       "type": "text",
-                      "disabled": true
-                    },
-                    {
-                      "key": "partner_services",
-                      "value": "[{\"category_id\":\"{{categoryObjectId}}\",\"services\":[{\"service_id\":\"{{serviceObjectId}}\",\"description\":\"legal documents\",\"price\":1234}]}]",
-                      "type": "text",
-                      "disabled": true,
-                      "description": "Same JSON shape as create (**`partner_services`** or **`partner-services`**). Partner service rows are not replaced by this route by default; enable only if you extend the API."
-                    },
-                    {
-                      "key": "category_ids",
-                      "value": "[\"{{categoryObjectId}}\",\"{{categoryObjectId}}\"]",
-                      "type": "text",
-                      "disabled": true
-                    },
-                    {
-                      "key": "service_ids",
-                      "value": "[\"{{serviceObjectId}}\",\"{{serviceObjectId}}\",\"{{serviceObjectId}}\"]",
-                      "type": "text",
-                      "disabled": true
-                    },
-                    {
-                      "key": "service_names",
-                      "value": "[\"Legal Documentation Service\",\"Home Companion Service\",\"Housekeeping Assistance\"]",
-                      "type": "text",
-                      "disabled": true
-                    },
-                    {
-                      "key": "service_descriptions",
-                      "value": "[\"legal documents\",\"Home services\",\"House cleaning\"]",
-                      "type": "text",
-                      "disabled": true
-                    },
-                    {
-                      "key": "service_prices",
-                      "value": "[\"1234\",\"1000\",\"999\"]",
-                      "type": "text",
-                      "disabled": true
-                    },
-                    {
-                      "key": "vehicle_registration",
-                      "type": "file",
-                      "src": []
-                    },
-                    {
-                      "key": "police_verification_certificate",
-                      "type": "file",
-                      "src": []
-                    },
-                    {
-                      "key": "pan_card",
-                      "type": "file",
-                      "src": []
-                    },
-                    {
-                      "key": "driving_license",
-                      "type": "file",
-                      "src": []
-                    },
-                    {
-                      "key": "aadhar_card",
-                      "type": "file",
-                      "src": []
-                    },
-                    {
-                      "key": "partner_documents",
-                      "value": "{}",
-                      "type": "text"
-                    },
-                    {
-                      "key": "bank_account",
-                      "value": "{\"account_holder_name\":\"Siva\",\"account_number\":\"1111111111111\",\"ifsc_code\":\"idbi000t196\",\"bank_name\":\"indian bank\",\"branch_name\":\"\",\"is_primary\":true,\"is_active\":true}",
-                      "type": "text",
-                      "disabled": true
-                    },
-                    {
-                      "key": "partner_subscription",
-                      "value": "{\"subscription_plan_id\":\"{{id}}\",\"subscription_start_date\":\"2026-04-30\",\"subscription_end_date\":\"2026-05-30\",\"status\":\"active\",\"notes\":\"\"}",
-                      "type": "text",
-                      "disabled": true,
-                      "description": "Same shape as **Create partner**; **`status`** = **`active`** | **`expired`** | **`cancelled`** (string)."
-                    },
-                    {
-                      "key": "is_business",
-                      "value": "false",
-                      "type": "text"
+                      "description": "Ignored when image file is attached."
                     },
                     {
                       "key": "image",
                       "type": "file",
                       "src": [],
-                      "description": "Optional new profile photo."
+                      "description": "Optional profile image."
+                    },
+                    {
+                      "key": "is_verified",
+                      "value": "approved",
+                      "type": "text",
+                      "disabled": true,
+                      "description": "approved | rejected | pending — maps to verification_status."
+                    },
+                    {
+                      "key": "verification_rejection_reason",
+                      "value": "",
+                      "type": "text",
+                      "disabled": true,
+                      "description": "Use when is_verified is rejected."
+                    },
+                    {
+                      "key": "partner_services",
+                      "value": "[{\"category_id\":\"{{categoryObjectId}}\",\"is_active\":true,\"services\":[{\"service_id\":\"{{serviceObjectId}}\",\"is_active\":true,\"description\":\"legal documents\",\"price\":1234}]},{\"category_id\":\"{{categoryObjectId}}\",\"is_active\":false,\"services\":[{\"service_id\":\"{{serviceObjectId}}\",\"is_active\":false,\"description\":\"second service\",\"price\":500}]}]",
+                      "type": "text",
+                      "description": "JSON array. Replaces full partner catalog. category is_active → partner_category.is_active; service is_active → partner_service.is_active. Use distinct category_id / service_id per row (duplicate IDs collapse to one DB row). Omit this field to leave catalog unchanged."
+                    },
+                    {
+                      "key": "partner_documents",
+                      "value": "{}",
+                      "type": "text",
+                      "description": "Optional JSON map of document slug → URL/path; merged with file uploads."
+                    },
+                    {
+                      "key": "vehicle_registration",
+                      "type": "file",
+                      "src": [],
+                      "disabled": true
+                    },
+                    {
+                      "key": "police_verification_certificate",
+                      "type": "file",
+                      "src": [],
+                      "disabled": true
+                    },
+                    {
+                      "key": "pan_card",
+                      "type": "file",
+                      "src": [],
+                      "disabled": true
+                    },
+                    {
+                      "key": "driving_license",
+                      "type": "file",
+                      "src": [],
+                      "disabled": true
+                    },
+                    {
+                      "key": "aadhar_card",
+                      "type": "file",
+                      "src": [],
+                      "disabled": true
                     }
                   ]
                 },
@@ -3427,9 +3382,9 @@
                     "{{partnerId}}"
                   ]
                 },
-                "description": "**`PUT /api/user/update/:id`** — same **`multipart`** field names as create; optional **`date_of_birth`**, **`experience`**, **`is_verified`** (`approved` / `rejected` / `pending`). Verification **files** + **`partner_documents`** for **`type`**: **2**; **`partner_document.document_image`** updates when **Document.name** matches (slug or spaced form, same as create)."
+                "description": "**PUT /api/user/update/:id** (partner). **multipart/form-data** or JSON.\n\n**Profile (optional each):** name, email, phone_number, address, state_id, city_id, area_id, pincode, profile_url, date_of_birth, experience, gender, is_active, is_blocked, is_business, chat, franchise_id, password.\n\n**Verification:** is_verified (approved|rejected|pending), verification_rejection_reason; file fields vehicle_registration, police_verification_certificate, pan_card, driving_license, aadhar_card; partner_documents JSON.\n\n**Catalog:** partner_services JSON array — replaces all partner_category + partner_service rows when sent. Shape: [{ category_id, is_active, services: [{ service_id, is_active, description, price, tax, payment_type, minimum_deposit }] }]. Omitted is_active defaults to true.\n\n**Not handled on update:** bank_account, partner_subscription, confirm_password. Use GET /api/user/get/:id for documents and partner_services after update."
               },
-              "description": "Multipart **`partnerId`** update — form keys aligned with create (optional fields disabled)."
+              "description": "Update partner profile, verification, and/or full service catalog (partner_services)."
             },
             {
               "name": "Delete partner (soft)",

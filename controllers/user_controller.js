@@ -24,7 +24,10 @@ const { getUploadType } = require('../enum/upload_type_enum');
 const PartnerDocument = require('../models/partner_document');
 const PartnerBankAccount = require('../models/partner_bank_account');
 const PartnerSubscription = require('../models/partner_subscription');
-const { replacePartnerCategoriesFromSignupRows } = require('../services/partner_category_service');
+const {
+  replacePartnerCategoriesFromSignupRows,
+  replacePartnerCatalogFromNormalizedRows,
+} = require('../services/partner_category_service');
 const partnerSubscriptionService = require('../services/partner_subscription_service');
 
 const GET_ALL_SORT_FIELDS = ['name', 'email', 'created_at'];
@@ -494,6 +497,11 @@ const normalizePartnerServices = (payload) => {
   return rows;
 };
 
+const hasPartnerCatalogPayload = (body) =>
+  body.partner_services !== undefined ||
+  body.partner_categories !== undefined ||
+  body.service_ids !== undefined;
+
 /** When frontend sends service_ids + category_ids (+ optional names/descriptions/prices) instead of partner_services. */
 const buildPartnerServicesFromParallelFields = (body) => {
   const coerceArray = (val, fallback = []) => {
@@ -547,6 +555,38 @@ const buildPartnerServicesFromParallelFields = (body) => {
     });
   }
   return rows;
+};
+
+/** Same resolution as partner create (type 2). */
+const resolvePartnerServicesInputFromBody = (body) => {
+  const partner_services = body.partner_services;
+  const psArr = Array.isArray(partner_services) ? partner_services : [];
+  const hasPartnerServicesPayload = psArr.length > 0;
+  const pcArr = Array.isArray(body.partner_categories) ? body.partner_categories : [];
+  const hasPartnerCategoriesPayload = pcArr.length > 0;
+  const hasParallelIds =
+    (Array.isArray(body.service_ids) && body.service_ids.length > 0) ||
+    (typeof body.service_ids === 'string' && String(body.service_ids).trim() !== '');
+
+  if (hasPartnerServicesPayload) {
+    return partner_services;
+  }
+  if (body.partner_services !== undefined) {
+    return partner_services;
+  }
+  if (!hasPartnerServicesPayload && hasParallelIds) {
+    return buildPartnerServicesFromParallelFields(body);
+  }
+  if (!hasPartnerServicesPayload && !hasParallelIds && hasPartnerCategoriesPayload) {
+    return pcArr;
+  }
+  if (body.partner_categories !== undefined) {
+    return pcArr;
+  }
+  if (body.service_ids !== undefined) {
+    return buildPartnerServicesFromParallelFields(body);
+  }
+  return null;
 };
 
 const normalizePartnerDocuments = (payload) => {
@@ -1286,21 +1326,8 @@ const create = async (req, res) => {
       verification_rejection_reason,
     } = req.body;
     const userType = Number(type);
-    let resolvedPartnerServicesInput = partner_services;
-    if (userType === 2) {
-      const psArr = Array.isArray(partner_services) ? partner_services : [];
-      const hasPartnerServicesPayload = psArr.length > 0;
-      const pcArr = Array.isArray(req.body.partner_categories) ? req.body.partner_categories : [];
-      const hasPartnerCategoriesPayload = pcArr.length > 0;
-      const hasParallelIds =
-        (Array.isArray(req.body.service_ids) && req.body.service_ids.length > 0) ||
-        (typeof req.body.service_ids === 'string' && String(req.body.service_ids).trim() !== '');
-      if (!hasPartnerServicesPayload && hasParallelIds) {
-        resolvedPartnerServicesInput = buildPartnerServicesFromParallelFields(req.body);
-      } else if (!hasPartnerServicesPayload && !hasParallelIds && hasPartnerCategoriesPayload) {
-        resolvedPartnerServicesInput = pcArr;
-      }
-    }
+    const resolvedPartnerServicesInput =
+      userType === 2 ? resolvePartnerServicesInputFromBody(req.body) : null;
     let resolvedProfileUrl = profile_url;
     const profileUpload = req.files?.image?.[0] || req.file;
     if (profileUpload) {
@@ -1476,7 +1503,9 @@ const create = async (req, res) => {
       }
       newUser.documents = partnerDocumentIds;
 
-      const normalizedServiceRows = normalizePartnerServices(resolvedPartnerServicesInput);
+      const normalizedServiceRows = normalizePartnerServices(
+        resolvedPartnerServicesInput ?? []
+      );
 
       const savedUser = await newUser.save();
       if (normalizedServiceRows.length > 0) {
@@ -1910,6 +1939,17 @@ const update = async (req, res) => {
         updatedUser._id,
         normalizePartnerDocuments(mergedPartnerDocs)
       );
+
+      if (hasPartnerCatalogPayload(updateData)) {
+        const resolvedPartnerServicesInput = resolvePartnerServicesInputFromBody(updateData);
+        const normalizedServiceRows = normalizePartnerServices(
+          resolvedPartnerServicesInput ?? []
+        );
+        await replacePartnerCatalogFromNormalizedRows(
+          updatedUser._id,
+          normalizedServiceRows
+        );
+      }
     }
     let responseRecord = updatedUser;
 

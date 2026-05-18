@@ -405,9 +405,28 @@ const getCountData = async (req, res) => {
             const inactive_employee = await User.countDocuments({ type: 3, is_active: false, deleted_at: null, ...userFr });
             const active_employee = await User.countDocuments({ type: 3, is_active: true, deleted_at: null, ...userFr });
 
-            const total_partner = await User.countDocuments({ type: 2, verification_status: 2, deleted_at: null, ...userFr });
-            const inactive_partner = await User.countDocuments({ type: 2, verification_status: 2, is_active: false, deleted_at: null, ...userFr });
-            const active_partner = await User.countDocuments({ type: 2, verification_status: 2, is_active: true, deleted_at: null, ...userFr });
+            const partnerApprovedFilter = {
+                type: 2,
+                verification_status: 2,
+                deleted_at: null,
+                ...userFr,
+            };
+            const total_partner = await User.countDocuments(partnerApprovedFilter);
+            const blocked_partner = await User.countDocuments({
+                ...partnerApprovedFilter,
+                is_blocked: true,
+                is_active: false,
+            });
+            const inactive_partner = await User.countDocuments({
+                ...partnerApprovedFilter,
+                is_blocked: false,
+                is_active: false,
+            });
+            const active_partner = await User.countDocuments({
+                ...partnerApprovedFilter,
+                is_blocked: false,
+                is_active: true,
+            });
 
             const total_document = await User.countDocuments({ type: 2, deleted_at: null, ...userFr });
             const pending_document = await User.countDocuments({ type: 2, verification_status: 1, deleted_at: null, ...userFr });
@@ -424,6 +443,7 @@ const getCountData = async (req, res) => {
             response.active_employee = active_employee;
 
             response.total_partner = total_partner;
+            response.blocked_partner = blocked_partner;
             response.inactive_partner = inactive_partner;
             response.active_partner = active_partner;
 

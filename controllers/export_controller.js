@@ -11,7 +11,11 @@ const OrderService = require('../models/order_services');
 const Ticket = require('../models/ticket');
 const createExcel = require('../utils/createExcel');
 const { getUserType } = require('../enum/user_type_enum');
-const { getOrderStatus } = require('../enum/order_status_enum');
+const {
+  normalizeOrderStatus,
+  getOrderStatusLabel,
+  ORDER_STATUS_COMPLETED,
+} = require('../enum/order_status_enum');
 const { getPartnerPaymentStatus } = require('../enum/partner_payment_status_enum');
 const { getResolveStatus } = require('../enum/ticket_resolve_status_enum');
 
@@ -307,7 +311,14 @@ const exportUserList = async (req, res) => {
 
 const exportOrders = async (req, res) => {
     try {
-        const order_status = req.body.order_status;
+        const order_status = normalizeOrderStatus(req.body.order_status);
+        if (!order_status) {
+            return res.status(409).json({
+                success: false,
+                status: 409,
+                message: 'Invalid order_status. Use: in-progress, completed, cancelled, refunded.',
+            });
+        }
         const orders = await Order.aggregate([
             {
                 $match: {
@@ -350,8 +361,8 @@ const exportOrders = async (req, res) => {
         const { fileBuffer, fileName } = await createExcel({
             headers,
             data: orders,
-            sheetName: `${getOrderStatus(order_status)} Report`,
-            fileName: `${getOrderStatus(order_status)}_Orders.xlsx`,
+            sheetName: `${getOrderStatusLabel(order_status)} Report`,
+            fileName: `${getOrderStatusLabel(order_status)}_Orders.xlsx`,
         });
 
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -370,7 +381,7 @@ const exportOrderPayments = async (req, res) => {
             {
                 $match: {
                     deleted_at: null,
-                    service_status: 3,
+                    service_status: ORDER_STATUS_COMPLETED,
                     is_paid: is_paid,
                 },
             },
@@ -439,7 +450,7 @@ const exportPartnerPayments = async (req, res) => {
             {
                 $match: {
                     deleted_at: null,
-                    service_status: 3,
+                    service_status: ORDER_STATUS_COMPLETED,
                     partner_paid_status: partner_paid_status,
                 },
             },
@@ -505,8 +516,19 @@ const exportUserServices = async (req, res) => {
         } else {
             matchStage.partner_id = userObjectId;
         }
-        if (service_status !== 0) {
-            matchStage.service_status = service_status;
+        const normalizedServiceStatus =
+            service_status === 0 || service_status === '0' || service_status === ''
+                ? null
+                : normalizeOrderStatus(service_status);
+        if (service_status !== 0 && service_status !== '0' && service_status !== '' && !normalizedServiceStatus) {
+            return res.status(409).json({
+                success: false,
+                status: 409,
+                message: 'Invalid service_status. Use: in-progress, completed, cancelled, refunded.',
+            });
+        }
+        if (normalizedServiceStatus) {
+            matchStage.service_status = normalizedServiceStatus;
         }
 
         const orderServices = await OrderService.aggregate([
@@ -545,14 +567,14 @@ const exportUserServices = async (req, res) => {
                         $cond: { if: { $eq: ['$payment_mode_id', "2"] }, then: 'Online', else: 'COD' },
                     },
                     transaction_id: '$transaction_id',
-                    ...(service_status === 0 && {
+                    ...((service_status === 0 || service_status === '0') && {
                         service_status: {
                             $switch: {
                                 branches: [
-                                    { case: { $eq: ['$service_status', 1] }, then: 'Pending' },
-                                    { case: { $eq: ['$service_status', 2] }, then: 'In-Progress' },
-                                    { case: { $eq: ['$service_status', 3] }, then: 'Completed' },
-                                    { case: { $eq: ['$service_status', 4] }, then: 'Cancelled' },
+                                    { case: { $eq: ['$service_status', 'in-progress'] }, then: 'In-progress' },
+                                    { case: { $eq: ['$service_status', 'completed'] }, then: 'Completed' },
+                                    { case: { $eq: ['$service_status', 'cancelled'] }, then: 'Cancelled' },
+                                    { case: { $eq: ['$service_status', 'refunded'] }, then: 'Refunded' },
                                 ],
                                 default: 'Unknown',
                             },
@@ -572,7 +594,7 @@ const exportUserServices = async (req, res) => {
             'Payment Status',
             'Pay Mode',
             'Transaction ID',
-            ...(service_status === 0 ? ['Service Status'] : []),
+            ...(service_status === 0 || service_status === '0' ? ['Service Status'] : []),
         ];
 
         console.log('orderServices', orderServices);
@@ -580,8 +602,8 @@ const exportUserServices = async (req, res) => {
         const { fileBuffer, fileName } = await createExcel({
             headers,
             data: orderServices,
-            sheetName: `${user.name} ${service_status === 0 ? '' : getOrderStatus(service_status)} Service Report`,
-            fileName: `${user.user_id}${service_status === 0 ? '' : `_${getOrderStatus(service_status)}`}_Service.xlsx`,
+            sheetName: `${user.name} ${service_status === 0 || service_status === '0' ? '' : getOrderStatusLabel(normalizedServiceStatus)} Service Report`,
+            fileName: `${user.user_id}${service_status === 0 || service_status === '0' ? '' : `_${getOrderStatusLabel(normalizedServiceStatus)}`}_Service.xlsx`,
         });
 
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

@@ -19,29 +19,59 @@ const Quote = require('../models/quote');
 const SubscriptionPlan = require('../models/subscription_plan');
 const PartnerSubscription = require('../models/partner_subscription');
 const { checkObjectIdExists } = require('../validator/id_validator');
+const { resolveOrderListScope } = require('../utils/order_access');
+const { resolveQuoteListScope } = require('../utils/quote_access');
+const {
+  ORDER_STATUS_IN_PROGRESS,
+  ORDER_STATUS_COMPLETED,
+  ORDER_STATUS_CANCELLED,
+  ORDER_STATUS_REFUNDED,
+  buildOrderStatusQueryFilter,
+} = require('../enum/order_status_enum');
 const moment = require("moment-timezone");
+const {
+    coerceLegacyCategoryMappingArrays,
+    coerceLegacyServiceMappingArrays,
+    normalizeStoredCategoriesList,
+    normalizeStoredServicesList,
+} = require('../utils/franchise_catalog_lists');
+const { loadEligibleCatalogMeta } = require('../utils/global_catalog_cascade');
+
+const pickFirstNonEmpty = (...values) => {
+    for (const value of values) {
+        if (value !== undefined && value !== null && String(value).trim() !== '') {
+            return String(value).trim();
+        }
+    }
+    return null;
+};
 
 /**
- * Optional franchise scope from JSON body: `franchise` (preferred) or `franchise_id`.
- * When present, must be a valid 24-char ObjectId.
+ * Franchise scope from body, headers, or query: `franchise` (preferred) or `franchise_id`.
+ * Matches franchise-category / franchise-service list APIs (query `franchise_id`).
  */
-const parseOptionalFranchiseFromBody = (req) => {
-    const rawPrimary = req.body?.franchise;
-    const rawAlt = req.body?.franchise_id;
-    const pick =
-        rawPrimary !== undefined && rawPrimary !== null && String(rawPrimary).trim() !== ''
-            ? rawPrimary
-            : rawAlt !== undefined && rawAlt !== null && String(rawAlt).trim() !== ''
-              ? rawAlt
-              : null;
+const parseOptionalFranchiseScope = (req) => {
+    const pick = pickFirstNonEmpty(
+        req.body?.franchise,
+        req.body?.franchise_id,
+        req.headers?.franchise,
+        req.headers?.franchise_id,
+        req.query?.franchise,
+        req.query?.franchise_id
+    );
     if (pick === null) {
         return { ok: true, oid: null };
     }
-    const s = String(pick).trim();
-    if (!mongoose.Types.ObjectId.isValid(s)) {
+    if (!mongoose.Types.ObjectId.isValid(pick)) {
         return { ok: false, status: 409, message: 'Invalid franchise id.' };
     }
-    return { ok: true, oid: new mongoose.Types.ObjectId(s) };
+    return { ok: true, oid: new mongoose.Types.ObjectId(pick) };
+};
+
+/** Count type from body, headers, or query (e.g. service-management, my-franchise). */
+const resolveCountTypeFromRequest = (req) => {
+    const raw = pickFirstNonEmpty(req.body?.type, req.headers?.type, req.query?.type);
+    return resolveCountType(raw);
 };
 
 const assertFranchiseAccess = async (req, franchiseOid) => {
@@ -111,7 +141,7 @@ const buildFranchiseScopedCompletedOrderIds = async (franchiseOid) => {
     return Order.find({
         _id: { $in: candidates },
         deleted_at: null,
-        order_status: 3,
+        order_status: 'completed',
     }).distinct('_id');
 };
 
@@ -162,6 +192,9 @@ const resolveCountType = (type) => {
         'settings-role': 13,
         settings_role: 13,
         settingsrole: 13,
+        'order-management': 14,
+        order_management: 14,
+        orders: 14,
     };
 
     return typeMap[key] ?? null;
@@ -197,8 +230,94 @@ const buildGlobalCategoryServiceCountRecord = async () => {
 };
 
 /**
- * Category/service counts aligned with my-franchise: global catalogue totals, mapping-based active slots,
- * requested rows from users on the given franchise(s).
+ * Totals from franchise_category / franchise_service mappings (same scope as GET franchise-category|service/getAll).
+ * Falls back to Franchise.categories / Franchise.services when no mapping row exists.
+ * @param {mongoose.Types.ObjectId[]} franchiseIdsScope
+ * @param {'category'|'service'} kind
+ */
+const aggregateFranchiseCatalogMappingCounts = async (franchiseIdsScope, kind) => {
+    const isCategory = kind === 'category';
+    const MappingModel = isCategory ? FranchiseCategory : FranchiseService;
+    const listField = isCategory ? 'categories_list' : 'services_list';
+    const activeField = isCategory ? 'active_categories' : 'active_services';
+    const inactiveField = isCategory ? 'inactive_categories' : 'inactive_services';
+    const coerce = isCategory ? coerceLegacyCategoryMappingArrays : coerceLegacyServiceMappingArrays;
+    const normalizeList = isCategory ? normalizeStoredCategoriesList : normalizeStoredServicesList;
+    const idKey = isCategory ? 'category_id' : 'service_id';
+    const franchiseArrayField = isCategory ? 'categories' : 'services';
+
+    const mappingDocs = await MappingModel.find({
+        franchise_id: { $in: franchiseIdsScope },
+        deleted_at: null,
+    })
+        .select(`${listField} ${activeField} ${inactiveField} franchise_id`)
+        .lean();
+
+    const franchiseIdsWithMapping = new Set(
+        mappingDocs.map((row) => row.franchise_id.toString())
+    );
+    const mappedIds = new Set();
+    const activeIds = [];
+    const inactiveIds = [];
+
+    for (const row of mappingDocs) {
+        const coerced = coerce(row);
+        const norm = normalizeList(coerced[listField] || []);
+        for (const entry of norm) {
+            if (entry[idKey]) mappedIds.add(entry[idKey].toString());
+        }
+        for (const oid of coerced[activeField] || []) {
+            activeIds.push(oid);
+        }
+        for (const oid of coerced[inactiveField] || []) {
+            inactiveIds.push(oid);
+        }
+    }
+
+    const missingFranchiseIds = franchiseIdsScope.filter(
+        (id) => !franchiseIdsWithMapping.has(id.toString())
+    );
+    if (missingFranchiseIds.length > 0) {
+        const franchiseRows = await Franchise.find({
+            _id: { $in: missingFranchiseIds },
+            deleted_at: null,
+        })
+            .select(franchiseArrayField)
+            .lean();
+        for (const fr of franchiseRows) {
+            const legacyIds = fr[franchiseArrayField] || [];
+            for (const oid of legacyIds) {
+                if (oid) mappedIds.add(oid.toString());
+            }
+            activeIds.push(...legacyIds);
+        }
+    }
+
+    const kindKey = isCategory ? 'category' : 'service';
+    const { eligible, globallyActive } = await loadEligibleCatalogMeta([...mappedIds], kindKey);
+
+    let totalEligible = 0;
+    for (const id of mappedIds) {
+        if (eligible.has(id)) totalEligible += 1;
+    }
+
+    const franchiseActiveSet = new Set(
+        activeIds.map((id) => id.toString()).filter((id) => eligible.has(id))
+    );
+
+    let activeEligible = 0;
+    for (const id of franchiseActiveSet) {
+        if (globallyActive.has(id)) activeEligible += 1;
+    }
+
+    const inactiveEligible = Math.max(0, totalEligible - activeEligible);
+
+    return { total: totalEligible, active: activeEligible, inactive: inactiveEligible };
+};
+
+/**
+ * Category/service counts aligned with my-franchise list APIs: mapped catalogue totals on the franchise,
+ * active/inactive from mapping arrays, plus pending requests from franchise users.
  * @param {mongoose.Types.ObjectId[]} franchiseIdsScope
  */
 const buildFranchiseDashboardCategoryServiceCountRecord = async (franchiseIdsScope) => {
@@ -221,36 +340,21 @@ const buildFranchiseDashboardCategoryServiceCountRecord = async (franchiseIdsSco
         deleted_at: null,
     }).distinct('_id');
 
-    out.total_category = await Category.countDocuments({ deleted_at: null });
-    out.total_service = await Service.countDocuments({ deleted_at: null });
+    const categoryCounts = await aggregateFranchiseCatalogMappingCounts(
+        franchiseIdsScope,
+        'category'
+    );
+    out.total_category = categoryCounts.total;
+    out.active_category = categoryCounts.active;
+    out.inactive_category = categoryCounts.inactive;
 
-    const franchiseCategoryDocs = await FranchiseCategory.find({
-        franchise_id: { $in: franchiseIdsScope },
-        deleted_at: null,
-    })
-        .select('active_categories')
-        .lean();
-
-    let activeCategorySlots = 0;
-    for (const row of franchiseCategoryDocs) {
-        activeCategorySlots += (row.active_categories || []).length;
-    }
-    out.active_category = activeCategorySlots;
-    out.inactive_category = Math.max(0, out.total_category - activeCategorySlots);
-
-    const franchiseServiceDocs = await FranchiseService.find({
-        franchise_id: { $in: franchiseIdsScope },
-        deleted_at: null,
-    })
-        .select('active_services')
-        .lean();
-
-    let activeServiceSlots = 0;
-    for (const row of franchiseServiceDocs) {
-        activeServiceSlots += (row.active_services || []).length;
-    }
-    out.active_service = activeServiceSlots;
-    out.inactive_service = Math.max(0, out.total_service - activeServiceSlots);
+    const serviceCounts = await aggregateFranchiseCatalogMappingCounts(
+        franchiseIdsScope,
+        'service'
+    );
+    out.total_service = serviceCounts.total;
+    out.active_service = serviceCounts.active;
+    out.inactive_service = serviceCounts.inactive;
 
     out.requested_category = await Category.countDocuments({
         deleted_at: null,
@@ -268,18 +372,17 @@ const buildFranchiseDashboardCategoryServiceCountRecord = async (franchiseIdsSco
 
 const getCountData = async (req, res) => {
     try {
-        const { type } = req.body;
-        const resolvedType = resolveCountType(type);
+        const resolvedType = resolveCountTypeFromRequest(req);
         if (resolvedType === null || resolvedType === undefined) {
             return res.status(400).json({
                 success: false,
                 status: 400,
                 message:
-                    'Invalid or unsupported count type. Send JSON body with "type" (e.g. "settings-role", "location-management", or a supported numeric code).',
+                    'Invalid or unsupported count type. Send "type" in the JSON body, a request header, or query (e.g. "service-management", "my-franchise").',
             });
         }
 
-        const parsedFranchise = parseOptionalFranchiseFromBody(req);
+        const parsedFranchise = parseOptionalFranchiseScope(req);
         if (!parsedFranchise.ok) {
             return res.status(parsedFranchise.status).json({
                 success: false,
@@ -381,8 +484,8 @@ const getCountData = async (req, res) => {
             }
 
         } else if (resolvedType === 2) {
-            // Service & category: same category/service semantics as my-franchise when franchise is in the body;
-            // global Category/Service counts when neither franchise nor franchise_id is sent ("all").
+            // Service & category: franchise mapping counts (franchise-service / franchise-category getAll) when
+            // franchise scope is sent (body, header, or query); global catalogue counts when omitted.
             if (franchiseScopeOid) {
                 Object.assign(
                     response,
@@ -435,7 +538,7 @@ const getCountData = async (req, res) => {
             // Order Payment
             const orderMatch = {
                 deleted_at: null,
-                order_status: 3,
+                order_status: 'completed',
                 ...(franchiseScopeOid ? { _id: { $in: await buildFranchiseScopedCompletedOrderIds(franchiseScopeOid) } } : {}),
             };
             const result = await Order.aggregate([
@@ -462,7 +565,7 @@ const getCountData = async (req, res) => {
             // Partner Payment
             const osMatch = {
                 deleted_at: null,
-                service_status: 3,
+                service_status: 'completed',
                 ...(franchiseScopeOid
                     ? { order_id: { $in: await buildFranchiseScopedCompletedOrderIds(franchiseScopeOid) } }
                     : {}),
@@ -707,13 +810,22 @@ const getCountData = async (req, res) => {
                 );
             }
         } else if (resolvedType === 11) {
-            // Quote Management
+            // Quote Management — same franchise/role scope as GET /api/quote/getCounts
             const { buildQuoteBucketFilter } = require('../enum/quote_status_enum');
 
-            const baseFilter = { deleted_at: null };
-            if (franchiseScopeOid) {
-                baseFilter.franchise_id = franchiseScopeOid;
+            const franchiseQuery = franchiseScopeOid ? franchiseScopeOid.toString() : undefined;
+            const scopeResult = await resolveQuoteListScope(req, {
+                franchiseIdFromQuery: franchiseQuery,
+            });
+            if (!scopeResult.ok) {
+                return res.status(scopeResult.status).json({
+                    success: false,
+                    status: scopeResult.status,
+                    message: scopeResult.message,
+                });
             }
+
+            const baseFilter = { deleted_at: null, ...scopeResult.filter };
 
             const [newCount, pendingCount, acceptedCount, successCount, failedCount] =
                 await Promise.all([
@@ -863,6 +975,45 @@ const getCountData = async (req, res) => {
                 ...staffBase,
                 is_active: false,
             });
+        } else if (resolvedType === 14) {
+            // Order Management — same franchise scope as GET /api/order/getAll
+            const franchiseQuery = franchiseScopeOid ? franchiseScopeOid.toString() : undefined;
+            const scopeResult = await resolveOrderListScope(req, {
+                franchiseIdFromQuery: franchiseQuery,
+            });
+            if (!scopeResult.ok) {
+                return res.status(scopeResult.status).json({
+                    success: false,
+                    status: scopeResult.status,
+                    message: scopeResult.message,
+                });
+            }
+
+            const orderBase = { deleted_at: null, ...scopeResult.filter };
+
+            const [inProgress, completed, cancelled, refunded] = await Promise.all([
+                Order.countDocuments({
+                    ...orderBase,
+                    ...buildOrderStatusQueryFilter(ORDER_STATUS_IN_PROGRESS),
+                }),
+                Order.countDocuments({
+                    ...orderBase,
+                    ...buildOrderStatusQueryFilter(ORDER_STATUS_COMPLETED),
+                }),
+                Order.countDocuments({
+                    ...orderBase,
+                    ...buildOrderStatusQueryFilter(ORDER_STATUS_CANCELLED),
+                }),
+                Order.countDocuments({
+                    ...orderBase,
+                    ...buildOrderStatusQueryFilter(ORDER_STATUS_REFUNDED),
+                }),
+            ]);
+
+            response.in_progress = inProgress;
+            response.completed = completed;
+            response.cancelled = cancelled;
+            response.refunded = refunded;
         }
         const body = buildGetCountSuccessBody(response);
         return res.status(200).type('application/json').send(JSON.stringify(body));
@@ -902,9 +1053,10 @@ const getServiceCountData = async (id) => {
                     paid_amount: {
                         $sum: { $cond: [{ $eq: [paid_field, true] }, amountField, 0] }
                     },
-                    in_progress_service: { $sum: { $cond: [{ $eq: ["$service_status", 2] }, 1, 0] } },
-                    completed_service: { $sum: { $cond: [{ $eq: ["$service_status", 3] }, 1, 0] } },
-                    cancelled_service: { $sum: { $cond: [{ $eq: ["$service_status", 4] }, 1, 0] } }
+                    in_progress_service: { $sum: { $cond: [{ $eq: ["$service_status", "in-progress"] }, 1, 0] } },
+                    completed_service: { $sum: { $cond: [{ $eq: ["$service_status", "completed"] }, 1, 0] } },
+                    cancelled_service: { $sum: { $cond: [{ $eq: ["$service_status", "cancelled"] }, 1, 0] } },
+                    refunded_service: { $sum: { $cond: [{ $eq: ["$service_status", "refunded"] }, 1, 0] } }
                 }
             },
             {
@@ -981,7 +1133,7 @@ const getPartnerServiceCount = async (req, res) => {
             {
                 $match: {
                     partner_id: new mongoose.Types.ObjectId(user_id),
-                    service_status: 3,
+                    service_status: 'completed',
                     deleted_at: null,
                 },
             },

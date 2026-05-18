@@ -10,15 +10,12 @@ const { getOrderId } = require("../helper/id_generator");
 const { computeOrderTotal, recalculateOrderTotals } = require("../utils/order_financials");
 const { combineDateAndTime } = require("../utils/order_schedule");
 const { resolveQuoteStatus } = require("../enum/quote_status_enum");
+const {
+  DEFAULT_ORDER_STATUS,
+  buildOrderStatusInfo,
+} = require("../enum/order_status_enum");
 
 const ORDER_TYPE_DEFAULT = 2;
-
-const buildOrderStatusInfo = () => [
-  { status: 1, updated_at: Date.now() },
-  { status: 2, updated_at: null },
-  { status: 3, updated_at: null },
-  { status: 4, updated_at: null },
-];
 
 class OrderCreationError extends Error {
   constructor(message, status = 409) {
@@ -238,6 +235,7 @@ const createOrderFromBody = async (body, options = {}) => {
       return {
         _id: new mongoose.Types.ObjectId(),
         ...option,
+        service_status: option.service_status ?? DEFAULT_ORDER_STATUS,
         order_id,
         order_unique_id: unique_id,
         user_unique_id: user.user_id,
@@ -270,7 +268,7 @@ const createOrderFromBody = async (body, options = {}) => {
     transaction_id,
     created_by_id,
     service_items: order_items,
-    order_status: 1,
+    order_status: DEFAULT_ORDER_STATUS,
     order_status_info: buildOrderStatusInfo(),
     order_date,
     sub_total,

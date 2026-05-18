@@ -4,6 +4,7 @@ const Category = require('../models/category')
 const Service = require('../models/service')
 const { checkObjectIdExists } = require('../validator/id_validator')
 const { isValidPrice } = require('../validator/form_validator')
+const { isValidOrderStatus } = require('../enum/order_status_enum')
 const createOrderMiddleware = async (req, res, next) => {
     const body = req.body;
     const {
@@ -15,7 +16,6 @@ const createOrderMiddleware = async (req, res, next) => {
         payment_mode_id,
         transaction_id,
         created_by_id,
-        order_status,
         order_date,
         address,
         sub_total,
@@ -87,21 +87,6 @@ const createOrderMiddleware = async (req, res, next) => {
         });
     }
 
-    if (order_status === undefined) {
-        return res.status(409).json({
-            success: false,
-            status: 409,
-            message: 'Order status is required.'
-
-        });
-    }
-    if (parseInt(order_status) < 1 || parseInt(order_status) > 4) {
-        return res.status(409).json({
-            success: false,
-            status: 409,
-            message: 'Order status is invalid.'
-        });
-    }
     if (!order_date || order_date === null || order_date.trim() === '') {
         return res.status(409).json({
             success: false,
@@ -341,11 +326,16 @@ const updateOrderServiceMiddleware = async (req, res, next) => {
             message: partnerResult.message,
         });
     }
-   if (parseInt(service_status) < 1 || parseInt(service_status) > 3) {
+    if (
+        service_status !== undefined &&
+        service_status !== null &&
+        String(service_status).trim() !== '' &&
+        !isValidOrderStatus(service_status)
+    ) {
         return res.status(409).json({
             success: false,
             status: 409,
-            message: 'Service status is invalid.'
+            message: 'Service status is invalid. Use: in-progress, completed, cancelled, refunded.',
         });
     }
     if (service_date !== undefined && (!service_date  || service_date === null || service_date.trim() === '')) {

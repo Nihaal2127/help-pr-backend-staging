@@ -889,6 +889,10 @@ const fetchCustomersMatchingFranchiseAreaPincodes = async (franchiseLean) => {
     }));
 };
 
+/** Global service fields for franchise related-catalog (commission comes from here, not partner_service). */
+const RELATED_CATALOG_SERVICE_SELECT =
+    'service_id name desc image_url category_id is_active is_request price helpers tax commission payment_type minimum_deposit approval_status rejection_reason requested_by created_at updated_at';
+
 const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
     try {
         const parsed = parseObjectId(franchiseIdRaw, 'franchise_id');
@@ -928,60 +932,26 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
             fetchCustomersMatchingFranchiseAreaPincodes(franchise),
         ]);
 
-        const mergedCatEntries = mergeFranchiseCategoryEntries(fcDocs);
         const mergedSvcEntries = mergeFranchiseServiceEntries(fsDocs);
 
-        const categoryIds = mergedCatEntries.map((e) => e.category_id);
         const serviceIds = mergedSvcEntries.map((e) => e.service_id);
 
-        const [categoryRows, serviceRows] = await Promise.all([
-            categoryIds.length === 0
-                ? []
-                : Category.find({
-                      _id: { $in: categoryIds },
-                      deleted_at: null,
-                  })
-                      .select('category_id name desc image_url is_active approval_status')
-                      .lean(),
+        const serviceRows =
             serviceIds.length === 0
                 ? []
-                : Service.find({
+                : await Service.find({
                       _id: { $in: serviceIds },
                       deleted_at: null,
                   })
-                      .select(
-                          'service_id name desc price category_id image_url is_active approval_status'
-                      )
-                      .lean(),
-        ]);
+                      .select(RELATED_CATALOG_SERVICE_SELECT)
+                      .lean();
 
-        const catById = new Map(categoryRows.map((c) => [c._id.toString(), c]));
         const svcById = new Map(serviceRows.map((s) => [s._id.toString(), s]));
 
-        const categories = mergedCatEntries
-            .map((e) => {
-                const c = catById.get(e.category_id.toString()) || null;
-                return {
-                    category_id: e.category_id,
-                    is_active: e.is_active,
-                    category: c,
-                };
-            })
-            .filter(
-                (row) =>
-                    row.is_active === true &&
-                    row.category &&
-                    isCatalogCategoryActive(row.category)
-            );
-
-        const services = mergedSvcEntries
+        const activeFranchiseServices = mergedSvcEntries
             .map((e) => {
                 const s = svcById.get(e.service_id.toString()) || null;
-                return {
-                    service_id: e.service_id,
-                    is_active: e.is_active,
-                    service: s,
-                };
+                return { service_id: e.service_id, is_active: e.is_active, service: s };
             })
             .filter(
                 (row) =>
@@ -990,7 +960,7 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
                     isCatalogServiceActive(row.service)
             );
 
-        const activeFranchiseServiceOids = services.map((r) => r.service_id);
+        const activeFranchiseServiceOids = activeFranchiseServices.map((r) => r.service_id);
         const partnerIds = partners.map((p) => p._id);
 
         let psRows = [];
@@ -1001,13 +971,13 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
                 deleted_at: null,
             })
                 .select(
-                    'partner_id category_id service_id is_accept_request description tax minimum_deposit payment_type price commission is_active created_at updated_at'
+                    'partner_id category_id service_id is_accept_request description tax minimum_deposit payment_type price is_active created_at updated_at'
                 )
                 .lean();
         }
 
         const serviceDetailById = new Map(
-            services.map((r) => [r.service_id.toString(), r.service])
+            activeFranchiseServices.map((r) => [r.service_id.toString(), r.service])
         );
 
         const partnerServiceMap = new Map();
@@ -1016,6 +986,7 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
             if (!svc) continue;
             const pid = row.partner_id.toString();
             if (!partnerServiceMap.has(pid)) partnerServiceMap.set(pid, []);
+            const globalCommission = Number.isFinite(Number(svc.commission)) ? Number(svc.commission) : 0;
             partnerServiceMap.get(pid).push({
                 _id: row._id,
                 service_id: row.service_id,
@@ -1026,21 +997,11 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
                 minimum_deposit: row.minimum_deposit ?? 0,
                 payment_type: row.payment_type ?? '',
                 price: row.price ?? 0,
-                commission: Number.isFinite(Number(row.commission)) ? Number(row.commission) : 0,
+                commission: globalCommission,
                 is_active: row.is_active !== undefined ? Boolean(row.is_active) : true,
                 created_at: row.created_at ?? null,
                 updated_at: row.updated_at ?? null,
-                service: {
-                    _id: svc._id,
-                    service_id: svc.service_id,
-                    name: svc.name,
-                    desc: svc.desc,
-                    price: svc.price,
-                    category_id: svc.category_id,
-                    image_url: svc.image_url,
-                    is_active: svc.is_active,
-                    approval_status: svc.approval_status,
-                },
+                service: svc,
             });
         }
 
@@ -1085,8 +1046,6 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
                 franchise: franchise,
                 franchise_categories: fcDocs,
                 franchise_services: fsDocs,
-                categories,
-                services,
                 partners: partnersWithServices,
                 employees,
                 customers,

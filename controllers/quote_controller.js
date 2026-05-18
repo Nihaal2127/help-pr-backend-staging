@@ -7,6 +7,7 @@ const Address = require("../models/address");
 const Franchise = require("../models/franchise");
 const City = require("../models/city");
 const State = require("../models/state");
+const Area = require("../models/area");
 const { applyPagination } = require("../utils/pagination");
 const { getQuoteSequenceId } = require("../helper/id_generator");
 const { checkObjectIdExists } = require("../validator/id_validator");
@@ -34,6 +35,17 @@ const {
   formatQuoteForApi,
   formatQuoteRecords,
 } = require("../enum/quote_status_enum");
+
+const QUOTE_ADDRESS_POPULATE = {
+  path: "address_id",
+  select:
+    "address landmark area area_id city_id state_id pincode contact_name contact_number",
+  populate: [
+    { path: "city_id", select: "name" },
+    { path: "state_id", select: "name" },
+    { path: "area_id", select: "name" },
+  ],
+};
 
 const USER_TYPE_ADMIN = 1;
 const USER_TYPE_PARTNER = 2;
@@ -418,6 +430,7 @@ const getAll = async (req, res) => {
     const addressColl = Address.collection.name;
     const citiesColl = City.collection.name;
     const statesColl = State.collection.name;
+    const areasColl = Area.collection.name;
 
     const pipeline = [
       { $match: baseFilter },
@@ -509,8 +522,17 @@ const getAll = async (req, res) => {
           as: "_addr_state",
         },
       },
+      {
+        $lookup: {
+          from: areasColl,
+          localField: "_address.area_id",
+          foreignField: "_id",
+          as: "_addr_area",
+        },
+      },
       { $unwind: { path: "$_addr_city", preserveNullAndEmptyArrays: true } },
       { $unwind: { path: "$_addr_state", preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: "$_addr_area", preserveNullAndEmptyArrays: true } },
       ...(regex
         ? [
             {
@@ -678,6 +700,13 @@ const getAll = async (req, res) => {
                         "$_address.state_id",
                       ],
                     },
+                    area_id: {
+                      $cond: [
+                        { $ifNull: ["$_addr_area._id", false] },
+                        { _id: "$_addr_area._id", name: "$_addr_area.name" },
+                        "$_address.area_id",
+                      ],
+                    },
                   },
                 ],
               },
@@ -698,6 +727,7 @@ const getAll = async (req, res) => {
           _address: 0,
           _addr_city: 0,
           _addr_state: 0,
+          _addr_area: 0,
           ...(!includeHistory && { history: 0 }),
         },
       },
@@ -806,14 +836,7 @@ const getById = async (req, res) => {
             "name category_id desc image_url approval_status is_request is_active rejection_reason",
         },
         { path: "franchise_id", select: "name city_name state_name" },
-        {
-          path: "address_id",
-          select: "address landmark area city_id state_id pincode contact_name contact_number",
-          populate: [
-            { path: "city_id", select: "name" },
-            { path: "state_id", select: "name" },
-          ],
-        },
+        QUOTE_ADDRESS_POPULATE,
         { path: "order_id", select: "unique_id order_status total_price user_id" },
       ])
       .lean();
@@ -905,14 +928,7 @@ const getCustomerQuotes = async (req, res) => {
           "name category_id desc image_url approval_status is_request is_active rejection_reason",
       },
       { path: "franchise_id", select: "name city_name state_name" },
-      {
-        path: "address_id",
-        select: "address landmark area city_id state_id pincode contact_name contact_number",
-        populate: [
-          { path: "city_id", select: "name" },
-          { path: "state_id", select: "name" },
-        ],
-      },
+      QUOTE_ADDRESS_POPULATE,
       { path: "order_id", select: "unique_id order_status total_price user_id" },
     ];
 

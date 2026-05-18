@@ -77,6 +77,270 @@ const isUserCreateRoute = (req) =>
 const isUserUpdateRoute = (req) =>
   String(req.baseUrl || '') === '/api/user' && String(req.path || '').startsWith('/update/');
 
+const hasPartnerCatalogFields = (body) =>
+  body.partner_services !== undefined ||
+  body.partner_categories !== undefined ||
+  body.service_ids !== undefined;
+
+const parsePartnerCatalogFields = (req) => {
+  parseJSONField(req, 'partner_services');
+  parseJSONField(req, 'partner-services');
+  parseJSONField(req, 'partner_categories');
+  parseJSONField(req, 'category_ids');
+  parseJSONField(req, 'service_ids');
+  parseJSONField(req, 'service_names');
+  parseJSONField(req, 'service_descriptions');
+  parseJSONField(req, 'service_prices');
+  parseJSONField(req, 'service_taxes');
+  parseJSONField(req, 'service_payment_types');
+  parseJSONField(req, 'service_minimum_deposits');
+  const partnerServicesAlias = req.body['partner-services'];
+  if (
+    partnerServicesAlias !== undefined &&
+    partnerServicesAlias !== null &&
+    (!Array.isArray(req.body.partner_services) || req.body.partner_services.length === 0)
+  ) {
+    req.body.partner_services = partnerServicesAlias;
+  }
+};
+
+const validatePartnerCatalogPayload = (req, res) => {
+  if (req.body.partner_services !== undefined && !Array.isArray(req.body.partner_services)) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'partner_services must be an array.',
+    });
+    return false;
+  }
+  if (req.body.partner_categories !== undefined && !Array.isArray(req.body.partner_categories)) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'partner_categories must be an array.',
+    });
+    return false;
+  }
+  const hasPartnerServicesPayload =
+    Array.isArray(req.body.partner_services) && req.body.partner_services.length > 0;
+  const hasPartnerCategoriesPayload =
+    Array.isArray(req.body.partner_categories) && req.body.partner_categories.length > 0;
+
+  if (hasPartnerServicesPayload) {
+    for (let i = 0; i < req.body.partner_services.length; i++) {
+      const item = req.body.partner_services[i];
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        res.status(400).json({
+          success: false,
+          status: 400,
+          message: `partner_services[${i}] must be an object.`,
+        });
+        return false;
+      }
+      if (Array.isArray(item.services)) {
+        if (!item.category_id || !mongoose.Types.ObjectId.isValid(String(item.category_id))) {
+          res.status(400).json({
+            success: false,
+            status: 400,
+            message: `partner_services[${i}].category_id must be a valid ObjectId.`,
+          });
+          return false;
+        }
+        for (let j = 0; j < item.services.length; j++) {
+          const svc = item.services[j];
+          if (svc === undefined || svc === null) {
+            res.status(400).json({
+              success: false,
+              status: 400,
+              message: `partner_services[${i}].services[${j}] is required.`,
+            });
+            return false;
+          }
+          if (typeof svc === 'string' || typeof svc === 'number') {
+            const sid = String(svc).trim();
+            if (!mongoose.Types.ObjectId.isValid(sid)) {
+              res.status(400).json({
+                success: false,
+                status: 400,
+                message: `partner_services[${i}].services[${j}] must be a valid service ObjectId.`,
+              });
+              return false;
+            }
+            continue;
+          }
+          if (typeof svc !== 'object' || Array.isArray(svc)) {
+            res.status(400).json({
+              success: false,
+              status: 400,
+              message: `partner_services[${i}].services[${j}] must be an object or service id string.`,
+            });
+            return false;
+          }
+          const sid = svc.service_id ?? svc.serviceId;
+          if (!sid || !mongoose.Types.ObjectId.isValid(String(sid))) {
+            res.status(400).json({
+              success: false,
+              status: 400,
+              message: `partner_services[${i}].services[${j}].service_id must be a valid ObjectId.`,
+            });
+            return false;
+          }
+          if (
+            svc.category_id !== undefined &&
+            String(svc.category_id).trim() !== '' &&
+            !mongoose.Types.ObjectId.isValid(String(svc.category_id))
+          ) {
+            res.status(400).json({
+              success: false,
+              status: 400,
+              message: `partner_services[${i}].services[${j}].category_id must be a valid ObjectId.`,
+            });
+            return false;
+          }
+        }
+      } else {
+        if (!item.service_id || !mongoose.Types.ObjectId.isValid(String(item.service_id))) {
+          res.status(400).json({
+            success: false,
+            status: 400,
+            message: `partner_services[${i}].service_id must be a valid ObjectId.`,
+          });
+          return false;
+        }
+        if (
+          item.category_id !== undefined &&
+          item.category_id !== null &&
+          String(item.category_id).trim() !== '' &&
+          !mongoose.Types.ObjectId.isValid(item.category_id)
+        ) {
+          res.status(400).json({
+            success: false,
+            status: 400,
+            message: `partner_services[${i}].category_id must be a valid ObjectId.`,
+          });
+          return false;
+        }
+      }
+    }
+  } else if (hasPartnerCategoriesPayload) {
+    for (let i = 0; i < req.body.partner_categories.length; i++) {
+      const item = req.body.partner_categories[i];
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        res.status(400).json({
+          success: false,
+          status: 400,
+          message: `partner_categories[${i}] must be an object.`,
+        });
+        return false;
+      }
+      if (!Array.isArray(item.services)) {
+        res.status(400).json({
+          success: false,
+          status: 400,
+          message: `partner_categories[${i}].services must be an array.`,
+        });
+        return false;
+      }
+      if (!item.category_id || !mongoose.Types.ObjectId.isValid(String(item.category_id))) {
+        res.status(400).json({
+          success: false,
+          status: 400,
+          message: `partner_categories[${i}].category_id must be a valid ObjectId.`,
+        });
+        return false;
+      }
+      for (let j = 0; j < item.services.length; j++) {
+        const svc = item.services[j];
+        if (svc === undefined || svc === null) {
+          res.status(400).json({
+            success: false,
+            status: 400,
+            message: `partner_categories[${i}].services[${j}] is required.`,
+          });
+          return false;
+        }
+        if (typeof svc === 'string' || typeof svc === 'number') {
+          const sid = String(svc).trim();
+          if (!mongoose.Types.ObjectId.isValid(sid)) {
+            res.status(400).json({
+              success: false,
+              status: 400,
+              message: `partner_categories[${i}].services[${j}] must be a valid service ObjectId.`,
+            });
+            return false;
+          }
+          continue;
+        }
+        if (typeof svc !== 'object' || Array.isArray(svc)) {
+          res.status(400).json({
+            success: false,
+            status: 400,
+            message: `partner_categories[${i}].services[${j}] must be an object or service id string.`,
+          });
+          return false;
+        }
+        const sid = svc.service_id ?? svc.serviceId;
+        if (!sid || !mongoose.Types.ObjectId.isValid(String(sid))) {
+          res.status(400).json({
+            success: false,
+            status: 400,
+            message: `partner_categories[${i}].services[${j}].service_id must be a valid ObjectId.`,
+          });
+          return false;
+        }
+      }
+    }
+  } else if (req.body.service_ids !== undefined) {
+    const raw = req.body.service_ids;
+    const ids = Array.isArray(raw) ? raw : null;
+    if (!Array.isArray(ids)) {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'service_ids must be an array when partner_services is omitted.',
+      });
+      return false;
+    }
+    for (let k = 0; k < ids.length; k++) {
+      if (!ids[k] || !mongoose.Types.ObjectId.isValid(String(ids[k]))) {
+        res.status(400).json({
+          success: false,
+          status: 400,
+          message: `service_ids[${k}] must be a valid ObjectId.`,
+        });
+        return false;
+      }
+    }
+    const cats = req.body.category_ids;
+    if (cats !== undefined && cats !== null) {
+      const catArr = Array.isArray(cats) ? cats : null;
+      if (!Array.isArray(catArr)) {
+        res.status(400).json({
+          success: false,
+          status: 400,
+          message: 'category_ids must be an array.',
+        });
+        return false;
+      }
+      for (let c = 0; c < catArr.length; c++) {
+        if (
+          catArr[c] != null &&
+          String(catArr[c]).trim() !== '' &&
+          !mongoose.Types.ObjectId.isValid(String(catArr[c]))
+        ) {
+          res.status(400).json({
+            success: false,
+            status: 400,
+            message: `category_ids[${c}] must be a valid ObjectId.`,
+          });
+          return false;
+        }
+      }
+    }
+  }
+  return true;
+};
+
 const createUserMiddleware = async (req, res, next) => {
   parseNumberField(req, "type");
   parseNumberField(req, "registration_type");
@@ -86,17 +350,7 @@ const createUserMiddleware = async (req, res, next) => {
   parseBooleanField(req, "is_business");
   parseBooleanField(req, "chat");
   parseJSONField(req, "accessible_screens");
-  parseJSONField(req, "partner_services");
-  parseJSONField(req, "partner-services");
-  parseJSONField(req, "partner_categories");
-  parseJSONField(req, "category_ids");
-  parseJSONField(req, "service_ids");
-  parseJSONField(req, "service_names");
-  parseJSONField(req, "service_descriptions");
-  parseJSONField(req, "service_prices");
-  parseJSONField(req, "service_taxes");
-  parseJSONField(req, "service_payment_types");
-  parseJSONField(req, "service_minimum_deposits");
+  parsePartnerCatalogFields(req);
   parseJSONField(req, "partner_documents");
   parseJSONField(req, "bank_account");
   parseJSONField(req, "partner_subscription");
@@ -149,205 +403,8 @@ const createUserMiddleware = async (req, res, next) => {
     chat,
   } = req.body;
   if (accessible_screens !== undefined && !validateAccessibleScreens(accessible_screens, res)) return;
-  if (type === 2) {
-    if (req.body.partner_services !== undefined && !Array.isArray(req.body.partner_services)) {
-      return res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'partner_services must be an array.',
-      });
-    }
-    if (req.body.partner_categories !== undefined && !Array.isArray(req.body.partner_categories)) {
-      return res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'partner_categories must be an array.',
-      });
-    }
-    const hasPartnerServicesPayload =
-      Array.isArray(req.body.partner_services) && req.body.partner_services.length > 0;
-    const hasPartnerCategoriesPayload =
-      Array.isArray(req.body.partner_categories) && req.body.partner_categories.length > 0;
-
-    if (hasPartnerServicesPayload) {
-      for (let i = 0; i < req.body.partner_services.length; i++) {
-        const item = req.body.partner_services[i];
-        if (!item || typeof item !== 'object' || Array.isArray(item)) {
-          return res.status(400).json({
-            success: false,
-            status: 400,
-            message: `partner_services[${i}] must be an object.`,
-          });
-        }
-        if (Array.isArray(item.services)) {
-          if (!item.category_id || !mongoose.Types.ObjectId.isValid(String(item.category_id))) {
-            return res.status(400).json({
-              success: false,
-              status: 400,
-              message: `partner_services[${i}].category_id must be a valid ObjectId.`,
-            });
-          }
-          for (let j = 0; j < item.services.length; j++) {
-            const svc = item.services[j];
-            if (svc === undefined || svc === null) {
-              return res.status(400).json({
-                success: false,
-                status: 400,
-                message: `partner_services[${i}].services[${j}] is required.`,
-              });
-            }
-            if (typeof svc === 'string' || typeof svc === 'number') {
-              const sid = String(svc).trim();
-              if (!mongoose.Types.ObjectId.isValid(sid)) {
-                return res.status(400).json({
-                  success: false,
-                  status: 400,
-                  message: `partner_services[${i}].services[${j}] must be a valid service ObjectId.`,
-                });
-              }
-              continue;
-            }
-            if (typeof svc !== 'object' || Array.isArray(svc)) {
-              return res.status(400).json({
-                success: false,
-                status: 400,
-                message: `partner_services[${i}].services[${j}] must be an object or service id string.`,
-              });
-            }
-            const sid = svc.service_id ?? svc.serviceId;
-            if (!sid || !mongoose.Types.ObjectId.isValid(String(sid))) {
-              return res.status(400).json({
-                success: false,
-                status: 400,
-                message: `partner_services[${i}].services[${j}].service_id must be a valid ObjectId.`,
-              });
-            }
-            if (svc.category_id !== undefined && String(svc.category_id).trim() !== '' && !mongoose.Types.ObjectId.isValid(String(svc.category_id))) {
-              return res.status(400).json({
-                success: false,
-                status: 400,
-                message: `partner_services[${i}].services[${j}].category_id must be a valid ObjectId.`,
-              });
-            }
-          }
-        } else {
-          if (!item.service_id || !mongoose.Types.ObjectId.isValid(String(item.service_id))) {
-            return res.status(400).json({
-              success: false,
-              status: 400,
-              message: `partner_services[${i}].service_id must be a valid ObjectId.`,
-            });
-          }
-          if (item.category_id !== undefined && item.category_id !== null && String(item.category_id).trim() !== '' && !mongoose.Types.ObjectId.isValid(item.category_id)) {
-            return res.status(400).json({
-              success: false,
-              status: 400,
-              message: `partner_services[${i}].category_id must be a valid ObjectId.`,
-            });
-          }
-        }
-      }
-    } else if (hasPartnerCategoriesPayload) {
-      for (let i = 0; i < req.body.partner_categories.length; i++) {
-        const item = req.body.partner_categories[i];
-        if (!item || typeof item !== 'object' || Array.isArray(item)) {
-          return res.status(400).json({
-            success: false,
-            status: 400,
-            message: `partner_categories[${i}] must be an object.`,
-          });
-        }
-        if (!Array.isArray(item.services)) {
-          return res.status(400).json({
-            success: false,
-            status: 400,
-            message: `partner_categories[${i}].services must be an array.`,
-          });
-        }
-        if (!item.category_id || !mongoose.Types.ObjectId.isValid(String(item.category_id))) {
-          return res.status(400).json({
-            success: false,
-            status: 400,
-            message: `partner_categories[${i}].category_id must be a valid ObjectId.`,
-          });
-        }
-        for (let j = 0; j < item.services.length; j++) {
-          const svc = item.services[j];
-          if (svc === undefined || svc === null) {
-            return res.status(400).json({
-              success: false,
-              status: 400,
-              message: `partner_categories[${i}].services[${j}] is required.`,
-            });
-          }
-          if (typeof svc === 'string' || typeof svc === 'number') {
-            const sid = String(svc).trim();
-            if (!mongoose.Types.ObjectId.isValid(sid)) {
-              return res.status(400).json({
-                success: false,
-                status: 400,
-                message: `partner_categories[${i}].services[${j}] must be a valid service ObjectId.`,
-              });
-            }
-            continue;
-          }
-          if (typeof svc !== 'object' || Array.isArray(svc)) {
-            return res.status(400).json({
-              success: false,
-              status: 400,
-              message: `partner_categories[${i}].services[${j}] must be an object or service id string.`,
-            });
-          }
-          const sid = svc.service_id ?? svc.serviceId;
-          if (!sid || !mongoose.Types.ObjectId.isValid(String(sid))) {
-            return res.status(400).json({
-              success: false,
-              status: 400,
-              message: `partner_categories[${i}].services[${j}].service_id must be a valid ObjectId.`,
-            });
-          }
-        }
-      }
-    } else if (req.body.service_ids !== undefined) {
-      const raw = req.body.service_ids;
-      const ids = Array.isArray(raw) ? raw : null;
-      if (!Array.isArray(ids)) {
-        return res.status(400).json({
-          success: false,
-          status: 400,
-          message: 'service_ids must be an array when partner_services is omitted.',
-        });
-      }
-      for (let k = 0; k < ids.length; k++) {
-        if (!ids[k] || !mongoose.Types.ObjectId.isValid(String(ids[k]))) {
-          return res.status(400).json({
-            success: false,
-            status: 400,
-            message: `service_ids[${k}] must be a valid ObjectId.`,
-          });
-        }
-      }
-      const cats = req.body.category_ids;
-      if (cats !== undefined && cats !== null) {
-        const catArr = Array.isArray(cats) ? cats : null;
-        if (!Array.isArray(catArr)) {
-          return res.status(400).json({
-            success: false,
-            status: 400,
-            message: 'category_ids must be an array.',
-          });
-        }
-        for (let c = 0; c < catArr.length; c++) {
-          if (catArr[c] != null && String(catArr[c]).trim() !== '' && !mongoose.Types.ObjectId.isValid(String(catArr[c]))) {
-            return res.status(400).json({
-              success: false,
-              status: 400,
-              message: `category_ids[${c}] must be a valid ObjectId.`,
-            });
-          }
-        }
-      }
-    }
+  if (type === 2 && hasPartnerCatalogFields(req.body) && !validatePartnerCatalogPayload(req, res)) {
+    return;
   }
 
   if (
@@ -692,6 +749,7 @@ const updateUserMiddleware = async (req, res, next) => {
   parseBooleanField(req, "is_business");
   parseBooleanField(req, "chat");
   parseJSONField(req, "accessible_screens");
+  parsePartnerCatalogFields(req);
   parseJSONField(req, "partner_documents");
   parseOptionalDateField(req, "date_of_birth");
   trimOptionalStringField(req, "experience");
@@ -723,7 +781,9 @@ const updateUserMiddleware = async (req, res, next) => {
     password,
   } = req.body;
   if (accessible_screens !== undefined && !validateAccessibleScreens(accessible_screens, res)) return;
-
+  if (hasPartnerCatalogFields(req.body) && !validatePartnerCatalogPayload(req, res)) {
+    return;
+  }
 
   if (name !== undefined && name.trim() === '') {
     return res.status(400).json({

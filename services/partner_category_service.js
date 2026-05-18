@@ -260,10 +260,32 @@ async function replacePartnerCategoriesFromSignupRows(partnerId, normalizedRows)
   }
 }
 
+/**
+ * Partner update: soft-delete existing catalog rows, then write normalized rows (same as signup).
+ * @param {mongoose.Types.ObjectId} partnerId
+ * @param {object[]} normalizedRows from normalizePartnerServices
+ */
+async function replacePartnerCatalogFromNormalizedRows(partnerId, normalizedRows) {
+  const partnerOid = toOid(partnerId);
+  const now = new Date();
+  await PartnerCategory.updateMany(
+    { partner_id: partnerOid, deleted_at: null },
+    { $set: { deleted_at: now, updated_at: now } }
+  );
+  await PartnerService.updateMany(
+    { partner_id: partnerOid, deleted_at: null },
+    { $set: { deleted_at: now, updated_at: now } }
+  );
+  if (normalizedRows.length > 0) {
+    await replacePartnerCategoriesFromSignupRows(partnerOid, normalizedRows);
+  }
+}
+
 module.exports = {
   syncPartnerServicesFromPartnerCategories,
   rebuildPartnerCategoriesFromPartnerServices,
   mergeServicesIntoPartnerCategories,
   replacePartnerCategoriesFromSignupRows,
+  replacePartnerCatalogFromNormalizedRows,
   toOid,
 };

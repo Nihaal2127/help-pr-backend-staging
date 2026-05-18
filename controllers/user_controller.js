@@ -308,6 +308,40 @@ async function applyType4FranchiseScope(roleFilter, franchiseOid) {
   };
 }
 
+/**
+ * Approved partners (verification_status 2) list buckets:
+ * - Active: is_blocked false, is_active true
+ * - Inactive: is_blocked false, is_active false
+ * - Blocked: is_blocked true, is_active false
+ */
+function buildPartnerListStatusFilter(query) {
+  const activeRaw = query.is_active;
+  const blockedRaw = query.is_blocked;
+  const hasActive =
+    activeRaw !== undefined && activeRaw !== null && String(activeRaw).trim() !== '';
+  const hasBlocked =
+    blockedRaw !== undefined && blockedRaw !== null && String(blockedRaw).trim() !== '';
+
+  if (!hasActive && !hasBlocked) return {};
+
+  const isBlocked = hasBlocked ? parseBoolean(blockedRaw) : null;
+  const isActive = hasActive ? parseBoolean(activeRaw) : null;
+
+  if (isBlocked === true) {
+    return { is_blocked: true, is_active: false };
+  }
+  if (isActive === true) {
+    return { is_blocked: false, is_active: true };
+  }
+  if (isActive === false) {
+    return { is_blocked: false, is_active: false };
+  }
+  if (isBlocked === false) {
+    return { is_blocked: false };
+  }
+  return {};
+}
+
 /** GET /user/getAll ?is_verified= for type=2. Omitted → verified only (2), matching previous hardcoded filter. */
 function resolvePartnerListVerificationStatus(isVerifiedRaw) {
   if (isVerifiedRaw === undefined || isVerifiedRaw === null || String(isVerifiedRaw).trim() === '') {
@@ -394,6 +428,22 @@ const parseBooleanInput = (value) => {
   return false;
 };
 
+const findPartnerAddressForUpdate = async (userId, addressId) => {
+  if (
+    addressId !== undefined &&
+    addressId !== null &&
+    String(addressId).trim() !== '' &&
+    mongoose.Types.ObjectId.isValid(String(addressId))
+  ) {
+    return Address.findOne({
+      _id: addressId,
+      user_id: userId,
+      deleted_at: null,
+    });
+  }
+  return Address.findOne({ user_id: userId, deleted_at: null }).sort({ created_at: 1 });
+};
+
 const createAddressRecord = async ({
   userId,
   name,
@@ -405,8 +455,8 @@ const createAddressRecord = async ({
   pincode,
   addressStatus,
 }) => {
-  if (!address || !stateId || !cityId || !pincode) return;
-  await Address.create({
+  if (!address || !stateId || !cityId || !pincode) return null;
+  return Address.create({
     user_id: userId,
     contact_name: name ?? '',
     contact_number: phoneNumber ?? '',
@@ -501,6 +551,28 @@ const hasPartnerCatalogPayload = (body) =>
   body.partner_services !== undefined ||
   body.partner_categories !== undefined ||
   body.service_ids !== undefined;
+
+const hasNonEmptyPartnerCatalogPayload = (body) => {
+  if (body.partner_categories !== undefined) {
+    const categories = Array.isArray(body.partner_categories)
+      ? body.partner_categories
+      : parseJsonIfString(body.partner_categories, []);
+    if (Array.isArray(categories) && categories.length > 0) return true;
+  }
+  if (body.partner_services !== undefined) {
+    const services = Array.isArray(body.partner_services)
+      ? body.partner_services
+      : parseJsonIfString(body.partner_services, []);
+    if (Array.isArray(services) && services.length > 0) return true;
+  }
+  if (body.service_ids !== undefined) {
+    const ids = Array.isArray(body.service_ids)
+      ? body.service_ids
+      : parseJsonIfString(body.service_ids, []);
+    if (Array.isArray(ids) && ids.length > 0) return true;
+  }
+  return false;
+};
 
 /** When frontend sends service_ids + category_ids (+ optional names/descriptions/prices) instead of partner_services. */
 const buildPartnerServicesFromParallelFields = (body) => {
@@ -983,8 +1055,16 @@ const getAll = async (req, res) => {
       roleFilter = type4Scope.roleFilter;
     }
 
-    const is_active = req.query.is_active !== undefined ? parseBoolean(req.query.is_active) : null;
-    const is_blocked = req.query.is_blocked !== undefined ? parseBoolean(req.query.is_blocked) : null;
+    const partnerStatusFilter =
+      type === USER_TYPE_PARTNER ? buildPartnerListStatusFilter(req.query) : {};
+    const is_active =
+      type !== USER_TYPE_PARTNER && req.query.is_active !== undefined
+        ? parseBoolean(req.query.is_active)
+        : null;
+    const is_blocked =
+      type !== USER_TYPE_PARTNER && req.query.is_blocked !== undefined
+        ? parseBoolean(req.query.is_blocked)
+        : null;
 
     const searchTerm = req.query.keyword ?? req.query.search;
     let regex;
@@ -998,8 +1078,9 @@ const getAll = async (req, res) => {
       deleted_at: null,
       ...(req.query.type && { type: type }),
       ...(type === 2 && { verification_status: partnerListVerificationStatus }),
-      ...(req.query.is_active && { is_active: is_active }),
-      ...(req.query.is_blocked !== undefined && { is_blocked: is_blocked }),
+      ...partnerStatusFilter,
+      ...(type !== 2 && req.query.is_active !== undefined && req.query.is_active !== null && String(req.query.is_active).trim() !== '' && { is_active: is_active }),
+      ...(type !== 2 && req.query.is_blocked !== undefined && { is_blocked: is_blocked }),
       ...(searchTerm && {
         $or: type === 2
           ? [{ name: regex }]
@@ -1805,7 +1886,27 @@ const update = async (req, res) => {
       updateData.city_id !== undefined ||
       updateData.pincode !== undefined;
     const hasAddressStatusPayload = updateData.address_status !== undefined;
-    if (shouldAddNewAddress && hasAddressPayload) {
+    const targetAddressId = updateData.address_id;
+    if (shouldAddNewAddress) {
+      if (
+        !hasAddressPayload ||
+        !updateData.address ||
+        String(updateData.address).trim() === '' ||
+        !updateData.state_id ||
+        String(updateData.state_id).trim() === '' ||
+        !mongoose.Types.ObjectId.isValid(String(updateData.state_id)) ||
+        !updateData.city_id ||
+        String(updateData.city_id).trim() === '' ||
+        !mongoose.Types.ObjectId.isValid(String(updateData.city_id)) ||
+        !updateData.pincode ||
+        String(updateData.pincode).trim() === ''
+      ) {
+        return res.status(400).json({
+          success: false,
+          status: 400,
+          message: 'Address, state_id, city_id, and pincode are required to add a new address.',
+        });
+      }
       await createAddressRecord({
         userId: user._id,
         name: updateData.contact_name ?? updateData.name ?? user.name,
@@ -1820,7 +1921,12 @@ const update = async (req, res) => {
       delete updateData.address;
       delete updateData.state_id;
       delete updateData.city_id;
+      delete updateData.area_id;
       delete updateData.pincode;
+      delete updateData.address_id;
+      delete updateData.address_status;
+      delete updateData.add_new_address;
+      delete updateData.is_additional_address;
     }
     const effectiveType = updateData.type !== undefined ? updateData.type : user.type;
     const effectiveFranchiseId = updateData.franchise_id !== undefined ? updateData.franchise_id : user.franchise_id;
@@ -1957,6 +2063,14 @@ const update = async (req, res) => {
       updateData.chat = true;
     }
 
+    if (updateData.is_blocked !== undefined) {
+      const blocked = parseBooleanInput(updateData.is_blocked);
+      updateData.is_blocked = blocked;
+      if (blocked === true) {
+        updateData.is_active = false;
+      }
+    }
+
     // Only allow explicit fields to be updated.
     const ALLOWED_UPDATE_FIELDS = new Set([
       'name',
@@ -1999,21 +2113,60 @@ const update = async (req, res) => {
 
     const updatedUser = await user.save();
     if (!shouldAddNewAddress && (hasAddressPayload || hasAddressStatusPayload)) {
-      const primaryAddress = await Address.findOne({ user_id: updatedUser._id, deleted_at: null }).sort({ created_at: 1 });
-      if (primaryAddress) {
+      const targetAddress = await findPartnerAddressForUpdate(updatedUser._id, targetAddressId);
+      if (targetAddress) {
         if (hasAddressPayload) {
-          primaryAddress.contact_name = updatedUser.name ?? '';
-          primaryAddress.contact_number = updatedUser.phone_number ?? '';
-          primaryAddress.address = updatedUser.address ?? '';
-          primaryAddress.state_id = updatedUser.state_id ?? null;
-          primaryAddress.city_id = updatedUser.city_id ?? null;
-          primaryAddress.area_id = updatedUser.area_id ?? null;
-          primaryAddress.pincode = updatedUser.pincode ?? '';
+          if (updateData.contact_name !== undefined || updateData.name !== undefined) {
+            targetAddress.contact_name =
+              updateData.contact_name ?? updateData.name ?? targetAddress.contact_name ?? '';
+          }
+          if (updateData.contact_number !== undefined || updateData.phone_number !== undefined) {
+            targetAddress.contact_number =
+              updateData.contact_number ??
+              updateData.phone_number ??
+              targetAddress.contact_number ??
+              '';
+          }
+          if (updateData.address !== undefined) {
+            targetAddress.address = String(updateData.address);
+          }
+          if (updateData.state_id !== undefined) {
+            targetAddress.state_id = updateData.state_id;
+          }
+          if (updateData.city_id !== undefined) {
+            targetAddress.city_id = updateData.city_id;
+          }
+          if (updateData.area_id !== undefined) {
+            targetAddress.area_id =
+              updateData.area_id != null &&
+              String(updateData.area_id).trim() !== '' &&
+              mongoose.Types.ObjectId.isValid(String(updateData.area_id))
+                ? updateData.area_id
+                : null;
+          }
+          if (updateData.pincode !== undefined) {
+            targetAddress.pincode = String(updateData.pincode);
+          }
+          if (
+            !targetAddressId &&
+            (updateData.address !== undefined ||
+              updateData.state_id !== undefined ||
+              updateData.city_id !== undefined ||
+              updateData.pincode !== undefined)
+          ) {
+            updatedUser.address = targetAddress.address ?? updatedUser.address;
+            updatedUser.state_id = targetAddress.state_id ?? updatedUser.state_id;
+            updatedUser.city_id = targetAddress.city_id ?? updatedUser.city_id;
+            updatedUser.area_id = targetAddress.area_id ?? updatedUser.area_id;
+            updatedUser.pincode = targetAddress.pincode ?? updatedUser.pincode;
+            await updatedUser.save();
+          }
         }
         if (hasAddressStatusPayload) {
-          primaryAddress.address_status = parseBooleanInput(updateData.address_status);
+          targetAddress.address_status = parseBooleanInput(updateData.address_status);
         }
-        await primaryAddress.save();
+        targetAddress.updated_at = new Date();
+        await targetAddress.save();
       } else if (hasAddressPayload) {
         await createAddressRecord({
           userId: updatedUser._id,
@@ -2026,9 +2179,26 @@ const update = async (req, res) => {
           pincode: updatedUser.pincode,
           addressStatus: updateData.address_status,
         });
+      } else if (hasAddressStatusPayload && targetAddressId) {
+        return res.status(404).json({
+          success: false,
+          status: 404,
+          message: 'Address not found for this user.',
+        });
       }
     }
-    if (effectiveType === 2) {
+    const hasPartnerDocFiles = PARTNER_DOCUMENT_FILE_FIELDS.some((f) => req.files?.[f]?.[0]);
+    const shouldRunPartnerExtras =
+      effectiveType === 2 &&
+      (hasNonEmptyPartnerCatalogPayload(updateData) ||
+        updateData.partner_documents !== undefined ||
+        updateData.bank_account !== undefined ||
+        updateData.account_number !== undefined ||
+        updateData.account_holder_name !== undefined ||
+        updateData.partner_subscription !== undefined ||
+        updateData.subscription_plan_id !== undefined ||
+        hasPartnerDocFiles);
+    if (shouldRunPartnerExtras) {
       await ensurePartnerDocumentCatalogRows(updatedUser._id, updatedUser);
 
       const mergedPartnerDocs = await mergePartnerDocumentPayloadFromMultipart(
@@ -2040,7 +2210,7 @@ const update = async (req, res) => {
         normalizePartnerDocuments(mergedPartnerDocs)
       );
 
-      if (hasPartnerCatalogPayload(updateData)) {
+      if (hasNonEmptyPartnerCatalogPayload(updateData)) {
         const resolvedPartnerServicesInput = resolvePartnerServicesInputFromBody(updateData);
         const normalizedServiceRows = normalizePartnerServices(
           resolvedPartnerServicesInput ?? []
@@ -2166,7 +2336,7 @@ const update = async (req, res) => {
     res.status(status).json({
       success: false,
       status,
-      message: status === 500 ? 'Internal server error.' : error.message,
+      message: status === 500 ? 'Internal server error.' : String(error.message || 'Internal server error.'),
     });
   }
 };

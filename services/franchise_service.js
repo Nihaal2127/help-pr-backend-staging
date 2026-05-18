@@ -889,6 +889,10 @@ const fetchCustomersMatchingFranchiseAreaPincodes = async (franchiseLean) => {
     }));
 };
 
+/** Global service fields for franchise related-catalog (commission comes from here, not partner_service). */
+const RELATED_CATALOG_SERVICE_SELECT =
+    'service_id name desc image_url category_id is_active is_request price helpers tax commission payment_type minimum_deposit approval_status rejection_reason requested_by created_at updated_at';
+
 const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
     try {
         const parsed = parseObjectId(franchiseIdRaw, 'franchise_id');
@@ -949,9 +953,7 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
                       _id: { $in: serviceIds },
                       deleted_at: null,
                   })
-                      .select(
-                          'service_id name desc price category_id image_url is_active approval_status'
-                      )
+                      .select(RELATED_CATALOG_SERVICE_SELECT)
                       .lean(),
         ]);
 
@@ -1001,7 +1003,7 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
                 deleted_at: null,
             })
                 .select(
-                    'partner_id category_id service_id is_accept_request description tax minimum_deposit payment_type price commission is_active created_at updated_at'
+                    'partner_id category_id service_id is_accept_request description tax minimum_deposit payment_type price is_active created_at updated_at'
                 )
                 .lean();
         }
@@ -1016,6 +1018,7 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
             if (!svc) continue;
             const pid = row.partner_id.toString();
             if (!partnerServiceMap.has(pid)) partnerServiceMap.set(pid, []);
+            const globalCommission = Number.isFinite(Number(svc.commission)) ? Number(svc.commission) : 0;
             partnerServiceMap.get(pid).push({
                 _id: row._id,
                 service_id: row.service_id,
@@ -1026,21 +1029,11 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
                 minimum_deposit: row.minimum_deposit ?? 0,
                 payment_type: row.payment_type ?? '',
                 price: row.price ?? 0,
-                commission: Number.isFinite(Number(row.commission)) ? Number(row.commission) : 0,
+                commission: globalCommission,
                 is_active: row.is_active !== undefined ? Boolean(row.is_active) : true,
                 created_at: row.created_at ?? null,
                 updated_at: row.updated_at ?? null,
-                service: {
-                    _id: svc._id,
-                    service_id: svc.service_id,
-                    name: svc.name,
-                    desc: svc.desc,
-                    price: svc.price,
-                    category_id: svc.category_id,
-                    image_url: svc.image_url,
-                    is_active: svc.is_active,
-                    approval_status: svc.approval_status,
-                },
+                service: svc,
             });
         }
 

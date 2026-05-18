@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Offer = require('../models/offer');
+const { getOfferId } = require('../helper/id_generator');
 const OFFER_TYPES = Offer.OFFER_TYPES;
 const { applyPagination } = require('../utils/pagination');
 const { parseBoolean } = require('../utils/parser');
@@ -151,7 +152,13 @@ const createOffer = async (body) => {
         const dateRangeError = validateDateRange(pStart.d, pEnd.d);
         if (dateRangeError) return fail(400, dateRangeError);
 
+        const unique_id = await getOfferId();
+        if (!unique_id || !String(unique_id).trim()) {
+            return fail(500, 'Failed to generate offer unique id.');
+        }
+
         const doc = new Offer({
+            unique_id: String(unique_id).trim(),
             name: String(name).trim(),
             type,
             value: pValue.n,
@@ -163,7 +170,8 @@ const createOffer = async (body) => {
         });
 
         const saved = await doc.save();
-        return ok(200, { message: 'Offer created successfully.', record: saved });
+        const record = typeof saved.toObject === 'function' ? saved.toObject() : saved;
+        return ok(200, { message: 'Offer created successfully.', record });
     } catch (error) {
         const validationMessage = formatValidationError(error);
         if (validationMessage) return fail(400, validationMessage);

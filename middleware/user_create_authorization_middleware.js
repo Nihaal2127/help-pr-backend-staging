@@ -1,6 +1,24 @@
 const mongoose = require('mongoose');
 const User = require('../models/user');
+const Franchise = require('../models/franchise');
 const { parseNumberField } = require('../utils/multipart_parser');
+
+/** Same resolution as user list: user.franchise_id, else franchise where caller is admin_id. */
+async function resolveCallerFranchiseId(caller, userId) {
+  if (caller?.franchise_id) {
+    return caller.franchise_id;
+  }
+  if (Number(caller?.type) === USER_TYPE_ADMIN && userId) {
+    const franchise = await Franchise.findOne({
+      admin_id: userId,
+      deleted_at: null,
+    })
+      .select('_id')
+      .lean();
+    return franchise?._id ?? null;
+  }
+  return null;
+}
 
 const USER_TYPE_ADMIN = 1;
 const USER_TYPE_PARTNER = 2;
@@ -78,7 +96,8 @@ const authorizeUserCreate = async (req, res, next) => {
       }
 
       if (targetType === USER_TYPE_PARTNER || targetType === USER_TYPE_EMPLOYEE) {
-        if (!caller.franchise_id) {
+        const effectiveFranchiseId = await resolveCallerFranchiseId(caller, req.user.id);
+        if (!effectiveFranchiseId) {
           return res.status(403).json({
             success: false,
             status: 403,
@@ -92,9 +111,17 @@ const authorizeUserCreate = async (req, res, next) => {
           rawFranchise !== null &&
           String(rawFranchise).trim() !== '' &&
           mongoose.Types.ObjectId.isValid(String(rawFranchise));
-        if (!hasPayloadFranchise) {
-          req.body.franchise_id = caller.franchise_id;
+        if (
+          hasPayloadFranchise &&
+          String(rawFranchise) !== String(effectiveFranchiseId)
+        ) {
+          return res.status(403).json({
+            success: false,
+            status: 403,
+            message: 'You can only assign users to your own franchise.',
+          });
         }
+        req.body.franchise_id = effectiveFranchiseId;
       }
 
       return next();

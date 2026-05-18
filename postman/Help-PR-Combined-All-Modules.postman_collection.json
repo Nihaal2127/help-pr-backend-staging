@@ -2824,7 +2824,7 @@
       "item": [
         {
           "name": "Partner (type 2)",
-          "description": "Partner CRUD uses **`/api/user`**. **`partner_services`** JSON: `{ category_id, is_active, services: [{ service_id, is_active, description, price }] }` — on **create** inserts catalog; on **update** replaces full catalog when sent (omit to leave catalog unchanged). Create also accepts **`partner-services`** alias or parallel **`category_ids`** / **`service_ids`**. New partners: **`verification_status` 1**, **`is_active` false** until **`is_verified`**: **approved** on update. **`PUT .../update/:id`**: profile fields, **`is_verified`**, verification files, **`partner_documents`**; not **`bank_account`** / **`partner_subscription`**. Use **`GET .../get/:id`** for **`partner_services`** after update.",
+          "description": "Partner CRUD uses **`/api/user`**. **`partner_services`** on create/update (update = full replace when sent). **`PUT .../update/:id`**: profile, **`password`** + **`confirm_password`**, **`is_verified`**, verification files + **`partner_documents`**, **`bank_account`**, **`partner_subscription`**, **`partner_services`**. Use **`GET .../get/:id`** after save.",
           "item": [
             {
               "name": "Create partner (web)",
@@ -3298,7 +3298,28 @@
                       "value": "Test@1234",
                       "type": "text",
                       "disabled": true,
-                      "description": "Optional; enable to change password."
+                      "description": "Optional; must send confirm_password with same value when enabled."
+                    },
+                    {
+                      "key": "confirm_password",
+                      "value": "Test@1234",
+                      "type": "text",
+                      "disabled": true,
+                      "description": "Required when password is sent; must match password."
+                    },
+                    {
+                      "key": "bank_account",
+                      "value": "{\"account_holder_name\":\"Siva\",\"account_number\":\"1111111111111\",\"ifsc_code\":\"idbi000t196\",\"bank_name\":\"indian bank\",\"branch_name\":\"\",\"is_primary\":true}",
+                      "type": "text",
+                      "disabled": true,
+                      "description": "JSON string; upserts partner primary bank account."
+                    },
+                    {
+                      "key": "partner_subscription",
+                      "value": "{\"subscription_plan_id\":\"{{id}}\",\"subscription_start_date\":\"2026-04-30\",\"subscription_end_date\":\"2026-05-30\",\"status\":\"active\",\"notes\":\"\"}",
+                      "type": "text",
+                      "disabled": true,
+                      "description": "JSON string; assigns new plan (cancels prior active subscription). status: active | expired | cancelled."
                     },
                     {
                       "key": "profile_url",
@@ -3382,7 +3403,7 @@
                     "{{partnerId}}"
                   ]
                 },
-                "description": "**PUT /api/user/update/:id** (partner). **multipart/form-data** or JSON.\n\n**Profile (optional each):** name, email, phone_number, address, state_id, city_id, area_id, pincode, profile_url, date_of_birth, experience, gender, is_active, is_blocked, is_business, chat, franchise_id, password.\n\n**Verification:** is_verified (approved|rejected|pending), verification_rejection_reason; file fields vehicle_registration, police_verification_certificate, pan_card, driving_license, aadhar_card; partner_documents JSON.\n\n**Catalog:** partner_services JSON array — replaces all partner_category + partner_service rows when sent. Shape: [{ category_id, is_active, services: [{ service_id, is_active, description, price, tax, payment_type, minimum_deposit }] }]. Omitted is_active defaults to true.\n\n**Not handled on update:** bank_account, partner_subscription, confirm_password. Use GET /api/user/get/:id for documents and partner_services after update."
+                "description": "**PUT /api/user/update/:id** (partner). **multipart/form-data** or JSON.\n\n**Profile:** name, email, phone_number, address, state_id, city_id, area_id, pincode, profile_url, image, date_of_birth, experience, gender, is_active, is_blocked, is_business, chat, franchise_id.\n\n**Password:** password + confirm_password (both required together).\n\n**Verification:** is_verified, verification_rejection_reason; partner_documents JSON; files: vehicle_registration, police_verification_certificate, pan_card, driving_license, aadhar_card (seeds missing doc rows from master catalog, then updates images).\n\n**Catalog:** partner_services JSON — full replace when sent.\n\n**Bank:** bank_account JSON — upsert primary account.\n\n**Subscription:** partner_subscription JSON — new assignment (same as create). Use GET /api/user/get/:id after update."
               },
               "description": "Update partner profile, verification, and/or full service catalog (partner_services)."
             },

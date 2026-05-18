@@ -11,14 +11,68 @@ const {
 } = require("../utils/multipart_parser");
 const { isValidGender, normalizeGender } = require("../enum/gender_enum");
 
-const validateOptionalGender = (req, res) => {
-  const value = req.body.gender;
-  if (value === undefined) return true;
-  if (value === null || (typeof value === "string" && value.trim() === "")) {
-    req.body.gender = null;
-    return true;
+const MIN_USER_AGE_YEARS = 18;
+
+const calculateAgeFromBirthDate = (birthDate) => {
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age -= 1;
   }
-  if (!isValidGender(value)) {
+  return age;
+};
+
+/** Required for all user types (1–6) on create and update. */
+const validateRequiredDateOfBirthAndGender = (req, res) => {
+  const dobRaw = req.body.date_of_birth;
+  if (
+    dobRaw === undefined ||
+    dobRaw === null ||
+    (typeof dobRaw === "string" && dobRaw.trim() === "")
+  ) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: "Date of birth is required.",
+    });
+    return false;
+  }
+
+  const birthDate = dobRaw instanceof Date ? dobRaw : new Date(dobRaw);
+  if (Number.isNaN(birthDate.getTime())) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: "Date of birth must be a valid date.",
+    });
+    return false;
+  }
+
+  if (calculateAgeFromBirthDate(birthDate) < MIN_USER_AGE_YEARS) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: "Not applicable for individuals below 18 years of age.",
+    });
+    return false;
+  }
+  req.body.date_of_birth = birthDate;
+
+  const genderRaw = req.body.gender;
+  if (
+    genderRaw === undefined ||
+    genderRaw === null ||
+    (typeof genderRaw === "string" && genderRaw.trim() === "")
+  ) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: "Gender is required.",
+    });
+    return false;
+  }
+  if (!isValidGender(genderRaw)) {
     res.status(400).json({
       success: false,
       status: 400,
@@ -26,7 +80,7 @@ const validateOptionalGender = (req, res) => {
     });
     return false;
   }
-  req.body.gender = normalizeGender(value);
+  req.body.gender = normalizeGender(genderRaw);
   return true;
 };
 
@@ -356,7 +410,7 @@ const createUserMiddleware = async (req, res, next) => {
   parseJSONField(req, "partner_subscription");
   parseOptionalDateField(req, "date_of_birth");
   trimOptionalStringField(req, "experience");
-  if (!validateOptionalGender(req, res)) return;
+  if (!validateRequiredDateOfBirthAndGender(req, res)) return;
 
   const partnerServicesAlias = req.body["partner-services"];
   if (
@@ -751,9 +805,11 @@ const updateUserMiddleware = async (req, res, next) => {
   parseJSONField(req, "accessible_screens");
   parsePartnerCatalogFields(req);
   parseJSONField(req, "partner_documents");
+  parseJSONField(req, "bank_account");
+  parseJSONField(req, "partner_subscription");
   parseOptionalDateField(req, "date_of_birth");
   trimOptionalStringField(req, "experience");
-  if (!validateOptionalGender(req, res)) return;
+  if (!validateRequiredDateOfBirthAndGender(req, res)) return;
 
   const {
     name,
@@ -911,6 +967,25 @@ const updateUserMiddleware = async (req, res, next) => {
         success: false,
         status: 400,
         message: 'Password must be at least 8 characters long, contain one uppercase, one lowercase, one number, and one special character.'
+      });
+    }
+    const confirmPassword = req.body.confirm_password;
+    if (
+      confirmPassword === undefined ||
+      confirmPassword === null ||
+      String(confirmPassword).trim() === ''
+    ) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Confirm password is required when password is provided.',
+      });
+    }
+    if (String(password) !== String(confirmPassword)) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Password and confirm password do not match.',
       });
     }
   }

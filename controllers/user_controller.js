@@ -711,6 +711,104 @@ async function applyPartnerDocumentImageUpdates(partnerId, normalizedDocumentPay
   await Promise.all(updates);
 }
 
+/** Ensure partner_document rows exist for each active master Document (same as create). */
+async function ensurePartnerDocumentCatalogRows(partnerId, userRecord) {
+  const documentList = await getDocumentList();
+  if (!documentList.length) return;
+
+  const existingRows = await PartnerDocument.find({
+    partner_id: partnerId,
+    deleted_at: null,
+  })
+    .select('document_id')
+    .lean();
+  const haveDocId = new Set(existingRows.map((r) => String(r.document_id)));
+  const newRows = [];
+  for (const document of documentList) {
+    if (haveDocId.has(String(document._id))) continue;
+    newRows.push({
+      _id: new mongoose.Types.ObjectId(),
+      partner_id: partnerId,
+      document_id: document._id,
+    });
+  }
+  if (!newRows.length) return;
+
+  const result = await createMultiple(newRows);
+  if (result.success !== true) {
+    const err = new Error(result.message || 'Failed to create partner documents.');
+    err.status = result.status || 500;
+    throw err;
+  }
+
+  const currentIds = Array.isArray(userRecord.documents)
+    ? userRecord.documents.map((id) => String(id))
+    : [];
+  const addedIds = newRows.map((r) => String(r._id));
+  userRecord.documents = [...new Set([...currentIds, ...addedIds])].map(
+    (id) => new mongoose.Types.ObjectId(id)
+  );
+  await userRecord.save();
+}
+
+async function upsertPartnerBankAccountForPartner(partnerId, normalizedBankAccount) {
+  if (!normalizedBankAccount) return { ok: true };
+  const bankAccountNumber =
+    normalizedBankAccount.account_number != null
+      ? String(normalizedBankAccount.account_number).trim()
+      : '';
+  if (!bankAccountNumber) return { ok: true };
+
+  const partnerOid =
+    partnerId instanceof mongoose.Types.ObjectId
+      ? partnerId
+      : new mongoose.Types.ObjectId(String(partnerId));
+
+  const takenByOther = await PartnerBankAccount.findOne({
+    account_number: bankAccountNumber,
+    deleted_at: null,
+    partner_id: { $ne: partnerOid },
+  }).lean();
+  if (takenByOther) {
+    return { ok: false, status: 409, message: 'Account number already exists.' };
+  }
+
+  let account = await PartnerBankAccount.findOne({
+    partner_id: partnerOid,
+    deleted_at: null,
+    is_primary: true,
+  });
+  if (!account) {
+    account = await PartnerBankAccount.findOne({
+      partner_id: partnerOid,
+      deleted_at: null,
+    }).sort({ created_at: 1 });
+  }
+
+  const fields = {
+    bank_name: normalizedBankAccount.bank_name,
+    account_holder_name: normalizedBankAccount.account_holder_name,
+    account_number: bankAccountNumber,
+    ifsc_code: normalizedBankAccount.ifsc_code,
+    branch_name: normalizedBankAccount.branch_name,
+    is_primary: normalizedBankAccount.is_primary === true,
+    updated_at: new Date(),
+  };
+
+  if (account) {
+    Object.assign(account, fields);
+    await account.save();
+  } else {
+    await PartnerBankAccount.create({
+      partner_id: partnerOid,
+      ...fields,
+      created_at: new Date(),
+      deleted_at: null,
+    });
+  }
+  return { ok: true };
+}
+
 
 const changePassword = async (req, res) => {
   try {
@@ -1931,6 +2029,8 @@ const update = async (req, res) => {
       }
     }
     if (effectiveType === 2) {
+      await ensurePartnerDocumentCatalogRows(updatedUser._id, updatedUser);
+
       const mergedPartnerDocs = await mergePartnerDocumentPayloadFromMultipart(
         req,
         updateData.partner_documents
@@ -1949,6 +2049,82 @@ const update = async (req, res) => {
           updatedUser._id,
           normalizedServiceRows
         );
+      }
+
+      const hasBankPayload =
+        updateData.bank_account !== undefined ||
+        updateData.account_number !== undefined ||
+        updateData.account_holder_name !== undefined;
+      if (hasBankPayload) {
+        const normalizedBankAccount = normalizePartnerBankAccount(
+          updateData.bank_account ?? {
+            account_name: updateData.account_name,
+            account_holder_name: updateData.account_holder_name,
+            account_number: updateData.account_number,
+            ifsc_code: updateData.ifsc_code,
+            bank_name: updateData.bank_name,
+            branch_name: updateData.branch_name,
+            primary_bank_account: updateData.primary_bank_account,
+            is_primary: updateData.is_primary,
+          }
+        );
+        const bankResult = await upsertPartnerBankAccountForPartner(
+          updatedUser._id,
+          normalizedBankAccount
+        );
+        if (!bankResult.ok) {
+          return res.status(bankResult.status).json({
+            success: false,
+            status: bankResult.status,
+            message: bankResult.message,
+          });
+        }
+      }
+
+      const hasSubscriptionPayload =
+        updateData.partner_subscription !== undefined ||
+        updateData.subscription_plan_id !== undefined;
+      if (hasSubscriptionPayload) {
+        const normalizedSubscription = normalizePartnerSubscriptionPayload(
+          updateData.partner_subscription ?? {
+            partner: updateData.partner,
+            partner_id: updateData.partner_id,
+            subscription_plan: updateData.subscription_plan,
+            subscription_plan_id: updateData.subscription_plan_id,
+            subscription_start_date: updateData.subscription_start_date,
+            started_at: updateData.started_at,
+            start_date: updateData.start_date,
+            subscription_end_date: updateData.subscription_end_date,
+            expires_at: updateData.expires_at,
+            end_date: updateData.end_date,
+            status: updateData.status,
+            notes: updateData.notes,
+          }
+        );
+        if (normalizedSubscription && normalizedSubscription.subscription_plan_id) {
+          const resolvedStatus =
+            normalizedSubscription.status === 'inactive'
+              ? 'cancelled'
+              : normalizedSubscription.status;
+          const subscriptionResult = await partnerSubscriptionService.createPartnerSubscription(
+            {
+              partner_id: updatedUser._id,
+              subscription_plan_id: normalizedSubscription.subscription_plan_id,
+              started_at: normalizedSubscription.started_at,
+              expires_at: normalizedSubscription.expires_at,
+              status: resolvedStatus,
+              notes: normalizedSubscription.notes,
+            },
+            req.user?.id ?? updateData.created_by_id
+          );
+          if (!subscriptionResult.ok) {
+            return res.status(subscriptionResult.status).json({
+              success: false,
+              status: subscriptionResult.status,
+              message: subscriptionResult.message,
+            });
+          }
+        }
       }
     }
     let responseRecord = updatedUser;
@@ -1986,10 +2162,11 @@ const update = async (req, res) => {
     });
   } catch (error) {
     console.error('Error updating User:', error);
-    res.status(500).json({
+    const status = Number(error.status) || 500;
+    res.status(status).json({
       success: false,
-      status: 500,
-      message: 'Internal server error.'
+      status,
+      message: status === 500 ? 'Internal server error.' : error.message,
     });
   }
 };

@@ -7631,6 +7631,232 @@
           "description": "Source path: 00 — Auth & health → Health (content-expense-expense-category-management.postman_collection (1).json)"
         }
       ]
+    },
+    {
+      "name": "36 — Offer",
+      "description": "**/api/offer** — Offers management (Settings).\n\n- **IDs:** `_id` (path param) + `unique_id` on create (e.g. OFF1001).\n- **Types:** `percentage` (amounts below 100) or `fixed`.\n- **getAll:** `page`, `limit`, `name` (search name + unique_id), `status` (active|inactive), `start_date`, `end_date`, `sort_by` (name|value), `sort_order`, optional `type`, `is_active`.",
+      "item": [
+        {
+          "name": "Offer — create",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  try {",
+                  "    const j = pm.response.json();",
+                  "    if (j && j.record && j.record._id) {",
+                  "      pm.collectionVariables.set('offer_id', String(j.record._id));",
+                  "      pm.collectionVariables.set('id', String(j.record._id));",
+                  "    }",
+                  "    if (j && j.record && j.record.unique_id) {",
+                  "      pm.collectionVariables.set('offer_unique_id', String(j.record.unique_id));",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Summer Sale\",\n  \"type\": \"percentage\",\n  \"value\": 20,\n  \"admin_contribution\": 10,\n  \"partner_contribution\": 10,\n  \"start_date\": \"2026-05-01\",\n  \"end_date\": \"2026-06-30\",\n  \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/offer/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "offer",
+                "create"
+              ]
+            },
+            "description": "Create offer. Response `record.unique_id` is auto-generated (e.g. OFF1001). For `type: percentage`, value/admin_contribution/partner_contribution must each be below 100."
+          }
+        },
+        {
+          "name": "Offer — getAll",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/offer/getAll?page={{page}}&limit={{limit}}&name={{offerSearch}}&status={{offerStatus}}&start_date={{offerStartDate}}&end_date={{offerEndDate}}&sort_by=name&sort_order=asc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "offer",
+                "getAll"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}",
+                  "description": "Page number (default 1)"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}",
+                  "description": "Page size (default 10)"
+                },
+                {
+                  "key": "name",
+                  "value": "{{offerSearch}}",
+                  "description": "Search offer name or unique_id (OFF1001), partial case-insensitive"
+                },
+                {
+                  "key": "status",
+                  "value": "{{offerStatus}}",
+                  "description": "active or inactive (omit/empty = all)"
+                },
+                {
+                  "key": "start_date",
+                  "value": "{{offerStartDate}}",
+                  "description": "Only start_date: offers from this date onward. With end_date: range filter."
+                },
+                {
+                  "key": "end_date",
+                  "value": "{{offerEndDate}}",
+                  "description": "Only end_date: offers until this date. With start_date: range filter."
+                },
+                {
+                  "key": "sort_by",
+                  "value": "name",
+                  "description": "name or value"
+                },
+                {
+                  "key": "sort_order",
+                  "value": "asc",
+                  "description": "asc or desc"
+                },
+                {
+                  "key": "type",
+                  "value": "percentage",
+                  "disabled": true,
+                  "description": "percentage or fixed"
+                },
+                {
+                  "key": "is_active",
+                  "value": "true",
+                  "disabled": true,
+                  "description": "Alternative to status: true/false"
+                }
+              ]
+            },
+            "description": "Paginated list.\n\n**Search (`name`):** matches `name` or `unique_id`.\n\n**Status:** `status=active` | `inactive`.\n\n**Dates:** start only → from date; end only → until date; both → between.\n\n**Sort:** `sort_by` + `sort_order`."
+          }
+        },
+        {
+          "name": "Offer — getById",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/offer/get/{{offer_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "offer",
+                "get",
+                "{{offer_id}}"
+              ]
+            },
+            "description": "Get offer by MongoDB `_id` ({{offer_id}}). Response includes `unique_id` (e.g. {{offer_unique_id}})."
+          }
+        },
+        {
+          "name": "Offer — update",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Summer Sale Updated\",\n  \"type\": \"percentage\",\n  \"value\": 15,\n  \"admin_contribution\": 8,\n  \"partner_contribution\": 7,\n  \"start_date\": \"2026-05-01\",\n  \"end_date\": \"2026-07-31\",\n  \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/offer/update/{{offer_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "offer",
+                "update",
+                "{{offer_id}}"
+              ]
+            },
+            "description": "Update offer by _id."
+          }
+        },
+        {
+          "name": "Offer — delete",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/offer/delete/{{offer_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "offer",
+                "delete",
+                "{{offer_id}}"
+              ]
+            },
+            "description": "Soft-delete offer."
+          }
+        }
+      ]
     }
   ],
   "variable": [
@@ -7759,7 +7985,7 @@
     {
       "key": "id",
       "value": "",
-      "description": "Generic MongoDB _id: franchise GET/update/delete, subscription-plan, imports, etc. For mapping docs prefer franchise_category_mapping_id / franchise_service_mapping_id."
+      "description": "Generic MongoDB _id: franchise GET/update/delete, subscription-plan, offer, imports, etc. For mapping docs prefer franchise_category_mapping_id / franchise_service_mapping_id."
     },
     {
       "key": "chatId",
@@ -7859,6 +8085,48 @@
       "type": "string",
       "enabled": true,
       "description": "Subscription plan document _id."
+    },
+    {
+      "key": "offer_id",
+      "value": "",
+      "type": "string",
+      "enabled": true,
+      "description": "Offer MongoDB _id (24 hex). Set by Offer — create test script. Used in get/update/delete paths."
+    },
+    {
+      "key": "offer_unique_id",
+      "value": "",
+      "type": "string",
+      "enabled": true,
+      "description": "Business offer id from create response (e.g. OFF1001). Read-only; shown in list/get records."
+    },
+    {
+      "key": "offerSearch",
+      "value": "",
+      "type": "string",
+      "enabled": true,
+      "description": "Search text for GET /api/offer/getAll query param name (matches offer name or unique_id e.g. OFF1001)."
+    },
+    {
+      "key": "offerStatus",
+      "value": "",
+      "type": "string",
+      "enabled": true,
+      "description": "GET /api/offer/getAll — status filter: active, inactive, or empty for all."
+    },
+    {
+      "key": "offerStartDate",
+      "value": "",
+      "type": "string",
+      "enabled": true,
+      "description": "GET /api/offer/getAll — filter start_date (YYYY-MM-DD). Alone: offers from this date onward."
+    },
+    {
+      "key": "offerEndDate",
+      "value": "",
+      "type": "string",
+      "enabled": true,
+      "description": "GET /api/offer/getAll — filter end_date (YYYY-MM-DD). Alone: offers until this date."
     },
     {
       "key": "partner_subscription_id",

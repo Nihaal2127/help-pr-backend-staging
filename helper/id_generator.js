@@ -99,6 +99,21 @@ const getOrderId = async () => {
         return 'O1001';
     }
 };
+const getOfferId = async () => {
+    const Offer = require('../models/offer');
+    const records = await Offer.find({ unique_id: { $regex: /^OFF\d+$/i } })
+        .select('unique_id')
+        .lean();
+
+    let maxNum = 1000;
+    for (const row of records) {
+        const n = extractNumber(row.unique_id);
+        if (n !== null && n > maxNum) {
+            maxNum = n;
+        }
+    }
+    return 'OFF' + (maxNum + 1);
+};
 const getTicketId = async () => {
     let records = await Ticket.find().sort({ _id: -1 });
     if (records.length > 0) {
@@ -128,4 +143,4 @@ const getQuoteSequenceId = async () => {
     }
 };
 
-module.exports = { getNewId, getVerificationId, getCategoryId, getServiceId,getOrderId,getTicketId, getQuoteSequenceId };
+module.exports = { getNewId, getVerificationId, getCategoryId, getServiceId, getOrderId, getOfferId, getTicketId, getQuoteSequenceId };

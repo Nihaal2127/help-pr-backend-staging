@@ -1,12 +1,13 @@
 /**
  * Server-side order pricing from global service rates + total_service_charge.
  *
- * Base flow:
+ * Flow (tax after offer / discount):
  *   commission_amount = total_service_charge × commission%
  *   sub_total         = total_service_charge + commission_amount
- *   tax_amount        = sub_total × tax%
- *   total (base)      = sub_total + tax_amount
- *   min_deposit       = final total × minimum_deposit%
+ *   discount          = offer total_discount (optional)
+ *   taxable_subtotal  = sub_total − discount
+ *   tax_amount        = taxable_subtotal × tax%
+ *   total             = taxable_subtotal + tax_amount
  */
 
 const PRICING_TOLERANCE = 0.01;
@@ -25,25 +26,74 @@ const loadServiceRates = (service) => ({
   minimum_deposit_percent: Number(service?.minimum_deposit) || 0,
 });
 
+const normalizeDiscount = (discount_amount, sub_total) => {
+  const disc =
+    discount_amount !== null && discount_amount !== undefined
+      ? Number(discount_amount)
+      : 0;
+  if (!Number.isFinite(disc) || disc <= 0) {
+    return { applied: 0, discounted_sub_total: clampMoney(sub_total) };
+  }
+  const applied = clampMoney(Math.min(disc, sub_total));
+  return {
+    applied,
+    discounted_sub_total: clampMoney(sub_total - applied),
+  };
+};
+
+/**
+ * Tax is calculated on sub_total AFTER discount (post-offer taxable base).
+ */
+const computeTaxAndTotalFromSubtotal = (
+  sub_total,
+  discount_amount,
+  tax_percent
+) => {
+  const { applied, discounted_sub_total } = normalizeDiscount(
+    discount_amount,
+    sub_total
+  );
+  const taxPct = Number(tax_percent) || 0;
+  const tax_amount = roundMoney((discounted_sub_total * taxPct) / 100);
+  const total_price_before_extras = roundMoney(
+    discounted_sub_total + tax_amount
+  );
+
+  return {
+    discount_amount: applied > 0 ? applied : null,
+    discounted_sub_total,
+    tax_amount,
+    total_price_before_extras,
+  };
+};
+
 /**
  * @param {number} total_service_charge
- * @param {{ tax_percent, commission_percent, minimum_deposit_percent }} rates
+ * @param {{ tax_percent, commission_percent, minimum_deposit_percent, discount_amount? }} params
  */
 const computeBasePricing = ({
   total_service_charge,
   tax_percent,
   commission_percent,
   minimum_deposit_percent,
+  discount_amount = null,
 }) => {
   const charge = clampMoney(total_service_charge);
   const commission_amount = roundMoney(
     (charge * (Number(commission_percent) || 0)) / 100
   );
   const sub_total = roundMoney(charge + commission_amount);
-  const tax_amount = roundMoney((sub_total * (Number(tax_percent) || 0)) / 100);
-  const total_price_before_extras = roundMoney(sub_total + tax_amount);
+
+  const taxBlock = computeTaxAndTotalFromSubtotal(
+    sub_total,
+    discount_amount,
+    tax_percent
+  );
+
   const minimum_deposit_amount = roundMoney(
-    (total_price_before_extras * (Number(minimum_deposit_percent) || 0)) / 100
+    (taxBlock.total_price_before_extras *
+      (Number(minimum_deposit_percent) || 0)) /
+      100
   );
 
   return {
@@ -51,9 +101,8 @@ const computeBasePricing = ({
     commission_percent: Number(commission_percent) || 0,
     commission_amount,
     tax_percent: Number(tax_percent) || 0,
-    tax_amount,
     sub_total,
-    total_price_before_extras,
+    ...taxBlock,
     minimum_deposit_percent: Number(minimum_deposit_percent) || 0,
     minimum_deposit_amount,
   };
@@ -72,14 +121,10 @@ const computeAdditionalChargeLine = (amount, tax_percent) => {
 };
 
 /**
- * Customer total: base (sub_total + tax_amount) + taxed additional charges − discount.
+ * Customer total: taxable subtotal + tax on that base + taxed additional charges.
  */
 const computeOrderTotal = (orderLike, additionalChargesTotal = 0) => {
   const sub = Number(orderLike.sub_total) || 0;
-  const taxAmount =
-    orderLike.tax_amount !== undefined && orderLike.tax_amount !== null
-      ? Number(orderLike.tax_amount)
-      : Number(orderLike.tax) || 0;
   const add = Number(additionalChargesTotal) || 0;
   const disc =
     orderLike.discount_amount !== null && orderLike.discount_amount !== undefined
@@ -93,14 +138,31 @@ const computeOrderTotal = (orderLike, additionalChargesTotal = 0) => {
       0;
 
   if (usesLegacyFees) {
+    const taxAmount =
+      orderLike.tax_amount !== undefined && orderLike.tax_amount !== null
+        ? Number(orderLike.tax_amount)
+        : Number(orderLike.tax) || 0;
     const userFee = Number(orderLike.user_paltform_fee) || 0;
     const partnerFee = Number(orderLike.partner_commison_platform_fee) || 0;
     let total = sub + taxAmount + userFee + partnerFee + add - disc;
     return clampMoney(total);
   }
 
-  let total = sub + taxAmount + add - disc;
-  return clampMoney(total);
+  const taxPct = Number(orderLike.tax_percent) || 0;
+  if (taxPct > 0 || disc > 0) {
+    const { total_price_before_extras } = computeTaxAndTotalFromSubtotal(
+      sub,
+      disc > 0 ? disc : null,
+      taxPct
+    );
+    return clampMoney(total_price_before_extras + add);
+  }
+
+  const taxAmount =
+    orderLike.tax_amount !== undefined && orderLike.tax_amount !== null
+      ? Number(orderLike.tax_amount)
+      : Number(orderLike.tax) || 0;
+  return clampMoney(sub + taxAmount + add - disc);
 };
 
 const computeMinimumDepositAmount = (total_price, minimum_deposit_percent) =>
@@ -115,6 +177,7 @@ const COMPARE_FIELDS = [
   "sub_total",
   "total_price",
   "minimum_deposit_amount",
+  "discount_amount",
 ];
 
 const comparePricing = (clientValues = {}, serverValues = {}, tolerance = PRICING_TOLERANCE) => {
@@ -148,6 +211,7 @@ const extractClientPricing = (body = {}, serviceItem = {}) => ({
   total_price: body.total_price ?? serviceItem.total_price,
   minimum_deposit_amount:
     body.minimum_deposit_amount ?? body.min_deposit ?? serviceItem.minimum_deposit_amount,
+  discount_amount: body.discount_amount ?? serviceItem.discount_amount,
 });
 
 const resolveTotalServiceCharge = (body = {}, serviceItem = {}) => {
@@ -167,31 +231,20 @@ const resolveTotalServiceCharge = (body = {}, serviceItem = {}) => {
  */
 const buildOrderPricingFromService = (service, total_service_charge, discount_amount = null) => {
   const rates = loadServiceRates(service);
-  const base = computeBasePricing({
+  const pricing = computeBasePricing({
     total_service_charge,
     ...rates,
+    discount_amount,
   });
 
-  const disc =
-    discount_amount !== null && discount_amount !== undefined
-      ? Number(discount_amount)
-      : 0;
-
-  const total_price = clampMoney(base.total_price_before_extras - disc);
-  const minimum_deposit_amount = computeMinimumDepositAmount(
-    total_price,
-    rates.minimum_deposit_percent
-  );
-
   return {
-    ...base,
+    ...pricing,
     ...rates,
-    discount_amount: disc > 0 ? disc : null,
     additional_charges_subtotal: 0,
     additional_charges_tax: 0,
     additional_charges_total: 0,
-    total_price,
-    minimum_deposit_amount,
+    total_price: pricing.total_price_before_extras,
+    minimum_deposit_amount: pricing.minimum_deposit_amount,
   };
 };
 
@@ -217,6 +270,25 @@ const applyPricingToOrder = (order, pricing) => {
   order.additional_charges_tax = pricing.additional_charges_tax ?? 0;
   order.additional_charges_total = pricing.additional_charges_total ?? 0;
   order.total_price = pricing.total_price;
+  order.discount_amount =
+    pricing.discount_amount !== undefined && pricing.discount_amount !== null
+      ? pricing.discount_amount
+      : null;
+  if (pricing.discount_percent !== undefined) {
+    order.discount_percent = pricing.discount_percent;
+  }
+  if (pricing.discount_code !== undefined) {
+    order.discount_code = pricing.discount_code;
+  }
+  if (pricing.discount_reason !== undefined) {
+    order.discount_reason = pricing.discount_reason;
+  }
+  if (pricing.offer_id !== undefined) {
+    order.offer_id = pricing.offer_id;
+  }
+  if (pricing.order_offer_id !== undefined) {
+    order.order_offer_id = pricing.order_offer_id;
+  }
   order.admin_earning =
     pricing.admin_earning !== undefined
       ? pricing.admin_earning
@@ -234,7 +306,7 @@ const mapPricingToServiceLine = (pricing, overrides = {}) => ({
   sub_total: pricing.sub_total,
   user_paltform_fee: 0,
   partner_commison_platform_fee: pricing.commission_amount,
-  total_price: pricing.total_price_before_extras,
+  total_price: pricing.total_price,
   partner_earning:
     overrides.partner_earning !== undefined
       ? overrides.partner_earning
@@ -280,16 +352,14 @@ const finalizeOrderPricing = (basePricing, additionalAgg, discount_amount = null
         ? Number(basePricing.discount_amount)
         : 0;
 
-  const total_price = computeOrderTotal(
-    {
-      sub_total: basePricing.sub_total,
-      tax_amount: basePricing.tax_amount,
-      tax_percent: basePricing.tax_percent,
-      user_paltform_fee: 0,
-      partner_commison_platform_fee: 0,
-      discount_amount: disc > 0 ? disc : null,
-    },
-    additionalAgg.additional_charges_total
+  const taxBlock = computeTaxAndTotalFromSubtotal(
+    basePricing.sub_total,
+    disc > 0 ? disc : null,
+    basePricing.tax_percent
+  );
+
+  const total_price = clampMoney(
+    taxBlock.total_price_before_extras + additionalAgg.additional_charges_total
   );
 
   const minimum_deposit_amount = computeMinimumDepositAmount(
@@ -299,8 +369,8 @@ const finalizeOrderPricing = (basePricing, additionalAgg, discount_amount = null
 
   return {
     ...basePricing,
+    ...taxBlock,
     ...additionalAgg,
-    discount_amount: disc > 0 ? disc : null,
     total_price,
     minimum_deposit_amount,
   };
@@ -311,6 +381,8 @@ module.exports = {
   roundMoney,
   clampMoney,
   loadServiceRates,
+  normalizeDiscount,
+  computeTaxAndTotalFromSubtotal,
   computeBasePricing,
   computeAdditionalChargeLine,
   computeOrderTotal,

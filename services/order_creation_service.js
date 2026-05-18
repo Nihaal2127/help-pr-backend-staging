@@ -12,8 +12,9 @@ const { OrderCreationError } = require("../errors/order_creation_error");
 const {
   resolveOrderPricing,
   applyPricingToOrderDocument,
-  mapPricingToServiceLine,
+  mapPricingToServiceLineWithOffer,
 } = require("./order_pricing_service");
+const { createOrderOfferRecord } = require("./order_offer_service");
 const { combineDateAndTime } = require("../utils/order_schedule");
 const { resolveQuoteStatus } = require("../enum/quote_status_enum");
 const {
@@ -188,6 +189,7 @@ const createOrderFromBody = async (body, options = {}) => {
     customer_payment_method,
     order_description,
     quote_id,
+    offer_id,
   } = body;
 
   const order_id =
@@ -224,13 +226,13 @@ const createOrderFromBody = async (body, options = {}) => {
   const resolvedPartnerId = partner_id ?? single.partner_id ?? null;
   const resolvedServiceId = service_id ?? single.service_id ?? null;
 
-  const { pricing, pricingMeta } = await resolveOrderPricing(
+  const { pricing, pricingMeta, orderOfferSnapshot } = await resolveOrderPricing(
     body,
     single,
     resolvedServiceId
   );
 
-  const linePricing = mapPricingToServiceLine(pricing, {
+  const linePricing = mapPricingToServiceLineWithOffer(pricing, orderOfferSnapshot, {
     partner_earning: single.partner_earning,
     admin_earning: admin_earning ?? pricing.commission_amount,
   });
@@ -277,7 +279,6 @@ const createOrderFromBody = async (body, options = {}) => {
     order_status: DEFAULT_ORDER_STATUS,
     order_status_info: buildOrderStatusInfo(),
     order_date,
-    discount_amount,
     address,
     type,
     partner_id: resolvedPartnerId,
@@ -297,12 +298,6 @@ const createOrderFromBody = async (body, options = {}) => {
     order_description: finalOrderDescription,
     quote_id: resolvedQuoteId,
     rejection_reason: rejection_reason ?? "",
-    discount_percent:
-      discount_percent !== undefined && discount_percent !== null
-        ? Number(discount_percent)
-        : null,
-    discount_code: discount_code ?? "",
-    discount_reason: discount_reason ?? "",
     payment_schedule_type:
       payment_schedule_type === "installments" ? "installments" : "single",
     customer_payment_method: customer_payment_method ?? "",
@@ -311,7 +306,7 @@ const createOrderFromBody = async (body, options = {}) => {
     additional_charges_total: 0,
   });
 
-  applyPricingToOrderDocument(newOrder, pricing, admin_earning);
+  applyPricingToOrderDocument(newOrder, pricing, admin_earning, orderOfferSnapshot);
 
   return {
     newOrder,
@@ -320,14 +315,23 @@ const createOrderFromBody = async (body, options = {}) => {
     service_items,
     resolvedQuoteId,
     pricingMeta,
+    orderOfferSnapshot,
   };
 };
 
 const persistOrderAndLinkQuote = async (
-  { newOrder, order_id, service_items, resolvedQuoteId },
+  { newOrder, order_id, service_items, resolvedQuoteId, orderOfferSnapshot },
   { notifyPartners = true } = {}
 ) => {
   await newOrder.save();
+
+  if (orderOfferSnapshot) {
+    const orderOfferDoc = await createOrderOfferRecord(order_id, orderOfferSnapshot);
+    newOrder.order_offer_id = orderOfferDoc._id;
+    newOrder.offer_id = orderOfferSnapshot.offer_id;
+    await newOrder.save();
+  }
+
   await recalculateOrderTotals(order_id);
 
   if (resolvedQuoteId) {

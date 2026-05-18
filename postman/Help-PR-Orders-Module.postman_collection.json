@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "name": "Help PR — Orders module (orders, line items, charges, payments, Razorpay)",
-    "description": "Order APIs for help-pr-backend-staging.\n\n**Documentation:** `docs/ORDER_MODULE_FRONTEND.md`\n\n**Setup:** Set `baseUrl` and `accessToken` (Bearer JWT). After **Create order**, copy `orderId` and `orderServiceId` from the response into collection variables for dependent requests.",
+    "description": "Order APIs for help-pr-backend-staging.\n\n**Documentation:** `docs/ORDER_MODULE_FRONTEND.md`, **`docs/ORDER_GETALL_API_CHANGES.md`** (latest getAll / access changes).\n\n**Setup:** Set `baseUrl` and `accessToken` (Bearer JWT). Use a **super admin / staff / franchise admin / employee** token for **GET /api/order/getAll** (partners & customers get **403** — use **getCustomerOrder** for customers).\n\nAfter **Create order**, copy `orderId` and `orderServiceId` into collection variables.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -12,7 +12,14 @@
     { "key": "orderServiceId", "value": "" },
     { "key": "customerUserId", "value": "" },
     { "key": "additionalChargeId", "value": "" },
-    { "key": "orderPaymentId", "value": "" }
+    { "key": "orderPaymentId", "value": "" },
+    { "key": "franchiseId", "value": "", "description": "Optional; super/staff may filter any franchise. Franchise admin/employee must match their franchise or omit." },
+    { "key": "search", "value": "", "description": "Free-text for GET /api/order/getAll (unique_id, users, category, service, quote, etc.)" },
+    { "key": "from_date", "value": "2026-05-14", "description": "Date filter (ISO date). Alone = that calendar day. With to_date = overlap range." },
+    { "key": "to_date", "value": "2026-05-20", "description": "Date filter (ISO date). Alone = that calendar day." },
+    { "key": "orderStatus", "value": "1", "description": "order_status filter: 1 Pending, 2 In-progress, 3 Completed, 4 Cancelled" },
+    { "key": "partnerId", "value": "", "description": "Optional ObjectId filter on getAll" },
+    { "key": "employeeId", "value": "", "description": "Optional ObjectId filter on getAll" }
   ],
   "item": [
     {
@@ -72,36 +79,105 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "order", "get", "{{orderId}}"]
             },
-            "description": "GET /api/order/get/:id — includes `additional_charges`, `order_payments`, populated refs."
+            "description": "GET /api/order/get/:id — includes `additional_charges`, `order_payments`, populated refs.\n\n**Access (same as quotes):** Super admin / staff — any order. Franchise admin / employee — only orders in their franchise (**403** otherwise). Partner / customer — **403** (use participant flows or getCustomerOrder for customers)."
           },
           "response": []
         },
         {
-          "name": "Get all orders (paginated)",
+          "name": "Get all orders (paginated — full filters)",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
             "url": {
-              "raw": "{{baseUrl}}/api/order/getAll?page=1&limit=10&search=&sort_by=created_at&sort_order=desc",
+              "raw": "{{baseUrl}}/api/order/getAll?page=1&limit=10&order_status={{orderStatus}}&is_paid=&search={{search}}&from_date={{from_date}}&to_date={{to_date}}&franchise_id={{franchiseId}}&user_id={{customerUserId}}&partner_id={{partnerId}}&employee_id={{employeeId}}&category_id=&service_id=&city_id=&sort_by=created_at&sort_order=desc",
               "host": ["{{baseUrl}}"],
               "path": ["api", "order", "getAll"],
               "query": [
                 { "key": "page", "value": "1" },
                 { "key": "limit", "value": "10" },
-                { "key": "order_status", "value": "", "disabled": true },
-                { "key": "is_paid", "value": "false", "disabled": true },
-                { "key": "search", "value": "", "description": "Same as quotes getAll; matches order + related user/partner/category/city/franchise text" },
-                { "key": "keyword", "value": "", "disabled": true, "description": "Legacy alias for search" },
-                { "key": "sort_by", "value": "created_at", "description": "created_at|updated_at|order_date|order_status|total_price|sub_total|unique_id|is_paid|tax|min_deposit" },
-                { "key": "sort_order", "value": "desc", "description": "asc or desc" },
-                { "key": "sort", "value": "-1", "disabled": true, "description": "Legacy: 1 asc, else desc when sort_order omitted" },
-                { "key": "user_id", "value": "", "disabled": true },
-                { "key": "partner_id", "value": "", "disabled": true },
+                { "key": "order_status", "value": "{{orderStatus}}", "description": "1 Pending | 2 In-progress | 3 Completed | 4 Cancelled. Invalid → 409." },
+                { "key": "is_paid", "value": "", "disabled": true, "description": "true | false" },
+                { "key": "search", "value": "{{search}}", "description": "Sanitized free-text (same idea as quote getAll)" },
+                { "key": "keyword", "value": "", "disabled": true, "description": "Legacy alias for search when search is empty" },
+                { "key": "from_date", "value": "{{from_date}}", "description": "Schedule/order_date filter. Alone = that UTC day. With to_date = overlap range." },
+                { "key": "to_date", "value": "{{to_date}}", "description": "Schedule/order_date filter. Alone = that UTC day." },
+                { "key": "franchise_id", "value": "{{franchiseId}}", "description": "Scoped by JWT role (see docs/ORDER_GETALL_API_CHANGES.md)" },
+                { "key": "user_id", "value": "{{customerUserId}}", "disabled": true },
+                { "key": "partner_id", "value": "{{partnerId}}", "disabled": true },
+                { "key": "employee_id", "value": "{{employeeId}}", "disabled": true },
+                { "key": "category_id", "value": "", "disabled": true },
+                { "key": "service_id", "value": "", "disabled": true },
                 { "key": "city_id", "value": "", "disabled": true },
-                { "key": "category_id", "value": "", "disabled": true }
+                { "key": "sort_by", "value": "created_at", "description": "created_at|updated_at|order_date|order_status|total_price|sub_total|unique_id|is_paid|tax|min_deposit|order_description" },
+                { "key": "sort_order", "value": "desc", "description": "asc | desc (case-insensitive collation)" },
+                { "key": "sort", "value": "-1", "disabled": true, "description": "Legacy: 1 asc, else desc when sort_order omitted" }
               ]
             },
-            "description": "GET /api/order/getAll — search/sort aligned with GET /api/quote/getAll: `search` + `sort_by` + `sort_order` (or legacy `keyword` + `sort`)."
+            "description": "GET /api/order/getAll — aligned with **GET /api/quote/getAll**.\n\n**Who can call:** Super admin (5), Staff (6), Franchise admin (1), Employee (3). Partner / Customer → **403**.\n\n**franchise_id:** Super/staff optional filter; franchise admin/employee auto-scoped to their franchise.\n\n**Date filters:** `from_date` and/or `to_date` (ISO). One param alone filters that calendar day; both = schedule overlap + `order_date` fallback.\n\n**Response:** Hydrated list rows (`user_id`, `partner_id`, `category_id`, `service_id`, `franchise_id`, `quote_id`, display names)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get all orders — from_date only (single day)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/order/getAll?page=1&limit=10&from_date={{from_date}}&sort_by=order_date&sort_order=desc",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order", "getAll"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "from_date", "value": "{{from_date}}", "description": "Only this param → orders active on that UTC day" },
+                { "key": "sort_by", "value": "order_date" },
+                { "key": "sort_order", "value": "desc" }
+              ]
+            },
+            "description": "Example: filter by **from_date only** (no to_date). Matches orders whose schedule or `order_date` falls on that day."
+          },
+          "response": []
+        },
+        {
+          "name": "Get all orders — to_date only (single day)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/order/getAll?page=1&limit=10&to_date={{to_date}}&sort_by=order_date&sort_order=desc",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order", "getAll"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "to_date", "value": "{{to_date}}", "description": "Only this param → orders active on that UTC day" },
+                { "key": "sort_by", "value": "order_date" },
+                { "key": "sort_order", "value": "desc" }
+              ]
+            },
+            "description": "Example: filter by **to_date only** (no from_date). Same single-day semantics as from_date-only."
+          },
+          "response": []
+        },
+        {
+          "name": "Get all orders — search + franchise",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/order/getAll?page=1&limit=10&search={{search}}&franchise_id={{franchiseId}}&sort_by=created_at&sort_order=desc",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order", "getAll"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "search", "value": "{{search}}" },
+                { "key": "franchise_id", "value": "{{franchiseId}}" },
+                { "key": "sort_by", "value": "created_at" },
+                { "key": "sort_order", "value": "desc" }
+              ]
+            },
+            "description": "Text search across order fields and joined user/category/service/franchise/quote data."
           },
           "response": []
         },

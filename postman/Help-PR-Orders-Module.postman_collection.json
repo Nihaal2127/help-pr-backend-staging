@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "name": "Help PR — Orders module (orders, line items, charges, payments, Razorpay)",
-    "description": "Order APIs for help-pr-backend-staging.\n\n**Documentation:** `docs/ORDER_MODULE_FRONTEND.md`, **`docs/ORDER_GETALL_API_CHANGES.md`** (latest getAll / access changes).\n\n**Setup:** Set `baseUrl` and `accessToken` (Bearer JWT). Use a **super admin / staff / franchise admin / employee** token for **GET /api/order/getAll** (partners & customers get **403** — use **getCustomerOrder** for customers).\n\nAfter **Create order**, copy `orderId` and `orderServiceId` into collection variables.",
+    "description": "Order APIs for help-pr-backend-staging.\n\n**Documentation:** `docs/ORDER_MODULE_FRONTEND.md`, **`docs/ORDER_GETALL_API_CHANGES.md`**, **`docs/GET_COUNT_API_FRONTEND.txt`** (dashboard counts).\n\n**Setup:** Set `baseUrl` and `accessToken` (Bearer JWT). Use a **super admin / staff / franchise admin / employee** token for order list/count APIs (partners & customers get **403** — use **getCustomerOrder** for customers).\n\n**Dashboard counts:** `POST /api/getCount` with `{ \"type\": \"order-management\" }` — same franchise/role scope as **GET /api/order/getAll**.\n\nAfter **Create order**, copy `orderId` and `orderServiceId` into collection variables.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -17,11 +17,61 @@
     { "key": "search", "value": "", "description": "Free-text for GET /api/order/getAll (unique_id, users, category, service, quote, etc.)" },
     { "key": "from_date", "value": "2026-05-14", "description": "Date filter (ISO date). Alone = that calendar day. With to_date = overlap range." },
     { "key": "to_date", "value": "2026-05-20", "description": "Date filter (ISO date). Alone = that calendar day." },
-    { "key": "orderStatus", "value": "1", "description": "order_status filter: 1 Pending, 2 In-progress, 3 Completed, 4 Cancelled" },
+    { "key": "orderStatus", "value": "in-progress", "description": "order_status filter: in-progress | completed | cancelled | refunded" },
     { "key": "partnerId", "value": "", "description": "Optional ObjectId filter on getAll" },
     { "key": "employeeId", "value": "", "description": "Optional ObjectId filter on getAll" }
   ],
   "item": [
+    {
+      "name": "Dashboard — getCount",
+      "description": "**POST /api/getCount** — order dashboard cards (`type: order-management`). Same franchise/role rules as **GET /api/order/getAll** and quote **getCounts**.",
+      "item": [
+        {
+          "name": "POST getCount — order-management (role-scoped)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"order-management\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/getCount",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "getCount"]
+            },
+            "description": "Order dashboard card counts — same buckets as **GET /api/order/getAll?order_status=**.\n\n**Access:** Super admin / staff → all orders (unless body franchise set). Franchise admin / employee → auto-scoped to their franchise. Partner / customer → **403**.\n\n**Response `record` keys (numbers):**\n| Key | `order_status` | List filter |\n|-----|----------------|-------------|\n| `in_progress` | `in-progress` | `?order_status=in-progress` |\n| `completed` | `completed` | `?order_status=completed` |\n| `cancelled` | `cancelled` | `?order_status=cancelled` |\n| `refunded` | `refunded` | `?order_status=refunded` |\n\nLegacy numeric statuses (1–4) are included in counts until DB migration (see `docs/ORDER_STATUS_MIGRATION.md`)."
+          },
+          "response": []
+        },
+        {
+          "name": "POST getCount — order-management + franchise",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"order-management\",\n  \"franchise_id\": \"{{franchiseId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/getCount",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "getCount"]
+            },
+            "description": "Same as order-management but scoped to one franchise when `franchise_id` (or `franchise`) is a valid 24-char ObjectId. Super/staff may pass any franchise they can access; franchise admin/employee must match their own franchise or receive **403**."
+          },
+          "response": []
+        }
+      ]
+    },
     {
       "name": "Orders",
       "item": [
@@ -35,7 +85,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n  \"user_unique_id\": \"CUST001\",\n  \"city_id\": \"REPLACE_WITH_CITY_OBJECT_ID\",\n  \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n  \"is_paid\": false,\n  \"payment_mode_id\": \"\",\n  \"transaction_id\": \"\",\n  \"created_by_id\": \"REPLACE_WITH_SAME_OR_STAFF_USER_OBJECT_ID\",\n  \"order_status\": 1,\n  \"order_date\": \"2026-06-01\",\n  \"address\": \"123 Sample Street, City\",\n  \"sub_total\": 1000,\n  \"tax\": 0,\n  \"discount_amount\": null,\n  \"user_paltform_fee\": 0,\n  \"partner_commison_platform_fee\": 0,\n  \"total_price\": 1000,\n  \"admin_earning\": 0,\n  \"type\": 2,\n  \"partner_id\": \"REPLACE_WITH_PARTNER_USER_OBJECT_ID\",\n  \"payment_schedule_type\": \"single\",\n  \"customer_payment_method\": \"upi\",\n  \"order_description\": \"Same role as quote_description; optional free text.\",\n  \"quote_id\": null,\n  \"service_items\": [\n    {\n      \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n      \"partner_id\": \"REPLACE_WITH_PARTNER_USER_OBJECT_ID\",\n      \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n      \"service_id\": \"REPLACE_WITH_SERVICE_OBJECT_ID\",\n      \"service_date\": \"2026-06-01T00:00:00.000Z\",\n      \"service_from_time\": \"2026-06-01T09:00:00.000Z\",\n      \"service_to_time\": \"2026-06-01T17:00:00.000Z\",\n      \"sub_total\": 1000,\n      \"tax\": 0,\n      \"service_price\": 1000,\n      \"user_paltform_fee\": 0,\n      \"partner_commison_platform_fee\": 0,\n      \"partner_earning\": 1000,\n      \"total_price\": 1000,\n      \"admin_earning\": 0\n    }\n  ]\n}",
+              "raw": "{\n  \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n  \"user_unique_id\": \"CUST001\",\n  \"city_id\": \"REPLACE_WITH_CITY_OBJECT_ID\",\n  \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n  \"is_paid\": false,\n  \"payment_mode_id\": \"\",\n  \"transaction_id\": \"\",\n  \"created_by_id\": \"REPLACE_WITH_SAME_OR_STAFF_USER_OBJECT_ID\",\n  \"order_date\": \"2026-06-01\",\n  \"address\": \"123 Sample Street, City\",\n  \"sub_total\": 1000,\n  \"tax\": 0,\n  \"discount_amount\": null,\n  \"user_paltform_fee\": 0,\n  \"partner_commison_platform_fee\": 0,\n  \"total_price\": 1000,\n  \"admin_earning\": 0,\n  \"type\": 2,\n  \"partner_id\": \"REPLACE_WITH_PARTNER_USER_OBJECT_ID\",\n  \"payment_schedule_type\": \"single\",\n  \"customer_payment_method\": \"upi\",\n  \"order_description\": \"Same role as quote_description; optional free text.\",\n  \"quote_id\": null,\n  \"service_items\": [\n    {\n      \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n      \"partner_id\": \"REPLACE_WITH_PARTNER_USER_OBJECT_ID\",\n      \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n      \"service_id\": \"REPLACE_WITH_SERVICE_OBJECT_ID\",\n      \"service_date\": \"2026-06-01T00:00:00.000Z\",\n      \"service_from_time\": \"2026-06-01T09:00:00.000Z\",\n      \"service_to_time\": \"2026-06-01T17:00:00.000Z\",\n      \"sub_total\": 1000,\n      \"tax\": 0,\n      \"service_price\": 1000,\n      \"user_paltform_fee\": 0,\n      \"partner_commison_platform_fee\": 0,\n      \"partner_earning\": 1000,\n      \"total_price\": 1000,\n      \"admin_earning\": 0\n    }\n  ]\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {
@@ -43,7 +93,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "order", "create"]
             },
-            "description": "POST /api/order/create — `service_items` must be **exactly one** object. Middleware requires prices and `order_status`. Server recomputes `total_price` after save. Copy `record.order_id` and resolve `orderServiceId` from GET order by id (`service_items[0]._id`)."
+            "description": "POST /api/order/create — `service_items` must be **exactly one** object. Server sets `order_status` to **in-progress** (do not send numeric status). Recomputes `total_price` after save. Copy `record.order_id` and resolve `orderServiceId` from GET order by id (`service_items[0]._id`)."
           },
           "response": []
         },
@@ -57,7 +107,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n  \"user_unique_id\": \"CUST001\",\n  \"city_id\": \"REPLACE_WITH_CITY_OBJECT_ID\",\n  \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n  \"is_paid\": false,\n  \"payment_mode_id\": \"2\",\n  \"transaction_id\": \"\",\n  \"created_by_id\": \"REPLACE_WITH_STAFF_USER_OBJECT_ID\",\n  \"order_status\": 1,\n  \"order_date\": \"2026-06-01\",\n  \"address\": \"123 Sample Street\",\n  \"sub_total\": 1500,\n  \"tax\": 0,\n  \"discount_amount\": null,\n  \"user_paltform_fee\": 0,\n  \"partner_commison_platform_fee\": 0,\n  \"total_price\": 1500,\n  \"admin_earning\": 0,\n  \"type\": 2,\n  \"name\": \"Customer Name\",\n  \"email\": \"customer@example.com\",\n  \"contact\": \"9999999999\",\n  \"order_description\": \"\",\n  \"quote_id\": null,\n  \"service_items\": [\n    {\n      \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n      \"partner_id\": \"REPLACE_WITH_PARTNER_USER_OBJECT_ID\",\n      \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n      \"service_id\": \"REPLACE_WITH_SERVICE_OBJECT_ID\",\n      \"service_date\": \"2026-06-01T00:00:00.000Z\",\n      \"service_from_time\": \"2026-06-01T09:00:00.000Z\",\n      \"service_to_time\": \"2026-06-01T17:00:00.000Z\",\n      \"sub_total\": 1500,\n      \"tax\": 0,\n      \"service_price\": 1500,\n      \"user_paltform_fee\": 0,\n      \"partner_commison_platform_fee\": 0,\n      \"partner_earning\": 1500,\n      \"total_price\": 1500,\n      \"admin_earning\": 0\n    }\n  ]\n}",
+              "raw": "{\n  \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n  \"user_unique_id\": \"CUST001\",\n  \"city_id\": \"REPLACE_WITH_CITY_OBJECT_ID\",\n  \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n  \"is_paid\": false,\n  \"payment_mode_id\": \"2\",\n  \"transaction_id\": \"\",\n  \"created_by_id\": \"REPLACE_WITH_STAFF_USER_OBJECT_ID\",\n  \"order_date\": \"2026-06-01\",\n  \"address\": \"123 Sample Street\",\n  \"sub_total\": 1500,\n  \"tax\": 0,\n  \"discount_amount\": null,\n  \"user_paltform_fee\": 0,\n  \"partner_commison_platform_fee\": 0,\n  \"total_price\": 1500,\n  \"admin_earning\": 0,\n  \"type\": 2,\n  \"name\": \"Customer Name\",\n  \"email\": \"customer@example.com\",\n  \"contact\": \"9999999999\",\n  \"order_description\": \"\",\n  \"quote_id\": null,\n  \"service_items\": [\n    {\n      \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n      \"partner_id\": \"REPLACE_WITH_PARTNER_USER_OBJECT_ID\",\n      \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n      \"service_id\": \"REPLACE_WITH_SERVICE_OBJECT_ID\",\n      \"service_date\": \"2026-06-01T00:00:00.000Z\",\n      \"service_from_time\": \"2026-06-01T09:00:00.000Z\",\n      \"service_to_time\": \"2026-06-01T17:00:00.000Z\",\n      \"sub_total\": 1500,\n      \"tax\": 0,\n      \"service_price\": 1500,\n      \"user_paltform_fee\": 0,\n      \"partner_commison_platform_fee\": 0,\n      \"partner_earning\": 1500,\n      \"total_price\": 1500,\n      \"admin_earning\": 0\n    }\n  ]\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {
@@ -95,7 +145,7 @@
               "query": [
                 { "key": "page", "value": "1" },
                 { "key": "limit", "value": "10" },
-                { "key": "order_status", "value": "{{orderStatus}}", "description": "1 Pending | 2 In-progress | 3 Completed | 4 Cancelled. Invalid → 409." },
+                { "key": "order_status", "value": "{{orderStatus}}", "description": "in-progress | completed | cancelled | refunded. Invalid → 409." },
                 { "key": "is_paid", "value": "", "disabled": true, "description": "true | false" },
                 { "key": "search", "value": "{{search}}", "description": "Sanitized free-text (same idea as quote getAll)" },
                 { "key": "keyword", "value": "", "disabled": true, "description": "Legacy alias for search when search is empty" },
@@ -210,7 +260,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"order_status\": 2,\n  \"is_paid\": true\n}",
+              "raw": "{\n  \"order_status\": \"completed\",\n  \"is_paid\": true\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {
@@ -218,7 +268,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "order", "update", "{{orderId}}"]
             },
-            "description": "`order_status` only moves forward vs current. `is_paid` propagates to non-cancelled line items."
+            "description": "`order_status` string: **in-progress** | **completed** | **cancelled** | **refunded** (any transition allowed). Syncs to non-terminal line items. `is_paid` propagates to non-cancelled/refunded lines."
           },
           "response": []
         },
@@ -232,7 +282,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"partner_id\": \"REPLACE_WITH_PARTNER_OBJECT_ID\",\n  \"service_status\": 2,\n  \"service_date\": \"2026-06-02\",\n  \"service_from_time\": \"2026-06-02T10:00:00.000Z\",\n  \"service_to_time\": \"2026-06-02T18:00:00.000Z\",\n  \"is_paid\": false\n}",
+              "raw": "{\n  \"partner_id\": \"REPLACE_WITH_PARTNER_OBJECT_ID\",\n  \"service_status\": \"completed\",\n  \"service_date\": \"2026-06-02\",\n  \"service_from_time\": \"2026-06-02T10:00:00.000Z\",\n  \"service_to_time\": \"2026-06-02T18:00:00.000Z\",\n  \"is_paid\": false\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {

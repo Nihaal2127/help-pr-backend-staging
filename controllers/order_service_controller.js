@@ -6,6 +6,7 @@ const { applyPagination } = require('../utils/pagination');
 const { parseBoolean } = require('../utils/parser');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
 const { checkObjectIdExists } = require('../validator/id_validator');
+const { normalizeOrderStatus } = require('../enum/order_status_enum');
 const getAll = async (req, res) => {
 
   try {
@@ -13,12 +14,23 @@ const getAll = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const partner_paid_status = parseInt(req.query.partner_paid_status) || null;
 
-    const service_status = req.query.service_status !== undefined ? parseInt(req.query.service_status) : null;
+    const serviceStatusRaw =
+      req.query.service_status !== undefined && req.query.service_status !== null
+        ? String(req.query.service_status).trim()
+        : '';
+    const service_status = serviceStatusRaw ? normalizeOrderStatus(serviceStatusRaw) : null;
+    if (serviceStatusRaw && !service_status) {
+      return res.status(409).json({
+        success: false,
+        status: 409,
+        message: 'Invalid service_status. Use: in-progress, completed, cancelled, refunded.',
+      });
+    }
     const is_paid = req.query.is_paid !== undefined ? parseBoolean(req.query.is_paid) : null;
 
     const filter = {
       deleted_at: null,
-      ...(req.query.service_status && { service_status: service_status }),
+      ...(service_status && { service_status }),
       ...(req.query.is_paid !== undefined && req.query.is_paid !== '' && { is_paid: is_paid }),
       ...(req.query.partner_paid_status && { partner_paid_status: partner_paid_status }),
     };

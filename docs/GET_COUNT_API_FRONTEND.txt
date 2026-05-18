@@ -55,6 +55,7 @@ OPTIONAL — franchise scope
   quote-management              11  (aliases: quote_management, quotes)
   partner-management            12
   settings-role                 13  (aliases: settings_role, settingsrole)
+  order-management              14  (aliases: order_management, orders)
 
   You may also send "type" as a string of digits (e.g. "11") — it is parsed as a number.
 
@@ -103,7 +104,10 @@ FRANCHISE PARAMETER — WHAT CHANGES PER "type"
       mapping, pending requests). See section “MY-FRANCHISE (TYPE 10)” below.
 
   11 quote-management
-      Quote buckets filtered by franchise_id (same as sending franchise filter).
+      Same franchise/role scope as GET /api/quote/getCounts (resolveQuoteListScope).
+      Super admin / staff: all quotes, or filter with franchise / franchise_id.
+      Franchise admin / employee: always scoped to their franchise.
+      Partner / customer: 403.
 
   12 partner-management
       Subscription plan totals stay global; partner subscription counts only
@@ -112,6 +116,26 @@ FRANCHISE PARAMETER — WHAT CHANGES PER "type"
   13 settings-role
       Super admin / staff: optional franchise scope (same id as above).
       Franchise admin / employee: still tied to their own franchise in logic.
+
+  14 order-management
+      Same franchise/role scope as GET /api/order/getAll and quote getCounts.
+      Super admin / staff: all orders, or filter with franchise / franchise_id.
+      Franchise admin / employee: always scoped to their franchise.
+      Partner / customer: 403.
+
+--------------------------------------------------------------------------------
+ORDER-MANAGEMENT (TYPE 14) — "record" KEYS (four dashboard cards)
+--------------------------------------------------------------------------------
+
+  Canonical order_status strings (see enum/order_status_enum.js):
+
+  in_progress   "in-progress"  (legacy DB: 1 or 2 also counted)
+  completed     "completed"    (legacy DB: 3 also counted)
+  cancelled     "cancelled"    (legacy DB: 4 also counted)
+  refunded      "refunded"
+
+  List filter (same buckets): GET /api/order/getAll?order_status=in-progress
+  Aliases accepted on getAll: pending → in-progress; numeric 1–4 mapped per migration doc.
 
 --------------------------------------------------------------------------------
 MY-FRANCHISE (TYPE 10) — HOW "record" FIELDS ARE COMPUTED

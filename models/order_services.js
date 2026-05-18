@@ -16,7 +16,12 @@ var orderServiceSchema = new schema(
     transaction_id: { type: String, default: '', trim: true },
     
     category_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: 'category' },
-    service_status: { type: Number, default: 1, require: false },
+    service_status: {
+      type: String,
+      default: "in-progress",
+      enum: ["in-progress", "completed", "cancelled", "refunded"],
+      trim: true,
+    },
     service_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: 'service' },
     service_date: { type: Date, default: null },
     service_from_time: { type: Date, default: "", require: false },

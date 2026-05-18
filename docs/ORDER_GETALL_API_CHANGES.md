@@ -37,7 +37,7 @@ Implemented in `utils/order_access.js` (`resolveOrderListScope`, `assertOrderRec
 | Parameter | Description |
 |-----------|-------------|
 | `page`, `limit` | Pagination (defaults `1`, `10`) |
-| `order_status` | `1` Pending, `2` In-progress, `3` Completed, `4` Cancelled. Invalid → **409** |
+| `order_status` | `in-progress`, `completed`, `cancelled`, `refunded`. Invalid → **409** |
 | `is_paid` | `true` / `false` |
 | `search` | Sanitized free-text (preferred) |
 | `keyword` | Legacy alias for `search` when `search` is empty |

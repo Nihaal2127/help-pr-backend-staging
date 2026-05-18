@@ -15,7 +15,16 @@ const { parseBoolean } = require('../utils/parser');
 const { sendTemplateEmail } = require('../helper/mail');
 const { getOrderId } = require('../helper/id_generator');
 const { checkObjectIdExists } = require('../validator/id_validator');
-const { getOrderStatusKey, getOrderStatus } = require('../enum/order_status_enum');
+const {
+  ORDER_STATUS_CANCELLED,
+  ORDER_STATUS_IN_PROGRESS,
+  ORDER_STATUS_REFUNDED,
+  ORDER_STATUSES,
+  normalizeOrderStatus,
+  buildOrderStatusQueryFilter,
+  getOrderStatusLabel,
+  touchOrderStatusInfo,
+} = require('../enum/order_status_enum');
 const { sendPushNotification } = require('../service/firebase/push_service');
 const { generatePaymentLink } = require('./razorpay_controller');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
@@ -280,16 +289,15 @@ const resolveOrderListStatusFilter = (orderStatusParam) => {
     return { ok: true, filter: {} };
   }
 
-  const statusNum = parseInt(raw, 10);
-  if (![1, 2, 3, 4].includes(statusNum)) {
+  const statusFilter = buildOrderStatusQueryFilter(raw);
+  if (!statusFilter) {
     return {
       ok: false,
-      message:
-        'Invalid order_status. Use 1 (Pending), 2 (In-progress), 3 (Completed), 4 (Cancelled).',
+      message: `Invalid order_status. Use one of: ${ORDER_STATUSES.join(', ')}.`,
     };
   }
 
-  return { ok: true, filter: { order_status: statusNum } };
+  return { ok: true, filter: statusFilter };
 };
 
 const getAll = async (req, res) => {
@@ -963,10 +971,20 @@ const update = async (req, res) => {
 
     const updateData = {};
 
-    if (order_status !== undefined && order_status > order.order_status) {
-      order.order_status_info[order_status - 1].updated_at = Date.now();
-      order.order_status = order_status;
-      updateData.service_status = order_status;
+    if (order_status !== undefined) {
+      const nextStatus = normalizeOrderStatus(order_status);
+      if (!nextStatus) {
+        return res.status(409).json({
+          success: false,
+          status: 409,
+          message: `Invalid order_status. Use one of: ${ORDER_STATUSES.join(', ')}.`,
+        });
+      }
+      if (nextStatus !== order.order_status) {
+        touchOrderStatusInfo(order, nextStatus);
+        order.order_status = nextStatus;
+        updateData.service_status = nextStatus;
+      }
     }
 
     if (is_paid !== undefined) {
@@ -977,7 +995,7 @@ const update = async (req, res) => {
     if (Object.keys(updateData).length > 0) {
       const updateCondition = {
         _id: { $in: order.service_items },
-        service_status: { $ne: 4 }
+        service_status: { $nin: [ORDER_STATUS_CANCELLED, ORDER_STATUS_REFUNDED] },
       };
 
       await OrderService.updateMany(
@@ -994,10 +1012,10 @@ const update = async (req, res) => {
       const user = await User.findById(order.user_id);
       const deviceToken = user?.device_token
       const title = `Order Status Update`
-      const body = `Your Order #${order.unique_id} status changed to ${getOrderStatus(order.order_status)}`
+      const body = `Your Order #${order.unique_id} status changed to ${getOrderStatusLabel(order.order_status)}`
       const data = {
         order_id: order.id,
-        order_status: `${order.order_status}`,
+        order_status: order.order_status,
         type: "Order"
       }
       if (deviceToken !== null && deviceToken !== '') {
@@ -1036,7 +1054,19 @@ const serviceUpdate = async (req, res) => {
   }
 
   const { id } = req.params;
-  const updateData = req.body;
+  const updateData = { ...req.body };
+
+  if (updateData.service_status !== undefined) {
+    const normalized = normalizeOrderStatus(updateData.service_status);
+    if (!normalized) {
+      return res.status(409).json({
+        success: false,
+        status: 409,
+        message: `Invalid service_status. Use one of: ${ORDER_STATUSES.join(', ')}.`,
+      });
+    }
+    updateData.service_status = normalized;
+  }
 
   try {
     const service = await OrderService.findById(id);
@@ -1127,7 +1157,7 @@ const serviceUpdate = async (req, res) => {
           data: { order_id: service.order_id.toString(), type: "Order" }
         });
       }
-    }else if (partner && service.service_status === 1) {
+    }else if (partner && service.service_status === ORDER_STATUS_IN_PROGRESS) {
       const partnerNotifySettings = await NotificationSettings.findOne({ user_id: service.partner_id });
       if (partnerNotifySettings?.is_update_allow) {
         const serviceData = await Service.findById(service.service_id);
@@ -1152,7 +1182,7 @@ const serviceUpdate = async (req, res) => {
       const serviceData = await Service.findById(service.service_id);
       const deviceToken = user?.device_token
       const title = `Service Update`
-      const body = `Your ${serviceData.name} status changed to ${getOrderStatus(service.service_status)} for order #${service.order_unique_id}`
+      const body = `Your ${serviceData.name} status changed to ${getOrderStatusLabel(service.service_status)} for order #${service.order_unique_id}`
       const data = {
         order_id: service.order_id.toString(),
         type: "Order"
@@ -1242,7 +1272,7 @@ const cancleService = async (req, res) => {
     order.total_price -= serviceData.total_price;
     order.admin_earning -= serviceData.admin_earning;
     await OrderService.findByIdAndUpdate(service_items_id,
-      { service_status: getOrderStatusKey('Cancelled') },
+      { service_status: ORDER_STATUS_CANCELLED },
       { new: true, runValidators: true }
     );
 
@@ -1331,17 +1361,16 @@ const cancleOrder = async (req, res) => {
         message: 'No record found'
       });
     }
-    const CANCELLED_STATUS = getOrderStatusKey('Cancelled');
-    order.order_status = CANCELLED_STATUS;
+    order.order_status = ORDER_STATUS_CANCELLED;
     order.cancellation_reasone = cancellation_reasone || '';
-    order.order_status_info[3].updated_at = new Date();
+    touchOrderStatusInfo(order, ORDER_STATUS_CANCELLED);
     const updatedOrder = await order.save();
 
     await OrderService.updateMany(
       { _id: { $in: order.service_items } },
       {
         $set: {
-          service_status: CANCELLED_STATUS,
+          service_status: ORDER_STATUS_CANCELLED,
           cancellation_reasone: cancellation_reasone || ''
         }
       }

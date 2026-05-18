@@ -66,6 +66,8 @@ const recalculateOrderTotals = async (orderId) => {
   order.additional_charges_subtotal = finalized.additional_charges_subtotal;
   order.additional_charges_tax = finalized.additional_charges_tax;
   order.additional_charges_total = finalized.additional_charges_total;
+  order.tax_amount = finalized.tax_amount;
+  order.tax = finalized.tax_amount;
   order.total_price = finalized.total_price;
   order.minimum_deposit_amount = finalized.minimum_deposit_amount;
   order.min_deposit = finalized.minimum_deposit_amount;

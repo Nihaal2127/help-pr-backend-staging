@@ -48,6 +48,8 @@ Order (1) ──has──▶ service_items[] ──▶ OrderService (1 per order
 
 **Update order** (`PUT /api/order/update/:id`): pass `order_status` as a string; any valid transition is allowed (e.g. `in-progress` → `completed`, `completed` → `refunded`).
 
+**Reprice on update** (optional, same endpoint): send **`total_service_charge`** and/or **`offer_id`**. Server keeps **`tax_percent`**, **`commission_percent`**, **`minimum_deposit_percent`** from the saved order; recalculates **`commission_amount`**, **`tax_amount`**, **`total_price`**, etc. Offer rows are **replaced** from the live **`offers`** table (not merged with old `order_offer`). Send **`offer_id`: `null`** to remove an offer.
+
 **Partner payout field** on **`order_service`**: **`partner_paid_status`** — `1` Pending, `2` Paid, `3` return (per existing comment).
 
 ---
@@ -91,9 +93,10 @@ Order (1) ──has──▶ service_items[] ──▶ OrderService (1 per order
 | `total_service_charge` | **Required on create** — base service amount for booked hours (frontend). Alias: `service_price`. |
 | `commission_percent`, `commission_amount` | Snapshotted from `service.commission` (%); amount = charge × commission% |
 | `sub_total` | `total_service_charge + commission_amount` (before tax) |
-| `tax_percent`, `tax_amount` | Snapshotted from `service.tax` (%); amount = sub_total × tax% |
+| `tax_percent`, `tax_amount` | Snapshotted from `service.tax` (%); tax on **(sub_total − discount)** |
 | `minimum_deposit_percent`, `minimum_deposit_amount` | From `service.minimum_deposit` (%); amount = **final** `total_price` × % |
-| `discount_amount`, `discount_percent`, `discount_code`, `discount_reason` | Discounts; **only `discount_amount` affects `total_price`** today |
+| `discount_amount`, `discount_percent`, `discount_code`, `discount_reason` | Set by server when **`offer_id`** applied (`discount_amount` = offer `total_discount`) |
+| `offer_id`, `order_offer_id` | Optional offer on create; see **`order_offer`** snapshot on GET detail |
 | `additional_charges_subtotal`, `additional_charges_tax`, `additional_charges_total` | **Maintained by server** (each charge: pre-tax `amount` + tax) |
 | `admin_commission` | Same as `commission_amount` (reporting) |
 | `admin_earning` | Defaults to `commission_amount` if omitted on create |
@@ -111,9 +114,11 @@ Order (1) ──has──▶ service_items[] ──▶ OrderService (1 per order
 **On create**, the server loads the global **`service`** by `service_id`, snapshots `tax`, `commission`, and `minimum_deposit` percentages, and computes:
 
 ```text
-commission_amount = total_service_charge × commission% / 100
-sub_total         = total_service_charge + commission_amount
-tax_amount        = sub_total × tax% / 100
+commission_amount   = total_service_charge × commission% / 100
+sub_total           = total_service_charge + commission_amount
+discount_amount     = offer total_discount (optional)
+taxable_subtotal    = sub_total − discount_amount
+tax_amount          = taxable_subtotal × tax% / 100
 ```
 
 **After create** and whenever additional charges change, **`recalculateOrderTotals`** runs:
@@ -122,7 +127,7 @@ tax_amount        = sub_total × tax% / 100
 per additional charge: charge_tax = amount × tax_percent / 100
                        charge_total = amount + charge_tax
 
-total_price = sub_total + tax_amount + sum(charge_total) − discount_amount
+total_price = taxable_subtotal + tax_amount + sum(charge_total)
 minimum_deposit_amount = total_price × minimum_deposit_percent / 100
 ```
 
@@ -144,7 +149,7 @@ Prefix **`/api/order`** unless noted.
 | GET | `/api/order/get/:id` | Full order detail (populated + `additional_charges` + `order_payments`) |
 | GET | `/api/order/getAll` | Paginated list — see **getAll query parameters** below |
 | GET | `/api/order/getCustomerOrder` | Customer orders — **query** `user_id` required |
-| PUT | `/api/order/update/:id` | Update `order_status`, `is_paid` (and sync `is_paid` to non-cancelled line items) |
+| PUT | `/api/order/update/:id` | Update `order_status`, `is_paid`, and/or **reprice** via `total_service_charge` / `offer_id` (see below) |
 | PUT | `/api/order/serviceUpdate/:orderServiceId` | Update line item fields (see middleware) |
 | PUT | `/api/order/cancleService/:orderId` | Cancel one line — body `service_items_id` |
 | PUT | `/api/order/cancle/:id` | Cancel whole order — body `cancellation_reasone` |
@@ -235,9 +240,11 @@ Top-level fields validated by **`createOrderMiddleware`** (in addition to **`ser
 
 **`service_items[0]`** must include: `user_id`, `category_id`, `service_id`, `service_date`, `service_from_time`, `service_to_time`, **`total_service_charge`** (or `service_price`), and **`partner_id`** when `type === 1`.
 
-**Optional pricing mirrors** (compared to server; server wins on mismatch): `commission_amount`, `tax_amount`, `sub_total`, `total_price`, `minimum_deposit_amount`.
+**Optional `offer_id`**: MongoDB id of an active offer valid on **`order_date`**. Server creates **`order_offer`** row and sets `discount_amount` = `total_discount` (admin + partner contribution amounts). Do **not** send `discount_amount` with `offer_id`.
 
-**Optional order extensions**: `partner_id`, `employee_id`, `franchise_id`, `address_id`, `from_date`, `to_date`, `work_*`, `customer_description`, **`order_description`**, **`quote_id`**, `discount_percent`, `discount_code`, `discount_reason`, `payment_schedule_type`, `customer_payment_method`, `partner_earning`, `admin_earning`.
+**Optional pricing mirrors** (compared to server; server wins on mismatch): `commission_amount`, `tax_amount`, `sub_total`, `total_price`, `minimum_deposit_amount`, `discount_amount`.
+
+**Optional order extensions**: `partner_id`, `employee_id`, `franchise_id`, `address_id`, `from_date`, `to_date`, `work_*`, `customer_description`, **`order_description`**, **`quote_id`**, `payment_schedule_type`, `customer_payment_method`, `partner_earning`, `admin_earning`.
 
 **Create response** may include `record.pricing` with `pricing_mismatch`, `saved`, and `mismatches`.
 
@@ -257,6 +264,7 @@ When **`quote_id`** is sent and **`order_description`** is omitted, the server c
 - **`service_items`**: each element includes **`service_info`** and optional **`partner_info`**
 - **`additional_charges`**: array from `order_additional_charge`
 - **`order_payments`**: array from `order_payment`
+- **`order_offer`**: offer snapshot (`total_discount`, contribution breakdown) when an offer was applied
 
 ---
 
@@ -279,10 +287,26 @@ Replace placeholder ObjectIds in example bodies with real IDs from your environm
 
 ---
 
-## 10. Known limitations (for backlog)
+## 10. Offers (`order_offer`)
 
-- **`discount_percent`** is stored but not derived from **`discount_amount`** automatically.
-- **Discounts** beyond flat **`discount_amount`** (coupons, codes) — planned phase 2.
+When **`offer_id`** is sent on create (percentage offer):
+
+```text
+admin_contribution_amount   = commission_amount × offer.admin_contribution%
+partner_contribution_amount = total_service_charge × offer.partner_contribution%
+total_discount              = admin_contribution_amount + partner_contribution_amount
+taxable_subtotal            = sub_total − total_discount
+tax_amount                  = taxable_subtotal × service tax%
+total_price                 = taxable_subtotal + tax_amount
+```
+
+`order.discount_amount` = `order_offer.total_discount`. `discount_code` = offer `unique_id`; `discount_reason` = offer name.
+
+Offers are **optional** — omit `offer_id` and creation behaves as before (no `order_offer` row, `discount_amount` null unless legacy manual discount).
+
+## 11. Known limitations (for backlog)
+
+- Manual **`discount_amount`** without **`offer_id`** still supported but prefer offers for auditable splits.
 - Existing DB rows may still have **numeric** `order_status` until a migration is run — see **`docs/ORDER_STATUS_MIGRATION.md`**.
 - Razorpay webhook signature uses JSON body hashing; confirm against Razorpay’s latest raw-body guidance for production.
 - Staff who are not `user_id` / `partner_id` / `created_by_id` / `employee_id` on the order cannot hit charge/payment APIs unless you add a role bypass.

@@ -143,4 +143,30 @@ const getQuoteSequenceId = async () => {
     }
 };
 
-module.exports = { getNewId, getVerificationId, getCategoryId, getServiceId, getOrderId, getOfferId, getTicketId, getQuoteSequenceId };
+const getFinancialOrderUniqueId = async () => {
+    const FinancialOrder = require('../models/financial_order');
+    const records = await FinancialOrder.find({ order_unique_id: { $regex: /^ORD-?\d+$/i } })
+        .select('order_unique_id')
+        .lean();
+
+    let maxNum = 1000;
+    for (const row of records) {
+        const n = extractNumber(row.order_unique_id);
+        if (n !== null && n > maxNum) {
+            maxNum = n;
+        }
+    }
+    return 'ORD-' + (maxNum + 1);
+};
+
+module.exports = {
+    getNewId,
+    getVerificationId,
+    getCategoryId,
+    getServiceId,
+    getOrderId,
+    getOfferId,
+    getTicketId,
+    getQuoteSequenceId,
+    getFinancialOrderUniqueId,
+};

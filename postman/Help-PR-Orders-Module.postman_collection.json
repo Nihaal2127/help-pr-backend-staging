@@ -10,6 +10,7 @@
     { "key": "accessToken", "value": "" },
     { "key": "orderId", "value": "" },
     { "key": "orderServiceId", "value": "" },
+    { "key": "financialOrderId", "value": "", "description": "Mongo _id from financial-order create/getAll" },
     { "key": "customerUserId", "value": "" },
     { "key": "additionalChargeId", "value": "" },
     { "key": "orderPaymentId", "value": "" },
@@ -85,7 +86,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n  \"user_unique_id\": \"CUST001\",\n  \"city_id\": \"REPLACE_WITH_CITY_OBJECT_ID\",\n  \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n  \"is_paid\": false,\n  \"payment_mode_id\": \"\",\n  \"transaction_id\": \"\",\n  \"created_by_id\": \"REPLACE_WITH_SAME_OR_STAFF_USER_OBJECT_ID\",\n  \"order_date\": \"2026-06-01\",\n  \"address\": \"123 Sample Street, City\",\n  \"total_service_charge\": 3000,\n  \"service_id\": \"REPLACE_WITH_SERVICE_OBJECT_ID\",\n  \"discount_amount\": null,\n  \"type\": 2,\n  \"partner_id\": \"REPLACE_WITH_PARTNER_USER_OBJECT_ID\",\n  \"payment_schedule_type\": \"single\",\n  \"customer_payment_method\": \"upi\",\n  \"order_description\": \"Server calculates commission, tax, total, min deposit from service table.\",\n  \"quote_id\": null,\n  \"service_items\": [\n    {\n      \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n      \"partner_id\": \"REPLACE_WITH_PARTNER_USER_OBJECT_ID\",\n      \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n      \"service_id\": \"REPLACE_WITH_SERVICE_OBJECT_ID\",\n      \"service_date\": \"2026-06-01T00:00:00.000Z\",\n      \"service_from_time\": \"2026-06-01T09:00:00.000Z\",\n      \"service_to_time\": \"2026-06-01T17:00:00.000Z\",\n      \"total_service_charge\": 3000\n    }\n  ]\n}",
+              "raw": "{\n  \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n  \"user_unique_id\": \"CUST001\",\n  \"city_id\": \"REPLACE_WITH_CITY_OBJECT_ID\",\n  \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n  \"is_paid\": false,\n  \"payment_mode_id\": \"\",\n  \"transaction_id\": \"\",\n  \"created_by_id\": \"REPLACE_WITH_SAME_OR_STAFF_USER_OBJECT_ID\",\n  \"order_date\": \"2026-06-01\",\n  \"address\": \"123 Sample Street, City\",\n  \"total_service_charge\": 3000,\n  \"service_id\": \"REPLACE_WITH_SERVICE_OBJECT_ID\",\n  \"discount_amount\": null,\n  \"type\": 2,\n  \"partner_id\": \"REPLACE_WITH_PARTNER_USER_OBJECT_ID\",\n  \"payment_schedule_type\": \"single\",\n  \"customer_payment_method\": \"upi\",\n  \"order_description\": \"Server calculates commission, tax, total, min deposit from service table.\",\n  \"quote_id\": null,\n  \"offer_id\": null,\n  \"service_items\": [\n    {\n      \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n      \"partner_id\": \"REPLACE_WITH_PARTNER_USER_OBJECT_ID\",\n      \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n      \"service_id\": \"REPLACE_WITH_SERVICE_OBJECT_ID\",\n      \"service_date\": \"2026-06-01T00:00:00.000Z\",\n      \"service_from_time\": \"2026-06-01T09:00:00.000Z\",\n      \"service_to_time\": \"2026-06-01T17:00:00.000Z\",\n      \"total_service_charge\": 3000\n    }\n  ]\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {
@@ -107,7 +108,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n  \"user_unique_id\": \"CUST001\",\n  \"city_id\": \"REPLACE_WITH_CITY_OBJECT_ID\",\n  \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n  \"is_paid\": false,\n  \"payment_mode_id\": \"2\",\n  \"transaction_id\": \"\",\n  \"created_by_id\": \"REPLACE_WITH_STAFF_USER_OBJECT_ID\",\n  \"order_date\": \"2026-06-01\",\n  \"address\": \"123 Sample Street\",\n  \"total_service_charge\": 3000,\n  \"service_id\": \"REPLACE_WITH_SERVICE_OBJECT_ID\",\n  \"discount_amount\": null,\n  \"type\": 2,\n  \"name\": \"Customer Name\",\n  \"email\": \"customer@example.com\",\n  \"contact\": \"9999999999\",\n  \"order_description\": \"\",\n  \"quote_id\": null,\n  \"service_items\": [\n    {\n      \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n      \"partner_id\": \"REPLACE_WITH_PARTNER_USER_OBJECT_ID\",\n      \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n      \"service_id\": \"REPLACE_WITH_SERVICE_OBJECT_ID\",\n      \"service_date\": \"2026-06-01T00:00:00.000Z\",\n      \"service_from_time\": \"2026-06-01T09:00:00.000Z\",\n      \"service_to_time\": \"2026-06-01T17:00:00.000Z\",\n      \"total_service_charge\": 3000\n    }\n  ]\n}",
+              "raw": "{\n  \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n  \"user_unique_id\": \"CUST001\",\n  \"city_id\": \"REPLACE_WITH_CITY_OBJECT_ID\",\n  \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n  \"is_paid\": false,\n  \"payment_mode_id\": \"2\",\n  \"transaction_id\": \"\",\n  \"created_by_id\": \"REPLACE_WITH_STAFF_USER_OBJECT_ID\",\n  \"order_date\": \"2026-06-01\",\n  \"address\": \"123 Sample Street\",\n  \"total_service_charge\": 3000,\n  \"service_id\": \"REPLACE_WITH_SERVICE_OBJECT_ID\",\n  \"discount_amount\": null,\n  \"type\": 2,\n  \"name\": \"Customer Name\",\n  \"email\": \"customer@example.com\",\n  \"contact\": \"9999999999\",\n  \"order_description\": \"\",\n  \"quote_id\": null,\n  \"offer_id\": null,\n  \"service_items\": [\n    {\n      \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n      \"partner_id\": \"REPLACE_WITH_PARTNER_USER_OBJECT_ID\",\n      \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n      \"service_id\": \"REPLACE_WITH_SERVICE_OBJECT_ID\",\n      \"service_date\": \"2026-06-01T00:00:00.000Z\",\n      \"service_from_time\": \"2026-06-01T09:00:00.000Z\",\n      \"service_to_time\": \"2026-06-01T17:00:00.000Z\",\n      \"total_service_charge\": 3000\n    }\n  ]\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {
@@ -579,6 +580,107 @@
               "path": ["api", "order_service", "payComission"]
             },
             "description": "`partner_paid_status`: 1 Pending, 2 Paid, 3 return."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Financial orders",
+      "description": "**/api/financial-order** — dedicated financial order ledger (separate from line-item **/api/order_service**).",
+      "item": [
+        {
+          "name": "List financial orders (getAll)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/financial-order/getAll?search=Arjun&page=1&limit=10&from_date=2026-04-01&to_date=2026-04-30&order_status=completed&partner_payment_status=partially_paid&customer_payment_status=paid&franchise_id={{franchiseId}}&sort_by=user_name&sort_order=asc",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "financial-order", "getAll"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "search", "value": "Arjun", "description": "order_unique_id, user_name, partner_name, service_name" },
+                { "key": "from_date", "value": "2026-04-01", "disabled": true },
+                { "key": "to_date", "value": "2026-04-30", "disabled": true },
+                { "key": "order_status", "value": "completed", "description": "completed | in_progress", "disabled": true },
+                { "key": "partner_payment_status", "value": "partially_paid", "description": "paid | unpaid | partially_paid | completed", "disabled": true },
+                { "key": "customer_payment_status", "value": "paid", "description": "paid | unpaid | partially_paid | refund | partially_refund | completed", "disabled": true },
+                { "key": "franchise_id", "value": "{{franchiseId}}", "disabled": true },
+                { "key": "sort_by", "value": "user_name", "description": "user_name | partner_name | service_name | service_date | created_at | total_price", "disabled": true },
+                { "key": "sort_order", "value": "asc", "description": "asc | desc", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get financial order by id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/financial-order/get/{{financialOrderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "financial-order", "get", "{{financialOrderId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create financial order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"{{orderId}}\",\n  \"franchise_id\": \"{{franchiseId}}\",\n  \"user_id\": \"{{customerUserId}}\",\n  \"user_name\": \"Arjun Sharma\",\n  \"partner_id\": \"{{partnerId}}\",\n  \"partner_name\": \"Rahul Service Pro\",\n  \"service_name\": \"AC Service\",\n  \"service_date\": \"2026-04-20\",\n  \"total_price\": 1062,\n  \"commission_percentage\": 10,\n  \"tax_percentage\": 18,\n  \"customer_paid_amount\": 1062,\n  \"customer_pending_amount\": 0,\n  \"total_service_amount\": 900,\n  \"paid_to_partner\": 600,\n  \"pending_to_partner\": 300,\n  \"customer_payment_status\": \"paid\",\n  \"partner_payment_status\": \"partially_paid\",\n  \"order_status\": \"completed\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/financial-order/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "financial-order", "create"]
+            },
+            "description": "Auto-generates `order_unique_id` (ORD-1001, …) when omitted."
+          },
+          "response": []
+        },
+        {
+          "name": "Update financial order",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_payment_status\": \"paid\",\n  \"partner_payment_status\": \"paid\",\n  \"paid_to_partner\": 900,\n  \"pending_to_partner\": 0\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/financial-order/update/{{financialOrderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "financial-order", "update", "{{financialOrderId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete financial order (soft)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/financial-order/delete/{{financialOrderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "financial-order", "delete", "{{financialOrderId}}"]
+            }
           },
           "response": []
         }

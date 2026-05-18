@@ -100,6 +100,9 @@ var orderSchema = new schema(
     discount_percent: { type: Number, default: null },
     discount_code: { type: String, default: "", trim: true },
     discount_reason: { type: String, default: "", trim: true },
+    /** Applied offer reference (optional). */
+    offer_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "offers" },
+    order_offer_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "order_offer" },
 
     user_paltform_fee: { type: Number, default: 0, require: true },
     partner_commison_platform_fee: { type: Number, default: 0, require: true },
@@ -139,5 +142,7 @@ orderSchema.index({ is_paid: 1 });
 orderSchema.index({ address_id: 1 });
 orderSchema.index({ service_id: 1 });
 orderSchema.index({ quote_id: 1 });
+orderSchema.index({ offer_id: 1 });
+orderSchema.index({ order_offer_id: 1 });
 
 module.exports = mongoose.model("order", orderSchema);

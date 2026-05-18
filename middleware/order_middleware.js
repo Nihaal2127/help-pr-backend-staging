@@ -5,6 +5,7 @@ const City = require('../models/city')
 const Category = require('../models/category')
 
 const Service = require('../models/service')
+const Offer = require('../models/offer')
 
 const { checkObjectIdExists } = require('../validator/id_validator')
 
@@ -48,6 +49,8 @@ const createOrderMiddleware = async (req, res, next) => {
         address,
 
         discount_amount,
+
+        offer_id,
 
         service_id,
 
@@ -262,6 +265,40 @@ const createOrderMiddleware = async (req, res, next) => {
                 status: 409,
 
                 message: 'Discount amount is invalid.',
+
+            });
+
+        }
+
+    }
+
+    if (offer_id !== undefined && offer_id !== null && String(offer_id).trim() !== '') {
+
+        if (discount_amount !== undefined && discount_amount !== null && discount_amount !== '') {
+
+            return res.status(409).json({
+
+                success: false,
+
+                status: 409,
+
+                message: 'Send offer_id or discount_amount, not both.',
+
+            });
+
+        }
+
+        const offerResult = await checkObjectIdExists(Offer, offer_id, 'offer');
+
+        if (offerResult.exists === false) {
+
+            return res.status(409).json({
+
+                success: false,
+
+                status: 409,
+
+                message: offerResult.message,
 
             });
 

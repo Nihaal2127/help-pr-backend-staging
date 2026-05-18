@@ -12,7 +12,13 @@ const orderAdditionalChargeSchema = new schema(
     },
     label: { type: String, default: "", trim: true },
     description: { type: String, default: "", trim: true },
+    /** Pre-tax charge amount */
     amount: { type: Number, required: true, min: 0 },
+    /** Snapshotted from order.tax_percent when charge is created */
+    tax_percent: { type: Number, default: 0 },
+    tax_amount: { type: Number, default: 0 },
+    /** amount + tax_amount */
+    total_amount: { type: Number, default: 0 },
     /** How this charge was collected / recorded: cash, upi, card, online, bank_transfer, other */
     payment_method: {
       type: String,

@@ -889,7 +889,7 @@ const create = async (req, res) => {
       throw err;
     }
 
-    const { newOrder, order_id } = draft;
+    const { newOrder, order_id, pricingMeta } = draft;
 
     if (newOrder.payment_mode_id === "2") {
       const responsePaymentLink = await generatePaymentLink(
@@ -904,6 +904,7 @@ const create = async (req, res) => {
         const result = {
           payment_url: responsePaymentLink.payment_url,
           order_id: newOrder._id,
+          pricing: pricingMeta,
         };
         return res.status(200).json({
           success: true,
@@ -924,7 +925,7 @@ const create = async (req, res) => {
       success: true,
       status: 200,
       message: "Order placed successfully.",
-      record: { order_id: newOrder._id },
+      record: { order_id: newOrder._id, pricing: pricingMeta },
     });
   } catch (error) {
     if (error.message === "INVALID_SERVICE_USER") {
@@ -1265,11 +1266,16 @@ const cancleService = async (req, res) => {
     }
 
     partner = await User.findById(serviceData.partner_id);
+    order.total_service_charge -=
+      Number(serviceData.total_service_charge ?? serviceData.service_price) || 0;
+    order.commission_amount -=
+      Number(serviceData.commission_amount ?? serviceData.partner_commison_platform_fee) || 0;
+    order.admin_commission = order.commission_amount;
     order.sub_total -= serviceData.sub_total;
-    order.tax -= serviceData.tax;
-    order.user_paltform_fee -= serviceData.user_paltform_fee;
-    order.partner_commison_platform_fee -= serviceData.partner_commison_platform_fee;
-    order.total_price -= serviceData.total_price;
+    order.tax_amount -= Number(serviceData.tax_amount ?? serviceData.tax) || 0;
+    order.tax = order.tax_amount;
+    order.user_paltform_fee = 0;
+    order.partner_commison_platform_fee = order.commission_amount;
     order.admin_earning -= serviceData.admin_earning;
     await OrderService.findByIdAndUpdate(service_items_id,
       { service_status: ORDER_STATUS_CANCELLED },

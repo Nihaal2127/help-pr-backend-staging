@@ -29,7 +29,7 @@ Order (1) ──has──▶ service_items[] ──▶ OrderService (1 per order
 
 - **Order** holds customer-facing totals, payment flags, quote-aligned fields (partner, franchise, schedule, etc.), and references **`order_service`** documents via **`service_items`** (array of ObjectIds; **length must be 1** on create).
 - **OrderService** holds per-job execution fields (partner, service window, line pricing, **`is_paid`**, **`partner_paid_status`**, etc.).
-- **`total_price`** on the order is **recalculated** server-side from base amounts + additional charges − discount (see §5). The **`total_price`** sent on create is validated by middleware but **overwritten** to match the server formula after save.
+- **`total_price`** is **calculated on the server** from `total_service_charge`, service table rates, taxed additional charges, and discount (see §5). Optional client mirrors are compared; **server values are always saved**.
 
 ---
 
@@ -88,14 +88,18 @@ Order (1) ──has──▶ service_items[] ──▶ OrderService (1 per order
 
 | Field | Notes |
 |-------|--------|
-| `sub_total`, `tax` | Base components |
-| `discount_amount`, `discount_percent`, `discount_code`, `discount_reason` | Discounts; **only `discount_amount` affects `total_price`** in the current helper |
-| `user_paltform_fee`, `partner_commison_platform_fee` | Fees (spelling matches API) |
-| `additional_charges_total` | **Maintained by server** when additional charges change |
-| `admin_commission` | Reporting; **not** subtracted from `total_price` in current formula |
-| `admin_earning` | As before |
-| `total_price` | **Recalculated** (see §5) |
-| `min_deposit` | Stored; not in total formula yet |
+| `total_service_charge` | **Required on create** — base service amount for booked hours (frontend). Alias: `service_price`. |
+| `commission_percent`, `commission_amount` | Snapshotted from `service.commission` (%); amount = charge × commission% |
+| `sub_total` | `total_service_charge + commission_amount` (before tax) |
+| `tax_percent`, `tax_amount` | Snapshotted from `service.tax` (%); amount = sub_total × tax% |
+| `minimum_deposit_percent`, `minimum_deposit_amount` | From `service.minimum_deposit` (%); amount = **final** `total_price` × % |
+| `discount_amount`, `discount_percent`, `discount_code`, `discount_reason` | Discounts; **only `discount_amount` affects `total_price`** today |
+| `additional_charges_subtotal`, `additional_charges_tax`, `additional_charges_total` | **Maintained by server** (each charge: pre-tax `amount` + tax) |
+| `admin_commission` | Same as `commission_amount` (reporting) |
+| `admin_earning` | Defaults to `commission_amount` if omitted on create |
+| `total_price` | **Server-calculated** (see §5); client values compared, server wins on mismatch |
+| `min_deposit` | Legacy alias of `minimum_deposit_amount` |
+| `user_paltform_fee`, `partner_commison_platform_fee` | Legacy; new orders set platform fee **0**, partner fee = `commission_amount` |
 | `is_paid`, `payment_mode_id`, `transaction_id` | Legacy + Razorpay link id |
 | `payment_schedule_type` | `"single"` \| `"installments"` |
 | `customer_payment_method` | Label, e.g. cash / upi / card / online / bank_transfer / other |
@@ -104,15 +108,27 @@ Order (1) ──has──▶ service_items[] ──▶ OrderService (1 per order
 
 ## 5. How `total_price` is calculated
 
-After create and whenever additional charges are added/updated/removed, the server runs **`recalculateOrderTotals`**:
+**On create**, the server loads the global **`service`** by `service_id`, snapshots `tax`, `commission`, and `minimum_deposit` percentages, and computes:
 
 ```text
-total_price = sub_total + tax + user_paltform_fee + partner_commison_platform_fee
-              + sum(order_additional_charge.amount for non-deleted rows)
-              − discount_amount   (treated as 0 if null/undefined)
+commission_amount = total_service_charge × commission% / 100
+sub_total         = total_service_charge + commission_amount
+tax_amount        = sub_total × tax% / 100
 ```
 
-Result is clamped to **≥ 0**. **`admin_commission`** does not change this total in the current implementation.
+**After create** and whenever additional charges change, **`recalculateOrderTotals`** runs:
+
+```text
+per additional charge: charge_tax = amount × tax_percent / 100
+                       charge_total = amount + charge_tax
+
+total_price = sub_total + tax_amount + sum(charge_total) − discount_amount
+minimum_deposit_amount = total_price × minimum_deposit_percent / 100
+```
+
+Optional client breakdown fields are **compared**; on mismatch the **server values are saved** and `pricing_mismatch: true` is returned on create.
+
+Result is clamped to **≥ 0**.
 
 **Razorpay payment link** (`payment_mode_id === "2"`): the amount sent to Razorpay is **`total_price` after** the in-memory compute at create time; after save, **`recalculateOrderTotals`** runs again (same if no extra charges yet).
 
@@ -212,13 +228,18 @@ Top-level fields validated by **`createOrderMiddleware`** (in addition to **`ser
 - `is_paid` (boolean); if `true`, **`transaction_id`** required
 - **`order_status`** is not required on create; server sets **`in-progress`** automatically.
 - `order_date`, `address` (string)
-- `sub_total`, `tax`, `user_paltform_fee`, `partner_commison_platform_fee`, `admin_earning`, `total_price` (prices validated)
+- **`total_service_charge`** (or **`service_price`**) — base service amount; must be **> 0**
+- **`service_id`** on order or on **`service_items[0]`** (used to load `tax`, `commission`, `minimum_deposit` from global **service**)
 - `discount_amount` optional
 - `type` — if `type === 1`, **`partner_id`** required on the **service line item**
 
-**`service_items[0]`** must include (among others validated): `user_id`, `category_id`, `service_id`, `service_date`, `service_from_time`, `service_to_time`, price fields (`sub_total`, `tax`, `service_price`, fees, `partner_earning`, `total_price`, `admin_earning`), and **`partner_id`** when `type === 1`.
+**`service_items[0]`** must include: `user_id`, `category_id`, `service_id`, `service_date`, `service_from_time`, `service_to_time`, **`total_service_charge`** (or `service_price`), and **`partner_id`** when `type === 1`.
 
-**Optional order extensions** (stored if sent): `partner_id`, `employee_id`, `franchise_id`, `address_id`, `service_id`, `from_date`, `to_date`, `work_*`, `service_price`, `customer_description`, **`order_description`**, **`quote_id`** (must reference a non-deleted quote with no `order_id` yet and not already used on another order), `rejection_reason`, `admin_commission`, `discount_percent`, `discount_code`, `discount_reason`, `min_deposit`, `payment_schedule_type`, `customer_payment_method`.
+**Optional pricing mirrors** (compared to server; server wins on mismatch): `commission_amount`, `tax_amount`, `sub_total`, `total_price`, `minimum_deposit_amount`.
+
+**Optional order extensions**: `partner_id`, `employee_id`, `franchise_id`, `address_id`, `from_date`, `to_date`, `work_*`, `customer_description`, **`order_description`**, **`quote_id`**, `discount_percent`, `discount_code`, `discount_reason`, `payment_schedule_type`, `customer_payment_method`, `partner_earning`, `admin_earning`.
+
+**Create response** may include `record.pricing` with `pricing_mismatch`, `saved`, and `mismatches`.
 
 When **`quote_id`** is sent and **`order_description`** is omitted, the server copies **`quote.quote_description`** into **`order_description`** if present.
 
@@ -260,7 +281,8 @@ Replace placeholder ObjectIds in example bodies with real IDs from your environm
 
 ## 10. Known limitations (for backlog)
 
-- **`discount_percent`** / **`min_deposit`** are not applied inside **`computeOrderTotal`** yet.
+- **`discount_percent`** is stored but not derived from **`discount_amount`** automatically.
+- **Discounts** beyond flat **`discount_amount`** (coupons, codes) — planned phase 2.
 - Existing DB rows may still have **numeric** `order_status` until a migration is run — see **`docs/ORDER_STATUS_MIGRATION.md`**.
 - Razorpay webhook signature uses JSON body hashing; confirm against Razorpay’s latest raw-body guidance for production.
 - Staff who are not `user_id` / `partner_id` / `created_by_id` / `employee_id` on the order cannot hit charge/payment APIs unless you add a role bypass.

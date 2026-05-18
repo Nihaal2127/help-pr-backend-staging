@@ -7,7 +7,13 @@ const Address = require("../models/address");
 const Quote = require("../models/quote");
 const NotificationSettings = require("../models/notification_settings");
 const { getOrderId } = require("../helper/id_generator");
-const { computeOrderTotal, recalculateOrderTotals } = require("../utils/order_financials");
+const { recalculateOrderTotals } = require("../utils/order_financials");
+const { OrderCreationError } = require("../errors/order_creation_error");
+const {
+  resolveOrderPricing,
+  applyPricingToOrderDocument,
+  mapPricingToServiceLine,
+} = require("./order_pricing_service");
 const { combineDateAndTime } = require("../utils/order_schedule");
 const { resolveQuoteStatus } = require("../enum/quote_status_enum");
 const {
@@ -16,14 +22,6 @@ const {
 } = require("../enum/order_status_enum");
 
 const ORDER_TYPE_DEFAULT = 2;
-
-class OrderCreationError extends Error {
-  constructor(message, status = 409) {
-    super(message);
-    this.name = "OrderCreationError";
-    this.status = status;
-  }
-}
 
 /**
  * Validates quote can be linked to a new order (same rules as POST /api/order/create).
@@ -223,6 +221,20 @@ const createOrderFromBody = async (body, options = {}) => {
   const single = service_items[0];
   const unique_id = await getOrderId();
 
+  const resolvedPartnerId = partner_id ?? single.partner_id ?? null;
+  const resolvedServiceId = service_id ?? single.service_id ?? null;
+
+  const { pricing, pricingMeta } = await resolveOrderPricing(
+    body,
+    single,
+    resolvedServiceId
+  );
+
+  const linePricing = mapPricingToServiceLine(pricing, {
+    partner_earning: single.partner_earning,
+    admin_earning: admin_earning ?? pricing.commission_amount,
+  });
+
   const orderItemsWithOrderId = await Promise.all(
     service_items.map(async (option) => {
       const user = await User.findById(new mongoose.Types.ObjectId(option.user_id));
@@ -235,6 +247,7 @@ const createOrderFromBody = async (body, options = {}) => {
       return {
         _id: new mongoose.Types.ObjectId(),
         ...option,
+        ...linePricing,
         service_status: option.service_status ?? DEFAULT_ORDER_STATUS,
         order_id,
         order_unique_id: unique_id,
@@ -248,13 +261,6 @@ const createOrderFromBody = async (body, options = {}) => {
 
   const savedDataOptions = await OrderService.insertMany(orderItemsWithOrderId);
   const order_items = savedDataOptions.map((doc) => doc._id);
-
-  const resolvedPartnerId = partner_id ?? single.partner_id ?? null;
-  const resolvedServiceId = service_id ?? single.service_id ?? null;
-  const resolvedServicePrice =
-    service_price !== undefined && service_price !== null
-      ? Number(service_price)
-      : Number(single.service_price ?? single.sub_total ?? 0);
 
   const newOrder = new Order({
     _id: order_id,
@@ -271,13 +277,7 @@ const createOrderFromBody = async (body, options = {}) => {
     order_status: DEFAULT_ORDER_STATUS,
     order_status_info: buildOrderStatusInfo(),
     order_date,
-    sub_total,
-    tax,
     discount_amount,
-    user_paltform_fee,
-    partner_commison_platform_fee,
-    total_price,
-    admin_earning,
     address,
     type,
     partner_id: resolvedPartnerId,
@@ -293,26 +293,25 @@ const createOrderFromBody = async (body, options = {}) => {
       total_work_hours !== undefined ? Number(total_work_hours) : 0,
     work_start_time: work_start_time ?? "",
     work_end_time: work_end_time ?? "",
-    service_price: resolvedServicePrice,
     customer_description: customer_description ?? "",
     order_description: finalOrderDescription,
     quote_id: resolvedQuoteId,
     rejection_reason: rejection_reason ?? "",
-    admin_commission: admin_commission !== undefined ? Number(admin_commission) : 0,
     discount_percent:
       discount_percent !== undefined && discount_percent !== null
         ? Number(discount_percent)
         : null,
     discount_code: discount_code ?? "",
     discount_reason: discount_reason ?? "",
-    min_deposit: min_deposit !== undefined ? Number(min_deposit) : 0,
     payment_schedule_type:
       payment_schedule_type === "installments" ? "installments" : "single",
     customer_payment_method: customer_payment_method ?? "",
+    additional_charges_subtotal: 0,
+    additional_charges_tax: 0,
     additional_charges_total: 0,
   });
 
-  newOrder.total_price = computeOrderTotal(newOrder, 0);
+  applyPricingToOrderDocument(newOrder, pricing, admin_earning);
 
   return {
     newOrder,
@@ -320,6 +319,7 @@ const createOrderFromBody = async (body, options = {}) => {
     unique_id,
     service_items,
     resolvedQuoteId,
+    pricingMeta,
   };
 };
 
@@ -385,13 +385,9 @@ const buildCreateInputFromQuote = async (quote) => {
     created_by_id:
       quote.created_by_id != null ? quote.created_by_id : quote.user_id,
     order_date: quote.from_date,
-    sub_total: price,
-    tax: 0,
+    total_service_charge: price,
+    service_price: price,
     discount_amount: null,
-    user_paltform_fee: 0,
-    partner_commison_platform_fee: 0,
-    total_price: price,
-    admin_earning: 0,
     address: addressStr,
     type: ORDER_TYPE_DEFAULT,
     partner_id: quote.partner_id,
@@ -410,11 +406,9 @@ const buildCreateInputFromQuote = async (quote) => {
     order_description: quoteDescription,
     quote_id: quote._id,
     rejection_reason: "",
-    admin_commission: 0,
     discount_percent: null,
     discount_code: "",
     discount_reason: "",
-    min_deposit: 0,
     payment_schedule_type: "single",
     customer_payment_method: "",
     service_items: [
@@ -426,14 +420,8 @@ const buildCreateInputFromQuote = async (quote) => {
         service_date: quote.from_date,
         service_from_time,
         service_to_time,
-        sub_total: price,
-        tax: 0,
-        user_paltform_fee: 0,
-        partner_commison_platform_fee: 0,
+        total_service_charge: price,
         service_price: price,
-        total_price: price,
-        partner_earning: price,
-        admin_earning: 0,
         is_paid: false,
         partner_paid_status: 1,
         rating: 0,

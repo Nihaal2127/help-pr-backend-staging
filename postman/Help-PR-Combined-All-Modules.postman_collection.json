@@ -7634,7 +7634,7 @@
     },
     {
       "name": "36 — Offer",
-      "description": "**/api/offer** — Offers management (Settings).\n\n- **Types:** `percentage` (value, admin_contribution, partner_contribution below 100) or `fixed` (no cap).\n- **getAll:** `page`, `limit`, `name` (search), `sort_by` (`name`|`value`), `sort_order` (`asc`|`desc`), optional `is_active`, `type`.",
+      "description": "**/api/offer** — Offers management (Settings).\n\n- **IDs:** MongoDB `_id` (API path param) + auto-generated `unique_id` (e.g. `OFF1001`) on create.\n- **Types:** `percentage` (value, admin_contribution, partner_contribution below 100) or `fixed` (no cap).\n- **getAll:** `page`, `limit`, `name` (search), `sort_by` (`name`|`value`), `sort_order` (`asc`|`desc`), optional `is_active`, `type`.",
       "item": [
         {
           "name": "Offer — create",
@@ -7649,6 +7649,9 @@
                   "    if (j && j.record && j.record._id) {",
                   "      pm.collectionVariables.set('offer_id', String(j.record._id));",
                   "      pm.collectionVariables.set('id', String(j.record._id));",
+                  "    }",
+                  "    if (j && j.record && j.record.unique_id) {",
+                  "      pm.collectionVariables.set('offer_unique_id', String(j.record.unique_id));",
                   "    }",
                   "  } catch (e) {}",
                   "}"
@@ -7685,7 +7688,7 @@
                 "create"
               ]
             },
-            "description": "Create offer. For `type: percentage`, value/admin_contribution/partner_contribution must each be below 100."
+            "description": "Create offer. Response `record.unique_id` is auto-generated (e.g. OFF1001). For `type: percentage`, value/admin_contribution/partner_contribution must each be below 100."
           }
         },
         {
@@ -7718,7 +7721,7 @@
                 "create"
               ]
             },
-            "description": "Create fixed-type offer (no 100 cap on amount fields)."
+            "description": "Create fixed-type offer (no 100 cap on amount fields). Response includes auto-generated `unique_id` (OFF1001, OFF1002, …)."
           }
         },
         {
@@ -7855,7 +7858,7 @@
                 "{{offer_id}}"
               ]
             },
-            "description": "Get offer by MongoDB _id. Uses {{offer_id}} or generic {{id}}."
+            "description": "Get offer by MongoDB `_id` ({{offer_id}}). Response includes `unique_id` (e.g. {{offer_unique_id}})."
           }
         },
         {
@@ -8153,7 +8156,14 @@
       "value": "",
       "type": "string",
       "enabled": true,
-      "description": "Offer document _id. Set automatically by Offer — create test script."
+      "description": "Offer MongoDB _id (24 hex). Set by Offer — create test script. Used in get/update/delete paths."
+    },
+    {
+      "key": "offer_unique_id",
+      "value": "",
+      "type": "string",
+      "enabled": true,
+      "description": "Business offer id from create response (e.g. OFF1001). Read-only; shown in list/get records."
     },
     {
       "key": "offerName",

@@ -4,6 +4,7 @@ const OFFER_TYPES = ['percentage', 'fixed'];
 
 const offerSchema = new mongoose.Schema(
     {
+        unique_id: { type: String, trim: true },
         name: { type: String, required: true, trim: true },
         type: {
             type: String,
@@ -22,9 +23,11 @@ const offerSchema = new mongoose.Schema(
     },
     {
         timestamps: false,
+        minimize: false,
     }
 );
 
+offerSchema.index({ unique_id: 1 });
 offerSchema.index({ type: 1 });
 offerSchema.index({ is_active: 1 });
 offerSchema.index({ deleted_at: 1 });

@@ -2,6 +2,8 @@
 
 This document describes the **order**, **order line item (order_service)**, **additional charges**, **order payments**, and **Razorpay** integration in `help-pr-backend-staging`. Share it with frontend developers together with the Postman collection **`postman/Help-PR-Orders-Module.postman_collection.json`**.
 
+> **Recent `getAll` changes:** See **`docs/ORDER_GETALL_API_CHANGES.md`** for role scope, date filters, search, and list response updates (aligned with quote `getAll`).
+
 ---
 
 ## 1. Base URL and authentication
@@ -132,19 +134,24 @@ Prefix **`/api/order`** unless noted.
 
 #### `GET /api/order/getAll` query parameters
 
+**Access:** Super admin, staff, franchise admin, franchise employee only. Partner / customer → **403** (use `getCustomerOrder` for customers). **`franchise_id`** is role-scoped like quotes — see **`docs/ORDER_GETALL_API_CHANGES.md`**.
+
 | Parameter | Description |
 |-----------|-------------|
 | `page`, `limit` | Pagination (defaults 1, 10) |
-| `order_status` | Filter by numeric order status (1–4) |
+| `order_status` | `1`–`4`; invalid → **409** |
 | `is_paid` | `true` / `false` |
-| **`search`** | Free-text search (sanitized), same role as quotes — matches `unique_id`, `user_unique_id`, address, comments, **`order_description`**, transaction/payment ids, discount code, customer description, linked **quote** (`quote_sequence_id`, `quote_description` when `quote_id` is set), **user / partner / employee / created_by** names & codes & email & phone, **category** name/code, **city** name, **franchise** name |
-| `keyword` | **Legacy alias** for `search` (if `search` is empty) |
-| **`sort_by`** | One of: `created_at`, `updated_at`, `order_date`, `order_status`, `total_price`, `sub_total`, `unique_id`, `is_paid`, `tax`, `min_deposit`, **`order_description`** (invalid values fall back to `created_at`) |
-| **`sort_order`** | `asc` or `desc` (preferred for string sort fields) |
-| `sort` | Legacy numeric direction: **`1`** = ascending, anything else = descending (used when `sort_order` is omitted; same as quotes) |
-| `user_id`, `partner_id`, `employee_id`, `franchise_id`, `city_id`, `category_id` | Optional ObjectId filters (same idea as quote list filters) |
+| **`search`** | Free-text (sanitized) — order fields, linked quote, users, category, **service**, city, franchise |
+| `keyword` | Legacy alias for `search` |
+| **`from_date`**, **`to_date`** | ISO dates. **One alone** = that UTC calendar day; **both** = schedule overlap (+ `order_date` fallback). Invalid → **409** |
+| **`sort_by`** | `created_at`, `updated_at`, `order_date`, `order_status`, `total_price`, `sub_total`, `unique_id`, `is_paid`, `tax`, `min_deposit`, `order_description` |
+| **`sort_order`** | `asc` or `desc` |
+| `sort` | Legacy: **`1`** = ascending, else descending |
+| `user_id`, `partner_id`, `employee_id`, `franchise_id`, `city_id`, `category_id`, **`service_id`** | Optional ObjectId filters |
 
-List responses use **case-insensitive collation** for sort (locale `en`, strength 2), matching quotes. Each record includes **`city_name`**, **`category_name`**, **`user_name`**, **`partner_name`** for display.
+List responses use **case-insensitive collation** for sort. Each record includes display names and **hydrated** `user_id`, `partner_id`, `category_id`, `service_id`, `franchise_id`, `address_id`, `quote_id` objects (quote list parity).
+
+**`GET /api/order/get/:id`** enforces the same franchise access rules as the list.
 
 > **Note:** `getCustomerOrderDetails` exists in `order_controller.js` but is **not** registered on `order_routes.js` today. Use **`GET /api/order/get/:id`** (or wire the handler if you need SOS-style `unique_id` lookup separately).
 
@@ -267,6 +274,6 @@ Replace placeholder ObjectIds in example bodies with real IDs from your environm
 | Additional charge model | `models/order_additional_charge.js` |
 | Order payment model | `models/order_payment.js` |
 | Totals helper | `utils/order_financials.js` |
-| Participant check | `utils/order_access.js` |
+| List/detail franchise access & participant check | `utils/order_access.js` (`resolveOrderListScope`, `assertOrderRecordAccess`, `callerMatchesOrderParticipant`) |
 | Controllers | `controllers/order_controller.js`, `order_service_controller.js`, `order_additional_charge_controller.js`, `order_payment_controller.js`, `razorpay_controller.js` |
 | Routes | `routes/order_routes.js`, `order_service_routes.js`, `order_additional_charge_routes.js`, `order_payment_routes.js`, `razorpay_routes.js` |

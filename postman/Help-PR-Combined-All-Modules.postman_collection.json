@@ -7631,6 +7631,294 @@
           "description": "Source path: 00 — Auth & health → Health (content-expense-expense-category-management.postman_collection (1).json)"
         }
       ]
+    },
+    {
+      "name": "36 — Offer",
+      "description": "**/api/offer** — Offers management (Settings).\n\n- **Types:** `percentage` (value, admin_contribution, partner_contribution below 100) or `fixed` (no cap).\n- **getAll:** `page`, `limit`, `name` (search), `sort_by` (`name`|`value`), `sort_order` (`asc`|`desc`), optional `is_active`, `type`.",
+      "item": [
+        {
+          "name": "Offer — create",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  try {",
+                  "    const j = pm.response.json();",
+                  "    if (j && j.record && j.record._id) {",
+                  "      pm.collectionVariables.set('offer_id', String(j.record._id));",
+                  "      pm.collectionVariables.set('id', String(j.record._id));",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Summer Sale\",\n  \"type\": \"percentage\",\n  \"value\": 20,\n  \"admin_contribution\": 10,\n  \"partner_contribution\": 10,\n  \"start_date\": \"2026-05-01\",\n  \"end_date\": \"2026-06-30\",\n  \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/offer/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "offer",
+                "create"
+              ]
+            },
+            "description": "Create offer. For `type: percentage`, value/admin_contribution/partner_contribution must each be below 100."
+          }
+        },
+        {
+          "name": "Offer — create (fixed)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Flat Discount\",\n  \"type\": \"fixed\",\n  \"value\": 500,\n  \"admin_contribution\": 200,\n  \"partner_contribution\": 300,\n  \"start_date\": \"2026-05-01\",\n  \"end_date\": \"2026-12-31\",\n  \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/offer/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "offer",
+                "create"
+              ]
+            },
+            "description": "Create fixed-type offer (no 100 cap on amount fields)."
+          }
+        },
+        {
+          "name": "Offer — getAll",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/offer/getAll?page={{page}}&limit={{limit}}&name={{offerName}}&sort_by=name&sort_order=asc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "offer",
+                "getAll"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}",
+                  "description": "Page number (default 1)"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}",
+                  "description": "Page size (default 10)"
+                },
+                {
+                  "key": "name",
+                  "value": "{{offerName}}",
+                  "description": "Search by offer name (partial, case-insensitive)"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "name",
+                  "description": "Sort field: name or value"
+                },
+                {
+                  "key": "sort_order",
+                  "value": "asc",
+                  "description": "asc or desc"
+                },
+                {
+                  "key": "is_active",
+                  "value": "true",
+                  "disabled": true,
+                  "description": "Filter by status"
+                },
+                {
+                  "key": "type",
+                  "value": "percentage",
+                  "disabled": true,
+                  "description": "Filter: percentage or fixed"
+                }
+              ]
+            },
+            "description": "Paginated list. Search: `name`. Sort: `sort_by` (name|value) + `sort_order` (asc|desc). Optional: `is_active`, `type`."
+          }
+        },
+        {
+          "name": "Offer — getAll (sort by value)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/offer/getAll?page={{page}}&limit={{limit}}&name={{offerName}}&sort_by=value&sort_order=desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "offer",
+                "getAll"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "name",
+                  "value": "{{offerName}}"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "value"
+                },
+                {
+                  "key": "sort_order",
+                  "value": "desc"
+                }
+              ]
+            },
+            "description": "Same as getAll with sort_by=value, sort_order=desc."
+          }
+        },
+        {
+          "name": "Offer — getById",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/offer/get/{{offer_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "offer",
+                "get",
+                "{{offer_id}}"
+              ]
+            },
+            "description": "Get offer by MongoDB _id. Uses {{offer_id}} or generic {{id}}."
+          }
+        },
+        {
+          "name": "Offer — update",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Summer Sale Updated\",\n  \"type\": \"percentage\",\n  \"value\": 15,\n  \"admin_contribution\": 8,\n  \"partner_contribution\": 7,\n  \"start_date\": \"2026-05-01\",\n  \"end_date\": \"2026-07-31\",\n  \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/offer/update/{{offer_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "offer",
+                "update",
+                "{{offer_id}}"
+              ]
+            },
+            "description": "Update offer by _id."
+          }
+        },
+        {
+          "name": "Offer — delete",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/offer/delete/{{offer_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "offer",
+                "delete",
+                "{{offer_id}}"
+              ]
+            },
+            "description": "Soft-delete offer."
+          }
+        }
+      ]
     }
   ],
   "variable": [
@@ -7759,7 +8047,7 @@
     {
       "key": "id",
       "value": "",
-      "description": "Generic MongoDB _id: franchise GET/update/delete, subscription-plan, imports, etc. For mapping docs prefer franchise_category_mapping_id / franchise_service_mapping_id."
+      "description": "Generic MongoDB _id: franchise GET/update/delete, subscription-plan, offer, imports, etc. For mapping docs prefer franchise_category_mapping_id / franchise_service_mapping_id."
     },
     {
       "key": "chatId",
@@ -7859,6 +8147,20 @@
       "type": "string",
       "enabled": true,
       "description": "Subscription plan document _id."
+    },
+    {
+      "key": "offer_id",
+      "value": "",
+      "type": "string",
+      "enabled": true,
+      "description": "Offer document _id. Set automatically by Offer — create test script."
+    },
+    {
+      "key": "offerName",
+      "value": "",
+      "type": "string",
+      "enabled": true,
+      "description": "Offer name search text for GET /api/offer/getAll (query param name)."
     },
     {
       "key": "partner_subscription_id",

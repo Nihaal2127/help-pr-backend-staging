@@ -67,24 +67,92 @@ const ALLOWED_SORT_FIELDS = {
 
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+const parseOptionalQueryDate = (value, fieldName) => {
+    if (value === undefined || value === null || String(value).trim() === '') {
+        return { ok: true, d: null };
+    }
+    const d = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(d.getTime())) {
+        return { ok: false, message: `${fieldName} must be a valid date.` };
+    }
+    return { ok: true, d };
+};
+
+const startOfDayUtc = (d) => {
+    const x = new Date(d);
+    x.setUTCHours(0, 0, 0, 0);
+    return x;
+};
+
+const endOfDayUtc = (d) => {
+    const x = new Date(d);
+    x.setUTCHours(23, 59, 59, 999);
+    return x;
+};
+
+const resolveIsActiveFilter = (query) => {
+    if (query.is_active !== undefined && query.is_active !== null && String(query.is_active).trim() !== '') {
+        return parseBoolean(query.is_active);
+    }
+    if (query.status !== undefined && query.status !== null && String(query.status).trim() !== '') {
+        const status = String(query.status).trim().toLowerCase();
+        if (status === 'active') return true;
+        if (status === 'inactive') return false;
+    }
+    return null;
+};
+
+const applyOfferDateFilters = (filter, query) => {
+    const pStart = parseOptionalQueryDate(query.start_date, 'start_date');
+    if (!pStart.ok) return { ok: false, message: pStart.message };
+
+    const pEnd = parseOptionalQueryDate(query.end_date, 'end_date');
+    if (!pEnd.ok) return { ok: false, message: pEnd.message };
+
+    if (pStart.d && pEnd.d && startOfDayUtc(pStart.d) > endOfDayUtc(pEnd.d)) {
+        return { ok: false, message: 'start_date must be on or before end_date.' };
+    }
+
+    if (pStart.d && !pEnd.d) {
+        filter.start_date = { $gte: startOfDayUtc(pStart.d) };
+    } else if (!pStart.d && pEnd.d) {
+        filter.end_date = { $lte: endOfDayUtc(pEnd.d) };
+    } else if (pStart.d && pEnd.d) {
+        filter.start_date = { $gte: startOfDayUtc(pStart.d) };
+        filter.end_date = { $lte: endOfDayUtc(pEnd.d) };
+    }
+
+    return { ok: true };
+};
+
 const listOffers = async (query) => {
     try {
         const page = parseInt(query.page, 10) || 1;
         const limit = parseInt(query.limit, 10) || 10;
         const filter = {
             deleted_at: null,
-            ...(query.is_active !== undefined && {
-                is_active: parseBoolean(query.is_active),
-            }),
         };
+
+        const isActiveFilter = resolveIsActiveFilter(query);
+        if (isActiveFilter !== null) {
+            filter.is_active = isActiveFilter;
+        }
+
+        const dateFilterResult = applyOfferDateFilters(filter, query);
+        if (!dateFilterResult.ok) {
+            return fail(400, dateFilterResult.message);
+        }
 
         if (query.type && OFFER_TYPES.includes(String(query.type).trim().toLowerCase())) {
             filter.type = String(query.type).trim().toLowerCase();
         }
 
         if (query.name && String(query.name).trim()) {
-            const nameSearch = escapeRegex(String(query.name).trim());
-            filter.name = { $regex: nameSearch, $options: 'i' };
+            const searchTerm = escapeRegex(String(query.name).trim());
+            filter.$or = [
+                { name: { $regex: searchTerm, $options: 'i' } },
+                { unique_id: { $regex: searchTerm, $options: 'i' } },
+            ];
         }
 
         const sortByKey = query.sort_by ? String(query.sort_by).trim().toLowerCase() : '';

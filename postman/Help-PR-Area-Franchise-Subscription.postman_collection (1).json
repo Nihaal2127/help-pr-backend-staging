@@ -3606,7 +3606,7 @@
             },
             "method": "GET",
             "header": [],
-            "description": "Dashboard buckets (new, pending, accepted, success, failed). Optional franchise_id filter. Same counts as POST /api/getCount with type quote-management.",
+            "description": "Dashboard card counts — same buckets as **GET /api/quote/getAll?status=** and **POST /api/getCount** `{ \"type\": \"quote-management\" }`.\n\n**Response `record` keys (all numbers):**\n| Key | Meaning |\n|-----|--------|\n| `new` | Pending, no partner assigned |\n| `pending` | Pending, partner assigned |\n| `accepted` | Approved / converted, no order yet |\n| `success` | Converted with `order_id` set |\n| `failed` | Rejected, cancelled, expired, or approved without order |\n\nUses `buildQuoteBucketFilter` (string status in DB and legacy numeric 1–6). Optional query: **franchise_id** (caller must have access). List/detail rows use the same bucket names in **`status`** (no separate status_code in latest API).",
             "url": "{{base_url}}/api/quote/getCounts?franchise_id={{franchise_id}}"
           }
         },

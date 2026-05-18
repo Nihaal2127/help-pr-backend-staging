@@ -35,16 +35,18 @@ Order (1) ──has──▶ service_items[] ──▶ OrderService (1 per order
 
 ## 3. Order status and service status
 
-**Order `order_status`** (aligned with `order_status_info` slots 1–4):
+**Order `order_status`** and **OrderService `service_status`** are stored as **strings** (not numbers):
 
-| Value | Meaning |
-|-------|---------|
-| 1 | Pending |
-| 2 | In-progress |
-| 3 | Completed |
-| 4 | Cancelled |
+| `order_status` / `service_status` | Meaning |
+|-----------------------------------|---------|
+| `in-progress` | Default when an order is created |
+| `completed` | Job finished |
+| `cancelled` | Order or line cancelled |
+| `refunded` | Order refunded |
 
-**OrderService `service_status`** uses the same numeric idea for listing; cancel flows set cancelled on the line.
+**`order_status_info`** — timeline array with one entry per status (`status` string + `updated_at`). On create, only `in-progress` has a timestamp.
+
+**Update order** (`PUT /api/order/update/:id`): pass `order_status` as a string; any valid transition is allowed (e.g. `in-progress` → `completed`, `completed` → `refunded`).
 
 **Partner payout field** on **`order_service`**: **`partner_paid_status`** — `1` Pending, `2` Paid, `3` return (per existing comment).
 
@@ -139,7 +141,7 @@ Prefix **`/api/order`** unless noted.
 | Parameter | Description |
 |-----------|-------------|
 | `page`, `limit` | Pagination (defaults 1, 10) |
-| `order_status` | `1`–`4`; invalid → **409** |
+| `order_status` | `in-progress` \| `completed` \| `cancelled` \| `refunded`; invalid → **409** |
 | `is_paid` | `true` / `false` |
 | **`search`** | Free-text (sanitized) — order fields, linked quote, users, category, **service**, city, franchise |
 | `keyword` | Legacy alias for `search` |
@@ -208,7 +210,7 @@ Top-level fields validated by **`createOrderMiddleware`** (in addition to **`ser
 
 - `user_id`, `user_unique_id`, `city_id`, `category_id`, `created_by_id`
 - `is_paid` (boolean); if `true`, **`transaction_id`** required
-- `order_status` (1–4) — required by middleware; **create handler does not copy this onto the order document** (order still defaults to status `1`); align product expectations
+- **`order_status`** is not required on create; server sets **`in-progress`** automatically.
 - `order_date`, `address` (string)
 - `sub_total`, `tax`, `user_paltform_fee`, `partner_commison_platform_fee`, `admin_earning`, `total_price` (prices validated)
 - `discount_amount` optional
@@ -259,7 +261,7 @@ Replace placeholder ObjectIds in example bodies with real IDs from your environm
 ## 10. Known limitations (for backlog)
 
 - **`discount_percent`** / **`min_deposit`** are not applied inside **`computeOrderTotal`** yet.
-- **`order_status`** from create body is not persisted by the create handler despite middleware validation.
+- Existing DB rows may still have **numeric** `order_status` until a migration is run — see **`docs/ORDER_STATUS_MIGRATION.md`**.
 - Razorpay webhook signature uses JSON body hashing; confirm against Razorpay’s latest raw-body guidance for production.
 - Staff who are not `user_id` / `partner_id` / `created_by_id` / `employee_id` on the order cannot hit charge/payment APIs unless you add a role bypass.
 

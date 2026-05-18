@@ -16,6 +16,7 @@ const {
     validateCategoriesOrderPermutation,
     filterRecordsByFranchiseMappingToggle,
 } = require('../utils/franchise_catalog_lists');
+const { cascadeInactiveCategoriesToFranchiseServices } = require('../utils/global_catalog_cascade');
 
 const fail = (status, message, extra = {}) => ({ ok: false, status, message, ...extra });
 const ok = (status, data) => ({ ok: true, status, data });
@@ -383,76 +384,6 @@ const ensureCategories = async (categoryIds) => {
         deleted_at: null,
     });
     return count === categoryIds.length;
-};
-
-/**
- * When categories are inactive, every mapped service under those categories must leave active_services
- * (same franchise). Only updates active_services / inactive_services — not services_list.
- */
-const cascadeInactiveCategoriesToFranchiseServices = async (franchiseOid, inactiveCategoryIds) => {
-    const inactiveCat = new Set((inactiveCategoryIds || []).map((id) => id.toString()));
-    if (inactiveCat.size === 0) return;
-
-    const fsDocs = await FranchiseService.find({ franchise_id: franchiseOid, deleted_at: null });
-    if (!fsDocs || fsDocs.length === 0) return;
-
-    const allSvcOids = [];
-    for (const d of fsDocs) {
-        const norm = normalizeStoredServicesList(d.services_list);
-        for (const e of norm) {
-            if (e.service_id) allSvcOids.push(e.service_id);
-        }
-    }
-    if (allSvcOids.length === 0) return;
-
-    const svcRows = await Service.find({
-        _id: { $in: allSvcOids },
-        deleted_at: null,
-    })
-        .select('category_id')
-        .lean();
-    const svcCategoryById = new Map(
-        svcRows.map((s) => [s._id.toString(), s.category_id ? s.category_id.toString() : ''])
-    );
-
-    for (const d of fsDocs) {
-        const norm = normalizeStoredServicesList(d.services_list);
-        const catalogIds = norm.map((e) => e.service_id);
-        if (catalogIds.length === 0) continue;
-
-        const activeSet = new Set((d.active_services || []).map((x) => x.toString()));
-        const inactiveSet = new Set((d.inactive_services || []).map((x) => x.toString()));
-
-        for (const sid of catalogIds) {
-            const cat = svcCategoryById.get(sid.toString());
-            if (cat && inactiveCat.has(cat)) {
-                activeSet.delete(sid.toString());
-                inactiveSet.add(sid.toString());
-            }
-        }
-
-        for (const sid of catalogIds) {
-            const s = sid.toString();
-            if (!activeSet.has(s) && !inactiveSet.has(s)) {
-                const cat = svcCategoryById.get(s);
-                if (cat && inactiveCat.has(cat)) inactiveSet.add(s);
-                else activeSet.add(s);
-            }
-        }
-        for (const sid of catalogIds) {
-            const s = sid.toString();
-            if (activeSet.has(s) && inactiveSet.has(s)) {
-                const cat = svcCategoryById.get(s);
-                if (cat && inactiveCat.has(cat)) activeSet.delete(s);
-                else inactiveSet.delete(s);
-            }
-        }
-
-        d.active_services = catalogIds.filter((id) => activeSet.has(id.toString()));
-        d.inactive_services = catalogIds.filter((id) => inactiveSet.has(id.toString()));
-        d.updated_at = new Date();
-        await d.save();
-    }
 };
 
 const list = async (query, userId) => {

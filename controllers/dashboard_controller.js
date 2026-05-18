@@ -49,21 +49,24 @@ const getDashboardDataOld = async (req, res) => {
                 $group: {
                     _id: null,
                     pending_order: {
-                        $sum: { $cond: [{ $eq: ["$order_status", 1] }, 1, 0] }
+                        $sum: { $cond: [{ $eq: [1, 0] }, 1, 0] },
                     },
                     in_progress_order: {
-                        $sum: { $cond: [{ $eq: ["$order_status", 2] }, 1, 0] }
+                        $sum: { $cond: [{ $eq: ["$order_status", "in-progress"] }, 1, 0] }
                     },
                     completed_order: {
-                        $sum: { $cond: [{ $eq: ["$order_status", 3] }, 1, 0] }
+                        $sum: { $cond: [{ $eq: ["$order_status", "completed"] }, 1, 0] }
                     },
                     cancelled_order: {
-                        $sum: { $cond: [{ $eq: ["$order_status", 4] }, 1, 0] }
+                        $sum: { $cond: [{ $eq: ["$order_status", "cancelled"] }, 1, 0] }
+                    },
+                    refunded_order: {
+                        $sum: { $cond: [{ $eq: ["$order_status", "refunded"] }, 1, 0] }
                     },
                     received_amount: {
                         $sum: {
                             $cond: [
-                                { $and: [{ $eq: ["$order_status", 3] }, { $eq: ["$is_paid", true] }] },
+                                { $and: [{ $eq: ["$order_status", "completed"] }, { $eq: ["$is_paid", true] }] },
                                 "$total_price",
                                 0
                             ]
@@ -72,7 +75,7 @@ const getDashboardDataOld = async (req, res) => {
                     pending_amount: {
                         $sum: {
                             $cond: [
-                                { $and: [{ $eq: ["$order_status", 3] }, { $eq: ["$is_paid", false] }] },
+                                { $and: [{ $eq: ["$order_status", "completed"] }, { $eq: ["$is_paid", false] }] },
                                 "$total_price",
                                 0
                             ]
@@ -87,6 +90,7 @@ const getDashboardDataOld = async (req, res) => {
                     in_progress_order: 1,
                     completed_order: 1,
                     cancelled_order: 1,
+                    refunded_order: 1,
                     received_amount: 1,
                     pending_amount: 1
                 }
@@ -97,6 +101,7 @@ const getDashboardDataOld = async (req, res) => {
             in_progress_order: 0,
             completed_order: 0,
             cancelled_order: 0,
+            refunded_order: 0,
             received_amount: 0,
             pending_amount: 0
         };
@@ -105,6 +110,7 @@ const getDashboardDataOld = async (req, res) => {
         response.in_progress_order = summaryTodaysOrder.in_progress_order;
         response.completed_order = summaryTodaysOrder.completed_order;
         response.cancelled_order = summaryTodaysOrder.cancelled_order;
+        response.refunded_order = summaryTodaysOrder.refunded_order;
         response.received_amount = summaryTodaysOrder.received_amount;
         response.pending_amount = summaryTodaysOrder.pending_amount;
 
@@ -112,7 +118,7 @@ const getDashboardDataOld = async (req, res) => {
             {
                 $match: {
                     deleted_at: null,
-                    order_status: 3
+                    order_status: 'completed'
                 }
             },
             {
@@ -209,21 +215,24 @@ const getDashboardData = async (req, res) => {
                 $group: {
                     _id: null,
                     pending_order: {
-                        $sum: { $cond: [{ $eq: ["$order_status", 1] }, 1, 0] }
+                        $sum: { $cond: [{ $eq: [1, 0] }, 1, 0] },
                     },
                     in_progress_order: {
-                        $sum: { $cond: [{ $eq: ["$order_status", 2] }, 1, 0] }
+                        $sum: { $cond: [{ $eq: ["$order_status", "in-progress"] }, 1, 0] }
                     },
                     completed_order: {
-                        $sum: { $cond: [{ $eq: ["$order_status", 3] }, 1, 0] }
+                        $sum: { $cond: [{ $eq: ["$order_status", "completed"] }, 1, 0] }
                     },
                     cancelled_order: {
-                        $sum: { $cond: [{ $eq: ["$order_status", 4] }, 1, 0] }
+                        $sum: { $cond: [{ $eq: ["$order_status", "cancelled"] }, 1, 0] }
+                    },
+                    refunded_order: {
+                        $sum: { $cond: [{ $eq: ["$order_status", "refunded"] }, 1, 0] }
                     },
                     received_amount: {
                         $sum: {
                             $cond: [
-                                { $and: [{ $eq: ["$order_status", 3] }, { $eq: ["$is_paid", true] }] },
+                                { $and: [{ $eq: ["$order_status", "completed"] }, { $eq: ["$is_paid", true] }] },
                                 "$total_price",
                                 0
                             ]
@@ -232,7 +241,7 @@ const getDashboardData = async (req, res) => {
                     pending_amount: {
                         $sum: {
                             $cond: [
-                                { $and: [{ $eq: ["$order_status", 3] }, { $eq: ["$is_paid", false] }] },
+                                { $and: [{ $eq: ["$order_status", "completed"] }, { $eq: ["$is_paid", false] }] },
                                 "$total_price",
                                 0
                             ]
@@ -247,6 +256,7 @@ const getDashboardData = async (req, res) => {
                     in_progress_order: 1,
                     completed_order: 1,
                     cancelled_order: 1,
+                    refunded_order: 1,
                     received_amount: 1,
                     pending_amount: 1
                 }
@@ -258,6 +268,7 @@ const getDashboardData = async (req, res) => {
             in_progress_order: 0,
             completed_order: 0,
             cancelled_order: 0,
+            refunded_order: 0,
             received_amount: 0,
             pending_amount: 0
         };
@@ -266,6 +277,7 @@ const getDashboardData = async (req, res) => {
         response.in_progress_order = summaryTodaysOrder.in_progress_order;
         response.completed_order = summaryTodaysOrder.completed_order;
         response.cancelled_order = summaryTodaysOrder.cancelled_order;
+        response.refunded_order = summaryTodaysOrder.refunded_order;
         response.received_amount = summaryTodaysOrder.received_amount;
         response.pending_amount = summaryTodaysOrder.pending_amount;
 
@@ -273,7 +285,7 @@ const getDashboardData = async (req, res) => {
             {
                 $match: {
                     deleted_at: null,
-                    order_status: 3,
+                    order_status: 'completed',
                     created_at: { $gte: startOfDay, $lte: endOfDay }
                 }
             },

@@ -5,6 +5,7 @@ const Category = require('../models/category');
 const City = require('../models/city');
 const State = require('../models/state');
 const franchiseServiceManagementService = require('../services/franchise_service_management_service');
+const { cascadeGlobalServiceInactive } = require('../utils/global_catalog_cascade');
 const { applyPagination, applyDropDownFilter } = require('../utils/pagination');
 const { validationResult } = require('express-validator');
 const { parseBoolean } = require('../utils/parser');
@@ -668,6 +669,8 @@ const update = async (req, res) => {
       });
     }
 
+    const wasGloballyActive = service.is_active === true && service.is_request !== true;
+
     if (req.body.name) {
       const name = req.body.name
       const existingService = await Service.findOne({
@@ -769,6 +772,12 @@ const update = async (req, res) => {
 
     service.updated_at = Date.now();
     const updatedService = await service.save();
+
+    const isNowGloballyInactive =
+        updatedService.is_active === false && updatedService.is_request !== true;
+    if (wasGloballyActive && isNowGloballyInactive) {
+      await cascadeGlobalServiceInactive(updatedService._id);
+    }
 
     const prevCatStr = prevCategoryId ? prevCategoryId.toString() : "";
     const newCatStr = updatedService.category_id

@@ -18,13 +18,19 @@ var orderSchema = new schema(
     category_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "category" },
     service_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "service" },
 
-    order_status: { type: Number, default: 1, require: false },
+    order_status: {
+      type: String,
+      default: "in-progress",
+      enum: ["in-progress", "completed", "cancelled", "refunded"],
+      trim: true,
+    },
     order_status_info: {
       type: [
         {
           status: {
-            type: Number,
+            type: String,
             required: true,
+            trim: true,
           },
           updated_at: {
             type: Date,

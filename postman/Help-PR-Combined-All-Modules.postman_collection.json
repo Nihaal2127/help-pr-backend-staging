@@ -7634,7 +7634,7 @@
     },
     {
       "name": "36 — Offer",
-      "description": "**/api/offer** — Offers management (Settings).\n\n- **IDs:** MongoDB `_id` (API path param) + auto-generated `unique_id` (e.g. `OFF1001`) on create.\n- **Types:** `percentage` (value, admin_contribution, partner_contribution below 100) or `fixed` (no cap).\n- **getAll:** `page`, `limit`, `name` (search), `sort_by` (`name`|`value`), `sort_order` (`asc`|`desc`), optional `is_active`, `type`.",
+      "description": "**/api/offer** — Offers management (Settings).\n\n- **IDs:** `_id` (path param) + `unique_id` on create (e.g. OFF1001).\n- **Types:** `percentage` (amounts below 100) or `fixed`.\n- **getAll:** `page`, `limit`, `name` (search name + unique_id), `status` (active|inactive), `start_date`, `end_date`, `sort_by` (name|value), `sort_order`, optional `type`, `is_active`.",
       "item": [
         {
           "name": "Offer — create",
@@ -7692,39 +7692,6 @@
           }
         },
         {
-          "name": "Offer — create (fixed)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Flat Discount\",\n  \"type\": \"fixed\",\n  \"value\": 500,\n  \"admin_contribution\": 200,\n  \"partner_contribution\": 300,\n  \"start_date\": \"2026-05-01\",\n  \"end_date\": \"2026-12-31\",\n  \"is_active\": true\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/offer/create",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "offer",
-                "create"
-              ]
-            },
-            "description": "Create fixed-type offer (no 100 cap on amount fields). Response includes auto-generated `unique_id` (OFF1001, OFF1002, …)."
-          }
-        },
-        {
           "name": "Offer — getAll",
           "request": {
             "method": "GET",
@@ -7736,7 +7703,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/offer/getAll?page={{page}}&limit={{limit}}&name={{offerName}}&sort_by=name&sort_order=asc",
+              "raw": "{{baseUrl}}/api/offer/getAll?page={{page}}&limit={{limit}}&name={{offerSearch}}&status={{offerStatus}}&start_date={{offerStartDate}}&end_date={{offerEndDate}}&sort_by=name&sort_order=asc",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -7758,13 +7725,28 @@
                 },
                 {
                   "key": "name",
-                  "value": "{{offerName}}",
-                  "description": "Search by offer name (partial, case-insensitive)"
+                  "value": "{{offerSearch}}",
+                  "description": "Search offer name or unique_id (OFF1001), partial case-insensitive"
+                },
+                {
+                  "key": "status",
+                  "value": "{{offerStatus}}",
+                  "description": "active or inactive (omit/empty = all)"
+                },
+                {
+                  "key": "start_date",
+                  "value": "{{offerStartDate}}",
+                  "description": "Only start_date: offers from this date onward. With end_date: range filter."
+                },
+                {
+                  "key": "end_date",
+                  "value": "{{offerEndDate}}",
+                  "description": "Only end_date: offers until this date. With start_date: range filter."
                 },
                 {
                   "key": "sort_by",
                   "value": "name",
-                  "description": "Sort field: name or value"
+                  "description": "name or value"
                 },
                 {
                   "key": "sort_order",
@@ -7772,67 +7754,20 @@
                   "description": "asc or desc"
                 },
                 {
-                  "key": "is_active",
-                  "value": "true",
-                  "disabled": true,
-                  "description": "Filter by status"
-                },
-                {
                   "key": "type",
                   "value": "percentage",
                   "disabled": true,
-                  "description": "Filter: percentage or fixed"
+                  "description": "percentage or fixed"
+                },
+                {
+                  "key": "is_active",
+                  "value": "true",
+                  "disabled": true,
+                  "description": "Alternative to status: true/false"
                 }
               ]
             },
-            "description": "Paginated list. Search: `name`. Sort: `sort_by` (name|value) + `sort_order` (asc|desc). Optional: `is_active`, `type`."
-          }
-        },
-        {
-          "name": "Offer — getAll (sort by value)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/offer/getAll?page={{page}}&limit={{limit}}&name={{offerName}}&sort_by=value&sort_order=desc",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "offer",
-                "getAll"
-              ],
-              "query": [
-                {
-                  "key": "page",
-                  "value": "{{page}}"
-                },
-                {
-                  "key": "limit",
-                  "value": "{{limit}}"
-                },
-                {
-                  "key": "name",
-                  "value": "{{offerName}}"
-                },
-                {
-                  "key": "sort_by",
-                  "value": "value"
-                },
-                {
-                  "key": "sort_order",
-                  "value": "desc"
-                }
-              ]
-            },
-            "description": "Same as getAll with sort_by=value, sort_order=desc."
+            "description": "Paginated list.\n\n**Search (`name`):** matches `name` or `unique_id`.\n\n**Status:** `status=active` | `inactive`.\n\n**Dates:** start only → from date; end only → until date; both → between.\n\n**Sort:** `sort_by` + `sort_order`."
           }
         },
         {
@@ -8166,11 +8101,32 @@
       "description": "Business offer id from create response (e.g. OFF1001). Read-only; shown in list/get records."
     },
     {
-      "key": "offerName",
+      "key": "offerSearch",
       "value": "",
       "type": "string",
       "enabled": true,
-      "description": "Offer name search text for GET /api/offer/getAll (query param name)."
+      "description": "Search text for GET /api/offer/getAll query param name (matches offer name or unique_id e.g. OFF1001)."
+    },
+    {
+      "key": "offerStatus",
+      "value": "",
+      "type": "string",
+      "enabled": true,
+      "description": "GET /api/offer/getAll — status filter: active, inactive, or empty for all."
+    },
+    {
+      "key": "offerStartDate",
+      "value": "",
+      "type": "string",
+      "enabled": true,
+      "description": "GET /api/offer/getAll — filter start_date (YYYY-MM-DD). Alone: offers from this date onward."
+    },
+    {
+      "key": "offerEndDate",
+      "value": "",
+      "type": "string",
+      "enabled": true,
+      "description": "GET /api/offer/getAll — filter end_date (YYYY-MM-DD). Alone: offers until this date."
     },
     {
       "key": "partner_subscription_id",

@@ -54,6 +54,19 @@ var orderSchema = new schema(
     quote_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "quote" },
 
     is_paid: { type: Boolean, default: false },
+    /**
+     * Derived from customer order_payment rows: unpaid | paid | partially_paid | refund | partially_refund
+     */
+    payment_status: {
+      type: String,
+      default: "unpaid",
+      enum: ["unpaid", "paid", "partially_paid", "refund", "partially_refund"],
+      trim: true,
+    },
+    customer_paid_amount: { type: Number, default: 0 },
+    customer_refunded_amount: { type: Number, default: 0 },
+    customer_net_paid: { type: Number, default: 0 },
+    customer_due_amount: { type: Number, default: 0 },
     /** Legacy / integration id (e.g. Razorpay flow uses "2") */
     payment_mode_id: { type: String, default: "", trim: true },
     transaction_id: { type: String, default: "", trim: true },
@@ -139,6 +152,7 @@ orderSchema.index({ city_id: 1 });
 orderSchema.index({ category_id: 1 });
 orderSchema.index({ order_status: 1 });
 orderSchema.index({ is_paid: 1 });
+orderSchema.index({ payment_status: 1 });
 orderSchema.index({ address_id: 1 });
 orderSchema.index({ service_id: 1 });
 orderSchema.index({ quote_id: 1 });

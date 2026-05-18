@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "name": "Help PR — Orders module (orders, line items, charges, payments, Razorpay)",
-    "description": "Order APIs for help-pr-backend-staging.\n\n**Documentation:** `docs/ORDER_MODULE_FRONTEND.md`, **`docs/ORDER_GETALL_API_CHANGES.md`**, **`docs/GET_COUNT_API_FRONTEND.txt`** (dashboard counts).\n\n**Setup:** Set `baseUrl` and `accessToken` (Bearer JWT). Use a **super admin / staff / franchise admin / employee** token for order list/count APIs (partners & customers get **403** — use **getCustomerOrder** for customers).\n\n**Dashboard counts:** `POST /api/getCount` with `{ \"type\": \"order-management\" }` — same franchise/role scope as **GET /api/order/getAll**.\n\nAfter **Create order**, copy `orderId` and `orderServiceId` into collection variables.",
+    "description": "Order APIs for help-pr-backend-staging.\n\n**Documentation:** `docs/ORDER_MODULE_FRONTEND.md` (full integration guide), `docs/ORDER_GETALL_API_CHANGES.md`, `docs/GET_COUNT_API_FRONTEND.txt`.\n\n**Pricing:** Create/update use `total_service_charge` + `service_id`; server calculates commission, tax (after offer), total. Optional `offer_id`.\n\n**Payment status:** Derived on order as `payment_status` from customer `order_payment` rows (`unpaid` | `paid` | `partially_paid` | `refund` | `partially_refund`). Do not set `is_paid` manually on update.\n\n**Setup:** `baseUrl`, `accessToken` (Bearer JWT). Staff roles for getAll; customers use getCustomerOrder.\n\nAfter **Create order**, set `orderId`, `orderServiceId`; optional `offerId`.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -20,7 +20,9 @@
     { "key": "to_date", "value": "2026-05-20", "description": "Date filter (ISO date). Alone = that calendar day." },
     { "key": "orderStatus", "value": "in-progress", "description": "order_status filter: in-progress | completed | cancelled | refunded" },
     { "key": "partnerId", "value": "", "description": "Optional ObjectId filter on getAll" },
-    { "key": "employeeId", "value": "", "description": "Optional ObjectId filter on getAll" }
+    { "key": "employeeId", "value": "", "description": "Optional ObjectId filter on getAll" },
+    { "key": "offerId", "value": "", "description": "Offer ObjectId for create/update with offer (e.g. OFF1001 row _id)" },
+    { "key": "paymentStatus", "value": "", "description": "getAll filter: unpaid | paid | partially_paid | refund | partially_refund" }
   ],
   "item": [
     {
@@ -86,7 +88,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n  \"user_unique_id\": \"CUST001\",\n  \"city_id\": \"REPLACE_WITH_CITY_OBJECT_ID\",\n  \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n  \"is_paid\": false,\n  \"payment_mode_id\": \"\",\n  \"transaction_id\": \"\",\n  \"created_by_id\": \"REPLACE_WITH_SAME_OR_STAFF_USER_OBJECT_ID\",\n  \"order_date\": \"2026-06-01\",\n  \"address\": \"123 Sample Street, City\",\n  \"total_service_charge\": 3000,\n  \"service_id\": \"REPLACE_WITH_SERVICE_OBJECT_ID\",\n  \"discount_amount\": null,\n  \"type\": 2,\n  \"partner_id\": \"REPLACE_WITH_PARTNER_USER_OBJECT_ID\",\n  \"payment_schedule_type\": \"single\",\n  \"customer_payment_method\": \"upi\",\n  \"order_description\": \"Server calculates commission, tax, total, min deposit from service table.\",\n  \"quote_id\": null,\n  \"offer_id\": null,\n  \"service_items\": [\n    {\n      \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n      \"partner_id\": \"REPLACE_WITH_PARTNER_USER_OBJECT_ID\",\n      \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n      \"service_id\": \"REPLACE_WITH_SERVICE_OBJECT_ID\",\n      \"service_date\": \"2026-06-01T00:00:00.000Z\",\n      \"service_from_time\": \"2026-06-01T09:00:00.000Z\",\n      \"service_to_time\": \"2026-06-01T17:00:00.000Z\",\n      \"total_service_charge\": 3000\n    }\n  ]\n}",
+              "raw": "{\n  \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n  \"user_unique_id\": \"CUST001\",\n  \"city_id\": \"REPLACE_WITH_CITY_OBJECT_ID\",\n  \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n  \"is_paid\": false,\n  \"payment_mode_id\": \"\",\n  \"transaction_id\": \"\",\n  \"created_by_id\": \"REPLACE_WITH_SAME_OR_STAFF_USER_OBJECT_ID\",\n  \"order_date\": \"2026-06-01\",\n  \"address\": \"123 Sample Street, City\",\n  \"total_service_charge\": 3000,\n  \"service_id\": \"REPLACE_WITH_SERVICE_OBJECT_ID\",\n  \"type\": 2,\n  \"partner_id\": \"REPLACE_WITH_PARTNER_USER_OBJECT_ID\",\n  \"payment_schedule_type\": \"single\",\n  \"customer_payment_method\": \"upi\",\n  \"order_description\": \"Server calculates commission, tax after offer, total, min deposit.\",\n  \"quote_id\": null,\n  \"offer_id\": null,\n  \"service_items\": [\n    {\n      \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n      \"partner_id\": \"REPLACE_WITH_PARTNER_USER_OBJECT_ID\",\n      \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n      \"service_id\": \"REPLACE_WITH_SERVICE_OBJECT_ID\",\n      \"service_date\": \"2026-06-01T00:00:00.000Z\",\n      \"service_from_time\": \"2026-06-01T09:00:00.000Z\",\n      \"service_to_time\": \"2026-06-01T17:00:00.000Z\",\n      \"total_service_charge\": 3000\n    }\n  ]\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {
@@ -108,7 +110,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n  \"user_unique_id\": \"CUST001\",\n  \"city_id\": \"REPLACE_WITH_CITY_OBJECT_ID\",\n  \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n  \"is_paid\": false,\n  \"payment_mode_id\": \"2\",\n  \"transaction_id\": \"\",\n  \"created_by_id\": \"REPLACE_WITH_STAFF_USER_OBJECT_ID\",\n  \"order_date\": \"2026-06-01\",\n  \"address\": \"123 Sample Street\",\n  \"total_service_charge\": 3000,\n  \"service_id\": \"REPLACE_WITH_SERVICE_OBJECT_ID\",\n  \"discount_amount\": null,\n  \"type\": 2,\n  \"name\": \"Customer Name\",\n  \"email\": \"customer@example.com\",\n  \"contact\": \"9999999999\",\n  \"order_description\": \"\",\n  \"quote_id\": null,\n  \"offer_id\": null,\n  \"service_items\": [\n    {\n      \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n      \"partner_id\": \"REPLACE_WITH_PARTNER_USER_OBJECT_ID\",\n      \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n      \"service_id\": \"REPLACE_WITH_SERVICE_OBJECT_ID\",\n      \"service_date\": \"2026-06-01T00:00:00.000Z\",\n      \"service_from_time\": \"2026-06-01T09:00:00.000Z\",\n      \"service_to_time\": \"2026-06-01T17:00:00.000Z\",\n      \"total_service_charge\": 3000\n    }\n  ]\n}",
+              "raw": "{\n  \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n  \"user_unique_id\": \"CUST001\",\n  \"city_id\": \"REPLACE_WITH_CITY_OBJECT_ID\",\n  \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n  \"is_paid\": false,\n  \"payment_mode_id\": \"2\",\n  \"transaction_id\": \"\",\n  \"created_by_id\": \"REPLACE_WITH_STAFF_USER_OBJECT_ID\",\n  \"order_date\": \"2026-06-01\",\n  \"address\": \"123 Sample Street\",\n  \"total_service_charge\": 3000,\n  \"service_id\": \"REPLACE_WITH_SERVICE_OBJECT_ID\",\n  \"type\": 2,\n  \"name\": \"Customer Name\",\n  \"email\": \"customer@example.com\",\n  \"contact\": \"9999999999\",\n  \"order_description\": \"\",\n  \"quote_id\": null,\n  \"offer_id\": null,\n  \"service_items\": [\n    {\n      \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n      \"partner_id\": \"REPLACE_WITH_PARTNER_USER_OBJECT_ID\",\n      \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n      \"service_id\": \"REPLACE_WITH_SERVICE_OBJECT_ID\",\n      \"service_date\": \"2026-06-01T00:00:00.000Z\",\n      \"service_from_time\": \"2026-06-01T09:00:00.000Z\",\n      \"service_to_time\": \"2026-06-01T17:00:00.000Z\",\n      \"total_service_charge\": 3000\n    }\n  ]\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {
@@ -130,7 +132,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "order", "get", "{{orderId}}"]
             },
-            "description": "GET /api/order/get/:id — includes `additional_charges`, `order_payments`, populated refs.\n\n**Access (same as quotes):** Super admin / staff — any order. Franchise admin / employee — only orders in their franchise (**403** otherwise). Partner / customer — **403** (use participant flows or getCustomerOrder for customers)."
+            "description": "GET /api/order/get/:id — includes `additional_charges`, `order_payments`, `order_offer` (if offer applied), `payment_status`, `customer_*` payment breakdown, populated refs.\n\n**Access:** Super admin / staff — any order. Franchise admin / employee — own franchise only. Partner / customer — **403**."
           },
           "response": []
         },
@@ -140,14 +142,15 @@
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
             "url": {
-              "raw": "{{baseUrl}}/api/order/getAll?page=1&limit=10&order_status={{orderStatus}}&is_paid=&search={{search}}&from_date={{from_date}}&to_date={{to_date}}&franchise_id={{franchiseId}}&user_id={{customerUserId}}&partner_id={{partnerId}}&employee_id={{employeeId}}&category_id=&service_id=&city_id=&sort_by=created_at&sort_order=desc",
+              "raw": "{{baseUrl}}/api/order/getAll?page=1&limit=10&order_status={{orderStatus}}&payment_status={{paymentStatus}}&is_paid=&search={{search}}&from_date={{from_date}}&to_date={{to_date}}&franchise_id={{franchiseId}}&user_id={{customerUserId}}&partner_id={{partnerId}}&employee_id={{employeeId}}&category_id=&service_id=&city_id=&sort_by=created_at&sort_order=desc",
               "host": ["{{baseUrl}}"],
               "path": ["api", "order", "getAll"],
               "query": [
                 { "key": "page", "value": "1" },
                 { "key": "limit", "value": "10" },
                 { "key": "order_status", "value": "{{orderStatus}}", "description": "in-progress | completed | cancelled | refunded. Invalid → 409." },
-                { "key": "is_paid", "value": "", "disabled": true, "description": "true | false" },
+                { "key": "payment_status", "value": "{{paymentStatus}}", "description": "unpaid | paid | partially_paid | refund | partially_refund" },
+                { "key": "is_paid", "value": "", "disabled": true, "description": "Legacy: true | false (maps to paid)" },
                 { "key": "search", "value": "{{search}}", "description": "Sanitized free-text (same idea as quote getAll)" },
                 { "key": "keyword", "value": "", "disabled": true, "description": "Legacy alias for search when search is empty" },
                 { "key": "from_date", "value": "{{from_date}}", "description": "Schedule/order_date filter. Alone = that UTC day. With to_date = overlap range." },
@@ -159,7 +162,7 @@
                 { "key": "category_id", "value": "", "disabled": true },
                 { "key": "service_id", "value": "", "disabled": true },
                 { "key": "city_id", "value": "", "disabled": true },
-                { "key": "sort_by", "value": "created_at", "description": "created_at|updated_at|order_date|order_status|total_price|sub_total|unique_id|is_paid|tax|min_deposit|order_description" },
+                { "key": "sort_by", "value": "created_at", "description": "created_at|updated_at|order_date|order_status|total_price|sub_total|unique_id|is_paid|payment_status|tax|min_deposit|order_description" },
                 { "key": "sort_order", "value": "desc", "description": "asc | desc (case-insensitive collation)" },
                 { "key": "sort", "value": "-1", "disabled": true, "description": "Legacy: 1 asc, else desc when sort_order omitted" }
               ]
@@ -252,7 +255,7 @@
           "response": []
         },
         {
-          "name": "Update order (status / paid)",
+          "name": "Update order (status only)",
           "request": {
             "method": "PUT",
             "header": [
@@ -261,7 +264,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"order_status\": \"completed\",\n  \"is_paid\": true\n}",
+              "raw": "{\n  \"order_status\": \"completed\"\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {
@@ -269,7 +272,95 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "order", "update", "{{orderId}}"]
             },
-            "description": "`order_status` string: **in-progress** | **completed** | **cancelled** | **refunded** (any transition allowed). Syncs to non-terminal line items. `is_paid` propagates to non-cancelled/refunded lines."
+            "description": "`order_status`: in-progress | completed | cancelled | refunded. **Do not** send `is_paid` — use order_payment APIs; `payment_status` is derived."
+          },
+          "response": []
+        },
+        {
+          "name": "Update order (reprice — total_service_charge)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"total_service_charge\": 4000\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/order/update/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order", "update", "{{orderId}}"]
+            },
+            "description": "Recalculates amounts using **saved** order `tax_percent`, `commission_percent`, `minimum_deposit_percent`. Keeps existing offer if `offer_id` omitted. Response includes `pricing` and may refresh `payment_status` via due amount."
+          },
+          "response": []
+        },
+        {
+          "name": "Update order (apply or change offer)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"offer_id\": \"{{offerId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/order/update/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order", "update", "{{orderId}}"]
+            },
+            "description": "Loads offer from `offers` table; **replaces** entire `order_offer` row. Tax after discount. Combine with `total_service_charge` in same body if both change."
+          },
+          "response": []
+        },
+        {
+          "name": "Update order (remove offer)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"offer_id\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/order/update/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order", "update", "{{orderId}}"]
+            },
+            "description": "Deletes `order_offer` and clears discount fields; reprices without offer."
+          },
+          "response": []
+        },
+        {
+          "name": "Create order (with offer)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n  \"user_unique_id\": \"CUST001\",\n  \"city_id\": \"REPLACE_WITH_CITY_OBJECT_ID\",\n  \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n  \"is_paid\": false,\n  \"payment_mode_id\": \"\",\n  \"transaction_id\": \"\",\n  \"created_by_id\": \"REPLACE_WITH_SAME_OR_STAFF_USER_OBJECT_ID\",\n  \"order_date\": \"2026-06-01\",\n  \"address\": \"123 Sample Street, City\",\n  \"total_service_charge\": 3000,\n  \"service_id\": \"REPLACE_WITH_SERVICE_OBJECT_ID\",\n  \"type\": 2,\n  \"partner_id\": \"REPLACE_WITH_PARTNER_USER_OBJECT_ID\",\n  \"offer_id\": \"{{offerId}}\",\n  \"service_items\": [\n    {\n      \"user_id\": \"REPLACE_WITH_CUSTOMER_OBJECT_ID\",\n      \"partner_id\": \"REPLACE_WITH_PARTNER_USER_OBJECT_ID\",\n      \"category_id\": \"REPLACE_WITH_CATEGORY_OBJECT_ID\",\n      \"service_id\": \"REPLACE_WITH_SERVICE_OBJECT_ID\",\n      \"service_date\": \"2026-06-01T00:00:00.000Z\",\n      \"service_from_time\": \"2026-06-01T09:00:00.000Z\",\n      \"service_to_time\": \"2026-06-01T17:00:00.000Z\",\n      \"total_service_charge\": 3000\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/order/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order", "create"]
+            },
+            "description": "Same as create but with `offer_id`. Do not send `discount_amount`. Offer must be active on `order_date`. Creates `order_offer` snapshot."
           },
           "response": []
         },
@@ -448,7 +539,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "order-payments", "create"]
             },
-            "description": "Does not by itself change `order.is_paid`; use for installment / ledger tracking."
+            "description": "Customer rows drive **`order.payment_status`** (`unpaid` → `partially_paid` / `paid`). Also sets **`is_paid`** when fully paid. Partner rows do not affect customer payment status."
           },
           "response": []
         },
@@ -505,7 +596,30 @@
               "raw": "{{baseUrl}}/api/order-payments/update/{{orderPaymentId}}",
               "host": ["{{baseUrl}}"],
               "path": ["api", "order-payments", "update", "{{orderPaymentId}}"]
-            }
+            },
+            "description": "Changing **`status`** on a customer row re-syncs **`order.payment_status`** and **`is_paid`**."
+          },
+          "response": []
+        },
+        {
+          "name": "Record customer refund (status refunded)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"{{orderId}}\",\n  \"payer_type\": \"customer\",\n  \"amount\": 500,\n  \"payment_method\": \"upi\",\n  \"status\": \"refunded\",\n  \"transaction_reference\": \"REFUND-UPI-001\",\n  \"notes\": \"Partial refund\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/order-payments/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order-payments", "create"]
+            },
+            "description": "Refunded customer payments reduce net paid. Order **`payment_status`** may become **`partially_refund`** or **`refund`** when net paid vs `total_price` rules match (see `docs/ORDER_MODULE_FRONTEND.md` §7)."
           },
           "response": []
         },
@@ -518,7 +632,8 @@
               "raw": "{{baseUrl}}/api/order-payments/delete/{{orderPaymentId}}",
               "host": ["{{baseUrl}}"],
               "path": ["api", "order-payments", "delete", "{{orderPaymentId}}"]
-            }
+            },
+            "description": "Soft-delete re-syncs **`payment_status`** on the parent order."
           },
           "response": []
         }

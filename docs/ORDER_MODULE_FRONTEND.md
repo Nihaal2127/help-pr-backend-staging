@@ -103,7 +103,10 @@ Order (1) ──has──▶ service_items[] ──▶ OrderService (1 per order
 | `total_price` | **Server-calculated** (see §5); client values compared, server wins on mismatch |
 | `min_deposit` | Legacy alias of `minimum_deposit_amount` |
 | `user_paltform_fee`, `partner_commison_platform_fee` | Legacy; new orders set platform fee **0**, partner fee = `commission_amount` |
-| `is_paid`, `payment_mode_id`, `transaction_id` | Legacy + Razorpay link id |
+| `payment_status` | **Derived:** `unpaid` \| `paid` \| `partially_paid` \| `refund` \| `partially_refund` (from customer `order_payment` rows) |
+| `customer_paid_amount`, `customer_refunded_amount`, `customer_net_paid`, `customer_due_amount` | Breakdown maintained on sync |
+| `is_paid` | **Derived** — `true` only when `payment_status === paid` (legacy filters) |
+| `payment_mode_id`, `transaction_id` | Legacy + Razorpay link id |
 | `payment_schedule_type` | `"single"` \| `"installments"` |
 | `customer_payment_method` | Label, e.g. cash / upi / card / online / bank_transfer / other |
 
@@ -149,7 +152,7 @@ Prefix **`/api/order`** unless noted.
 | GET | `/api/order/get/:id` | Full order detail (populated + `additional_charges` + `order_payments`) |
 | GET | `/api/order/getAll` | Paginated list — see **getAll query parameters** below |
 | GET | `/api/order/getCustomerOrder` | Customer orders — **query** `user_id` required |
-| PUT | `/api/order/update/:id` | Update `order_status`, `is_paid`, and/or **reprice** via `total_service_charge` / `offer_id` (see below) |
+| PUT | `/api/order/update/:id` | Update `order_status` and/or **reprice** via `total_service_charge` / `offer_id` — **do not** set `is_paid` manually |
 | PUT | `/api/order/serviceUpdate/:orderServiceId` | Update line item fields (see middleware) |
 | PUT | `/api/order/cancleService/:orderId` | Cancel one line — body `service_items_id` |
 | PUT | `/api/order/cancle/:id` | Cancel whole order — body `cancellation_reasone` |
@@ -202,7 +205,19 @@ List responses use **case-insensitive collation** for sort. Each record includes
 
 **`payer_type`:** `customer` = money from/to customer context; `partner` = partner-side / payout context (business meaning is up to product).
 
-**`status`:** `pending` \| `completed` \| `failed` \| `refunded`.
+**`status`:** `pending` \| `completed` \| `failed` \| `refunded`. After any change, server runs **`syncOrderPaymentStatus`** on the order.
+
+### Customer payment status (on `order`)
+
+| `payment_status` | When |
+|------------------|------|
+| `unpaid` | No customer `order_payment` rows |
+| `paid` | Sum of **completed** customer payments ≥ `order.total_price` (±₹0.01) |
+| `partially_paid` | Some **completed** payment, net collected &lt; total due |
+| `refund` | **Refunded** amount covers all completed payments or full order value |
+| `partially_refund` | Some refund recorded, not a full refund |
+
+Only **`payer_type: customer`** rows count. **`order.total_price`** includes additional charges. Pending/failed payments do not count as paid.
 
 Same **403** participant rule as additional charges.
 
@@ -218,7 +233,7 @@ Same **403** participant rule as additional charges.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/razorpayWebhook` | **Server-to-server** (Razorpay); signs `payment_link.paid`, sets order + line items **`is_paid`** |
+| POST | `/razorpayWebhook` | **Server-to-server** (Razorpay); creates **completed** customer `order_payment`, syncs **`payment_status`** |
 | GET | `/callback` | Browser redirect success page |
 
 Frontend normally only opens **`payment_url`** returned from order create when `payment_mode_id === "2"`.
@@ -235,8 +250,8 @@ Top-level fields validated by **`createOrderMiddleware`** (in addition to **`ser
 - `order_date`, `address` (string)
 - **`total_service_charge`** (or **`service_price`**) — base service amount; must be **> 0**
 - **`service_id`** on order or on **`service_items[0]`** (used to load `tax`, `commission`, `minimum_deposit` from global **service**)
-- `discount_amount` optional
 - `type` — if `type === 1`, **`partner_id`** required on the **service line item**
+- Do **not** send `discount_amount` with **`offer_id`** (use offer or manual discount, not both)
 
 **`service_items[0]`** must include: `user_id`, `category_id`, `service_id`, `service_date`, `service_from_time`, `service_to_time`, **`total_service_charge`** (or `service_price`), and **`partner_id`** when `type === 1`.
 
@@ -254,9 +269,34 @@ When **`quote_id`** is sent and **`order_description`** is omitted, the server c
 
 **Razorpay create:** `payment_mode_id === "2"` requires **`name`**, **`email`**, **`contact`** on the body for the payment link.
 
+On create, **`payment_status`** is **`unpaid`** until customer **`order_payment`** rows exist.
+
 ---
 
-## 8. Get order by id — response shape
+## 8. Update order — status and repricing
+
+`PUT /api/order/update/:id` supports:
+
+| Body field | Effect |
+|------------|--------|
+| `order_status` | Same as before; syncs to non-cancelled/refunded line items |
+| `total_service_charge` (or `service_price`) | Reprice using **saved** `tax_percent`, `commission_percent`, `minimum_deposit_percent` on the order |
+| `offer_id` | Apply or change offer (fresh row from **`offers`** table); **`order_offer`** fully replaced |
+| `offer_id: null` | Remove offer and clear discount |
+
+**Do not** send `is_paid` — it is **derived** from customer payments (see §6 payment status).
+
+**Reprice response** (when charge or offer changes): includes `pricing` object and `order_offer` when applicable.
+
+```text
+commission_amount = total_service_charge × order.commission_percent / 100
+sub_total           = total_service_charge + commission_amount
+(then offer discount, then tax on taxable subtotal — same as create)
+```
+
+---
+
+## 9. Get order by id — response shape
 
 `GET /api/order/get/:id` returns **`record`** with:
 
@@ -268,7 +308,7 @@ When **`quote_id`** is sent and **`order_description`** is omitted, the server c
 
 ---
 
-## 9. Postman collection
+## 10. Postman collection
 
 Import **`postman/Help-PR-Orders-Module.postman_collection.json`** (repository path: `help-pr-backend-staging/postman/Help-PR-Orders-Module.postman_collection.json`).
 
@@ -282,12 +322,13 @@ Set collection variables:
 | `orderServiceId` | From `service_items[0]._id` or list APIs |
 | `additionalChargeId` | After creating a charge |
 | `orderPaymentId` | After creating a payment |
+| `offerId` | Active offer ObjectId for create/update with offer |
 
 Replace placeholder ObjectIds in example bodies with real IDs from your environment.
 
 ---
 
-## 10. Offers (`order_offer`)
+## 11. Offers (`order_offer`)
 
 When **`offer_id`** is sent on create (percentage offer):
 
@@ -304,7 +345,7 @@ total_price                 = taxable_subtotal + tax_amount
 
 Offers are **optional** — omit `offer_id` and creation behaves as before (no `order_offer` row, `discount_amount` null unless legacy manual discount).
 
-## 11. Known limitations (for backlog)
+## 12. Known limitations (for backlog)
 
 - Manual **`discount_amount`** without **`offer_id`** still supported but prefer offers for auditable splits.
 - Existing DB rows may still have **numeric** `order_status` until a migration is run — see **`docs/ORDER_STATUS_MIGRATION.md`**.
@@ -313,13 +354,17 @@ Offers are **optional** — omit `offer_id` and creation behaves as before (no `
 
 ---
 
-## 11. Related code (for backend readers)
+## 13. Related code (for backend readers)
 
 | Area | Path |
 |------|------|
 | Order model | `models/order.js` |
+| Order offer model | `models/order_offer.js` |
 | Order service model | `models/order_services.js` |
 | Additional charge model | `models/order_additional_charge.js` |
+| Payment status enum | `enum/order_payment_status_enum.js` |
+| Reprice on update | `services/order_update_pricing_service.js` |
+| Sync payment status | `services/order_payment_status_service.js` |
 | Order payment model | `models/order_payment.js` |
 | Totals helper | `utils/order_financials.js` |
 | List/detail franchise access & participant check | `utils/order_access.js` (`resolveOrderListScope`, `assertOrderRecordAccess`, `callerMatchesOrderParticipant`) |

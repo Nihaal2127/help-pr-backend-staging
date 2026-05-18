@@ -9,7 +9,8 @@
         "sync:catalog-mappings": "node scripts/sync-global-catalog-to-franchise-mappings.js",
         "sync:catalog-mappings:dry-run": "node scripts/sync-global-catalog-to-franchise-mappings.js --dry-run",
         "verify:order-pricing": "node scripts/verify-order-pricing.js",
-        "verify:order-offer": "node scripts/verify-order-pricing.js"
+        "verify:order-offer": "node scripts/verify-order-pricing.js",
+        "verify:order-payment-status": "node scripts/verify-order-payment-status.js"
     },
     "keywords": [],
     "author": "",

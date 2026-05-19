@@ -12,6 +12,7 @@ const FranchiseService = require('../models/franchise_service');
 const PartnerService = require('../models/partner_service');
 const PartnerCategory = require('../models/partner_category');
 const { applyPagination, applyDropDownFilter } = require('../utils/pagination');
+const { loadFranchiseCallerScope } = require('../utils/franchise_user_scope');
 const { parseBoolean } = require('../utils/parser');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
 
@@ -648,12 +649,35 @@ const importFranchises = async (records) => {
     }
 };
 
-const listFranchisesForDropdown = async (query) => {
+const listFranchisesForDropdown = async (query, userId) => {
     try {
         const filter = {
             deleted_at: null,
             is_active: true,
         };
+
+        if (userId) {
+            const scope = await loadFranchiseCallerScope(userId);
+            if (!scope) {
+                return fail(403, 'Access denied.');
+            }
+            if (scope.isFranchiseStaff) {
+                if (!scope.franchiseOid) {
+                    return fail(403, 'Your account is not linked to a franchise.');
+                }
+                filter._id = scope.franchiseOid;
+                const sort = { name: 1 };
+                const projection = { _id: 1, name: 1 };
+                const { data: rows } = await applyDropDownFilter(Franchise, filter, sort, projection);
+                return ok(200, {
+                    message: 'Franchise list fetched successfully.',
+                    records: rows,
+                });
+            }
+            if (!scope.isSuper) {
+                return fail(403, 'Access denied.');
+            }
+        }
 
         const fullListRaw = query.full_list ?? query.fullList;
         const fullList =

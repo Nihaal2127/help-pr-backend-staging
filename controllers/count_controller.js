@@ -20,6 +20,7 @@ const Quote = require('../models/quote');
 const SubscriptionPlan = require('../models/subscription_plan');
 const PartnerSubscription = require('../models/partner_subscription');
 const Offer = require('../models/offer');
+const FinancialOrder = require('../models/financial_order');
 const { checkObjectIdExists } = require('../validator/id_validator');
 const { resolveOrderListScope } = require('../utils/order_access');
 const { resolveQuoteListScope } = require('../utils/quote_access');
@@ -581,6 +582,40 @@ const buildUserManagementCountRecord = async (franchiseScopeOid) => {
     };
 };
 
+/** Financial — Order Payments dashboard (financial_order collection). */
+const buildFinancialOrderPaymentsCountRecord = async (franchiseScopeOid) => {
+    const match = { deleted_at: null };
+    if (franchiseScopeOid) {
+        match.franchise_id = franchiseScopeOid;
+    }
+
+    const result = await FinancialOrder.aggregate([
+        { $match: match },
+        {
+            $group: {
+                _id: null,
+                total_completed_orders: {
+                    $sum: { $cond: [{ $eq: ['$order_status', 'completed'] }, 1, 0] },
+                },
+                total_in_progress_orders: {
+                    $sum: { $cond: [{ $eq: ['$order_status', 'in_progress'] }, 1, 0] },
+                },
+                total_partner_pending_amount: { $sum: '$pending_to_partner' },
+                total_user_pending_amount: { $sum: '$customer_pending_amount' },
+            },
+        },
+    ]);
+
+    const roundMoney = (n) => Math.round(Number(n || 0) * 100) / 100;
+    const row = result[0] || {};
+    return {
+        total_completed_orders: row.total_completed_orders || 0,
+        total_in_progress_orders: row.total_in_progress_orders || 0,
+        total_partner_pending_amount: roundMoney(row.total_partner_pending_amount),
+        total_user_pending_amount: roundMoney(row.total_user_pending_amount),
+    };
+};
+
 const getCountData = async (req, res) => {
     try {
         const resolvedType = resolveCountTypeFromRequest(req);
@@ -716,32 +751,8 @@ const getCountData = async (req, res) => {
             // User-management: global counts when franchise omitted; franchise-scoped when body/header/query sends franchise (same as service-management).
             Object.assign(response, await buildUserManagementCountRecord(franchiseScopeOid));
         } else if (resolvedType === 4) {
-            // Order Payment
-            const orderMatch = {
-                deleted_at: null,
-                order_status: 'completed',
-                ...(franchiseScopeOid ? { _id: { $in: await buildFranchiseScopedCompletedOrderIds(franchiseScopeOid) } } : {}),
-            };
-            const result = await Order.aggregate([
-                {
-                    $match: orderMatch,
-                },
-                {
-                    $group: {
-                        _id: null,
-                        received_amount: { $sum: { $cond: [{ $eq: ["$is_paid", true] }, "$total_price", 0] } },
-                        pending_amount: { $sum: { $cond: [{ $eq: ["$is_paid", false] }, "$total_price", 0] } },
-                    }
-                },
-            ]);
-            if (result.length > 0) {
-                const data = result[0];
-                response.received_amount = data.received_amount;
-                response.pending_amount = data.pending_amount;
-            } else {
-                response.received_amount = 0;
-                response.pending_amount = 0;
-            }
+            // Financial — Order Payments (financial_order rows; optional franchise_id filter)
+            Object.assign(response, await buildFinancialOrderPaymentsCountRecord(franchiseScopeOid));
         } else if (resolvedType === 5) {
             // Partner Payment
             const osMatch = {

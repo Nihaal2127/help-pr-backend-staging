@@ -1,6 +1,9 @@
 # Orders module — frontend integration guide
 
-This document describes the **order**, **order line item (order_service)**, **additional charges**, **order payments**, and **Razorpay** integration in `help-pr-backend-staging`. Share it with frontend developers together with the Postman collection **`postman/Help-PR-Orders-Module.postman_collection.json`**.
+This document describes the **order**, **order line item (order_service)**, **additional charges**, **order payments**, and **Razorpay** integration in `help-pr-backend-staging`. Share it with frontend developers together with:
+
+- **`postman/Help-PR-Orders-Module.postman_collection.json`** — core order CRUD (5 requests)
+- **`postman/Help-PR-Order-Charges-Payments.postman_collection.json`** — additional charges + payment ledger
 
 > **Recent `getAll` changes:** See **`docs/ORDER_GETALL_API_CHANGES.md`** for role scope, date filters, search, and list response updates (aligned with quote `getAll`).
 
@@ -269,7 +272,50 @@ When **`quote_id`** is sent and **`order_description`** is omitted, the server c
 
 **Razorpay create:** `payment_mode_id === "2"` requires **`name`**, **`email`**, **`contact`** on the body for the payment link.
 
-On create, **`payment_status`** is **`unpaid`** until customer **`order_payment`** rows exist.
+On create, **`payment_status`** is **`unpaid`** until customer **`order_payment`** rows exist (unless you include completed customer rows in **`order_payments`** below).
+
+### Nested additional charges & payments (create)
+
+Optional arrays on the same **`POST /api/order/create`** body:
+
+```json
+{
+  "additional_charges": [
+    {
+      "amount": 150,
+      "label": "Transport",
+      "description": "Extra visit",
+      "payment_method": "upi",
+      "charge_type": "transport"
+    }
+  ],
+  "order_payments": [
+    {
+      "payer_type": "customer",
+      "amount": 500,
+      "payment_method": "upi",
+      "status": "completed",
+      "transaction_reference": "UPIREF123",
+      "notes": "Deposit"
+    }
+  ]
+}
+```
+
+Shorthand: `{ "additional_charges": { "create": [ ... ] } }` — **`update`** / **`delete`** are not allowed on create.
+
+After save, the server creates rows, runs **`recalculateOrderTotals`** (charges affect **`total_price`**), and syncs **`payment_status`**.
+
+**Create response** may include `record.nested` with created ids:
+
+```json
+"nested": {
+  "additional_charges": { "created": ["..."] },
+  "order_payments": { "created": ["..."] }
+}
+```
+
+Standalone **`/api/order-additional-charges`** and **`/api/order-payments`** routes still work for changes after create.
 
 ---
 
@@ -294,6 +340,39 @@ sub_total           = total_service_charge + commission_amount
 (then offer discount, then tax on taxable subtotal — same as create)
 ```
 
+### Nested additional charges & payments (update)
+
+Optional on **`PUT /api/order/update/:id`** — object form (recommended):
+
+```json
+{
+  "order_status": "completed",
+  "additional_charges": {
+    "create": [{ "amount": 100, "label": "Materials" }],
+    "update": [{ "_id": "CHARGE_OBJECT_ID", "amount": 200 }],
+    "delete": ["CHARGE_OBJECT_ID_TO_REMOVE"]
+  },
+  "order_payments": {
+    "create": [
+      {
+        "payer_type": "customer",
+        "amount": 1000,
+        "status": "completed",
+        "payment_method": "upi"
+      }
+    ],
+    "update": [{ "_id": "PAYMENT_OBJECT_ID", "status": "completed" }],
+    "delete": []
+  }
+}
+```
+
+**Array shorthand** (append-only): `"additional_charges": [{ "amount": 50 }]` → treated as **`create`** only (no update/delete).
+
+Processing order: **delete → update → create** for each resource. Charges trigger **`recalculateOrderTotals`**; payments-only changes trigger **`syncOrderPaymentStatus`**.
+
+**Update response** may include `nested` with `created` / `updated` / `deleted` id lists per resource.
+
 ---
 
 ## 9. Get order by id — response shape
@@ -308,21 +387,25 @@ sub_total           = total_service_charge + commission_amount
 
 ---
 
-## 10. Postman collection
+## 10. Postman collections
 
-Import **`postman/Help-PR-Orders-Module.postman_collection.json`** (repository path: `help-pr-backend-staging/postman/Help-PR-Orders-Module.postman_collection.json`).
+### Core orders — `postman/Help-PR-Orders-Module.postman_collection.json`
 
-Set collection variables:
+| # | Request | Route |
+|---|---------|--------|
+| 1 | Get all orders | `GET /api/order/getAll` (all query params on one request) |
+| 2 | Get order by id | `GET /api/order/get/:id` |
+| 3 | Create order | `POST /api/order/create` |
+| 4 | Update order | `PUT /api/order/update/:id` |
+| 5 | Soft-delete order | `DELETE /api/order/delete/:id` |
 
-| Variable | Usage |
-|----------|--------|
-| `baseUrl` | API host, e.g. `http://localhost:5001` |
-| `accessToken` | JWT after login |
-| `orderId` | Set after create (or paste manually) |
-| `orderServiceId` | From `service_items[0]._id` or list APIs |
-| `additionalChargeId` | After creating a charge |
-| `orderPaymentId` | After creating a payment |
-| `offerId` | Active offer ObjectId for create/update with offer |
+Variables: `baseUrl`, `accessToken`, `orderId`, `orderServiceId`, filter vars (`search`, `from_date`, `to_date`, `orderStatus`, `paymentStatus`, `franchiseId`, etc.), `offerId`.
+
+### Charges & payments — `postman/Help-PR-Order-Charges-Payments.postman_collection.json`
+
+Legacy standalone CRUD for `/api/order-additional-charges` and `/api/order-payments` (optional if you use nested payloads on create/update). Variables: `orderId`, `additionalChargeId`, `orderPaymentId`.
+
+Other routes (`serviceUpdate`, `cancle`, `getCustomerOrder`, `order_service`, `financial-order`, `getCount`, Razorpay) are documented in §6 but not in these collections.
 
 Replace placeholder ObjectIds in example bodies with real IDs from your environment.
 

@@ -1,0 +1,176 @@
+{
+  "info": {
+    "_postman_id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+    "name": "Help PR — Order charges & payments",
+    "description": "Standalone sub-resource APIs for orders in `help-pr-backend-staging`.\n\n**Preferred:** nest `additional_charges` and `order_payments` on **POST /api/order/create** and **PUT /api/order/update/:id** (`Help-PR-Orders-Module` collection).\n\nUse this collection only for post-create edits without touching the full order body, or for integrations that still call legacy routes.\n\n**Docs:** `docs/ORDER_MODULE_FRONTEND.md` §6–§8.\n\n**Read path:** `GET /api/order/get/:id` includes both arrays.\n\n**Auth:** JWT user must be order participant or **403**.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5001" },
+    { "key": "accessToken", "value": "" },
+    { "key": "orderId", "value": "" },
+    { "key": "additionalChargeId", "value": "" },
+    { "key": "orderPaymentId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Additional charges",
+      "description": "Prefix **/api/order-additional-charges**. Each write **recalculates** parent `order.total_price` (includes taxed charges).",
+      "item": [
+        {
+          "name": "Create charge",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"{{orderId}}\",\n  \"amount\": 150,\n  \"label\": \"Transport\",\n  \"description\": \"Extra visit\",\n  \"payment_method\": \"upi\",\n  \"charge_type\": \"transport\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/order-additional-charges/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order-additional-charges", "create"]
+            },
+            "description": "**POST /create**\n\n**Required:** `order_id`, `amount` (> 0).\n\n**Optional:** `label`, `description`, `charge_type`, **`payment_method`**: `cash` | `upi` | `card` | `online` | `bank_transfer` | `other` (invalid → stored as `other`).\n\nTax on charge uses order's saved tax rules. Saves charge id → `additionalChargeId`."
+          },
+          "response": []
+        },
+        {
+          "name": "List charges by order",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/order-additional-charges/by-order/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order-additional-charges", "by-order", "{{orderId}}"]
+            },
+            "description": "**GET /by-order/:orderId** — active charges for the order. Prefer **GET /api/order/get/:id** for full detail in one call."
+          },
+          "response": []
+        },
+        {
+          "name": "Update charge",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 200,\n  \"label\": \"Transport (updated)\",\n  \"description\": \"Updated note\",\n  \"payment_method\": \"cash\",\n  \"charge_type\": \"transport\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/order-additional-charges/update/{{additionalChargeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order-additional-charges", "update", "{{additionalChargeId}}"]
+            },
+            "description": "**PUT /update/:id** — partial body; recalculates order totals."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete charge (soft)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/order-additional-charges/delete/{{additionalChargeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order-additional-charges", "delete", "{{additionalChargeId}}"]
+            },
+            "description": "**DELETE /delete/:id** — soft-delete; recalculates order `total_price` and may affect `payment_status` / due amount."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Order payments (ledger)",
+      "description": "Prefix **/api/order-payments**. Customer rows drive **`order.payment_status`** and **`is_paid`**. Partner rows are ledger-only.",
+      "item": [
+        {
+          "name": "Create payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"{{orderId}}\",\n  \"payer_type\": \"customer\",\n  \"amount\": 500,\n  \"payment_method\": \"upi\",\n  \"status\": \"completed\",\n  \"transaction_reference\": \"UPIREF123\",\n  \"installment_index\": null,\n  \"due_date\": null,\n  \"paid_at\": \"2026-06-10T12:00:00.000Z\",\n  \"notes\": \"Partial payment\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/order-payments/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order-payments", "create"]
+            },
+            "description": "**POST /create**\n\n**Required:** `order_id`, **`payer_type`**: `customer` | `partner`, `amount`.\n\n**Optional:** `payment_method`, **`status`**: `pending` | `completed` | `failed` | `refunded`, `transaction_reference`, `installment_index`, `due_date`, `paid_at`, `notes`.\n\n**Customer + completed:** updates `payment_status` (`partially_paid` / `paid`) and `is_paid` when sum ≥ `total_price`.\n\n**Partner example:** `\"payer_type\": \"partner\"`, `\"status\": \"pending\"`, `\"due_date\": \"2026-06-15T00:00:00.000Z\"`.\n\n**Refund example:** `\"payer_type\": \"customer\"`, `\"status\": \"refunded\"` → may set `partially_refund` / `refund` on order."
+          },
+          "response": []
+        },
+        {
+          "name": "List payments by order",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/order-payments/by-order/{{orderId}}?payer_type=",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order-payments", "by-order", "{{orderId}}"],
+              "query": [
+                { "key": "payer_type", "value": "", "description": "Optional: customer | partner. Leave empty for all.", "disabled": true }
+              ]
+            },
+            "description": "**GET /by-order/:orderId** — optional `?payer_type=customer` or `partner`."
+          },
+          "response": []
+        },
+        {
+          "name": "Update payment",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"completed\",\n  \"amount\": 500,\n  \"paid_at\": \"2026-06-10T12:00:00.000Z\",\n  \"transaction_reference\": \"UPIREF123\",\n  \"notes\": \"Marked paid\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/order-payments/update/{{orderPaymentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order-payments", "update", "{{orderPaymentId}}"]
+            },
+            "description": "**PUT /update/:id** — partial update. Customer **`status`** changes re-run **`syncOrderPaymentStatus`** on parent order."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete payment (soft)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/order-payments/delete/{{orderPaymentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order-payments", "delete", "{{orderPaymentId}}"]
+            },
+            "description": "**DELETE /delete/:id** — soft-delete; re-syncs parent **`payment_status`**."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

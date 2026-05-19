@@ -2,7 +2,7 @@
 
 **Date:** May 2026  
 **Scope:** `GET /api/order/getAll`, `GET /api/order/get/:id` (access), supporting code in `utils/order_access.js`  
-**Postman:** `postman/Help-PR-Orders-Module.postman_collection.json`  
+**Postman:** `postman/Help-PR-Orders-Module.postman_collection.json` (request **1. Get all orders**)  
 **Related:** Aligned with `GET /api/quote/getAll` behaviour (search, sort, franchise scope, date filters).
 
 ---

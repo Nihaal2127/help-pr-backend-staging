@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const State = require('../models/state');
 const City = require('../models/city');
 const Area = require('../models/area');
+const Address = require('../models/address');
 const User = require('../models/user');
 const PartnerDocument = require('../models/partner_document');
 const Category = require('../models/category');
@@ -375,6 +376,208 @@ const buildFranchiseDashboardCategoryServiceCountRecord = async (franchiseIdsSco
     return out;
 };
 
+const collectFranchiseAreaIdsFromLean = (franchiseLean) => {
+    const seen = new Set();
+    const oids = [];
+    if (!franchiseLean || franchiseLean.area_id == null) return oids;
+    const arr = Array.isArray(franchiseLean.area_id) ? franchiseLean.area_id : [franchiseLean.area_id];
+    for (const item of arr) {
+        let oid = null;
+        if (item instanceof mongoose.Types.ObjectId) {
+            oid = item;
+        } else if (item && typeof item === 'object' && item._id) {
+            oid = item._id;
+        } else if (typeof item === 'string' && /^[a-fA-F0-9]{24}$/i.test(item.trim())) {
+            oid = new mongoose.Types.ObjectId(item.trim());
+        }
+        if (!oid) continue;
+        const k = oid.toString();
+        if (seen.has(k)) continue;
+        seen.add(k);
+        oids.push(oid);
+    }
+    return oids;
+};
+
+/** Type-4 user ids with an address pincode in the franchise's linked areas (same as user getAll). */
+const getFranchiseCustomerUserIdsByPincode = async (franchiseLean) => {
+    const areaIds = collectFranchiseAreaIdsFromLean(franchiseLean);
+    if (areaIds.length === 0) return [];
+
+    const areas = await Area.find({
+        _id: { $in: areaIds },
+        deleted_at: null,
+    })
+        .select('pincodes')
+        .lean();
+
+    const allowedPins = [];
+    const pinSeen = new Set();
+    for (const a of areas) {
+        for (const p of a.pincodes || []) {
+            const t = String(p).trim();
+            if (!t || pinSeen.has(t)) continue;
+            pinSeen.add(t);
+            allowedPins.push(t);
+        }
+    }
+    if (allowedPins.length === 0) return [];
+
+    const rows = await Address.aggregate([
+        {
+            $match: {
+                deleted_at: null,
+                user_id: { $exists: true, $ne: null },
+            },
+        },
+        {
+            $addFields: {
+                pinNorm: {
+                    $trim: {
+                        input: {
+                            $toString: { $ifNull: ['$pincode', ''] },
+                        },
+                    },
+                },
+            },
+        },
+        { $match: { pinNorm: { $in: allowedPins } } },
+        { $group: { _id: '$user_id' } },
+    ]);
+
+    return rows.map((r) => r._id).filter(Boolean);
+};
+
+/** Customer filter for user-management counts (global or franchise + pincode scope). */
+const buildUserManagementCustomerFilter = async (franchiseScopeOid) => {
+    const base = { type: 4, deleted_at: null };
+    if (!franchiseScopeOid) {
+        return base;
+    }
+
+    const franchise = await Franchise.findOne({ _id: franchiseScopeOid, deleted_at: null })
+        .select('area_id')
+        .lean();
+    if (!franchise) {
+        return { ...base, franchise_id: franchiseScopeOid };
+    }
+
+    const pincodeUserIds = await getFranchiseCustomerUserIdsByPincode(franchise);
+    const orClause = [{ franchise_id: franchiseScopeOid }];
+    if (pincodeUserIds.length > 0) {
+        orClause.push({ _id: { $in: pincodeUserIds } });
+    }
+    return { ...base, $or: orClause };
+};
+
+const buildUserManagementFranchiseStaffFilter = (franchiseScopeOid, type) => {
+    const base = { type, deleted_at: null };
+    if (!franchiseScopeOid) {
+        return base;
+    }
+    return { ...base, franchise_id: franchiseScopeOid };
+};
+
+/** Partner verification buckets; pending includes unassigned franchise_id (same as user getAll). */
+const buildUserManagementPartnerVerificationFilter = (franchiseScopeOid, verificationStatus) => {
+    const base = { type: 2, deleted_at: null, verification_status: verificationStatus };
+    if (!franchiseScopeOid) {
+        return base;
+    }
+    if (verificationStatus === 1) {
+        return {
+            ...base,
+            $or: [
+                { franchise_id: franchiseScopeOid },
+                { franchise_id: null },
+                { franchise_id: { $exists: false } },
+            ],
+        };
+    }
+    return { ...base, franchise_id: franchiseScopeOid };
+};
+
+const buildUserManagementAllPartnersFilter = (franchiseScopeOid) => {
+    if (!franchiseScopeOid) {
+        return { type: 2, deleted_at: null };
+    }
+    return {
+        type: 2,
+        deleted_at: null,
+        $or: [
+            { franchise_id: franchiseScopeOid },
+            { verification_status: 1, franchise_id: null },
+            { verification_status: 1, franchise_id: { $exists: false } },
+        ],
+    };
+};
+
+/**
+ * User-management dashboard counts (type 3).
+ * Without franchise: platform-wide. With franchise: scoped like user list APIs when franchise is sent in body.
+ * @param {mongoose.Types.ObjectId | null} franchiseScopeOid
+ */
+const buildUserManagementCountRecord = async (franchiseScopeOid) => {
+    const customerFilter = await buildUserManagementCustomerFilter(franchiseScopeOid);
+
+    const total_user = await User.countDocuments(customerFilter);
+    const inactive_user = await User.countDocuments({ ...customerFilter, is_active: false });
+    const active_user = await User.countDocuments({ ...customerFilter, is_active: true });
+    const blocked_user = await User.countDocuments({ ...customerFilter, is_blocked: true });
+
+    const employeeFilter = buildUserManagementFranchiseStaffFilter(franchiseScopeOid, 3);
+    const total_employee = await User.countDocuments(employeeFilter);
+    const inactive_employee = await User.countDocuments({ ...employeeFilter, is_active: false });
+    const active_employee = await User.countDocuments({ ...employeeFilter, is_active: true });
+
+    const partnerApprovedFilter = buildUserManagementPartnerVerificationFilter(franchiseScopeOid, 2);
+    const total_partner = await User.countDocuments(partnerApprovedFilter);
+    const blocked_partner = await User.countDocuments({
+        ...partnerApprovedFilter,
+        is_blocked: true,
+        is_active: false,
+    });
+    const inactive_partner = await User.countDocuments({
+        ...partnerApprovedFilter,
+        is_blocked: false,
+        is_active: false,
+    });
+    const active_partner = await User.countDocuments({
+        ...partnerApprovedFilter,
+        is_blocked: false,
+        is_active: true,
+    });
+
+    const total_document = await User.countDocuments(buildUserManagementAllPartnersFilter(franchiseScopeOid));
+    const pending_document = await User.countDocuments(
+        buildUserManagementPartnerVerificationFilter(franchiseScopeOid, 1),
+    );
+    const verified_document = await User.countDocuments(
+        buildUserManagementPartnerVerificationFilter(franchiseScopeOid, 2),
+    );
+    const reject_document = await User.countDocuments(
+        buildUserManagementPartnerVerificationFilter(franchiseScopeOid, 3),
+    );
+
+    return {
+        total_user,
+        inactive_user,
+        active_user,
+        blocked_user,
+        total_employee,
+        inactive_employee,
+        active_employee,
+        total_partner,
+        blocked_partner,
+        inactive_partner,
+        active_partner,
+        total_document,
+        pending_document,
+        verified_document,
+        reject_document,
+    };
+};
+
 const getCountData = async (req, res) => {
     try {
         const resolvedType = resolveCountTypeFromRequest(req);
@@ -501,64 +704,8 @@ const getCountData = async (req, res) => {
             }
 
         } else if (resolvedType === 3) {
-            // Users & partner & Employee & Verifications -> Total,Verified,Pending,Rejected
-            const userFr = franchiseScopeOid ? { franchise_id: franchiseScopeOid } : {};
-
-            const total_user = await User.countDocuments({ type: 4, deleted_at: null, ...userFr });
-            const inactive_user = await User.countDocuments({ type: 4, is_active: false, deleted_at: null, ...userFr });
-            const active_user = await User.countDocuments({ type: 4, is_active: true, deleted_at: null, ...userFr });
-            const blocked_user = await User.countDocuments({ type: 4, is_blocked: true, deleted_at: null, ...userFr });
-
-            const total_employee = await User.countDocuments({ type: 3, deleted_at: null, ...userFr });
-            const inactive_employee = await User.countDocuments({ type: 3, is_active: false, deleted_at: null, ...userFr });
-            const active_employee = await User.countDocuments({ type: 3, is_active: true, deleted_at: null, ...userFr });
-
-            const partnerApprovedFilter = {
-                type: 2,
-                verification_status: 2,
-                deleted_at: null,
-                ...userFr,
-            };
-            const total_partner = await User.countDocuments(partnerApprovedFilter);
-            const blocked_partner = await User.countDocuments({
-                ...partnerApprovedFilter,
-                is_blocked: true,
-                is_active: false,
-            });
-            const inactive_partner = await User.countDocuments({
-                ...partnerApprovedFilter,
-                is_blocked: false,
-                is_active: false,
-            });
-            const active_partner = await User.countDocuments({
-                ...partnerApprovedFilter,
-                is_blocked: false,
-                is_active: true,
-            });
-
-            const total_document = await User.countDocuments({ type: 2, deleted_at: null, ...userFr });
-            const pending_document = await User.countDocuments({ type: 2, verification_status: 1, deleted_at: null, ...userFr });
-            const verified_document = await User.countDocuments({ type: 2, verification_status: 2, deleted_at: null, ...userFr });
-            const reject_document = await User.countDocuments({ type: 2, verification_status: 3, deleted_at: null, ...userFr });
-
-            response.total_user = total_user;
-            response.inactive_user = inactive_user;
-            response.active_user = active_user;
-            response.blocked_user = blocked_user;
-
-            response.total_employee = total_employee;
-            response.inactive_employee = inactive_employee;
-            response.active_employee = active_employee;
-
-            response.total_partner = total_partner;
-            response.blocked_partner = blocked_partner;
-            response.inactive_partner = inactive_partner;
-            response.active_partner = active_partner;
-
-            response.total_document = total_document;
-            response.pending_document = pending_document;
-            response.verified_document = verified_document;
-            response.reject_document = reject_document;
+            // User-management: global counts when franchise omitted; franchise-scoped when body/header/query sends franchise (same as service-management).
+            Object.assign(response, await buildUserManagementCountRecord(franchiseScopeOid));
         } else if (resolvedType === 4) {
             // Order Payment
             const orderMatch = {

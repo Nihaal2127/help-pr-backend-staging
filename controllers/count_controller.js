@@ -38,6 +38,7 @@ const {
     normalizeStoredServicesList,
 } = require('../utils/franchise_catalog_lists');
 const { loadEligibleCatalogMeta } = require('../utils/global_catalog_cascade');
+const { loadFranchiseCallerScope } = require('../utils/franchise_user_scope');
 
 const pickFirstNonEmpty = (...values) => {
     for (const value of values) {
@@ -600,7 +601,13 @@ const getCountData = async (req, res) => {
                 message: parsedFranchise.message,
             });
         }
-        const franchiseScopeOid = parsedFranchise.oid;
+        let franchiseScopeOid = parsedFranchise.oid;
+        if (!franchiseScopeOid && req.user?.id) {
+            const callerScope = await loadFranchiseCallerScope(req.user.id);
+            if (callerScope?.isFranchiseStaff && callerScope.franchiseOid) {
+                franchiseScopeOid = callerScope.franchiseOid;
+            }
+        }
         if (franchiseScopeOid) {
             const access = await assertFranchiseAccess(req, franchiseScopeOid);
             if (!access.ok) {

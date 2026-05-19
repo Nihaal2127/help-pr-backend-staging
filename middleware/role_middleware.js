@@ -1,4 +1,5 @@
 const User = require('../models/user');
+const { loadFranchiseCallerScope, resolveUserFranchiseOid } = require('../utils/franchise_user_scope');
 
 const USER_TYPE_ADMIN = 1;
 const USER_TYPE_PARTNER = 2;
@@ -49,14 +50,44 @@ const isFranchiseDropDownFullListQuery = (req) => {
 
 /**
  * GET /api/franchise/getDropDown:
- * - Default: Super Admin or Staff only (assign franchise to admin — excludes franchises owned by other admins).
- * - full_list=true|1: Super Admin, Staff, Franchise Admin, or Franchise Employee — all active franchises (dropdown filters, etc.).
+ * - Franchise Admin / Employee: always allowed; service returns only their franchise.
+ * - Super Admin / Staff: allowed; default query excludes franchises assigned to other admins;
+ *   full_list=true|1 returns all active franchises.
  */
 const requireFranchiseDropDownAccess = async (req, res, next) => {
-    if (isFranchiseDropDownFullListQuery(req)) {
-        return requireSuperAdminStaffFranchiseAdminEmployee(req, res, next);
+    try {
+        const scope = await loadFranchiseCallerScope(req.user?.id);
+        if (!scope) {
+            return res.status(403).json({
+                success: false,
+                status: 403,
+                message: 'Access denied.',
+            });
+        }
+        if (scope.isFranchiseStaff || scope.isSuper) {
+            if (scope.isFranchiseStaff && !scope.franchiseOid) {
+                return res.status(403).json({
+                    success: false,
+                    status: 403,
+                    message: 'Your account is not linked to a franchise.',
+                });
+            }
+            return next();
+        }
+        return res.status(403).json({
+            success: false,
+            status: 403,
+            message:
+                'Super admin, staff, franchise admin, or franchise employee access required.',
+        });
+    } catch (err) {
+        console.error('requireFranchiseDropDownAccess', err.message);
+        return res.status(500).json({
+            success: false,
+            status: 500,
+            message: 'Internal server error.',
+        });
     }
-    return requireSuperAdminOrStaff(req, res, next);
 };
 
 /**
@@ -65,18 +96,15 @@ const requireFranchiseDropDownAccess = async (req, res, next) => {
  */
 const requireSuperAdminStaffFranchiseAdminEmployee = async (req, res, next) => {
     try {
-        const user = await User.findOne({ _id: req.user.id, deleted_at: null }).select(
-            'type franchise_id'
-        );
-        if (!user) {
+        const scope = await loadFranchiseCallerScope(req.user?.id);
+        if (!scope) {
             return res.status(403).json({
                 success: false,
                 status: 403,
                 message: 'Access denied.',
             });
         }
-        const allowed =
-            isSuperAdminOrStaff(user.type) || isFranchiseAdminOrEmployee(user);
+        const allowed = scope.isSuper || scope.isFranchiseStaff;
         if (!allowed) {
             return res.status(403).json({
                 success: false,
@@ -114,10 +142,8 @@ const requireFranchiseRelatedCatalogAccess = async (req, res, next) => {
             });
         }
 
-        const user = await User.findOne({ _id: req.user.id, deleted_at: null }).select(
-            'type franchise_id'
-        );
-        if (!user) {
+        const scope = await loadFranchiseCallerScope(req.user?.id);
+        if (!scope) {
             return res.status(403).json({
                 success: false,
                 status: 403,
@@ -125,15 +151,14 @@ const requireFranchiseRelatedCatalogAccess = async (req, res, next) => {
             });
         }
 
-        const t = Number(user.type);
-        if (isSuperAdminOrStaff(t)) {
+        if (scope.isSuper) {
             return next();
         }
 
         const linked =
-            (t === USER_TYPE_ADMIN || t === USER_TYPE_EMPLOYEE) &&
-            user.franchise_id &&
-            String(user.franchise_id) === franchiseIdParam;
+            scope.isFranchiseStaff &&
+            scope.franchiseOid &&
+            String(scope.franchiseOid) === franchiseIdParam;
 
         if (linked) {
             return next();

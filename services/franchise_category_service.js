@@ -17,6 +17,7 @@ const {
     filterRecordsByFranchiseMappingToggle,
 } = require('../utils/franchise_catalog_lists');
 const { cascadeInactiveCategoriesToFranchiseServices } = require('../utils/global_catalog_cascade');
+const { loadFranchiseCallerScope } = require('../utils/franchise_user_scope');
 
 const fail = (status, message, extra = {}) => ({ ok: false, status, message, ...extra });
 const ok = (status, data) => ({ ok: true, status, data });
@@ -362,14 +363,15 @@ const sortAllCategoriesRows = (rows, sortBy, sortOrder) => {
 };
 
 const loadUserFranchiseAuth = async (userId) => {
-    if (!userId) return null;
-    const user = await User.findOne({ _id: userId, deleted_at: null }).select('type franchise_id');
-    if (!user) return null;
-    const t = Number(user.type);
-    const isSuper = t === USER_TYPE_SUPER_ADMIN || t === USER_TYPE_STAFF;
-    const isFranchiseAdmin = t === USER_TYPE_ADMIN && user.franchise_id;
-    const isEmployee = t === USER_TYPE_EMPLOYEE && user.franchise_id;
-    return { user, isSuper, isFranchiseAdmin, isEmployee, franchise_id: user.franchise_id };
+    const scope = await loadFranchiseCallerScope(userId);
+    if (!scope) return null;
+    return {
+        user: scope.user,
+        isSuper: scope.isSuper,
+        isFranchiseAdmin: scope.isFranchiseAdmin,
+        isEmployee: scope.isEmployee,
+        franchise_id: scope.franchiseOid,
+    };
 };
 
 const ensureFranchise = async (franchiseOid) => {

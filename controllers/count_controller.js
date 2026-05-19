@@ -18,6 +18,7 @@ const ContentManagement = require('../models/content_management');
 const Quote = require('../models/quote');
 const SubscriptionPlan = require('../models/subscription_plan');
 const PartnerSubscription = require('../models/partner_subscription');
+const Offer = require('../models/offer');
 const { checkObjectIdExists } = require('../validator/id_validator');
 const { resolveOrderListScope } = require('../utils/order_access');
 const { resolveQuoteListScope } = require('../utils/quote_access');
@@ -195,6 +196,10 @@ const resolveCountType = (type) => {
         'order-management': 14,
         order_management: 14,
         orders: 14,
+        'settings-offers': 15,
+        settings_offers: 15,
+        'offers-management': 15,
+        offers_management: 15,
     };
 
     return typeMap[key] ?? null;
@@ -1034,6 +1039,12 @@ const getCountData = async (req, res) => {
             response.completed = completed;
             response.cancelled = cancelled;
             response.refunded = refunded;
+        } else if (resolvedType === 15) {
+            // Settings → Offers (settings-offers page)
+            const offerBase = { deleted_at: null };
+            response.total_offer = await Offer.countDocuments(offerBase);
+            response.active_offer = await Offer.countDocuments({ ...offerBase, is_active: true });
+            response.inactive_offer = await Offer.countDocuments({ ...offerBase, is_active: false });
         }
         const body = buildGetCountSuccessBody(response);
         return res.status(200).type('application/json').send(JSON.stringify(body));

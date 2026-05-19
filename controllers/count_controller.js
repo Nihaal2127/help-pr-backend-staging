@@ -181,6 +181,8 @@ const resolveCountType = (type) => {
         'user-management': 3,
         'financials': 4,
         'order-payment': 4,
+        'financial-order-payments': 4,
+        financial_order_payments: 4,
         'partner-management': 12,
         'partner-payment': 5,
         'franchise-management': 6,

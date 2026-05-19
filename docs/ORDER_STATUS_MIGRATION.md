@@ -69,5 +69,5 @@ db.orders.updateMany({ order_status: 4 }, { $set: { order_status: "cancelled" } 
 - `middleware/order_middleware.js`
 - `controllers/order_controller.js`, `order_service_controller.js`
 - `controllers/dashboard_controller.js`, `count_controller.js`, `export_controller.js`
-- `postman/Help-PR-Orders-Module.postman_collection.json`
+- `postman/Help-PR-All-APIs.postman_collection.json` (Order folder; source: `postman/archive/Help-PR-Orders-Module.postman_collection.json`)
 - `docs/ORDER_MODULE_FRONTEND.md`

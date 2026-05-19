@@ -74,10 +74,11 @@ FRANCHISE PARAMETER — WHAT CHANGES PER "type"
      Counts only that franchise’s state, city, and linked areas.
 
   2  service-management
-     Same category/service fields as my-franchise (global catalogue totals,
-     mapping-based active/inactive, requested_* from franchise users) — no
-     employees or areas. If franchise is omitted, counts are global Category/Service
-     rows (is_request / is_active), same as the former unscoped service-management.
+     With franchise_id: same category/service fields as my-franchise (global catalogue
+     totals, mapping-based active/inactive, requested_* from franchise users) — no
+     employees or areas. Aligns with GET franchise-category|service/getAll all_* arrays.
+     If franchise is omitted, counts are global Category/Service rows (is_request /
+     is_active) for approved catalogue only.
 
   3  user-management
      User counts filtered by user.franchise_id = that franchise.

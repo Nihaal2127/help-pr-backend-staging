@@ -258,17 +258,33 @@ const buildFranchiseDashboardCategoryServiceCountRecord = async (franchiseIdsSco
         franchiseIdsScope,
         'category'
     );
-    out.total_category = categoryCounts.total;
-    out.active_category = categoryCounts.active;
-    out.inactive_category = categoryCounts.inactive;
+    out.total_category = categoryCounts.total_catalog ?? categoryCounts.total;
+    out.active_category = categoryCounts.locally_enabled ?? categoryCounts.active;
+    out.inactive_category = Math.max(
+        0,
+        (categoryCounts.total_catalog ?? categoryCounts.total) -
+            (categoryCounts.locally_enabled ?? categoryCounts.active)
+    );
+    out.locally_enabled_category = categoryCounts.locally_enabled;
+    out.globally_active_category = categoryCounts.globally_active;
+    out.effectively_available_category = categoryCounts.effectively_available;
+    out.total_assigned_category = categoryCounts.total_assigned;
 
     const serviceCounts = await countFranchiseScopedCatalogDashboard(
         franchiseIdsScope,
         'service'
     );
-    out.total_service = serviceCounts.total;
-    out.active_service = serviceCounts.active;
-    out.inactive_service = serviceCounts.inactive;
+    out.total_service = serviceCounts.total_catalog ?? serviceCounts.total;
+    out.active_service = serviceCounts.locally_enabled ?? serviceCounts.active;
+    out.inactive_service = Math.max(
+        0,
+        (serviceCounts.total_catalog ?? serviceCounts.total) -
+            (serviceCounts.locally_enabled ?? serviceCounts.active)
+    );
+    out.locally_enabled_service = serviceCounts.locally_enabled;
+    out.globally_active_service = serviceCounts.globally_active;
+    out.effectively_available_service = serviceCounts.effectively_available;
+    out.total_assigned_service = serviceCounts.total_assigned;
 
     out.requested_category = await countFranchiseScopedRequestedCatalog(
         franchiseIdsScope,

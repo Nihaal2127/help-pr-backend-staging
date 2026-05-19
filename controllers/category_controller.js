@@ -6,7 +6,6 @@ const State = require('../models/state');
 const Service = require('../models/service');
 const franchiseCategoryService = require('../services/franchise_category_service');
 const { applyCatalogRequestScopeForCaller } = require('../utils/franchise_catalog_request_scope');
-const { cascadeGlobalCategoryInactive } = require('../utils/global_catalog_cascade');
 const { applyPagination, applyDropDownFilter } = require('../utils/pagination');
 const { validationResult } = require('express-validator');
 const { parseBoolean } = require('../utils/parser');
@@ -526,8 +525,6 @@ const update = async (req, res) => {
       });
     }
 
-    const wasGloballyActive = category.is_active === true && category.is_request !== true;
-
     if (req.body.name) {
       const name = req.body.name
       const existingCategory = await Category.findOne({
@@ -650,12 +647,6 @@ const update = async (req, res) => {
 
     category.updated_at = Date.now();
     const updatedCategory = await category.save();
-
-    const isNowGloballyInactive =
-        updatedCategory.is_active === false && updatedCategory.is_request !== true;
-    if (wasGloballyActive && isNowGloballyInactive) {
-      await cascadeGlobalCategoryInactive(updatedCategory._id);
-    }
 
     res.status(200).json({
       success: true,

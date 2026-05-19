@@ -15,6 +15,7 @@ var partnerServiceSchema = new schema(
         payment_type: { type: String, default: '', trim: true },
         price: { type: Number, default: 0 },
         commission: { type: Number, default: 0 },
+        /** Local partner offering preference (is_enabled); effective visibility is resolver-computed. */
         is_active: { type: Boolean, default: true },
 
         created_at: { type: Date, default: Date.now },

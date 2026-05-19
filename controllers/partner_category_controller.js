@@ -2,12 +2,18 @@ const mongoose = require('mongoose');
 const PartnerCategory = require('../models/partner_category');
 const PartnerService = require('../models/partner_service');
 const Category = require('../models/category');
-const FranchiseCategory = require('../models/franchise_category');
 const { applyPagination } = require('../utils/pagination');
 const { parseBoolean } = require('../utils/parser');
 const { validateObjectId } = require('../validator/form_validator');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
 const { rebuildPartnerCategoriesFromPartnerServices } = require('../services/partner_category_service');
+const {
+  loadPartnerAvailabilityContext,
+  enrichPartnerCategoryApiRecord,
+  resolveFranchiseEffectiveCatalog,
+  annotateCatalogRowWithAvailability,
+  isGlobalCatalogRowActive,
+} = require('../utils/catalog_availability_resolver');
 
 const ensurePartnerCategoryRowsExist = async (partnerOid) => {
   const partnerId =
@@ -21,11 +27,53 @@ const ensurePartnerCategoryRowsExist = async (partnerOid) => {
   }
 };
 
+const mapPartnerCategoryRows = (data, ctx) =>
+  data.map((row) => {
+    const globalCat =
+      row.category_id && typeof row.category_id === 'object' ? row.category_id : null;
+    const base = {
+      _id: row._id,
+      partner_id: row.partner_id,
+      category_id: globalCat?._id || row.category_id,
+      category_name: globalCat?.name || null,
+      category_desc: globalCat?.desc || null,
+      category_image_url: globalCat?.image_url || null,
+      services: Array.isArray(row.services)
+        ? row.services.map((s) =>
+            s && typeof s === 'object' && s._id
+              ? {
+                  _id: s._id,
+                  name: s.name,
+                  desc: s.desc,
+                  price: s.price,
+                  tax: s.tax,
+                  image_url: s.image_url,
+                  category_id: s.category_id,
+                }
+              : s
+          )
+        : [],
+      is_active: row.is_active,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    };
+    return enrichPartnerCategoryApiRecord(base, ctx, globalCat);
+  });
+
 // GET /api/partner_category/myCategories
 const getMyCategories = async (req, res) => {
   try {
     const partnerId = new mongoose.Types.ObjectId(req.user.id);
     await ensurePartnerCategoryRowsExist(partnerId);
+
+    const ctx = await loadPartnerAvailabilityContext(partnerId);
+    if (!ctx.ok) {
+      return res.status(ctx.status).json({
+        success: false,
+        status: ctx.status,
+        message: ctx.message,
+      });
+    }
 
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 10;
@@ -63,37 +111,17 @@ const getMyCategories = async (req, res) => {
       sort,
       {},
       [
-        { path: 'category_id', select: 'name desc image_url is_active approval_status' },
+        { path: 'category_id', select: 'name desc image_url is_active is_request approval_status' },
         { path: 'services', select: 'name desc price tax image_url category_id is_active approval_status' },
       ]
     );
 
-    const records = data.map((row) => ({
-      _id: row._id,
-      partner_id: row.partner_id,
-      category_id: row.category_id?._id || row.category_id,
-      category_name: row.category_id?.name || null,
-      category_desc: row.category_id?.desc || null,
-      category_image_url: row.category_id?.image_url || null,
-      services: Array.isArray(row.services)
-        ? row.services.map((s) =>
-            s && typeof s === 'object' && s._id
-              ? {
-                  _id: s._id,
-                  name: s.name,
-                  desc: s.desc,
-                  price: s.price,
-                  tax: s.tax,
-                  image_url: s.image_url,
-                  category_id: s.category_id,
-                }
-              : s
-          )
-        : [],
-      is_active: row.is_active,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-    }));
+    let records = mapPartnerCategoryRows(data, ctx);
+
+    if (req.query.effective_active !== undefined && req.query.effective_active !== '') {
+      const wantEffective = parseBoolean(req.query.effective_active);
+      records = records.filter((r) => Boolean(r.effective_active) === wantEffective);
+    }
 
     return res.status(200).json({
       success: true,
@@ -131,6 +159,15 @@ const getAll = async (req, res) => {
     const partnerId = new mongoose.Types.ObjectId(req.query.partner_id);
     await ensurePartnerCategoryRowsExist(partnerId);
 
+    const ctx = await loadPartnerAvailabilityContext(partnerId);
+    if (!ctx.ok) {
+      return res.status(ctx.status).json({
+        success: false,
+        status: ctx.status,
+        message: ctx.message,
+      });
+    }
+
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 10;
     const filter = { partner_id: partnerId, deleted_at: null };
@@ -165,27 +202,17 @@ const getAll = async (req, res) => {
       sort,
       {},
       [
-        { path: 'category_id', select: 'name desc image_url' },
-        { path: 'services', select: 'name desc price image_url category_id' },
+        { path: 'category_id', select: 'name desc image_url is_active is_request approval_status' },
+        { path: 'services', select: 'name desc price image_url category_id is_active approval_status' },
       ]
     );
 
-    const records = data.map((row) => ({
-      _id: row._id,
-      partner_id: row.partner_id,
-      category_id: row.category_id?._id || row.category_id,
-      category_name: row.category_id?.name || null,
-      services: Array.isArray(row.services)
-        ? row.services.map((s) =>
-            s && typeof s === 'object' && s._id
-              ? { _id: s._id, name: s.name, desc: s.desc, price: s.price, image_url: s.image_url }
-              : s
-          )
-        : [],
-      is_active: row.is_active,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-    }));
+    let records = mapPartnerCategoryRows(data, ctx);
+
+    if (req.query.effective_active !== undefined && req.query.effective_active !== '') {
+      const wantEffective = parseBoolean(req.query.effective_active);
+      records = records.filter((r) => Boolean(r.effective_active) === wantEffective);
+    }
 
     return res.status(200).json({
       success: true,
@@ -207,7 +234,7 @@ const getAll = async (req, res) => {
 };
 
 // POST /api/partner_category/franchiseActiveCategories
-// Body: { franchise_id } — categories listed in franchise_category.active_categories for that franchise.
+// Body: { franchise_id } — effectively available categories for the franchise (resolver-driven).
 const getFranchiseActiveCategories = async (req, res) => {
   try {
     const franchiseIdRaw =
@@ -226,18 +253,22 @@ const getFranchiseActiveCategories = async (req, res) => {
       return res.status(400).json({ success: false, status: 400, message: fr.message });
     }
     const fid = new mongoose.Types.ObjectId(franchiseIdRaw);
-    const fc = await FranchiseCategory.findOne({ franchise_id: fid, deleted_at: null })
-      .sort({ created_at: -1 })
-      .select('active_categories')
-      .lean();
 
-    const ids =
-      fc && Array.isArray(fc.active_categories) ? fc.active_categories.filter(Boolean) : [];
+    const resolved = await resolveFranchiseEffectiveCatalog(fid);
+    if (!resolved.ok) {
+      return res.status(resolved.status).json({
+        success: false,
+        status: resolved.status,
+        message: resolved.message,
+      });
+    }
+
+    const ids = resolved.effectiveCategoryIds || [];
     if (ids.length === 0) {
       return res.status(200).json({
         success: true,
         status: 200,
-        message: 'No active categories for this franchise.',
+        message: 'No effectively available categories for this franchise.',
         records: [],
       });
     }
@@ -246,24 +277,32 @@ const getFranchiseActiveCategories = async (req, res) => {
       _id: { $in: ids },
       deleted_at: null,
     })
-      .select('name desc image_url is_active approval_status')
+      .select('name desc image_url is_active is_request approval_status')
       .lean();
 
-    const byId = new Map(categories.map((c) => [String(c._id), c]));
-    const ordered = ids.map((id) => byId.get(String(id))).filter(Boolean);
-    const records = ordered.map((c) => ({
-      _id: c._id,
-      name: c.name,
-      desc: c.desc,
-      image_url: c.image_url,
-      is_active: c.is_active,
-      approval_status: c.approval_status,
-    }));
+    const records = categories.map((c) =>
+      annotateCatalogRowWithAvailability(
+        {
+          _id: c._id,
+          name: c.name,
+          desc: c.desc,
+          image_url: c.image_url,
+          is_active: c.is_active,
+          approval_status: c.approval_status,
+        },
+        {
+          kind: 'category',
+          globalActive: isGlobalCatalogRowActive(c),
+          franchiseEnabled: resolved.categoryEnabled.get(c._id.toString()) === true,
+          partnerEnabled: true,
+        }
+      )
+    );
 
     return res.status(200).json({
       success: true,
       status: 200,
-      message: 'Franchise active categories fetched successfully.',
+      message: 'Franchise effectively available categories fetched successfully.',
       records,
     });
   } catch (err) {

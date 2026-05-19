@@ -13,10 +13,16 @@ const {
   rebuildPartnerCategoriesFromPartnerServices,
   mergeServicesIntoPartnerCategories,
 } = require('../services/partner_category_service');
-const { resolvePartnerFranchiseCatalog } = require('../utils/partner_franchise_catalog');
+const {
+  resolvePartnerFranchiseCatalog,
+  resolveFranchiseEffectiveCatalog,
+} = require('../utils/partner_franchise_catalog');
+const {
+  loadPartnerAvailabilityContext,
+  enrichPartnerServiceApiRecord,
+} = require('../utils/catalog_availability_resolver');
 
 const getAll = async (req, res) => {
-
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
@@ -28,7 +34,7 @@ const getAll = async (req, res) => {
       ...(req.query.is_active && { is_active: is_active }),
     };
     if (req.query.partner_id) {
-      const partnerResult = validateObjectId(req.query.partner_id, 'partner')
+      const partnerResult = validateObjectId(req.query.partner_id, 'partner');
       if (partnerResult.valid === true) {
         filter.partner_id = new mongoose.Types.ObjectId(req.query.partner_id);
       } else {
@@ -40,7 +46,7 @@ const getAll = async (req, res) => {
       }
     }
     if (req.query.name) {
-      filter.name = { $regex: new RegExp(req.query.name, 'i') }; // Case-insensitive match
+      filter.name = { $regex: new RegExp(req.query.name, 'i') };
     }
 
     const sort = { created_at: -1 };
@@ -54,20 +60,43 @@ const getAll = async (req, res) => {
     );
 
     const populatedServices = await PartnerService.populate(services, [
-      { path: "service_id" },
+      {
+        path: 'service_id',
+        select: 'name image_url price category_id is_active is_request approval_status',
+      },
+      { path: 'category_id', select: 'name is_active is_request approval_status' },
     ]);
 
+    const partnerOid = filter.partner_id;
+    const ctx =
+      partnerOid ? await loadPartnerAvailabilityContext(partnerOid) : null;
 
-
-    const processedServices = populatedServices.map(service => {
-
-      const { service_id, ...rest } = service;
-      return {
+    let processedServices = populatedServices.map((service) => {
+      const { service_id, category_id, ...rest } = service;
+      const base = {
         ...rest,
-        service_id: service.service_id._id,
-        service_name: service.service_id.name,
+        service_id: service_id?._id || service.service_id,
+        service_name: service_id?.name || null,
+        category_id: category_id?._id || rest.category_id,
+        category_name: category_id?.name || null,
       };
+      if (ctx && ctx.ok) {
+        return enrichPartnerServiceApiRecord(base, ctx, service_id, category_id);
+      }
+      return base;
     });
+
+    if (
+      req.query.effective_active !== undefined &&
+      req.query.effective_active !== '' &&
+      ctx &&
+      ctx.ok
+    ) {
+      const wantEffective = parseBoolean(req.query.effective_active);
+      processedServices = processedServices.filter(
+        (r) => Boolean(r.effective_active) === wantEffective
+      );
+    }
 
     res.status(200).json({
       success: true,
@@ -494,13 +523,25 @@ const getMyServices = async (req, res) => {
     );
 
     const populated = await PartnerService.populate(services, [
-      { path: 'service_id' },
-      { path: 'category_id' },
+      {
+        path: 'service_id',
+        select: 'name image_url price category_id is_active is_request approval_status',
+      },
+      { path: 'category_id', select: 'name is_active is_request approval_status' },
     ]);
 
-    const processed = populated.map((ps) => {
+    const ctx = await loadPartnerAvailabilityContext(partnerId);
+    if (!ctx.ok) {
+      return res.status(ctx.status).json({
+        success: false,
+        status: ctx.status,
+        message: ctx.message,
+      });
+    }
+
+    let processed = populated.map((ps) => {
       const { service_id, category_id, ...rest } = ps;
-      return {
+      const base = {
         ...rest,
         service_id: service_id?._id || null,
         service_name: service_id?.name || null,
@@ -509,7 +550,13 @@ const getMyServices = async (req, res) => {
         category_id: category_id?._id || null,
         category_name: category_id?.name || null,
       };
+      return enrichPartnerServiceApiRecord(base, ctx, service_id, category_id);
     });
+
+    if (req.query.effective_active !== undefined && req.query.effective_active !== '') {
+      const wantEffective = parseBoolean(req.query.effective_active);
+      processed = processed.filter((r) => Boolean(r.effective_active) === wantEffective);
+    }
 
     return res.status(200).json({
       success: true,
@@ -1142,7 +1189,7 @@ const toggleMyServiceStatus = async (req, res) => {
 };
 
 // POST /api/partner_service/franchiseCategoryServices
-// Body: { franchise_id, category_id } — intersection of category.services and franchise_service.active_services.
+// Body: { franchise_id, category_id } — category.services ∩ effectively available franchise services.
 const getFranchiseCategoryServicesIntersection = async (req, res) => {
   try {
     const franchiseIdRaw =
@@ -1181,12 +1228,9 @@ const getFranchiseCategoryServicesIntersection = async (req, res) => {
     const fid = new mongoose.Types.ObjectId(franchiseIdRaw);
     const cid = new mongoose.Types.ObjectId(categoryIdRaw);
 
-    const [category, fsRow] = await Promise.all([
+    const [category, franchiseCatalog] = await Promise.all([
       Category.findOne({ _id: cid, deleted_at: null }).select('services').lean(),
-      FranchiseService.findOne({ franchise_id: fid, deleted_at: null })
-        .sort({ created_at: -1 })
-        .select('active_services')
-        .lean(),
+      resolveFranchiseEffectiveCatalog(fid),
     ]);
 
     if (!category) {
@@ -1196,13 +1240,24 @@ const getFranchiseCategoryServicesIntersection = async (req, res) => {
         message: 'Category not found.',
       });
     }
+    if (!franchiseCatalog.ok) {
+      return res.status(franchiseCatalog.status).json({
+        success: false,
+        status: franchiseCatalog.status,
+        message: franchiseCatalog.message,
+      });
+    }
 
     const catServices = Array.isArray(category.services) ? category.services : [];
-    const activeFranchiseServices =
-      fsRow && Array.isArray(fsRow.active_services) ? fsRow.active_services.filter(Boolean) : [];
-
-    const allow = new Set(activeFranchiseServices.map((x) => String(x)));
-    const intersectionIds = catServices.filter((sid) => sid && allow.has(String(sid)));
+    const effectiveSvcSet = new Set(
+      (franchiseCatalog.effectiveServiceIds || []).map((x) => String(x))
+    );
+    const categoryEffective = (franchiseCatalog.effectiveCategoryIds || []).some(
+      (id) => String(id) === String(cid)
+    );
+    const intersectionIds = categoryEffective
+      ? catServices.filter((sid) => sid && effectiveSvcSet.has(String(sid)))
+      : [];
 
     if (intersectionIds.length === 0) {
       return res.status(200).json({

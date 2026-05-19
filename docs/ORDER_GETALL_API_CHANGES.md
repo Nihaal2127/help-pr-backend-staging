@@ -2,7 +2,7 @@
 
 **Date:** May 2026  
 **Scope:** `GET /api/order/getAll`, `GET /api/order/get/:id` (access), supporting code in `utils/order_access.js`  
-**Postman:** `postman/Help-PR-Orders-Module.postman_collection.json` (request **1. Get all orders**)  
+**Postman:** `postman/Help-PR-All-APIs.postman_collection.json` → **Order** → **1. Get all orders**  
 **Related:** Aligned with `GET /api/quote/getAll` behaviour (search, sort, franchise scope, date filters).
 
 ---
@@ -132,7 +132,7 @@ Each record in `records` includes display helpers and hydrated refs (same patter
 |------|--------|
 | `utils/order_access.js` | `resolveOrderListScope`, `assertOrderRecordAccess` (plus existing `callerMatchesOrderParticipant`) |
 | `controllers/order_controller.js` | `getAll` pipeline; date helpers; `getById` access check |
-| `postman/Help-PR-Orders-Module.postman_collection.json` | Variables, getAll requests, descriptions |
+| `postman/archive/Help-PR-Orders-Module.postman_collection.json` | Source for merge; use `postman/Help-PR-All-APIs.postman_collection.json` in Postman |
 | `docs/ORDER_GETALL_API_CHANGES.md` | This document |
 
 ---

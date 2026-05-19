@@ -15,6 +15,9 @@ const {
   mapPricingToServiceLineWithOffer,
 } = require("./order_pricing_service");
 const { createOrderOfferRecord } = require("./order_offer_service");
+const {
+  applyNestedResourcesOnCreate,
+} = require("./order_nested_resources_service");
 const { combineDateAndTime } = require("../utils/order_schedule");
 const { resolveQuoteStatus } = require("../enum/quote_status_enum");
 const {
@@ -321,7 +324,7 @@ const createOrderFromBody = async (body, options = {}) => {
 
 const persistOrderAndLinkQuote = async (
   { newOrder, order_id, service_items, resolvedQuoteId, orderOfferSnapshot },
-  { notifyPartners = true } = {}
+  { notifyPartners = true, requestBody = null } = {}
 ) => {
   await newOrder.save();
 
@@ -331,6 +334,10 @@ const persistOrderAndLinkQuote = async (
     newOrder.offer_id = orderOfferSnapshot.offer_id;
     await newOrder.save();
   }
+
+  const nested = requestBody
+    ? await applyNestedResourcesOnCreate(newOrder, requestBody)
+    : null;
 
   await recalculateOrderTotals(order_id);
 
@@ -342,7 +349,8 @@ const persistOrderAndLinkQuote = async (
     await notifyPartnersForNewOrder(service_items, newOrder.unique_id, order_id);
   }
 
-  return newOrder;
+  const refreshed = await Order.findById(order_id);
+  return { order: refreshed || newOrder, nested };
 };
 
 /**
@@ -443,8 +451,9 @@ const createOrderFromQuote = async (quote, options = {}) => {
     linkQuote: true,
     ...options,
   });
-  const order = await persistOrderAndLinkQuote(draft, {
+  const { order } = await persistOrderAndLinkQuote(draft, {
     notifyPartners: options.notifyPartners !== false,
+    requestBody: body,
   });
   return { order, unique_id: draft.unique_id, order_id: draft.order_id };
 };

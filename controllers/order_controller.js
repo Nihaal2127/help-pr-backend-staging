@@ -44,6 +44,9 @@ const {
   repriceOrderOnUpdate,
 } = require('../services/order_update_pricing_service');
 const {
+  applyNestedResourcesOnUpdate,
+} = require('../services/order_nested_resources_service');
+const {
   resolveOrderListScope,
   assertOrderRecordAccess,
 } = require('../utils/order_access');
@@ -926,11 +929,14 @@ const create = async (req, res) => {
       );
       if (responsePaymentLink.success === true) {
         newOrder.transaction_id = responsePaymentLink.transaction_id;
-        await persistOrderAndLinkQuote(draft);
+        const { order: savedOrder, nested } = await persistOrderAndLinkQuote(draft, {
+          requestBody: req.body,
+        });
         const result = {
           payment_url: responsePaymentLink.payment_url,
-          order_id: newOrder._id,
+          order_id: savedOrder._id,
           pricing: pricingMeta,
+          ...(nested ? { nested } : {}),
         };
         return res.status(200).json({
           success: true,
@@ -946,14 +952,27 @@ const create = async (req, res) => {
       });
     }
 
-    await persistOrderAndLinkQuote(draft);
+    const { order: savedOrder, nested } = await persistOrderAndLinkQuote(draft, {
+      requestBody: req.body,
+    });
     return res.status(200).json({
       success: true,
       status: 200,
       message: "Order placed successfully.",
-      record: { order_id: newOrder._id, pricing: pricingMeta },
+      record: {
+        order_id: savedOrder._id,
+        pricing: pricingMeta,
+        ...(nested ? { nested } : {}),
+      },
     });
   } catch (error) {
+    if (error instanceof OrderCreationError) {
+      return res.status(error.status).json({
+        success: false,
+        status: error.status,
+        message: error.message,
+      });
+    }
     if (error.message === "INVALID_SERVICE_USER") {
       return res.status(400).json({
         success: false,
@@ -1045,8 +1064,25 @@ const update = async (req, res) => {
     }
 
     orderToUpdate.updated_at = new Date();
-    const updatedOrder = await orderToUpdate.save();
+    let updatedOrder = await orderToUpdate.save();
 
+    let nested = null;
+    try {
+      nested = await applyNestedResourcesOnUpdate(updatedOrder, req.body);
+    } catch (err) {
+      if (err instanceof OrderCreationError) {
+        return res.status(err.status).json({
+          success: false,
+          status: err.status,
+          message: err.message,
+        });
+      }
+      throw err;
+    }
+
+    if (nested) {
+      updatedOrder = await Order.findById(updatedOrder._id);
+    }
 
     const notificationSetting = await NotificationSettings.findOne({
       user_id: updatedOrder.user_id,
@@ -1074,6 +1110,7 @@ const update = async (req, res) => {
       status: 200,
       message: 'Order updated successfully',
       record: updatedOrder,
+      ...(nested ? { nested } : {}),
       ...(repriceResult
         ? {
             pricing: {
@@ -1091,6 +1128,13 @@ const update = async (req, res) => {
     });
   }
   catch (error) {
+    if (error instanceof OrderCreationError) {
+      return res.status(error.status).json({
+        success: false,
+        status: error.status,
+        message: error.message,
+      });
+    }
     console.error('Error updating Order:', error);
     res.status(500).json({
       success: false,

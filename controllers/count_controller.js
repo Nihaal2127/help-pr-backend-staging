@@ -11,8 +11,6 @@ const OrderService = require('../models/order_services');
 const Order = require('../models/order');
 const PartnerService = require('../models/partner_service');
 const Franchise = require('../models/franchise');
-const FranchiseCategory = require('../models/franchise_category');
-const FranchiseService = require('../models/franchise_service');
 const Expense = require('../models/expense');
 const ExpenseCategory = require('../models/expense_category');
 const ContentManagement = require('../models/content_management');
@@ -33,12 +31,9 @@ const {
 } = require('../enum/order_status_enum');
 const moment = require("moment-timezone");
 const {
-    coerceLegacyCategoryMappingArrays,
-    coerceLegacyServiceMappingArrays,
-    normalizeStoredCategoriesList,
-    normalizeStoredServicesList,
-} = require('../utils/franchise_catalog_lists');
-const { loadEligibleCatalogMeta } = require('../utils/global_catalog_cascade');
+    countFranchiseScopedCatalogDashboard,
+    countFranchiseScopedRequestedCatalog,
+} = require('../utils/franchise_catalog_dashboard_counts');
 const { loadFranchiseCallerScope } = require('../utils/franchise_user_scope');
 
 const pickFirstNonEmpty = (...values) => {
@@ -240,94 +235,8 @@ const buildGlobalCategoryServiceCountRecord = async () => {
 };
 
 /**
- * Totals from franchise_category / franchise_service mappings (same scope as GET franchise-category|service/getAll).
- * Falls back to Franchise.categories / Franchise.services when no mapping row exists.
- * @param {mongoose.Types.ObjectId[]} franchiseIdsScope
- * @param {'category'|'service'} kind
- */
-const aggregateFranchiseCatalogMappingCounts = async (franchiseIdsScope, kind) => {
-    const isCategory = kind === 'category';
-    const MappingModel = isCategory ? FranchiseCategory : FranchiseService;
-    const listField = isCategory ? 'categories_list' : 'services_list';
-    const activeField = isCategory ? 'active_categories' : 'active_services';
-    const inactiveField = isCategory ? 'inactive_categories' : 'inactive_services';
-    const coerce = isCategory ? coerceLegacyCategoryMappingArrays : coerceLegacyServiceMappingArrays;
-    const normalizeList = isCategory ? normalizeStoredCategoriesList : normalizeStoredServicesList;
-    const idKey = isCategory ? 'category_id' : 'service_id';
-    const franchiseArrayField = isCategory ? 'categories' : 'services';
-
-    const mappingDocs = await MappingModel.find({
-        franchise_id: { $in: franchiseIdsScope },
-        deleted_at: null,
-    })
-        .select(`${listField} ${activeField} ${inactiveField} franchise_id`)
-        .lean();
-
-    const franchiseIdsWithMapping = new Set(
-        mappingDocs.map((row) => row.franchise_id.toString())
-    );
-    const mappedIds = new Set();
-    const activeIds = [];
-    const inactiveIds = [];
-
-    for (const row of mappingDocs) {
-        const coerced = coerce(row);
-        const norm = normalizeList(coerced[listField] || []);
-        for (const entry of norm) {
-            if (entry[idKey]) mappedIds.add(entry[idKey].toString());
-        }
-        for (const oid of coerced[activeField] || []) {
-            activeIds.push(oid);
-        }
-        for (const oid of coerced[inactiveField] || []) {
-            inactiveIds.push(oid);
-        }
-    }
-
-    const missingFranchiseIds = franchiseIdsScope.filter(
-        (id) => !franchiseIdsWithMapping.has(id.toString())
-    );
-    if (missingFranchiseIds.length > 0) {
-        const franchiseRows = await Franchise.find({
-            _id: { $in: missingFranchiseIds },
-            deleted_at: null,
-        })
-            .select(franchiseArrayField)
-            .lean();
-        for (const fr of franchiseRows) {
-            const legacyIds = fr[franchiseArrayField] || [];
-            for (const oid of legacyIds) {
-                if (oid) mappedIds.add(oid.toString());
-            }
-            activeIds.push(...legacyIds);
-        }
-    }
-
-    const kindKey = isCategory ? 'category' : 'service';
-    const { eligible, globallyActive } = await loadEligibleCatalogMeta([...mappedIds], kindKey);
-
-    let totalEligible = 0;
-    for (const id of mappedIds) {
-        if (eligible.has(id)) totalEligible += 1;
-    }
-
-    const franchiseActiveSet = new Set(
-        activeIds.map((id) => id.toString()).filter((id) => eligible.has(id))
-    );
-
-    let activeEligible = 0;
-    for (const id of franchiseActiveSet) {
-        if (globallyActive.has(id)) activeEligible += 1;
-    }
-
-    const inactiveEligible = Math.max(0, totalEligible - activeEligible);
-
-    return { total: totalEligible, active: activeEligible, inactive: inactiveEligible };
-};
-
-/**
- * Category/service counts aligned with my-franchise list APIs: mapped catalogue totals on the franchise,
- * active/inactive from mapping arrays, plus pending requests from franchise users.
+ * Category/service counts aligned with franchise-category|service getAll (all_* catalog)
+ * and my-franchise / service-management getCount cards.
  * @param {mongoose.Types.ObjectId[]} franchiseIdsScope
  */
 const buildFranchiseDashboardCategoryServiceCountRecord = async (franchiseIdsScope) => {
@@ -345,12 +254,7 @@ const buildFranchiseDashboardCategoryServiceCountRecord = async (franchiseIdsSco
         return out;
     }
 
-    const franchiseUserIds = await User.find({
-        franchise_id: { $in: franchiseIdsScope },
-        deleted_at: null,
-    }).distinct('_id');
-
-    const categoryCounts = await aggregateFranchiseCatalogMappingCounts(
+    const categoryCounts = await countFranchiseScopedCatalogDashboard(
         franchiseIdsScope,
         'category'
     );
@@ -358,7 +262,7 @@ const buildFranchiseDashboardCategoryServiceCountRecord = async (franchiseIdsSco
     out.active_category = categoryCounts.active;
     out.inactive_category = categoryCounts.inactive;
 
-    const serviceCounts = await aggregateFranchiseCatalogMappingCounts(
+    const serviceCounts = await countFranchiseScopedCatalogDashboard(
         franchiseIdsScope,
         'service'
     );
@@ -366,16 +270,14 @@ const buildFranchiseDashboardCategoryServiceCountRecord = async (franchiseIdsSco
     out.active_service = serviceCounts.active;
     out.inactive_service = serviceCounts.inactive;
 
-    out.requested_category = await Category.countDocuments({
-        deleted_at: null,
-        is_request: true,
-        requested_by: { $in: franchiseUserIds },
-    });
-    out.requested_service = await Service.countDocuments({
-        deleted_at: null,
-        is_request: true,
-        requested_by: { $in: franchiseUserIds },
-    });
+    out.requested_category = await countFranchiseScopedRequestedCatalog(
+        franchiseIdsScope,
+        'category'
+    );
+    out.requested_service = await countFranchiseScopedRequestedCatalog(
+        franchiseIdsScope,
+        'service'
+    );
 
     return out;
 };

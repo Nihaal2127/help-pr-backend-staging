@@ -64,6 +64,18 @@ const parseServicesListInput = (raw, fieldName) => {
     return { ok: true, entries };
 };
 
+const hasFranchiseIdQueryParam = (query) => {
+    const raw = query?.franchise_id;
+    return raw !== undefined && raw !== null && String(raw).trim() !== '';
+};
+
+/** Hide pending requests in franchise-scoped all_* unless is_request is explicit. */
+const resolveEffectiveIsRequestFilter = (query, listFlags) => {
+    if (listFlags.isRequestFilter !== undefined) return listFlags.isRequestFilter;
+    if (hasFranchiseIdQueryParam(query)) return false;
+    return undefined;
+};
+
 const parseOptionalQueryBool = (raw, fieldName) => {
     if (raw === undefined || raw === null) return { ok: true, present: false };
     const s = String(raw).trim().toLowerCase();
@@ -422,6 +434,7 @@ const list = async (query, userId) => {
 
         const listFlags = resolveFranchiseMappingListQuery(query);
         if (!listFlags.ok) return fail(400, listFlags.message);
+        const isRequestFilter = resolveEffectiveIsRequestFilter(query, listFlags);
 
         let { data, totalCount, totalPages, currentPage } = await applyPagination(
             FranchiseService,
@@ -451,7 +464,7 @@ const list = async (query, userId) => {
             applyServiceCatalogFiltersToRecords(
                 data,
                 undefined,
-                listFlags.isRequestFilter
+                isRequestFilter
             ).map((row) => coerceLegacyServiceMappingArrays(row)),
             listFlags.mappingActiveFilter,
             'services_list',
@@ -471,6 +484,11 @@ const list = async (query, userId) => {
             if (!sortOpts.ok) return fail(400, sortOpts.message);
 
             all_services = await buildAllServicesWithFranchiseMappingStatus(filter.franchise_id);
+            if (isRequestFilter !== undefined) {
+                all_services = all_services.filter(
+                    (svc) => Boolean(svc.is_request) === isRequestFilter
+                );
+            }
             all_services = filterAllServicesBySearch(all_services, searchTerm);
             all_services = sortAllServicesRows(
                 all_services,

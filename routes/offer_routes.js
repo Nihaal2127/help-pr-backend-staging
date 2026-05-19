@@ -11,16 +11,18 @@ const authMiddleware = require('../middleware/auth_middleware');
 const rateLimiter = require('../middleware/rate_middleware');
 const {
     validateOfferIdParam,
+    requireOfferCreatePermission,
     createOfferMiddleware,
     updateOfferMiddleware,
 } = require('../middleware/offer_middleware');
 
 router.use(rateLimiter);
+router.use(authMiddleware, requireOfferCreatePermission);
 
-router.post('/create', authMiddleware, createOfferMiddleware, create);
-router.get('/get/:id', authMiddleware, validateOfferIdParam, getById);
-router.get('/getAll', authMiddleware, getAll);
-router.put('/update/:id', authMiddleware, validateOfferIdParam, updateOfferMiddleware, update);
-router.delete('/delete/:id', authMiddleware, validateOfferIdParam, deleteOffer);
+router.post('/create', createOfferMiddleware, create);
+router.get('/get/:id', validateOfferIdParam, getById);
+router.get('/getAll', getAll);
+router.put('/update/:id', validateOfferIdParam, updateOfferMiddleware, update);
+router.delete('/delete/:id', validateOfferIdParam, deleteOffer);
 
 module.exports = router;

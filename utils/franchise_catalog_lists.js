@@ -60,7 +60,10 @@ const parseObjectIdArrayOrdered = (raw, fieldName) => {
     return { ok: true, oids };
 };
 
-/** Legacy plain ObjectId entries or { category_id, is_active }. */
+/**
+ * Franchise/partner mapping list entries.
+ * DB field `is_active` = local preference (conceptually `is_enabled`), NOT effective visibility.
+ */
 const normalizeStoredCategoriesList = (raw) => {
     if (!raw || !Array.isArray(raw) || raw.length === 0) return [];
     const out = [];
@@ -95,59 +98,142 @@ const normalizeStoredServicesList = (raw) => {
     return out;
 };
 
+/** Build legacy partition arrays from categories_list (response-only; not source of truth). */
+const deriveCategoryPartitionFromList = (normList) => ({
+    active_categories: normList.filter((e) => e.is_active).map((e) => e.category_id),
+    inactive_categories: normList.filter((e) => !e.is_active).map((e) => e.category_id),
+});
+
+/** Build legacy partition arrays from services_list (response-only; not source of truth). */
+const deriveServicePartitionFromList = (normList) => ({
+    active_services: normList.filter((e) => e.is_active).map((e) => e.service_id),
+    inactive_services: normList.filter((e) => !e.is_active).map((e) => e.service_id),
+});
+
 /**
- * Legacy DB rows stored active_categories / inactive_categories as booleans.
- * Response shape always uses ObjectId[] for those fields.
+ * Legacy rows may only have active_categories / inactive_categories arrays.
+ * Rebuild categories_list once for reads.
+ */
+const rebuildCategoriesListFromLegacyPartition = (activeIds, inactiveIds) => {
+    const out = [];
+    for (const id of activeIds || []) {
+        out.push({ category_id: id, is_active: true });
+    }
+    for (const id of inactiveIds || []) {
+        out.push({ category_id: id, is_active: false });
+    }
+    return out;
+};
+
+const rebuildServicesListFromLegacyPartition = (activeIds, inactiveIds) => {
+    const out = [];
+    for (const id of activeIds || []) {
+        out.push({ service_id: id, is_active: true });
+    }
+    for (const id of inactiveIds || []) {
+        out.push({ service_id: id, is_active: false });
+    }
+    return out;
+};
+
+/**
+ * Coerce franchise_category mapping for API responses.
+ * Source of truth: categories_list[].is_active (local is_enabled preference).
+ * active_categories / inactive_categories are derived for backward compatibility only.
  */
 const coerceLegacyCategoryMappingArrays = (plain) => {
     if (!plain || typeof plain !== 'object') return plain;
     const out = typeof plain.toObject === 'function' ? plain.toObject() : { ...plain };
-    const ac = out.active_categories;
-    const ic = out.inactive_categories;
-    if (typeof ac === 'boolean' || typeof ic === 'boolean') {
-        const norm = normalizeStoredCategoriesList(out.categories_list);
-        out.active_categories = norm.filter((e) => e.is_active).map((e) => e.category_id);
-        out.inactive_categories = norm.filter((e) => !e.is_active).map((e) => e.category_id);
+
+    let normList = normalizeStoredCategoriesList(out.categories_list || []);
+
+    const acLegacy = Array.isArray(out.active_categories) ? out.active_categories : [];
+    const icLegacy = Array.isArray(out.inactive_categories) ? out.inactive_categories : [];
+    const hasLegacyBoolean =
+        typeof out.active_categories === 'boolean' || typeof out.inactive_categories === 'boolean';
+
+    if (normList.length === 0 && (acLegacy.length > 0 || icLegacy.length > 0 || hasLegacyBoolean)) {
+        if (hasLegacyBoolean) {
+            normList = normalizeStoredCategoriesList(out.categories_list || []);
+        } else {
+            normList = rebuildCategoriesListFromLegacyPartition(acLegacy, icLegacy);
+        }
     }
-    if (!Array.isArray(out.active_categories)) out.active_categories = [];
-    if (!Array.isArray(out.inactive_categories)) out.inactive_categories = [];
-    if (!Array.isArray(out.categories_order)) {
-        const norm = normalizeStoredCategoriesList(out.categories_list || []);
-        out.categories_order = norm.map((e) => e.category_id);
+
+    out.categories_list = normList;
+
+    const derived = deriveCategoryPartitionFromList(normList);
+    out.active_categories = derived.active_categories;
+    out.inactive_categories = derived.inactive_categories;
+
+    if (!Array.isArray(out.categories_order) || out.categories_order.length === 0) {
+        out.categories_order = normList.map((e) => e.category_id);
     }
-    /** Response-only: reflect toggle state from active_categories without persisting to categories_list. */
-    const activeSet = new Set((out.active_categories || []).map((id) => id.toString()));
-    const normList = normalizeStoredCategoriesList(out.categories_list || []);
-    out.categories_list = normList.map((e) => ({
-        category_id: e.category_id,
-        is_active: activeSet.has(e.category_id.toString()),
-    }));
+
     return out;
 };
 
+/**
+ * Coerce franchise_service mapping for API responses.
+ * Source of truth: services_list[].is_active (local is_enabled preference).
+ */
 const coerceLegacyServiceMappingArrays = (plain) => {
     if (!plain || typeof plain !== 'object') return plain;
     const out = typeof plain.toObject === 'function' ? plain.toObject() : { ...plain };
-    const ac = out.active_services;
-    const ic = out.inactive_services;
-    if (typeof ac === 'boolean' || typeof ic === 'boolean') {
-        const norm = normalizeStoredServicesList(out.services_list);
-        out.active_services = norm.filter((e) => e.is_active).map((e) => e.service_id);
-        out.inactive_services = norm.filter((e) => !e.is_active).map((e) => e.service_id);
+
+    let normList = normalizeStoredServicesList(out.services_list || []);
+
+    const acLegacy = Array.isArray(out.active_services) ? out.active_services : [];
+    const icLegacy = Array.isArray(out.inactive_services) ? out.inactive_services : [];
+    const hasLegacyBoolean =
+        typeof out.active_services === 'boolean' || typeof out.inactive_services === 'boolean';
+
+    if (normList.length === 0 && (acLegacy.length > 0 || icLegacy.length > 0 || hasLegacyBoolean)) {
+        if (hasLegacyBoolean) {
+            normList = normalizeStoredServicesList(out.services_list || []);
+        } else {
+            normList = rebuildServicesListFromLegacyPartition(acLegacy, icLegacy);
+        }
     }
-    if (!Array.isArray(out.active_services)) out.active_services = [];
-    if (!Array.isArray(out.inactive_services)) out.inactive_services = [];
-    if (!Array.isArray(out.services_order)) {
-        const norm = normalizeStoredServicesList(out.services_list || []);
-        out.services_order = norm.map((e) => e.service_id);
+
+    out.services_list = normList;
+
+    const derived = deriveServicePartitionFromList(normList);
+    out.active_services = derived.active_services;
+    out.inactive_services = derived.inactive_services;
+
+    if (!Array.isArray(out.services_order) || out.services_order.length === 0) {
+        out.services_order = normList.map((e) => e.service_id);
     }
-    const activeSet = new Set((out.active_services || []).map((id) => id.toString()));
-    const normList = normalizeStoredServicesList(out.services_list || []);
-    out.services_list = normList.map((e) => ({
-        service_id: e.service_id,
-        is_active: activeSet.has(e.service_id.toString()),
-    }));
+
     return out;
+};
+
+/**
+ * Apply active/inactive partition API input to categories_list (local preference only).
+ */
+const applyCategoryPartitionToCategoriesList = (normList, activeIds, inactiveIds) => {
+    const activeSet = new Set((activeIds || []).map((id) => id.toString()));
+    const inactiveSet = new Set((inactiveIds || []).map((id) => id.toString()));
+    return normList.map((e) => {
+        const key = e.category_id.toString();
+        let enabled = e.is_active;
+        if (activeSet.has(key)) enabled = true;
+        else if (inactiveSet.has(key)) enabled = false;
+        return { category_id: e.category_id, is_active: enabled };
+    });
+};
+
+const applyServicePartitionToServicesList = (normList, activeIds, inactiveIds) => {
+    const activeSet = new Set((activeIds || []).map((id) => id.toString()));
+    const inactiveSet = new Set((inactiveIds || []).map((id) => id.toString()));
+    return normList.map((e) => {
+        const key = e.service_id.toString();
+        let enabled = e.is_active;
+        if (activeSet.has(key)) enabled = true;
+        else if (inactiveSet.has(key)) enabled = false;
+        return { service_id: e.service_id, is_active: enabled };
+    });
 };
 
 /**
@@ -325,26 +411,14 @@ const extractCatalogRefId = (ref) => {
 };
 
 /**
- * Keep only franchise-toggle active or inactive rows (after coerceLegacy* sets entry.is_active).
- * Optionally updates:
- * - active_*
- * - inactive_*
- * - *_order
- * fields to stay consistent with the filtered list.
- *
- * @param {unknown[]} records
- * @param {boolean | undefined} mappingActiveFilter — true = franchise-on only, false = franchise-off only
- * @param {'categories_list'|'services_list'} listKey
- * @param {'active_categories'|'active_services'} activeKey
- * @param {'inactive_categories'|'inactive_services'} inactiveKey
- * @param {'category_id'|'service_id'} entryIdKey
+ * Filter mapping records by local franchise preference (categories_list / services_list is_active).
  */
 const filterRecordsByFranchiseMappingToggle = (
     records,
     mappingActiveFilter,
     listKey,
-    activeKey,
-    inactiveKey,
+    _activeKey,
+    _inactiveKey,
     entryIdKey
 ) => {
     if (mappingActiveFilter === undefined) return records;
@@ -355,12 +429,24 @@ const filterRecordsByFranchiseMappingToggle = (
         const filtered = list.filter((e) => Boolean(e.is_active) === mappingActiveFilter);
         plain[listKey] = filtered;
         const ids = filtered.map((e) => extractCatalogRefId(e[entryIdKey])).filter(Boolean);
-        if (mappingActiveFilter === true) {
-            plain[activeKey] = ids;
-            plain[inactiveKey] = [];
+        if (listKey === 'categories_list') {
+            const derived = deriveCategoryPartitionFromList(
+                filtered.map((e) => ({
+                    category_id: extractCatalogRefId(e.category_id),
+                    is_active: e.is_active,
+                }))
+            );
+            plain.active_categories = derived.active_categories;
+            plain.inactive_categories = derived.inactive_categories;
         } else {
-            plain[activeKey] = [];
-            plain[inactiveKey] = ids;
+            const derived = deriveServicePartitionFromList(
+                filtered.map((e) => ({
+                    service_id: extractCatalogRefId(e.service_id),
+                    is_active: e.is_active,
+                }))
+            );
+            plain.active_services = derived.active_services;
+            plain.inactive_services = derived.inactive_services;
         }
         const idSet = new Set(ids.map((id) => id.toString()));
         if (Array.isArray(plain[orderKey])) {
@@ -370,12 +456,31 @@ const filterRecordsByFranchiseMappingToggle = (
     });
 };
 
+/** Strip derived partition arrays before persisting (lists are the only stored preference). */
+const stripDerivedPartitionArraysFromCategoryMapping = (record) => {
+    if (!record) return record;
+    record.active_categories = undefined;
+    record.inactive_categories = undefined;
+    return record;
+};
+
+const stripDerivedPartitionArraysFromServiceMapping = (record) => {
+    if (!record) return record;
+    record.active_services = undefined;
+    record.inactive_services = undefined;
+    return record;
+};
+
 module.exports = {
     dedupeObjectIdsPreserveOrder,
     parseObjectIdArray,
     parseObjectIdArrayOrdered,
     normalizeStoredCategoriesList,
     normalizeStoredServicesList,
+    deriveCategoryPartitionFromList,
+    deriveServicePartitionFromList,
+    applyCategoryPartitionToCategoriesList,
+    applyServicePartitionToServicesList,
     coerceLegacyCategoryMappingArrays,
     coerceLegacyServiceMappingArrays,
     validateCategoryActiveInactivePartition,
@@ -383,4 +488,6 @@ module.exports = {
     validateCategoriesOrderPermutation,
     validateServicesOrderPermutation,
     filterRecordsByFranchiseMappingToggle,
+    stripDerivedPartitionArraysFromCategoryMapping,
+    stripDerivedPartitionArraysFromServiceMapping,
 };

@@ -1,7 +1,5 @@
 const mongoose = require('mongoose');
 const Franchise = require('../models/franchise');
-const FranchiseCategory = require('../models/franchise_category');
-const FranchiseService = require('../models/franchise_service');
 const Category = require('../models/category');
 const Service = require('../models/service');
 const User = require('../models/user');
@@ -9,63 +7,49 @@ const {
     coerceLegacyCategoryMappingArrays,
     coerceLegacyServiceMappingArrays,
 } = require('./franchise_catalog_lists');
+const { countFranchiseScopedAvailability } = require('./catalog_availability_resolver');
 
 const KIND_CONFIG = {
     category: {
-        MappingModel: FranchiseCategory,
         CatalogModel: Category,
-        activeField: 'active_categories',
         franchiseArrayField: 'categories',
         coerce: coerceLegacyCategoryMappingArrays,
     },
     service: {
-        MappingModel: FranchiseService,
         CatalogModel: Service,
-        activeField: 'active_services',
         franchiseArrayField: 'services',
         coerce: coerceLegacyServiceMappingArrays,
     },
 };
 
 /**
- * Latest franchise_category / franchise_service mapping for one franchise (same as
- * buildAllCategories|ServicesWithFranchiseMappingStatus in mapping list services).
- * Falls back to Franchise.categories / Franchise.services when no mapping row exists.
+ * Latest franchise mapping coerced from categories_list / services_list (local preference).
  * @param {mongoose.Types.ObjectId} franchiseOid
  * @param {'category'|'service'} kind
- * @returns {Promise<object | null>} coerced mapping plain object
  */
 const resolveLatestCoercedMappingForFranchise = async (franchiseOid, kind) => {
-    const cfg = KIND_CONFIG[kind];
-    if (!cfg) throw new Error(`Invalid catalog kind: ${kind}`);
+    const { resolveFranchiseLocalEnabledMaps } = require('./catalog_availability_resolver');
+    const local = await resolveFranchiseLocalEnabledMaps(franchiseOid);
+    if (!local.ok) return null;
 
-    const row = await cfg.MappingModel.findOne({
-        franchise_id: franchiseOid,
-        deleted_at: null,
-    })
-        .sort({ created_at: -1 })
-        .lean();
-
-    if (row) return cfg.coerce(row);
-
-    const fr = await Franchise.findOne({ _id: franchiseOid, deleted_at: null })
-        .select(cfg.franchiseArrayField)
-        .lean();
-    const legacyIds = fr && Array.isArray(fr[cfg.franchiseArrayField]) ? fr[cfg.franchiseArrayField] : [];
-    if (legacyIds.length === 0) return null;
+    const idMap = kind === 'category' ? local.categoryEnabled : local.serviceEnabled;
+    const listKey = kind === 'category' ? 'categories_list' : 'services_list';
+    const idField = kind === 'category' ? 'category_id' : 'service_id';
+    const entries = [...idMap.entries()].map(([id, enabled]) => ({
+        [idField]: new mongoose.Types.ObjectId(id),
+        is_active: enabled,
+    }));
 
     if (kind === 'category') {
         return coerceLegacyCategoryMappingArrays({
-            active_categories: [...legacyIds],
-            inactive_categories: [],
-            categories_list: legacyIds.map((category_id) => ({ category_id, is_active: true })),
+            categories_list: entries,
+            categories_order: entries.map((e) => e.category_id),
         });
     }
 
     return coerceLegacyServiceMappingArrays({
-        active_services: [...legacyIds],
-        inactive_services: [],
-        services_list: legacyIds.map((service_id) => ({ service_id, is_active: true })),
+        services_list: entries,
+        services_order: entries.map((e) => e.service_id),
     });
 };
 
@@ -80,9 +64,6 @@ const getFranchiseUserIdsForScope = async (franchiseIdsScope) => {
 
 /**
  * Pending catalogue requests raised by users under the franchise scope.
- * Matches GET /api/category|service/getAll with status=requested* (and franchise admin JWT scope).
- * @param {mongoose.Types.ObjectId[]} franchiseIdsScope
- * @param {'category'|'service'} kind
  */
 const countFranchiseScopedRequestedCatalog = async (franchiseIdsScope, kind) => {
     const cfg = KIND_CONFIG[kind];
@@ -99,40 +80,11 @@ const countFranchiseScopedRequestedCatalog = async (franchiseIdsScope, kind) => 
 };
 
 /**
- * Dashboard category/service counts for franchise scope — aligned with:
- * - GET franchise-category|service/getAll `all_categories` / `all_services` (approved catalogue only;
- *   pending requests omitted unless is_request=true)
- * - POST /api/getCount types my-franchise & service-management (with franchise_id)
- *
- * total_*     = non-deleted global catalogue rows with is_request: false
- * active_*    = sum of active_* array lengths on the latest mapping per franchise (legacy fallback included)
- * inactive_*  = max(0, total - active)
- *
- * @param {mongoose.Types.ObjectId[]} franchiseIdsScope
- * @param {'category'|'service'} kind
+ * Resolver-driven franchise dashboard counts.
+ * Returns total_assigned, locally_enabled, globally_active, effectively_available per kind.
  */
 const countFranchiseScopedCatalogDashboard = async (franchiseIdsScope, kind) => {
-    const cfg = KIND_CONFIG[kind];
-    if (!cfg) throw new Error(`Invalid catalog kind: ${kind}`);
-
-    if (!franchiseIdsScope || franchiseIdsScope.length === 0) {
-        return { total: 0, active: 0, inactive: 0 };
-    }
-
-    const total = await cfg.CatalogModel.countDocuments({ deleted_at: null, is_request: false });
-
-    let active = 0;
-    for (const franchiseOid of franchiseIdsScope) {
-        const coerced = await resolveLatestCoercedMappingForFranchise(franchiseOid, kind);
-        if (!coerced) continue;
-        active += (coerced[cfg.activeField] || []).length;
-    }
-
-    return {
-        total,
-        active,
-        inactive: Math.max(0, total - active),
-    };
+    return countFranchiseScopedAvailability(franchiseIdsScope, kind);
 };
 
 module.exports = {

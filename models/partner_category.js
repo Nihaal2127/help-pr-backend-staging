@@ -18,6 +18,7 @@ const partnerCategorySchema = new mongoose.Schema(
       type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'service' }],
       default: [],
     },
+    /** Local partner offering preference (is_enabled); effective visibility is resolver-computed. */
     is_active: { type: Boolean, default: true },
     created_at: { type: Date, default: Date.now },
     updated_at: { type: Date, default: Date.now },

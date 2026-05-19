@@ -12,7 +12,16 @@ const {
     validateServiceActiveInactivePartition,
     validateServicesOrderPermutation,
     filterRecordsByFranchiseMappingToggle,
+    applyServicePartitionToServicesList,
+    stripDerivedPartitionArraysFromServiceMapping,
 } = require('../utils/franchise_catalog_lists');
+const {
+    resolveFranchiseLocalEnabledMaps,
+    annotateCatalogRowWithAvailability,
+    isGlobalCatalogRowActive,
+    loadGlobalCategoryActiveMap,
+    enrichFranchiseServiceMappingRecords,
+} = require('../utils/catalog_availability_resolver');
 const { loadFranchiseCallerScope } = require('../utils/franchise_user_scope');
 
 const fail = (status, message, extra = {}) => ({ ok: false, status, message, ...extra });
@@ -191,31 +200,12 @@ const buildSyntheticFranchiseServiceFromFranchiseDoc = async (franchiseOid) => {
 };
 
 /**
- * Every global service (non-deleted), each with franchise_active derived from the latest
- * franchise_service mapping for this franchise (active_services after coerce).
+ * Every global service (non-deleted), annotated with franchise local preference and effective availability.
  */
 const buildAllServicesWithFranchiseMappingStatus = async (franchiseOid) => {
-    const row = await FranchiseService.findOne({
-        franchise_id: franchiseOid,
-        deleted_at: null,
-    })
-        .sort({ created_at: -1 })
-        .lean();
-
-    let plainForCoerce = row;
-    if (!row) {
-        const synthetic = await buildSyntheticFranchiseServiceFromFranchiseDoc(franchiseOid);
-        if (synthetic) {
-            plainForCoerce =
-                typeof synthetic.toObject === 'function' ? synthetic.toObject() : { ...synthetic };
-        }
-    }
-
-    const activeSet = new Set();
-    if (plainForCoerce) {
-        const coerced = coerceLegacyServiceMappingArrays(plainForCoerce);
-        (coerced.active_services || []).forEach((id) => activeSet.add(id.toString()));
-    }
+    const local = await resolveFranchiseLocalEnabledMaps(franchiseOid);
+    const franchiseServiceEnabled = local.ok ? local.serviceEnabled : new Map();
+    const franchiseCategoryEnabled = local.ok ? local.categoryEnabled : new Map();
 
     const allSvcs = await Service.find({ deleted_at: null })
         .populate({
@@ -225,10 +215,42 @@ const buildAllServicesWithFranchiseMappingStatus = async (franchiseOid) => {
         })
         .lean();
 
-    return allSvcs.map((svc) => ({
-        ...svc,
-        franchise_active: activeSet.has(svc._id.toString()),
-    }));
+    const catIds = [
+        ...new Set(
+            allSvcs
+                .map((s) => {
+                    const c = s.category_id;
+                    if (!c) return null;
+                    return c._id ? c._id.toString() : c.toString();
+                })
+                .filter(Boolean)
+        ),
+    ].map((s) => new mongoose.Types.ObjectId(s));
+    const globalCatActive = await loadGlobalCategoryActiveMap(catIds);
+
+    return allSvcs.map((svc) => {
+        const svcKey = svc._id.toString();
+        const catRef = svc.category_id;
+        const catKey = catRef
+            ? catRef._id
+                ? catRef._id.toString()
+                : catRef.toString()
+            : '';
+        const globalServiceActive = isGlobalCatalogRowActive(svc);
+        const globalCategoryActive = catKey ? globalCatActive.get(catKey) === true : false;
+        const franchiseServiceEnabledFlag = franchiseServiceEnabled.get(svcKey) === true;
+        const franchiseCategoryEnabledFlag = catKey
+            ? franchiseCategoryEnabled.get(catKey) === true
+            : false;
+
+        return annotateCatalogRowWithAvailability(svc, {
+            kind: 'service',
+            globalActive: globalServiceActive,
+            globalCategoryActive,
+            franchiseEnabled: franchiseServiceEnabledFlag,
+            franchiseCategoryEnabled: franchiseCategoryEnabledFlag,
+        });
+    });
 };
 
 const normalizeFranchiseServiceSearchInput = (searchRaw) => {
@@ -478,6 +500,8 @@ const list = async (query, userId) => {
             records = filterFranchiseServiceMappingRecordsBySearch(records, searchTerm);
         }
 
+        records = await enrichFranchiseServiceMappingRecords(records);
+
         let all_services;
         if (filter.franchise_id) {
             const sortOpts = parseFranchiseServiceCatalogSort(query);
@@ -526,15 +550,11 @@ const create = async (body) => {
         const validServices = await ensureServices(svcIds);
         if (!validServices) return fail(400, 'One or more service IDs are invalid or deleted.');
 
-        const activeSvc = parsedServices.entries.filter((e) => e.is_active).map((e) => e.service_id);
-        const inactiveSvc = parsedServices.entries.filter((e) => !e.is_active).map((e) => e.service_id);
         const servicesOrderIds = parsedServices.entries.map((e) => e.service_id);
 
         const doc = new FranchiseService({
             franchise_id: parsedFranchise.oid,
             services_list: parsedServices.entries,
-            active_services: activeSvc,
-            inactive_services: inactiveSvc,
             services_order: servicesOrderIds,
             order_number:
                 body.order_number !== undefined && body.order_number !== null
@@ -581,7 +601,7 @@ const getById = async (id, userId, query = {}) => {
             undefined,
             listFlags.isRequestFilter
         ).map((row) => coerceLegacyServiceMappingArrays(row));
-        const [recordOut] = filterRecordsByFranchiseMappingToggle(
+        let [recordOut] = filterRecordsByFranchiseMappingToggle(
             afterCatalog,
             listFlags.mappingActiveFilter,
             'services_list',
@@ -589,6 +609,8 @@ const getById = async (id, userId, query = {}) => {
             'inactive_services',
             'service_id'
         );
+        const enrichedRows = await enrichFranchiseServiceMappingRecords(recordOut ? [recordOut] : []);
+        recordOut = enrichedRows[0] || recordOut;
         return ok(200, {
             message: 'Franchise service fetched successfully.',
             record: recordOut,
@@ -629,13 +651,8 @@ const update = async (id, body, userId) => {
 
             if (auth.isSuper) {
                 record.services_list = parsedServices.entries;
-                record.active_services = parsedServices.entries
-                    .filter((e) => e.is_active)
-                    .map((e) => e.service_id);
-                record.inactive_services = parsedServices.entries
-                    .filter((e) => !e.is_active)
-                    .map((e) => e.service_id);
                 record.services_order = servicesOrderFromEntries;
+                stripDerivedPartitionArraysFromServiceMapping(record);
             } else if (auth.isEmployee) {
                 return fail(403, 'Franchise employees cannot update services list.');
             } else if (auth.isFranchiseAdmin) {
@@ -643,13 +660,8 @@ const update = async (id, body, userId) => {
                     return fail(403, 'Access denied.');
                 }
                 record.services_list = parsedServices.entries;
-                record.active_services = parsedServices.entries
-                    .filter((e) => e.is_active)
-                    .map((e) => e.service_id);
-                record.inactive_services = parsedServices.entries
-                    .filter((e) => !e.is_active)
-                    .map((e) => e.service_id);
                 record.services_order = servicesOrderFromEntries;
+                stripDerivedPartitionArraysFromServiceMapping(record);
             } else {
                 return fail(403, 'Access denied.');
             }
@@ -715,8 +727,12 @@ const update = async (id, body, userId) => {
             );
             if (!partitionCheck.ok) return fail(400, partitionCheck.message);
 
-            record.active_services = activeIds;
-            record.inactive_services = inactiveIds;
+            record.services_list = applyServicePartitionToServicesList(
+                normList,
+                activeIds,
+                inactiveIds
+            );
+            stripDerivedPartitionArraysFromServiceMapping(record);
         }
 
         if (body.services_order !== undefined) {

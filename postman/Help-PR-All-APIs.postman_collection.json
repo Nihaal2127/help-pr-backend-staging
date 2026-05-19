@@ -491,7 +491,7 @@
                 }
               }
             },
-            "description": "Aliases in code: `order-payment`, `financial-order-payments`. Received vs pending order amounts (completed orders). Optional `franchise_id` scopes to that franchise.",
+            "description": "Aliases: `order-payment`, `financial-order-payments`. Returns `total_completed_orders`, `total_in_progress_orders`, `total_partner_pending_amount`, `total_user_pending_amount` from financial_order. Optional `franchise_id` filters by franchise.",
             "url": {
               "raw": "{{baseUrl}}/api/getCount",
               "host": [

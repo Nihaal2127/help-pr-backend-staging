@@ -30,7 +30,10 @@ const {
   buildOrderStatusQueryFilter,
 } = require('../enum/order_status_enum');
 const moment = require("moment-timezone");
-const { countFranchiseScopedCatalogDashboard } = require('../utils/franchise_catalog_dashboard_counts');
+const {
+    countFranchiseScopedCatalogDashboard,
+    countFranchiseScopedRequestedCatalog,
+} = require('../utils/franchise_catalog_dashboard_counts');
 const { loadFranchiseCallerScope } = require('../utils/franchise_user_scope');
 
 const pickFirstNonEmpty = (...values) => {
@@ -251,11 +254,6 @@ const buildFranchiseDashboardCategoryServiceCountRecord = async (franchiseIdsSco
         return out;
     }
 
-    const franchiseUserIds = await User.find({
-        franchise_id: { $in: franchiseIdsScope },
-        deleted_at: null,
-    }).distinct('_id');
-
     const categoryCounts = await countFranchiseScopedCatalogDashboard(
         franchiseIdsScope,
         'category'
@@ -272,16 +270,14 @@ const buildFranchiseDashboardCategoryServiceCountRecord = async (franchiseIdsSco
     out.active_service = serviceCounts.active;
     out.inactive_service = serviceCounts.inactive;
 
-    out.requested_category = await Category.countDocuments({
-        deleted_at: null,
-        is_request: true,
-        requested_by: { $in: franchiseUserIds },
-    });
-    out.requested_service = await Service.countDocuments({
-        deleted_at: null,
-        is_request: true,
-        requested_by: { $in: franchiseUserIds },
-    });
+    out.requested_category = await countFranchiseScopedRequestedCatalog(
+        franchiseIdsScope,
+        'category'
+    );
+    out.requested_service = await countFranchiseScopedRequestedCatalog(
+        franchiseIdsScope,
+        'service'
+    );
 
     return out;
 };

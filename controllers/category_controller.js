@@ -5,6 +5,7 @@ const City = require('../models/city');
 const State = require('../models/state');
 const Service = require('../models/service');
 const franchiseCategoryService = require('../services/franchise_category_service');
+const { applyCatalogRequestScopeForCaller } = require('../utils/franchise_catalog_request_scope');
 const { cascadeGlobalCategoryInactive } = require('../utils/global_catalog_cascade');
 const { applyPagination, applyDropDownFilter } = require('../utils/pagination');
 const { validationResult } = require('express-validator');
@@ -313,16 +314,20 @@ const getAll = async (req, res) => {
         message: 'User not found.',
       });
     }
-    if (caller.type === USER_TYPE_ADMIN) {
-      if (!caller.franchise_id) {
-        filter.requested_by = { $in: [] };
-      } else {
-        const franchiseUserIds = await User.find({
-          franchise_id: caller.franchise_id,
-          deleted_at: null,
-        }).distinct('_id');
-        filter.requested_by = { $in: franchiseUserIds };
-      }
+    const isRequestListing =
+      filter.is_request === true || statusConfig.is_request === true;
+    const scopeResult = await applyCatalogRequestScopeForCaller(
+      filter,
+      caller,
+      req.query,
+      isRequestListing
+    );
+    if (!scopeResult.ok) {
+      return res.status(scopeResult.status).json({
+        success: false,
+        status: scopeResult.status,
+        message: scopeResult.message,
+      });
     }
 
     // Align with POST /api/getCount type 2 (service-management) global totals:

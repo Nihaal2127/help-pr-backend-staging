@@ -174,11 +174,12 @@ MY-FRANCHISE (TYPE 10) — HOW "record" FIELDS ARE COMPUTED
       Area documents whose _id appears on the franchise’s area_id list(s),
       deleted_at null; inactive = is_active false; active = is_active not false.
 
-  Global catalogue size (same for all franchises)
+  Global catalogue size (approved rows only — is_request: false)
     total_category
-      Count of all non-deleted Category documents (global catalogue).
+      Count of non-deleted Category documents with is_request false.
     total_service
-      Count of all non-deleted Service documents (global catalogue).
+      Count of non-deleted Service documents with is_request false.
+      Matches franchise-category|service getAll all_* when pending rows are hidden.
 
   Franchise mapping vs catalogue (categories)
     active_category
@@ -200,6 +201,8 @@ MY-FRANCHISE (TYPE 10) — HOW "record" FIELDS ARE COMPUTED
     requested_category, requested_service
       Global Category / Service rows with is_request true and requested_by in the
       set of user _ids that have franchise_id in the resolved franchise scope.
+      Pair with GET /api/category|service/getAll?status=requested* (and for super
+      admin / staff also pass franchise_id when viewing one franchise).
 
 --------------------------------------------------------------------------------
 SUCCESS RESPONSE (200)

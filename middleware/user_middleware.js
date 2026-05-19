@@ -12,6 +12,35 @@ const {
 const { isValidGender, normalizeGender } = require("../enum/gender_enum");
 
 const MIN_USER_AGE_YEARS = 18;
+const MIN_NAME_LENGTH = 2;
+const MAX_NAME_LENGTH = 50;
+/** Letters (A–Z, a–z) and spaces only — no digits or special characters. */
+const NAME_FORMAT_REGEX = /^[a-zA-Z ]+$/;
+
+/**
+ * Validates person name: 2–50 chars, letters and spaces only.
+ * @returns {string|null} trimmed name, or null after sending 400 response
+ */
+const validatePersonName = (name, res) => {
+  const trimmed = String(name).trim();
+  if (trimmed.length < MIN_NAME_LENGTH || trimmed.length > MAX_NAME_LENGTH) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: `Name must be between ${MIN_NAME_LENGTH} and ${MAX_NAME_LENGTH} characters.`,
+    });
+    return null;
+  }
+  if (!NAME_FORMAT_REGEX.test(trimmed)) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Name must contain letters only; digits and special characters are not allowed.',
+    });
+    return null;
+  }
+  return trimmed;
+};
 
 const calculateAgeFromBirthDate = (birthDate) => {
   const today = new Date();
@@ -482,6 +511,9 @@ const createUserMiddleware = async (req, res, next) => {
       message: 'Name is required.'
     });
   }
+  const validatedName = validatePersonName(name, res);
+  if (validatedName === null) return;
+  req.body.name = validatedName;
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!email || email.trim() === '') {
     return res.status(400).json({
@@ -847,6 +879,11 @@ const updateUserMiddleware = async (req, res, next) => {
       status: 400,
       message: 'Name is required.'
     });
+  }
+  if (name !== undefined) {
+    const validatedName = validatePersonName(name, res);
+    if (validatedName === null) return;
+    req.body.name = validatedName;
   }
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (email !== undefined && email.trim() === '') {

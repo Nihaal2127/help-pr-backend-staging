@@ -262,25 +262,6 @@ function buildUserListRoleFilter(caller, { franchiseIdFilter, type, partnerListV
       message: 'You are not allowed to access this user type.',
     };
   }
-  const pendingPartnerList =
-    type === USER_TYPE_PARTNER &&
-    partnerListVerificationStatus === 1 &&
-    callerFranchise != null;
-
-  if (pendingPartnerList) {
-    return {
-      ok: true,
-      roleFilter: {
-        type: { $in: allowedTypes },
-        $or: [
-          { franchise_id: callerFranchise },
-          { franchise_id: null },
-          { franchise_id: { $exists: false } },
-        ],
-      },
-    };
-  }
-
   return {
     ok: true,
     roleFilter: {

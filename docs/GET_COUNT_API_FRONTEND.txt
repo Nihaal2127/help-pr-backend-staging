@@ -44,8 +44,9 @@ OPTIONAL — franchise scope
   location-management           1
   service-management            2
   user-management                 3
-  financials                    4   (alias: order-payment → 4)
+  financials                    4   (aliases: order-payment, financial-order-payments → 4)
   order-payment                 4
+  financial-order-payments      4
   partner-payment               5
   franchise-management          6
   expenses                      7

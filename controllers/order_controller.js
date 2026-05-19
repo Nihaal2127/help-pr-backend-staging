@@ -47,6 +47,9 @@ const {
   applyNestedResourcesOnUpdate,
 } = require('../services/order_nested_resources_service');
 const {
+  applyOrderFieldsAndServicesUpdate,
+} = require('../services/order_field_update_service');
+const {
   resolveOrderListScope,
   assertOrderRecordAccess,
 } = require('../utils/order_access');
@@ -1012,6 +1015,31 @@ const update = async (req, res) => {
         status: 404,
         message: 'No record found'
       });
+    }
+
+    const access = await assertOrderRecordAccess(req, order);
+    if (!access.ok) {
+      return res.status(access.status).json({
+        success: false,
+        status: access.status,
+        message: access.message,
+      });
+    }
+
+    try {
+      const fieldUpdateResult = await applyOrderFieldsAndServicesUpdate(order, req.body);
+      if (fieldUpdateResult.triggerRepriceFromLine) {
+        req.body.total_service_charge = fieldUpdateResult.lineChargeForReprice;
+      }
+    } catch (err) {
+      if (err instanceof OrderCreationError) {
+        return res.status(err.status).json({
+          success: false,
+          status: err.status,
+          message: err.message,
+        });
+      }
+      throw err;
     }
 
     let repriceResult = null;

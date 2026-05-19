@@ -2,8 +2,8 @@
 
 This document describes the **order**, **order line item (order_service)**, **additional charges**, **order payments**, and **Razorpay** integration in `help-pr-backend-staging`. Share it with frontend developers together with:
 
-- **`postman/Help-PR-Orders-Module.postman_collection.json`** — core order CRUD (5 requests)
-- **`postman/Help-PR-Order-Charges-Payments.postman_collection.json`** — additional charges + payment ledger
+- **`postman/Help-PR-All-APIs.postman_collection.json`** — import this single collection (folders **Order**, **Order additional charges**, **Order payments**)
+- Source snapshots (merge inputs): `postman/archive/Help-PR-Orders-Module.postman_collection.json`, `postman/archive/Help-PR-Order-Charges-Payments.postman_collection.json`
 
 > **Recent `getAll` changes:** See **`docs/ORDER_GETALL_API_CHANGES.md`** for role scope, date filters, search, and list response updates (aligned with quote `getAll`).
 
@@ -319,18 +319,54 @@ Standalone **`/api/order-additional-charges`** and **`/api/order-payments`** rou
 
 ---
 
-## 8. Update order — status and repricing
+## 8. Update order — fields, status, repricing, nested resources
 
-`PUT /api/order/update/:id` supports:
+`PUT /api/order/update/:id` supports (send only fields you are changing):
+
+### Order header
 
 | Body field | Effect |
 |------------|--------|
-| `order_status` | Same as before; syncs to non-cancelled/refunded line items |
-| `total_service_charge` (or `service_price`) | Reprice using **saved** `tax_percent`, `commission_percent`, `minimum_deposit_percent` on the order |
-| `offer_id` | Apply or change offer (fresh row from **`offers`** table); **`order_offer`** fully replaced |
-| `offer_id: null` | Remove offer and clear discount |
+| `user_id` | Customer; updates `user_unique_id` from user record if omitted |
+| `user_unique_id` | Denormalized customer code (optional with `user_id`) |
+| `partner_id` | Primary partner (`null` to clear) |
+| `employee_id` | Assigned employee (`null` to clear) |
+| `franchise_id` | Franchise (`null` to clear) |
+| `city_id`, `category_id`, `service_id` | Catalog references |
+| `address`, `address_id` | Display / linked address |
+| `order_date` | Order date |
+| `order_description`, `customer_description` | Text fields |
+| `from_date`, `to_date`, `work_hours_per_day`, `total_work_hours`, `work_start_time`, `work_end_time` | Schedule |
+| `payment_schedule_type` | `single` \| `installments` |
+| `customer_payment_method` | e.g. `upi`, `cash` |
+| `type` | Order type (`1` requires `partner_id`) |
 
-**Do not** send `is_paid` — it is **derived** from customer payments (see §6 payment status).
+### Status and pricing
+
+| Body field | Effect |
+|------------|--------|
+| `order_status` | Syncs to non-cancelled/refunded line items |
+| `total_service_charge` (or `service_price`) | Reprice using **saved** % on the order |
+| `offer_id` | Apply/change offer; **`order_offer`** replaced |
+| `offer_id: null` | Remove offer |
+
+### Service line (`service_items`)
+
+Array or `{ update: [...] }`. Each item may include `_id` (order_service id); if omitted and the order has **one** line, that line is updated.
+
+| Line field | Effect |
+|------------|--------|
+| `user_id`, `partner_id`, `category_id`, `service_id` | Line + mirrored order header where applicable |
+| `service_date`, `service_from_time`, `service_to_time` | Execution window |
+| `service_status` | Line status string |
+| `total_service_charge` / `service_price` | Triggers **reprice** when order-level charge not sent |
+| `is_paid` | Line-level flag only (order `payment_status` still from ledger) |
+
+### Nested charges & payments
+
+See §7 nested update section below.
+
+**Do not** send `is_paid` on the **order** — it is **derived** from customer payments (see §6).
 
 **Reprice response** (when charge or offer changes): includes `pricing` object and `order_offer` when applicable.
 
@@ -342,7 +378,7 @@ sub_total           = total_service_charge + commission_amount
 
 ### Nested additional charges & payments (update)
 
-Optional on **`PUT /api/order/update/:id`** — object form (recommended):
+Optional on the same **`PUT /api/order/update/:id`** — object form (recommended):
 
 ```json
 {
@@ -387,9 +423,11 @@ Processing order: **delete → update → create** for each resource. Charges tr
 
 ---
 
-## 10. Postman collections
+## 10. Postman
 
-### Core orders — `postman/Help-PR-Orders-Module.postman_collection.json`
+Import **`postman/Help-PR-All-APIs.postman_collection.json`** only (see `postman/README.md`).
+
+### Core orders — folder **Order**
 
 | # | Request | Route |
 |---|---------|--------|
@@ -401,11 +439,11 @@ Processing order: **delete → update → create** for each resource. Charges tr
 
 Variables: `baseUrl`, `accessToken`, `orderId`, `orderServiceId`, filter vars (`search`, `from_date`, `to_date`, `orderStatus`, `paymentStatus`, `franchiseId`, etc.), `offerId`.
 
-### Charges & payments — `postman/Help-PR-Order-Charges-Payments.postman_collection.json`
+### Charges & payments — folders **Order additional charges** / **Order payments**
 
-Legacy standalone CRUD for `/api/order-additional-charges` and `/api/order-payments` (optional if you use nested payloads on create/update). Variables: `orderId`, `additionalChargeId`, `orderPaymentId`.
+Standalone CRUD for `/api/order-additional-charges` and `/api/order-payments` (optional if you use nested payloads on create/update). Variables: `orderId`, `additionalChargeId`, `orderPaymentId`.
 
-Other routes (`serviceUpdate`, `cancle`, `getCustomerOrder`, `order_service`, `financial-order`, `getCount`, Razorpay) are documented in §6 but not in these collections.
+Other routes (`serviceUpdate`, `cancle`, `getCustomerOrder`, `order_service`, `financial-order`, `getCount`, Razorpay) are in the same All APIs collection or documented in §6.
 
 Replace placeholder ObjectIds in example bodies with real IDs from your environment.
 

@@ -47,6 +47,7 @@ const contentManagementRoutes = require('./routes/content_management_routes');
 const expenseCategoryManagementRoutes = require('./routes/expense_category_management_routes');
 const expenseManagementRoutes = require('./routes/expense_management_routes');
 const financialOrderRoutes = require('./routes/financial_order_routes');
+const partnerPayoutRoutes = require('./routes/partner_payout_routes');
 const { chatRoutes, registerChatSocket } = require('./src/modules/chat');
 const { publicImageUrlsResponseMiddleware } = require('./middleware/public_image_urls_response_middleware');
 
@@ -140,6 +141,7 @@ app.use('/api/content-management', contentManagementRoutes);
 app.use('/api/expense-category-management', expenseCategoryManagementRoutes);
 app.use('/api/expense-management', expenseManagementRoutes);
 app.use('/api/financial-order', financialOrderRoutes);
+app.use('/api/partner_payout', partnerPayoutRoutes);
 app.use('/api/chat', chatRoutes);
 
 // app.use('/login', loginRoute);

@@ -2,6 +2,8 @@ const axios = require('axios');
 const crypto = require('crypto');
 const Order = require('../models/order');
 const OrderService = require('../models/order_services');
+const OrderPayment = require('../models/order_payment');
+const { syncOrderPaymentStatus } = require('../services/order_payment_status_service');
 const path = require('path');
 
 const generatePaymentLink = async (name, email, contact, amount) => {
@@ -68,15 +70,34 @@ const handleRazorpayWebhook = async (req, res) => {
         const order = await Order.findOne({ transaction_id: paymentLinkId });
 
         if (order) {
-            order.is_paid = true;
-            await order.save();
-            if (order.service_items && order.service_items.length) {
-                await OrderService.updateMany(
-                    { _id: { $in: order.service_items } },
-                    { $set: { is_paid: true } }
-                );
+            const amount = Number(order.total_price) || 0;
+            const existing = await OrderPayment.findOne({
+                order_id: order._id,
+                payer_type: 'customer',
+                transaction_reference: paymentLinkId,
+                deleted_at: null,
+            });
+
+            if (!existing && amount > 0) {
+                await OrderPayment.create({
+                    order_id: order._id,
+                    payer_type: 'customer',
+                    amount,
+                    payment_method: 'online',
+                    status: 'completed',
+                    transaction_reference: paymentLinkId,
+                    paid_at: new Date(),
+                    notes: 'Razorpay payment link',
+                });
+            } else if (existing && existing.status !== 'completed') {
+                existing.status = 'completed';
+                existing.paid_at = new Date();
+                existing.updated_at = new Date();
+                await existing.save();
             }
-            console.log(`✅ Marked order ${order._id} as paid`);
+
+            await syncOrderPaymentStatus(order._id);
+            console.log(`✅ Order ${order._id} payment synced from Razorpay`);
         } else {
             console.log('⚠️ No matching order found for payment link ID:', paymentLinkId);
         }

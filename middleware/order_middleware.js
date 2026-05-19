@@ -1,391 +1,674 @@
 const User = require('../models/user')
+
 const City = require('../models/city')
+
 const Category = require('../models/category')
+
 const Service = require('../models/service')
+const Offer = require('../models/offer')
+
 const { checkObjectIdExists } = require('../validator/id_validator')
-const { isValidPrice } = require('../validator/form_validator')
+
+const { resolveTotalServiceCharge } = require('../utils/order_pricing')
 const { isValidOrderStatus } = require('../enum/order_status_enum')
+
+const isValidPositiveAmount = (value) => {
+
+    const n = Number(value);
+
+    return Number.isFinite(n) && n > 0;
+
+};
+
+
+
 const createOrderMiddleware = async (req, res, next) => {
+
     const body = req.body;
+
     const {
+
         user_id,
+
         user_unique_id,
+
         city_id,
+
         category_id,
+
         is_paid,
+
         payment_mode_id,
+
         transaction_id,
+
         created_by_id,
+
         order_date,
+
         address,
-        sub_total,
-        tax,
+
         discount_amount,
-        user_paltform_fee,
-        partner_commison_platform_fee,
-        total_price,
-        admin_earning,
-        type,
+
+        offer_id,
+
+        service_id,
+
+        service_items,
+
     } = body;
+
 
 
     const userResult = await checkObjectIdExists(User, user_id, 'user');
+
     if (userResult.exists === false) {
+
         return res.status(409).json({
+
             success: false,
+
             status: 409,
+
             message: userResult.message,
+
         });
+
     }
+
     if (!user_unique_id || user_unique_id.trim() === '') {
+
         return res.status(409).json({
+
             success: false,
+
             status: 409,
+
             message: 'User unique id is requiered.'
+
         });
+
     }
+
     const cityResult = await checkObjectIdExists(City, city_id, 'city');
+
     if (cityResult.exists === false) {
+
         return res.status(409).json({
+
             success: false,
+
             status: 409,
+
             message: cityResult.message,
+
         });
+
     }
+
     const categoryResult = await checkObjectIdExists(Category, category_id, 'category');
+
     if (categoryResult.exists === false) {
+
         return res.status(409).json({
+
             success: false,
+
             status: 409,
+
             message: categoryResult.message,
+
         });
+
     }
+
     if (is_paid === undefined) {
+
         return res.status(409).json({
+
             success: false,
+
             status: 409,
+
             message: 'Paymemt status is requiered.'
 
+
+
         });
+
     }
+
     if (is_paid === true) {
+
         if (!transaction_id || transaction_id.trim() === '') {
+
             return res.status(409).json({
+
                 success: false,
+
                 status: 409,
+
                 message: 'Transaction id is requiered.'
+
             });
+
         }
+
     }
+
+
 
     const createdByResult = await checkObjectIdExists(User, created_by_id, 'user');
+
     if (createdByResult.exists === false) {
+
         return res.status(409).json({
+
             success: false,
+
             status: 409,
+
             message: createdByResult.message,
+
         });
+
     }
+
+
 
     if (!order_date || order_date === null || order_date.trim() === '') {
+
         return res.status(409).json({
+
             success: false,
+
             status: 409,
+
             message: 'Fitting date is requiered.'
+
         });
-    }
-    if (!address || address === null) {
-        return res.status(409).json({
-            success: false,
-            status: 409,
-            message: 'Address date requiered.'
-        });
-    }
-    if (isValidPrice(sub_total) === false) {
-        return res.status(409).json({
-            success: false,
-            status: 409,
-            message: 'Sub total is required.'
-        });
+
     }
 
-    if (isValidPrice(tax) === false) {
+    if (!address || address === null) {
+
         return res.status(409).json({
+
             success: false,
+
             status: 409,
-            message: 'Tax price is required.'
+
+            message: 'Address date requiered.'
+
         });
+
     }
-    if (discount_amount && isValidPrice(discount_amount) === false) {
+
+
+
+    const singleItem =
+
+        Array.isArray(service_items) && service_items.length === 1
+
+            ? service_items[0]
+
+            : {};
+
+    const totalCharge = resolveTotalServiceCharge(body, singleItem);
+
+    if (!isValidPositiveAmount(totalCharge)) {
+
         return res.status(409).json({
+
             success: false,
+
             status: 409,
-            message: 'Discount amount is invalid.'
+
+            message: 'total_service_charge (or service_price) is required and must be greater than 0.',
+
         });
+
     }
-    if (isValidPrice(user_paltform_fee) === false) {
+
+
+
+    const resolvedServiceId = service_id ?? singleItem.service_id;
+
+    const serviceResult = await checkObjectIdExists(Service, resolvedServiceId, 'service');
+
+    if (serviceResult.exists === false) {
+
         return res.status(409).json({
+
             success: false,
+
             status: 409,
-            message: 'Platform fee is required.'
+
+            message: 'Valid service_id is required.',
+
         });
+
     }
-    if (isValidPrice(partner_commison_platform_fee) === false) {
-        return res.status(409).json({
-            success: false,
-            status: 409,
-            message: 'Partner commison and platform fee is required.'
-        });
+
+
+
+    if (discount_amount !== undefined && discount_amount !== null && discount_amount !== '') {
+
+        const disc = Number(discount_amount);
+
+        if (!Number.isFinite(disc) || disc < 0) {
+
+            return res.status(409).json({
+
+                success: false,
+
+                status: 409,
+
+                message: 'Discount amount is invalid.',
+
+            });
+
+        }
+
     }
-    if (isValidPrice(admin_earning) === false) {
-        return res.status(409).json({
-            success: false,
-            status: 409,
-            message: 'Admin is required.'
-        });
+
+    if (offer_id !== undefined && offer_id !== null && String(offer_id).trim() !== '') {
+
+        if (discount_amount !== undefined && discount_amount !== null && discount_amount !== '') {
+
+            return res.status(409).json({
+
+                success: false,
+
+                status: 409,
+
+                message: 'Send offer_id or discount_amount, not both.',
+
+            });
+
+        }
+
+        const offerResult = await checkObjectIdExists(Offer, offer_id, 'offer');
+
+        if (offerResult.exists === false) {
+
+            return res.status(409).json({
+
+                success: false,
+
+                status: 409,
+
+                message: offerResult.message,
+
+            });
+
+        }
+
     }
-    if (isValidPrice(total_price) === false) {
-        return res.status(409).json({
-            success: false,
-            status: 409,
-            message: 'Total price is required.'
-        });
-    }
+
     next();
+
 };
 
+
+
 const checkItemsMiddleware = async (req, res, next) => {
+
     const items = req.body.service_items;
+
     const type = req.body.type;
+
     if (!Array.isArray(items)) {
+
         return res.status(409).json({
+
             success: false,
+
             status: 409,
+
             message: 'service_items must be an array.',
+
         });
+
     }
+
     if (items.length !== 1) {
+
         return res.status(409).json({
+
             success: false,
+
             status: 409,
+
             message: 'Each order must contain exactly one service; service_items must have length 1.',
+
         });
+
     }
+
+
 
     for (let i = 0; i < items.length; i++) {
+
         const {
+
             user_id,
+
             partner_id,
+
             category_id,
+
             service_id,
+
             service_date,
+
             service_from_time,
+
             service_to_time,
-            sub_total,
-            tax,
-            service_price,
-            user_paltform_fee,
-            partner_commison_platform_fee,
-            partner_earning,
-            total_price,
-            admin_earning,
+
         } = items[i];
 
+
+
         const userResult = await checkObjectIdExists(User, user_id, 'user');
+
         if (userResult.exists === false) {
+
             return res.status(409).json({
+
                 success: false,
+
                 status: 409,
+
                 message: userResult.message,
+
             });
+
         }
+
         if (type === 1) {
+
             const partnerResult = await checkObjectIdExists(User, partner_id, 'partner');
+
             if (partnerResult.exists === false) {
+
                 return res.status(409).json({
+
                     success: false,
+
                     status: 409,
+
                     message: partnerResult.message,
+
                 });
+
             }
+
         }
+
+
+
 
 
         const categoryResult = await checkObjectIdExists(Category, category_id, 'category');
+
         if (categoryResult.exists === false) {
+
             return res.status(409).json({
+
                 success: false,
+
                 status: 409,
+
                 message: categoryResult.message,
+
             });
+
         }
-        const serviceResult = await checkObjectIdExists(Service, service_id, 'city');
+
+        const serviceResult = await checkObjectIdExists(Service, service_id, 'service');
+
         if (serviceResult.exists === false) {
+
             return res.status(409).json({
+
                 success: false,
+
                 status: 409,
+
                 message: serviceResult.message,
+
             });
+
         }
+
         if (!service_date || service_date === null) {
+
             return res.status(409).json({
+
                 success: false,
+
                 status: 409,
+
                 message: 'Service date requiered.'
+
             });
+
         }
+
         if (!service_from_time || service_from_time === null) {
+
             return res.status(409).json({
+
                 success: false,
+
                 status: 409,
+
                 message: 'Service start time requiered.'
+
             });
+
         }
+
         if (!service_to_time || service_to_time === null) {
+
             return res.status(409).json({
+
                 success: false,
+
                 status: 409,
+
                 message: 'Service end time requiered.'
+
             });
+
         }
-        if (isValidPrice(sub_total) === false) {
+
+
+
+        const lineCharge = resolveTotalServiceCharge(req.body, items[i]);
+
+        if (!isValidPositiveAmount(lineCharge)) {
+
             return res.status(409).json({
+
                 success: false,
+
                 status: 409,
-                message: 'Sub total is required.'
+
+                message: 'total_service_charge (or service_price) on service_items is required and must be greater than 0.',
+
             });
+
         }
-        if (isValidPrice(tax) === false) {
-            return res.status(409).json({
-                success: false,
-                status: 409,
-                message: 'Tax price is required.'
-            });
-        }
-        if (isValidPrice(service_price) === false) {
-            return res.status(409).json({
-                success: false,
-                status: 409,
-                message: 'Service price is required.'
-            });
-        }
-        if (isValidPrice(user_paltform_fee) === false) {
-            return res.status(409).json({
-                success: false,
-                status: 409,
-                message: 'Platform fee is required.'
-            });
-        }
-        if (isValidPrice(partner_commison_platform_fee) === false) {
-            return res.status(409).json({
-                success: false,
-                status: 409,
-                message: 'Partner commison and platform fee is required.'
-            });
-        }
-        if (isValidPrice(partner_earning) === false) {
-            return res.status(409).json({
-                success: false,
-                status: 409,
-                message: 'Partner earning is required.'
-            });
-        }
-        if (isValidPrice(admin_earning) === false) {
-            return res.status(409).json({
-                success: false,
-                status: 409,
-                message: 'Admin is required.'
-            });
-        }
-        if (isValidPrice(total_price) === false) {
-            return res.status(409).json({
-                success: false,
-                status: 409,
-                message: 'Total price is required.'
-            });
-        }
+
     }
+
     next();
+
 };
+
+
 
 const updateOrderServiceMiddleware = async (req, res, next) => {
+
     const body = req.body;
+
     const {
+
         partner_id,
+
         service_status,
+
         service_date,
+
         service_from_time,
+
         service_to_time,
+
     } = body;
 
+
+
     const partnerResult = await checkObjectIdExists(User, partner_id, 'partner');
+
     if (partner_id !== undefined && partnerResult.exists === false) {
+
         return res.status(409).json({
+
             success: false,
+
             status: 409,
+
             message: partnerResult.message,
+
         });
+
     }
+
     if (
+
         service_status !== undefined &&
+
         service_status !== null &&
+
         String(service_status).trim() !== '' &&
+
         !isValidOrderStatus(service_status)
+
     ) {
+
         return res.status(409).json({
+
             success: false,
+
             status: 409,
+
             message: 'Service status is invalid. Use: in-progress, completed, cancelled, refunded.',
+
         });
+
     }
+
     if (service_date !== undefined && (!service_date  || service_date === null || service_date.trim() === '')) {
+
         return res.status(409).json({
+
             success: false,
+
             status: 409,
+
             message: 'Service date is requiered.'
+
         });
+
     }
+
     if (service_from_time !== undefined && (!service_from_time  || service_from_time === null || service_from_time.trim() === '')) {
+
         return res.status(409).json({
+
             success: false,
+
             status: 409,
+
             message: 'Service from time is requiered.'
+
         });
+
     }
+
     if (service_to_time !== undefined && (!service_to_time  || service_to_time === null || service_to_time.trim() === '')) {
+
         return res.status(409).json({
+
             success: false,
+
             status: 409,
+
             message: 'Service to time is requiered.'
+
         });
+
     }
+
     next();
+
 };
 
+
+
 const payComissionMiddleware = (req, res, next) => {
+
     const items = req.body.order_service_ids;
+
     const partner_paid_status = req.body.partner_paid_status;
+
     if(partner_paid_status === undefined){
+
         return res.status(400).json({
+
             success: false,
+
             status: 400,
+
             message: 'Paymemt statsu missing.',
+
         });
+
     }
+
     if(partner_paid_status < 1 || partner_paid_status > 3){
+
         return res.status(400).json({
+
             success: false,
+
             status: 400,
+
             message: 'Paymemt statsu invalid.',
+
         });
+
     }
+
     if (!items || !Array.isArray(items) || items.length === 0) {
+
         return res.status(400).json({
+
             success: false,
+
             status: 400,
+
             message: 'Order id must be a non-empty array.',
+
         });
+
     }
+
     next();
+
 };
+
 module.exports = { createOrderMiddleware, checkItemsMiddleware,updateOrderServiceMiddleware,payComissionMiddleware };
+

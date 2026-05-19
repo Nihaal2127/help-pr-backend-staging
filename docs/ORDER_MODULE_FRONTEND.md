@@ -29,7 +29,7 @@ Order (1) ──has──▶ service_items[] ──▶ OrderService (1 per order
 
 - **Order** holds customer-facing totals, payment flags, quote-aligned fields (partner, franchise, schedule, etc.), and references **`order_service`** documents via **`service_items`** (array of ObjectIds; **length must be 1** on create).
 - **OrderService** holds per-job execution fields (partner, service window, line pricing, **`is_paid`**, **`partner_paid_status`**, etc.).
-- **`total_price`** on the order is **recalculated** server-side from base amounts + additional charges − discount (see §5). The **`total_price`** sent on create is validated by middleware but **overwritten** to match the server formula after save.
+- **`total_price`** is **calculated on the server** from `total_service_charge`, service table rates, taxed additional charges, and discount (see §5). Optional client mirrors are compared; **server values are always saved**.
 
 ---
 
@@ -47,6 +47,8 @@ Order (1) ──has──▶ service_items[] ──▶ OrderService (1 per order
 **`order_status_info`** — timeline array with one entry per status (`status` string + `updated_at`). On create, only `in-progress` has a timestamp.
 
 **Update order** (`PUT /api/order/update/:id`): pass `order_status` as a string; any valid transition is allowed (e.g. `in-progress` → `completed`, `completed` → `refunded`).
+
+**Reprice on update** (optional, same endpoint): send **`total_service_charge`** and/or **`offer_id`**. Server keeps **`tax_percent`**, **`commission_percent`**, **`minimum_deposit_percent`** from the saved order; recalculates **`commission_amount`**, **`tax_amount`**, **`total_price`**, etc. Offer rows are **replaced** from the live **`offers`** table (not merged with old `order_offer`). Send **`offer_id`: `null`** to remove an offer.
 
 **Partner payout field** on **`order_service`**: **`partner_paid_status`** — `1` Pending, `2` Paid, `3` return (per existing comment).
 
@@ -88,15 +90,23 @@ Order (1) ──has──▶ service_items[] ──▶ OrderService (1 per order
 
 | Field | Notes |
 |-------|--------|
-| `sub_total`, `tax` | Base components |
-| `discount_amount`, `discount_percent`, `discount_code`, `discount_reason` | Discounts; **only `discount_amount` affects `total_price`** in the current helper |
-| `user_paltform_fee`, `partner_commison_platform_fee` | Fees (spelling matches API) |
-| `additional_charges_total` | **Maintained by server** when additional charges change |
-| `admin_commission` | Reporting; **not** subtracted from `total_price` in current formula |
-| `admin_earning` | As before |
-| `total_price` | **Recalculated** (see §5) |
-| `min_deposit` | Stored; not in total formula yet |
-| `is_paid`, `payment_mode_id`, `transaction_id` | Legacy + Razorpay link id |
+| `total_service_charge` | **Required on create** — base service amount for booked hours (frontend). Alias: `service_price`. |
+| `commission_percent`, `commission_amount` | Snapshotted from `service.commission` (%); amount = charge × commission% |
+| `sub_total` | `total_service_charge + commission_amount` (before tax) |
+| `tax_percent`, `tax_amount` | Snapshotted from `service.tax` (%); tax on **(sub_total − discount)** |
+| `minimum_deposit_percent`, `minimum_deposit_amount` | From `service.minimum_deposit` (%); amount = **final** `total_price` × % |
+| `discount_amount`, `discount_percent`, `discount_code`, `discount_reason` | Set by server when **`offer_id`** applied (`discount_amount` = offer `total_discount`) |
+| `offer_id`, `order_offer_id` | Optional offer on create; see **`order_offer`** snapshot on GET detail |
+| `additional_charges_subtotal`, `additional_charges_tax`, `additional_charges_total` | **Maintained by server** (each charge: pre-tax `amount` + tax) |
+| `admin_commission` | Same as `commission_amount` (reporting) |
+| `admin_earning` | Defaults to `commission_amount` if omitted on create |
+| `total_price` | **Server-calculated** (see §5); client values compared, server wins on mismatch |
+| `min_deposit` | Legacy alias of `minimum_deposit_amount` |
+| `user_paltform_fee`, `partner_commison_platform_fee` | Legacy; new orders set platform fee **0**, partner fee = `commission_amount` |
+| `payment_status` | **Derived:** `unpaid` \| `paid` \| `partially_paid` \| `refund` \| `partially_refund` (from customer `order_payment` rows) |
+| `customer_paid_amount`, `customer_refunded_amount`, `customer_net_paid`, `customer_due_amount` | Breakdown maintained on sync |
+| `is_paid` | **Derived** — `true` only when `payment_status === paid` (legacy filters) |
+| `payment_mode_id`, `transaction_id` | Legacy + Razorpay link id |
 | `payment_schedule_type` | `"single"` \| `"installments"` |
 | `customer_payment_method` | Label, e.g. cash / upi / card / online / bank_transfer / other |
 
@@ -104,15 +114,29 @@ Order (1) ──has──▶ service_items[] ──▶ OrderService (1 per order
 
 ## 5. How `total_price` is calculated
 
-After create and whenever additional charges are added/updated/removed, the server runs **`recalculateOrderTotals`**:
+**On create**, the server loads the global **`service`** by `service_id`, snapshots `tax`, `commission`, and `minimum_deposit` percentages, and computes:
 
 ```text
-total_price = sub_total + tax + user_paltform_fee + partner_commison_platform_fee
-              + sum(order_additional_charge.amount for non-deleted rows)
-              − discount_amount   (treated as 0 if null/undefined)
+commission_amount   = total_service_charge × commission% / 100
+sub_total           = total_service_charge + commission_amount
+discount_amount     = offer total_discount (optional)
+taxable_subtotal    = sub_total − discount_amount
+tax_amount          = taxable_subtotal × tax% / 100
 ```
 
-Result is clamped to **≥ 0**. **`admin_commission`** does not change this total in the current implementation.
+**After create** and whenever additional charges change, **`recalculateOrderTotals`** runs:
+
+```text
+per additional charge: charge_tax = amount × tax_percent / 100
+                       charge_total = amount + charge_tax
+
+total_price = taxable_subtotal + tax_amount + sum(charge_total)
+minimum_deposit_amount = total_price × minimum_deposit_percent / 100
+```
+
+Optional client breakdown fields are **compared**; on mismatch the **server values are saved** and `pricing_mismatch: true` is returned on create.
+
+Result is clamped to **≥ 0**.
 
 **Razorpay payment link** (`payment_mode_id === "2"`): the amount sent to Razorpay is **`total_price` after** the in-memory compute at create time; after save, **`recalculateOrderTotals`** runs again (same if no extra charges yet).
 
@@ -128,7 +152,7 @@ Prefix **`/api/order`** unless noted.
 | GET | `/api/order/get/:id` | Full order detail (populated + `additional_charges` + `order_payments`) |
 | GET | `/api/order/getAll` | Paginated list — see **getAll query parameters** below |
 | GET | `/api/order/getCustomerOrder` | Customer orders — **query** `user_id` required |
-| PUT | `/api/order/update/:id` | Update `order_status`, `is_paid` (and sync `is_paid` to non-cancelled line items) |
+| PUT | `/api/order/update/:id` | Update `order_status` and/or **reprice** via `total_service_charge` / `offer_id` — **do not** set `is_paid` manually |
 | PUT | `/api/order/serviceUpdate/:orderServiceId` | Update line item fields (see middleware) |
 | PUT | `/api/order/cancleService/:orderId` | Cancel one line — body `service_items_id` |
 | PUT | `/api/order/cancle/:id` | Cancel whole order — body `cancellation_reasone` |
@@ -181,7 +205,19 @@ List responses use **case-insensitive collation** for sort. Each record includes
 
 **`payer_type`:** `customer` = money from/to customer context; `partner` = partner-side / payout context (business meaning is up to product).
 
-**`status`:** `pending` \| `completed` \| `failed` \| `refunded`.
+**`status`:** `pending` \| `completed` \| `failed` \| `refunded`. After any change, server runs **`syncOrderPaymentStatus`** on the order.
+
+### Customer payment status (on `order`)
+
+| `payment_status` | When |
+|------------------|------|
+| `unpaid` | No customer `order_payment` rows |
+| `paid` | Sum of **completed** customer payments ≥ `order.total_price` (±₹0.01) |
+| `partially_paid` | Some **completed** payment, net collected &lt; total due |
+| `refund` | **Refunded** amount covers all completed payments or full order value |
+| `partially_refund` | Some refund recorded, not a full refund |
+
+Only **`payer_type: customer`** rows count. **`order.total_price`** includes additional charges. Pending/failed payments do not count as paid.
 
 Same **403** participant rule as additional charges.
 
@@ -197,7 +233,7 @@ Same **403** participant rule as additional charges.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/razorpayWebhook` | **Server-to-server** (Razorpay); signs `payment_link.paid`, sets order + line items **`is_paid`** |
+| POST | `/razorpayWebhook` | **Server-to-server** (Razorpay); creates **completed** customer `order_payment`, syncs **`payment_status`** |
 | GET | `/callback` | Browser redirect success page |
 
 Frontend normally only opens **`payment_url`** returned from order create when `payment_mode_id === "2"`.
@@ -212,13 +248,20 @@ Top-level fields validated by **`createOrderMiddleware`** (in addition to **`ser
 - `is_paid` (boolean); if `true`, **`transaction_id`** required
 - **`order_status`** is not required on create; server sets **`in-progress`** automatically.
 - `order_date`, `address` (string)
-- `sub_total`, `tax`, `user_paltform_fee`, `partner_commison_platform_fee`, `admin_earning`, `total_price` (prices validated)
-- `discount_amount` optional
+- **`total_service_charge`** (or **`service_price`**) — base service amount; must be **> 0**
+- **`service_id`** on order or on **`service_items[0]`** (used to load `tax`, `commission`, `minimum_deposit` from global **service**)
 - `type` — if `type === 1`, **`partner_id`** required on the **service line item**
+- Do **not** send `discount_amount` with **`offer_id`** (use offer or manual discount, not both)
 
-**`service_items[0]`** must include (among others validated): `user_id`, `category_id`, `service_id`, `service_date`, `service_from_time`, `service_to_time`, price fields (`sub_total`, `tax`, `service_price`, fees, `partner_earning`, `total_price`, `admin_earning`), and **`partner_id`** when `type === 1`.
+**`service_items[0]`** must include: `user_id`, `category_id`, `service_id`, `service_date`, `service_from_time`, `service_to_time`, **`total_service_charge`** (or `service_price`), and **`partner_id`** when `type === 1`.
 
-**Optional order extensions** (stored if sent): `partner_id`, `employee_id`, `franchise_id`, `address_id`, `service_id`, `from_date`, `to_date`, `work_*`, `service_price`, `customer_description`, **`order_description`**, **`quote_id`** (must reference a non-deleted quote with no `order_id` yet and not already used on another order), `rejection_reason`, `admin_commission`, `discount_percent`, `discount_code`, `discount_reason`, `min_deposit`, `payment_schedule_type`, `customer_payment_method`.
+**Optional `offer_id`**: MongoDB id of an active offer valid on **`order_date`**. Server creates **`order_offer`** row and sets `discount_amount` = `total_discount` (admin + partner contribution amounts). Do **not** send `discount_amount` with `offer_id`.
+
+**Optional pricing mirrors** (compared to server; server wins on mismatch): `commission_amount`, `tax_amount`, `sub_total`, `total_price`, `minimum_deposit_amount`, `discount_amount`.
+
+**Optional order extensions**: `partner_id`, `employee_id`, `franchise_id`, `address_id`, `from_date`, `to_date`, `work_*`, `customer_description`, **`order_description`**, **`quote_id`**, `payment_schedule_type`, `customer_payment_method`, `partner_earning`, `admin_earning`.
+
+**Create response** may include `record.pricing` with `pricing_mismatch`, `saved`, and `mismatches`.
 
 When **`quote_id`** is sent and **`order_description`** is omitted, the server copies **`quote.quote_description`** into **`order_description`** if present.
 
@@ -226,9 +269,34 @@ When **`quote_id`** is sent and **`order_description`** is omitted, the server c
 
 **Razorpay create:** `payment_mode_id === "2"` requires **`name`**, **`email`**, **`contact`** on the body for the payment link.
 
+On create, **`payment_status`** is **`unpaid`** until customer **`order_payment`** rows exist.
+
 ---
 
-## 8. Get order by id — response shape
+## 8. Update order — status and repricing
+
+`PUT /api/order/update/:id` supports:
+
+| Body field | Effect |
+|------------|--------|
+| `order_status` | Same as before; syncs to non-cancelled/refunded line items |
+| `total_service_charge` (or `service_price`) | Reprice using **saved** `tax_percent`, `commission_percent`, `minimum_deposit_percent` on the order |
+| `offer_id` | Apply or change offer (fresh row from **`offers`** table); **`order_offer`** fully replaced |
+| `offer_id: null` | Remove offer and clear discount |
+
+**Do not** send `is_paid` — it is **derived** from customer payments (see §6 payment status).
+
+**Reprice response** (when charge or offer changes): includes `pricing` object and `order_offer` when applicable.
+
+```text
+commission_amount = total_service_charge × order.commission_percent / 100
+sub_total           = total_service_charge + commission_amount
+(then offer discount, then tax on taxable subtotal — same as create)
+```
+
+---
+
+## 9. Get order by id — response shape
 
 `GET /api/order/get/:id` returns **`record`** with:
 
@@ -236,10 +304,11 @@ When **`quote_id`** is sent and **`order_description`** is omitted, the server c
 - **`service_items`**: each element includes **`service_info`** and optional **`partner_info`**
 - **`additional_charges`**: array from `order_additional_charge`
 - **`order_payments`**: array from `order_payment`
+- **`order_offer`**: offer snapshot (`total_discount`, contribution breakdown) when an offer was applied
 
 ---
 
-## 9. Postman collection
+## 10. Postman collection
 
 Import **`postman/Help-PR-Orders-Module.postman_collection.json`** (repository path: `help-pr-backend-staging/postman/Help-PR-Orders-Module.postman_collection.json`).
 
@@ -253,27 +322,49 @@ Set collection variables:
 | `orderServiceId` | From `service_items[0]._id` or list APIs |
 | `additionalChargeId` | After creating a charge |
 | `orderPaymentId` | After creating a payment |
+| `offerId` | Active offer ObjectId for create/update with offer |
 
 Replace placeholder ObjectIds in example bodies with real IDs from your environment.
 
 ---
 
-## 10. Known limitations (for backlog)
+## 11. Offers (`order_offer`)
 
-- **`discount_percent`** / **`min_deposit`** are not applied inside **`computeOrderTotal`** yet.
+When **`offer_id`** is sent on create (percentage offer):
+
+```text
+admin_contribution_amount   = commission_amount × offer.admin_contribution%
+partner_contribution_amount = total_service_charge × offer.partner_contribution%
+total_discount              = admin_contribution_amount + partner_contribution_amount
+taxable_subtotal            = sub_total − total_discount
+tax_amount                  = taxable_subtotal × service tax%
+total_price                 = taxable_subtotal + tax_amount
+```
+
+`order.discount_amount` = `order_offer.total_discount`. `discount_code` = offer `unique_id`; `discount_reason` = offer name.
+
+Offers are **optional** — omit `offer_id` and creation behaves as before (no `order_offer` row, `discount_amount` null unless legacy manual discount).
+
+## 12. Known limitations (for backlog)
+
+- Manual **`discount_amount`** without **`offer_id`** still supported but prefer offers for auditable splits.
 - Existing DB rows may still have **numeric** `order_status` until a migration is run — see **`docs/ORDER_STATUS_MIGRATION.md`**.
 - Razorpay webhook signature uses JSON body hashing; confirm against Razorpay’s latest raw-body guidance for production.
 - Staff who are not `user_id` / `partner_id` / `created_by_id` / `employee_id` on the order cannot hit charge/payment APIs unless you add a role bypass.
 
 ---
 
-## 11. Related code (for backend readers)
+## 13. Related code (for backend readers)
 
 | Area | Path |
 |------|------|
 | Order model | `models/order.js` |
+| Order offer model | `models/order_offer.js` |
 | Order service model | `models/order_services.js` |
 | Additional charge model | `models/order_additional_charge.js` |
+| Payment status enum | `enum/order_payment_status_enum.js` |
+| Reprice on update | `services/order_update_pricing_service.js` |
+| Sync payment status | `services/order_payment_status_service.js` |
 | Order payment model | `models/order_payment.js` |
 | Totals helper | `utils/order_financials.js` |
 | List/detail franchise access & participant check | `utils/order_access.js` (`resolveOrderListScope`, `assertOrderRecordAccess`, `callerMatchesOrderParticipant`) |

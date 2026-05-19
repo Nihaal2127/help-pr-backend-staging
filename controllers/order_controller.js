@@ -30,13 +30,19 @@ const { generatePaymentLink } = require('./razorpay_controller');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
 const OrderAdditionalCharge = require('../models/order_additional_charge');
 const OrderPayment = require('../models/order_payment');
+const OrderOffer = require('../models/order_offer');
 const Quote = require('../models/quote');
 const { computeOrderTotal, recalculateOrderTotals } = require('../utils/order_financials');
+const { isValidOrderPaymentStatus } = require('../enum/order_payment_status_enum');
 const {
   OrderCreationError,
   createOrderFromBody,
   persistOrderAndLinkQuote,
 } = require('../services/order_creation_service');
+const {
+  isRepricingRequested,
+  repriceOrderOnUpdate,
+} = require('../services/order_update_pricing_service');
 const {
   resolveOrderListScope,
   assertOrderRecordAccess,
@@ -78,7 +84,7 @@ const ORDER_DETAIL_POPULATE = [
   },
 ];
 
-function shapeOrderDetailResponse(populatedOrderData, additional_charges, order_payments) {
+function shapeOrderDetailResponse(populatedOrderData, additional_charges, order_payments, order_offer) {
   return {
     ...populatedOrderData,
     created_by_id: populatedOrderData.created_by_id?._id ?? populatedOrderData.created_by_id,
@@ -145,19 +151,21 @@ function shapeOrderDetailResponse(populatedOrderData, additional_charges, order_
 
     additional_charges,
     order_payments,
+    order_offer: order_offer || null,
   };
 }
 
 async function loadOrderDetailLean(orderMongoId) {
   const populatedOrderData = await Order.findById(orderMongoId).populate(ORDER_DETAIL_POPULATE).lean();
   if (!populatedOrderData) return null;
-  const [additional_charges, order_payments] = await Promise.all([
+  const [additional_charges, order_payments, order_offer] = await Promise.all([
     OrderAdditionalCharge.find({ order_id: orderMongoId, deleted_at: null })
       .sort({ created_at: -1 })
       .lean(),
     OrderPayment.find({ order_id: orderMongoId, deleted_at: null }).sort({ created_at: -1 }).lean(),
+    OrderOffer.findOne({ order_id: orderMongoId }).lean(),
   ]);
-  return shapeOrderDetailResponse(populatedOrderData, additional_charges, order_payments);
+  return shapeOrderDetailResponse(populatedOrderData, additional_charges, order_payments, order_offer);
 }
 
 /** Same pattern as quote getAll: `sort_by` whitelist + `sort_order` or legacy `sort` (1 | -1). */
@@ -170,6 +178,7 @@ const ORDER_SORT_WHITELIST = new Set([
   'sub_total',
   'unique_id',
   'is_paid',
+  'payment_status',
   'tax',
   'min_deposit',
   'order_description',
@@ -331,6 +340,22 @@ const getAll = async (req, res) => {
         ? parseBoolean(req.query.is_paid)
         : null;
 
+    const payment_status_raw =
+      req.query.payment_status !== undefined &&
+      req.query.payment_status !== null &&
+      String(req.query.payment_status).trim() !== ''
+        ? String(req.query.payment_status).trim().toLowerCase()
+        : null;
+
+    if (payment_status_raw && !isValidOrderPaymentStatus(payment_status_raw)) {
+      return res.status(409).json({
+        success: false,
+        status: 409,
+        message:
+          'Invalid payment_status. Use: unpaid, paid, partially_paid, refund, partially_refund.',
+      });
+    }
+
     const rawSearch = req.query.search;
     const legacyKeyword =
       req.query.keyword !== undefined &&
@@ -363,6 +388,7 @@ const getAll = async (req, res) => {
       ...dateRangeResult.filter,
       ...statusFilterResult.filter,
       ...(is_paid !== null && { is_paid }),
+      ...(payment_status_raw && { payment_status: payment_status_raw }),
       ...(req.query.user_id &&
         mongoose.Types.ObjectId.isValid(req.query.user_id) && {
           user_id: new mongoose.Types.ObjectId(req.query.user_id),
@@ -889,7 +915,7 @@ const create = async (req, res) => {
       throw err;
     }
 
-    const { newOrder, order_id } = draft;
+    const { newOrder, order_id, pricingMeta } = draft;
 
     if (newOrder.payment_mode_id === "2") {
       const responsePaymentLink = await generatePaymentLink(
@@ -904,6 +930,7 @@ const create = async (req, res) => {
         const result = {
           payment_url: responsePaymentLink.payment_url,
           order_id: newOrder._id,
+          pricing: pricingMeta,
         };
         return res.status(200).json({
           success: true,
@@ -924,7 +951,7 @@ const create = async (req, res) => {
       success: true,
       status: 200,
       message: "Order placed successfully.",
-      record: { order_id: newOrder._id },
+      record: { order_id: newOrder._id, pricing: pricingMeta },
     });
   } catch (error) {
     if (error.message === "INVALID_SERVICE_USER") {
@@ -958,7 +985,7 @@ const update = async (req, res) => {
 
   try {
 
-    const order = await Order.findById(id);
+    const order = await Order.findOne({ _id: id, deleted_at: null });
 
     if (!order) {
       return res.status(404).json({
@@ -967,7 +994,25 @@ const update = async (req, res) => {
         message: 'No record found'
       });
     }
-    const { order_status, is_paid } = req.body;
+
+    let repriceResult = null;
+    if (isRepricingRequested(req.body)) {
+      try {
+        repriceResult = await repriceOrderOnUpdate(order, req.body);
+      } catch (err) {
+        if (err instanceof OrderCreationError) {
+          return res.status(err.status).json({
+            success: false,
+            status: err.status,
+            message: err.message,
+          });
+        }
+        throw err;
+      }
+    }
+
+    const orderToUpdate = repriceResult?.order ?? order;
+    const { order_status } = req.body;
 
     const updateData = {};
 
@@ -980,21 +1025,16 @@ const update = async (req, res) => {
           message: `Invalid order_status. Use one of: ${ORDER_STATUSES.join(', ')}.`,
         });
       }
-      if (nextStatus !== order.order_status) {
-        touchOrderStatusInfo(order, nextStatus);
-        order.order_status = nextStatus;
+      if (nextStatus !== orderToUpdate.order_status) {
+        touchOrderStatusInfo(orderToUpdate, nextStatus);
+        orderToUpdate.order_status = nextStatus;
         updateData.service_status = nextStatus;
       }
     }
 
-    if (is_paid !== undefined) {
-      order.is_paid = is_paid;
-      updateData.is_paid = is_paid;
-    }
-
     if (Object.keys(updateData).length > 0) {
       const updateCondition = {
-        _id: { $in: order.service_items },
+        _id: { $in: orderToUpdate.service_items },
         service_status: { $nin: [ORDER_STATUS_CANCELLED, ORDER_STATUS_REFUNDED] },
       };
 
@@ -1004,18 +1044,21 @@ const update = async (req, res) => {
       );
     }
 
-    const updatedOrder = await order.save();
+    orderToUpdate.updated_at = new Date();
+    const updatedOrder = await orderToUpdate.save();
 
 
-    const notificationSetting = await NotificationSettings.findOne({ user_id: order.user_id });
+    const notificationSetting = await NotificationSettings.findOne({
+      user_id: updatedOrder.user_id,
+    });
     if (notificationSetting?.is_update_allow) {
-      const user = await User.findById(order.user_id);
+      const user = await User.findById(updatedOrder.user_id);
       const deviceToken = user?.device_token
       const title = `Order Status Update`
-      const body = `Your Order #${order.unique_id} status changed to ${getOrderStatusLabel(order.order_status)}`
+      const body = `Your Order #${updatedOrder.unique_id} status changed to ${getOrderStatusLabel(updatedOrder.order_status)}`
       const data = {
-        order_id: order.id,
-        order_status: order.order_status,
+        order_id: updatedOrder.id,
+        order_status: updatedOrder.order_status,
         type: "Order"
       }
       if (deviceToken !== null && deviceToken !== '') {
@@ -1031,6 +1074,20 @@ const update = async (req, res) => {
       status: 200,
       message: 'Order updated successfully',
       record: updatedOrder,
+      ...(repriceResult
+        ? {
+            pricing: {
+              total_service_charge: repriceResult.pricing.total_service_charge,
+              commission_amount: repriceResult.pricing.commission_amount,
+              tax_amount: repriceResult.pricing.tax_amount,
+              sub_total: repriceResult.pricing.sub_total,
+              discount_amount: repriceResult.pricing.discount_amount,
+              total_price: repriceResult.pricing.total_price,
+              minimum_deposit_amount: repriceResult.pricing.minimum_deposit_amount,
+            },
+            order_offer: repriceResult.order_offer,
+          }
+        : {}),
     });
   }
   catch (error) {
@@ -1265,11 +1322,16 @@ const cancleService = async (req, res) => {
     }
 
     partner = await User.findById(serviceData.partner_id);
+    order.total_service_charge -=
+      Number(serviceData.total_service_charge ?? serviceData.service_price) || 0;
+    order.commission_amount -=
+      Number(serviceData.commission_amount ?? serviceData.partner_commison_platform_fee) || 0;
+    order.admin_commission = order.commission_amount;
     order.sub_total -= serviceData.sub_total;
-    order.tax -= serviceData.tax;
-    order.user_paltform_fee -= serviceData.user_paltform_fee;
-    order.partner_commison_platform_fee -= serviceData.partner_commison_platform_fee;
-    order.total_price -= serviceData.total_price;
+    order.tax_amount -= Number(serviceData.tax_amount ?? serviceData.tax) || 0;
+    order.tax = order.tax_amount;
+    order.user_paltform_fee = 0;
+    order.partner_commison_platform_fee = order.commission_amount;
     order.admin_earning -= serviceData.admin_earning;
     await OrderService.findByIdAndUpdate(service_items_id,
       { service_status: ORDER_STATUS_CANCELLED },

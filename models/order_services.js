@@ -27,8 +27,13 @@ var orderServiceSchema = new schema(
     service_from_time: { type: Date, default: "", require: false },
     service_to_time: { type: Date, default: "", require: false },
 
+    total_service_charge: { type: Number, default: 0 },
+    commission_percent: { type: Number, default: 0 },
+    commission_amount: { type: Number, default: 0 },
     sub_total: { type: Number, default: 0, require: true },
     tax: { type: Number, default: 0, require: true },
+    tax_percent: { type: Number, default: 0 },
+    tax_amount: { type: Number, default: 0 },
     user_paltform_fee: { type: Number, default: 0, require: true },
     partner_commison_platform_fee: { type: Number, default: 0, require: true },
     service_price: { type: Number, default: 0, require: true },

@@ -38,14 +38,15 @@ Implemented in `utils/order_access.js` (`resolveOrderListScope`, `assertOrderRec
 |-----------|-------------|
 | `page`, `limit` | Pagination (defaults `1`, `10`) |
 | `order_status` | `in-progress`, `completed`, `cancelled`, `refunded`. Invalid → **409** |
-| `is_paid` | `true` / `false` |
+| `is_paid` | `true` / `false` (legacy; true only when `payment_status === paid`) |
+| `payment_status` | `unpaid`, `paid`, `partially_paid`, `refund`, `partially_refund`. Invalid → **409** |
 | `search` | Sanitized free-text (preferred) |
 | `keyword` | Legacy alias for `search` when `search` is empty |
 | `from_date`, `to_date` | ISO date strings — see §4 |
 | `franchise_id` | ObjectId; scoped by role (§2) |
 | `user_id`, `partner_id`, `employee_id` | Optional ObjectId filters |
 | `city_id`, `category_id`, `service_id` | Optional ObjectId filters |
-| `sort_by` | Whitelist: `created_at`, `updated_at`, `order_date`, `order_status`, `total_price`, `sub_total`, `unique_id`, `is_paid`, `tax`, `min_deposit`, `order_description` (invalid → `created_at`) |
+| `sort_by` | Whitelist: `created_at`, `updated_at`, `order_date`, `order_status`, `total_price`, `sub_total`, `unique_id`, `is_paid`, `payment_status`, `tax`, `min_deposit`, `order_description` (invalid → `created_at`) |
 | `sort_order` | `asc` or `desc` |
 | `sort` | Legacy: `1` = ascending, anything else = descending if `sort_order` omitted |
 

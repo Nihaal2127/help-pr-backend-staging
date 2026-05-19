@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Order = require("../models/order");
 const OrderAdditionalCharge = require("../models/order_additional_charge");
 const { recalculateOrderTotals } = require("../utils/order_financials");
+const { computeAdditionalChargeLine } = require("../utils/order_pricing");
 const { callerMatchesOrderParticipant } = require("../utils/order_access");
 
 const ALLOWED_METHODS = new Set([
@@ -64,11 +65,17 @@ const create = async (req, res) => {
         ? String(payment_method).toLowerCase()
         : "other";
 
+    const taxPercent = Number(order.tax_percent) || 0;
+    const chargeLine = computeAdditionalChargeLine(amount, taxPercent);
+
     const doc = new OrderAdditionalCharge({
       order_id: order._id,
       label: label || "",
       description: description || "",
-      amount: Number(amount),
+      amount: chargeLine.amount,
+      tax_percent: chargeLine.tax_percent,
+      tax_amount: chargeLine.tax_amount,
+      total_amount: chargeLine.total_amount,
       payment_method: method,
       charge_type: charge_type || "misc",
     });
@@ -190,7 +197,12 @@ const update = async (req, res) => {
           message: "amount must be >= 0.",
         });
       }
-      row.amount = Number(amount);
+      const taxPercent = Number(order.tax_percent) || 0;
+      const chargeLine = computeAdditionalChargeLine(amount, taxPercent);
+      row.amount = chargeLine.amount;
+      row.tax_percent = chargeLine.tax_percent;
+      row.tax_amount = chargeLine.tax_amount;
+      row.total_amount = chargeLine.total_amount;
     }
     if (payment_method !== undefined) {
       const m = String(payment_method).toLowerCase();

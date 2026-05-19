@@ -28,8 +28,8 @@ const KIND_CONFIG = {
  * @param {'category'|'service'} kind
  */
 const resolveLatestCoercedMappingForFranchise = async (franchiseOid, kind) => {
-    const { resolveFranchiseLocalEnabledMaps } = require('./catalog_availability_resolver');
-    const local = await resolveFranchiseLocalEnabledMaps(franchiseOid);
+    const { resolveFranchiseMappingPreferenceMaps } = require('./catalog_availability_resolver');
+    const local = await resolveFranchiseMappingPreferenceMaps(franchiseOid);
     if (!local.ok) return null;
 
     const idMap = kind === 'category' ? local.categoryEnabled : local.serviceEnabled;

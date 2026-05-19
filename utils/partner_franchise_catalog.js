@@ -7,6 +7,8 @@ const {
     resolvePartnerFranchiseCatalog,
     resolveFranchiseEffectiveCatalog,
     resolvePartnerEffectiveCatalog,
+    resolveFranchiseMappingPreferenceMaps,
+    resolveFranchiseAssignedEnabledMaps,
     resolveFranchiseLocalEnabledMaps,
 } = require('./catalog_availability_resolver');
 
@@ -15,5 +17,7 @@ module.exports = {
     resolvePartnerFranchiseCatalog,
     resolveFranchiseEffectiveCatalog,
     resolvePartnerEffectiveCatalog,
+    resolveFranchiseMappingPreferenceMaps,
+    resolveFranchiseAssignedEnabledMaps,
     resolveFranchiseLocalEnabledMaps,
 };

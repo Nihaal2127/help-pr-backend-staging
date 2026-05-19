@@ -111,7 +111,8 @@ const deriveServicePartitionFromList = (normList) => ({
 });
 
 /**
- * Legacy rows may only have active_*/inactive_* arrays. Rebuild categories_list once for reads.
+ * Legacy rows may only have active_categories / inactive_categories arrays.
+ * Rebuild categories_list once for reads.
  */
 const rebuildCategoriesListFromLegacyPartition = (activeIds, inactiveIds) => {
     const out = [];

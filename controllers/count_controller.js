@@ -376,7 +376,7 @@ const buildUserManagementCustomerFilter = async (franchiseScopeOid) => {
     return { ...base, $or: orClause };
 };
 
-/** Partner verification buckets; pending includes unassigned franchise_id (same as user getAll). */
+/** Partner verification buckets; pending includes unassigned franchise_id when franchise is selected. */
 const buildUserManagementPartnerVerificationFilter = (franchiseScopeOid, verificationStatus) => {
     const base = { type: 2, deleted_at: null, verification_status: verificationStatus };
     if (!franchiseScopeOid) {
@@ -395,7 +395,8 @@ const buildUserManagementPartnerVerificationFilter = (franchiseScopeOid, verific
     return { ...base, franchise_id: franchiseScopeOid };
 };
 
-const buildUserManagementAllPartnersFilter = (franchiseScopeOid) => {
+/** Verification total when franchise selected: franchise pending/rejected + unassigned pending only. */
+const buildUserManagementVerificationTotalFilter = (franchiseScopeOid) => {
     if (!franchiseScopeOid) {
         return { type: 2, deleted_at: null };
     }
@@ -403,7 +404,7 @@ const buildUserManagementAllPartnersFilter = (franchiseScopeOid) => {
         type: 2,
         deleted_at: null,
         $or: [
-            { franchise_id: franchiseScopeOid },
+            { franchise_id: franchiseScopeOid, verification_status: { $in: [1, 3] } },
             { verification_status: 1, franchise_id: null },
             { verification_status: 1, franchise_id: { $exists: false } },
         ],
@@ -440,7 +441,9 @@ const buildUserManagementCountRecord = async (franchiseScopeOid) => {
         is_active: true,
     });
 
-    const total_document = await User.countDocuments(buildUserManagementAllPartnersFilter(franchiseScopeOid));
+    const total_document = await User.countDocuments(
+        buildUserManagementVerificationTotalFilter(franchiseScopeOid),
+    );
     const pending_document = await User.countDocuments(
         buildUserManagementPartnerVerificationFilter(franchiseScopeOid, 1),
     );

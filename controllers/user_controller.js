@@ -286,6 +286,41 @@ function buildUserListRoleFilter(caller, { franchiseIdFilter, type, partnerListV
   };
 }
 
+/**
+ * Franchise scope for verification list when super admin/staff selects a franchise.
+ * Pending includes unassigned partners; rejected is franchise-only (matches getCount verification cards).
+ */
+function buildVerificationFranchiseRoleFilter(franchiseOid, verificationFilter) {
+  const rawStatus = verificationFilter?.verification_status;
+  const statuses = rawStatus?.$in
+    ? rawStatus.$in
+    : rawStatus !== undefined
+      ? [rawStatus]
+      : [1, 3];
+
+  if (statuses.length === 1 && statuses[0] === 3) {
+    return { franchise_id: franchiseOid };
+  }
+
+  if (statuses.length === 1 && statuses[0] === 1) {
+    return {
+      $or: [
+        { franchise_id: franchiseOid },
+        { franchise_id: null },
+        { franchise_id: { $exists: false } },
+      ],
+    };
+  }
+
+  return {
+    $or: [
+      { franchise_id: franchiseOid, verification_status: { $in: [1, 3] } },
+      { verification_status: 1, franchise_id: null },
+      { verification_status: 1, franchise_id: { $exists: false } },
+    ],
+  };
+}
+
 async function applyType4FranchiseScope(roleFilter, franchiseOid) {
   const franchise = await Franchise.findOne({ _id: franchiseOid, deleted_at: null })
     .select('area_id')
@@ -1352,6 +1387,20 @@ const getVerificationAll = async (req, res) => {
       });
     }
 
+    let roleFilter = roleResult.roleFilter;
+    let listVerificationFilter = { ...verificationFilter };
+    if (
+      franchiseIdFilter &&
+      [USER_TYPE_SUPER_ADMIN, USER_TYPE_STAFF].includes(caller.type)
+    ) {
+      const franchiseOid = new mongoose.Types.ObjectId(franchiseIdFilter);
+      roleFilter = buildVerificationFranchiseRoleFilter(franchiseOid, verificationFilter);
+      if (roleFilter.$or?.some((branch) => branch.verification_status !== undefined)) {
+        const { verification_status: _vs, ...rest } = listVerificationFilter;
+        listVerificationFilter = rest;
+      }
+    }
+
     const searchTerm = req.query.keyword ?? req.query.search;
     let regex;
     if (searchTerm) {
@@ -1361,8 +1410,8 @@ const getVerificationAll = async (req, res) => {
     const filter = {
       deleted_at: null,
       type: USER_TYPE_PARTNER,
-      ...roleResult.roleFilter,
-      ...verificationFilter,
+      ...roleFilter,
+      ...listVerificationFilter,
       ...(searchTerm && { name: regex })
     };
     

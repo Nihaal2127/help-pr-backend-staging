@@ -376,23 +376,16 @@ const buildUserManagementCustomerFilter = async (franchiseScopeOid) => {
     return { ...base, $or: orClause };
 };
 
-/** Pending partners: franchise + unassigned (document verification pending). */
+/** Pending partners — all franchises or strict franchise_id when scoped. */
 const buildVerificationPendingPartnerFilter = (franchiseScopeOid) => {
     const base = { type: 2, deleted_at: null, verification_status: 1 };
     if (!franchiseScopeOid) {
         return base;
     }
-    return {
-        ...base,
-        $or: [
-            { franchise_id: franchiseScopeOid },
-            { franchise_id: null },
-            { franchise_id: { $exists: false } },
-        ],
-    };
+    return { ...base, franchise_id: franchiseScopeOid };
 };
 
-/** Rejected partners: selected franchise only. */
+/** Rejected partners — all franchises or strict franchise_id when scoped. */
 const buildVerificationRejectedPartnerFilter = (franchiseScopeOid) => {
     const base = { type: 2, deleted_at: null, verification_status: 3 };
     if (!franchiseScopeOid) {
@@ -401,7 +394,7 @@ const buildVerificationRejectedPartnerFilter = (franchiseScopeOid) => {
     return { ...base, franchise_id: franchiseScopeOid };
 };
 
-/** Verification total: pending + rejected only (never includes approved). */
+/** Verification total: pending + rejected only; scoped by franchise when provided. */
 const buildVerificationTotalPartnerFilter = (franchiseScopeOid) => {
     if (!franchiseScopeOid) {
         return { type: 2, deleted_at: null, verification_status: { $in: [1, 3] } };
@@ -409,43 +402,8 @@ const buildVerificationTotalPartnerFilter = (franchiseScopeOid) => {
     return {
         type: 2,
         deleted_at: null,
-        $or: [
-            { franchise_id: franchiseScopeOid, verification_status: { $in: [1, 3] } },
-            { verification_status: 1, franchise_id: null },
-            { verification_status: 1, franchise_id: { $exists: false } },
-        ],
-    };
-};
-
-/** getVerificationAll franchise scope (same rules as verification counts above). */
-const buildVerificationListFranchiseFilter = (franchiseOid, verificationFilter) => {
-    const rawStatus = verificationFilter?.verification_status;
-    const statuses = rawStatus?.$in
-        ? rawStatus.$in
-        : rawStatus !== undefined
-          ? [rawStatus]
-          : [1, 3];
-
-    if (statuses.length === 1 && statuses[0] === 3) {
-        return { franchise_id: franchiseOid };
-    }
-
-    if (statuses.length === 1 && statuses[0] === 1) {
-        return {
-            $or: [
-                { franchise_id: franchiseOid },
-                { franchise_id: null },
-                { franchise_id: { $exists: false } },
-            ],
-        };
-    }
-
-    return {
-        $or: [
-            { franchise_id: franchiseOid, verification_status: { $in: [1, 3] } },
-            { verification_status: 1, franchise_id: null },
-            { verification_status: 1, franchise_id: { $exists: false } },
-        ],
+        franchise_id: franchiseScopeOid,
+        verification_status: { $in: [1, 3] },
     };
 };
 
@@ -1320,6 +1278,5 @@ module.exports = {
     getVerificationCountData,
     getPartnerServiceCount,
     getHomeCount,
-    buildVerificationListFranchiseFilter,
     pickFranchiseIdFromRequest,
 };

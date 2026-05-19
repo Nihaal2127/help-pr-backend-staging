@@ -16,7 +16,6 @@ const { sanitizeInput } = require('../validator/search_keyword_validator');
 const {
   getServiceCountData,
   getVerificationCountData,
-  buildVerificationListFranchiseFilter,
   pickFranchiseIdFromRequest,
 } = require('./count_controller');
 
@@ -1357,16 +1356,7 @@ const getVerificationAll = async (req, res) => {
       });
     }
 
-    let roleFilter = roleResult.roleFilter;
-    let listVerificationFilter = { ...verificationFilter };
-    if (franchiseIdFilter && mongoose.Types.ObjectId.isValid(franchiseIdFilter)) {
-      const franchiseOid = new mongoose.Types.ObjectId(franchiseIdFilter);
-      roleFilter = buildVerificationListFranchiseFilter(franchiseOid, verificationFilter);
-      if (roleFilter.$or?.some((branch) => branch.verification_status !== undefined)) {
-        const { verification_status: _vs, ...rest } = listVerificationFilter;
-        listVerificationFilter = rest;
-      }
-    }
+    const roleFilter = roleResult.roleFilter;
 
     const searchTerm = req.query.keyword ?? req.query.search;
     let regex;
@@ -1378,7 +1368,7 @@ const getVerificationAll = async (req, res) => {
       deleted_at: null,
       type: USER_TYPE_PARTNER,
       ...roleFilter,
-      ...listVerificationFilter,
+      ...verificationFilter,
       ...(searchTerm && { name: regex })
     };
     

@@ -2071,6 +2071,25 @@ const update = async (req, res) => {
       }
     }
 
+    if (
+      Number(user.type) === 2 &&
+      updateData.is_active !== undefined &&
+      updateData.is_active !== null &&
+      parseBooleanInput(updateData.is_active)
+    ) {
+      const nextVerificationStatus =
+        updateData.verification_status !== undefined
+          ? Number(updateData.verification_status)
+          : Number(user.verification_status);
+      if (nextVerificationStatus === 1) {
+        return res.status(400).json({
+          success: false,
+          status: 400,
+          message: 'Documents verification is pending.',
+        });
+      }
+    }
+
     // Only allow explicit fields to be updated.
     const ALLOWED_UPDATE_FIELDS = new Set([
       'name',

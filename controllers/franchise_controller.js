@@ -47,7 +47,7 @@ const importRecords = async (req, res) => {
 };
 
 const getDropDown = async (req, res) => {
-    const result = await franchiseService.listFranchisesForDropdown(req.query);
+    const result = await franchiseService.listFranchisesForDropdown(req.query, req.user?.id);
     return sendServiceResult(res, result);
 };
 

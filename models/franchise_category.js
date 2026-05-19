@@ -1,5 +1,9 @@
 const mongoose = require('mongoose');
 
+/**
+ * Local franchise preference per global category.
+ * `is_active` in DB = is_enabled (NOT effective visibility; see catalog_availability_resolver).
+ */
 const franchiseCategoryEntrySchema = new mongoose.Schema(
     {
         category_id: {
@@ -23,10 +27,12 @@ const franchiseCategorySchema = new mongoose.Schema(
             type: [franchiseCategoryEntrySchema],
             default: [],
         },
+        /** @deprecated Derived from categories_list for API compat — not source of truth. */
         active_categories: {
             type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'category' }],
             default: [],
         },
+        /** @deprecated Derived from categories_list for API compat — not source of truth. */
         inactive_categories: {
             type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'category' }],
             default: [],

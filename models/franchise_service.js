@@ -1,5 +1,9 @@
 const mongoose = require('mongoose');
 
+/**
+ * Local franchise preference per global service.
+ * `is_active` in DB = is_enabled (NOT effective visibility; see catalog_availability_resolver).
+ */
 const franchiseServiceEntrySchema = new mongoose.Schema(
     {
         service_id: {
@@ -23,10 +27,12 @@ const franchiseServiceSchema = new mongoose.Schema(
             type: [franchiseServiceEntrySchema],
             default: [],
         },
+        /** @deprecated Derived from services_list for API compat — not source of truth. */
         active_services: {
             type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'service' }],
             default: [],
         },
+        /** @deprecated Derived from services_list for API compat — not source of truth. */
         inactive_services: {
             type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'service' }],
             default: [],

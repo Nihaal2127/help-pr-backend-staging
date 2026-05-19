@@ -15,8 +15,15 @@ const {
     validateCategoryActiveInactivePartition,
     validateCategoriesOrderPermutation,
     filterRecordsByFranchiseMappingToggle,
+    applyCategoryPartitionToCategoriesList,
+    stripDerivedPartitionArraysFromCategoryMapping,
 } = require('../utils/franchise_catalog_lists');
-const { cascadeInactiveCategoriesToFranchiseServices } = require('../utils/global_catalog_cascade');
+const {
+    resolveFranchiseLocalEnabledMaps,
+    annotateCatalogRowWithAvailability,
+    isGlobalCatalogRowActive,
+    enrichFranchiseCategoryMappingRecords,
+} = require('../utils/catalog_availability_resolver');
 const { loadFranchiseCallerScope } = require('../utils/franchise_user_scope');
 
 const fail = (status, message, extra = {}) => ({ ok: false, status, message, ...extra });
@@ -255,39 +262,26 @@ const buildSyntheticFranchiseCategoryFromFranchiseDoc = async (franchiseOid) => 
 };
 
 /**
- * Every global category (non-deleted), each with franchise_active derived from the latest
- * franchise_category mapping for this franchise (active_categories after coerce).
+ * Every global category (non-deleted), annotated with franchise local preference and effective availability.
  */
 const buildAllCategoriesWithFranchiseMappingStatus = async (franchiseOid) => {
-    const row = await FranchiseCategory.findOne({
-        franchise_id: franchiseOid,
-        deleted_at: null,
-    })
-        .sort({ created_at: -1 })
-        .lean();
-
-    let plainForCoerce = row;
-    if (!row) {
-        const synthetic = await buildSyntheticFranchiseCategoryFromFranchiseDoc(franchiseOid);
-        if (synthetic) {
-            plainForCoerce =
-                typeof synthetic.toObject === 'function' ? synthetic.toObject() : { ...synthetic };
-        }
-    }
-
-    const activeSet = new Set();
-    if (plainForCoerce) {
-        const coerced = coerceLegacyCategoryMappingArrays(plainForCoerce);
-        (coerced.active_categories || []).forEach((id) => activeSet.add(id.toString()));
-    }
+    const local = await resolveFranchiseLocalEnabledMaps(franchiseOid);
+    const franchiseEnabledMap = local.ok ? local.categoryEnabled : new Map();
 
     const allCats = await Category.find({ deleted_at: null }).lean();
     const svcMap = await loadServicesGroupedByCategoryId(allCats.map((c) => c._id));
-    return allCats.map((cat) => ({
-        ...cat,
-        franchise_active: activeSet.has(cat._id.toString()),
-        related_services: svcMap.get(cat._id.toString()) || [],
-    }));
+    return allCats.map((cat) => {
+        const key = cat._id.toString();
+        const globalActive = isGlobalCatalogRowActive(cat);
+        const franchiseEnabled = franchiseEnabledMap.get(key) === true;
+        return annotateCatalogRowWithAvailability(
+            {
+                ...cat,
+                related_services: svcMap.get(key) || [],
+            },
+            { kind: 'category', globalActive, franchiseEnabled }
+        );
+    });
 };
 
 const matchesSearchInCategoryName = (cat, qLower) => {
@@ -464,6 +458,7 @@ const list = async (query, userId) => {
         );
 
         records = await enrichFranchiseCategoryRecordsWithRelatedServices(records);
+        records = await enrichFranchiseCategoryMappingRecords(records);
 
         let all_categories;
         if (filter.franchise_id) {
@@ -514,20 +509,11 @@ const create = async (body) => {
         const validCategories = await ensureCategories(catIds);
         if (!validCategories) return fail(400, 'One or more category IDs are invalid or deleted.');
 
-        const activeCats = parsedCategories.entries
-            .filter((e) => e.is_active)
-            .map((e) => e.category_id);
-        const inactiveCats = parsedCategories.entries
-            .filter((e) => !e.is_active)
-            .map((e) => e.category_id);
-
         const categoriesOrderIds = parsedCategories.entries.map((e) => e.category_id);
 
         const doc = new FranchiseCategory({
             franchise_id: parsedFranchise.oid,
             categories_list: parsedCategories.entries,
-            active_categories: activeCats,
-            inactive_categories: inactiveCats,
             categories_order: categoriesOrderIds,
             order_number:
                 body.order_number !== undefined && body.order_number !== null
@@ -582,10 +568,11 @@ const getById = async (id, userId, query = {}) => {
             'inactive_categories',
             'category_id'
         );
-        const [enriched] = await enrichFranchiseCategoryRecordsWithRelatedServices(
+        let enrichedRows = await enrichFranchiseCategoryRecordsWithRelatedServices(
             recordOut ? [recordOut] : []
         );
-        recordOut = enriched || recordOut;
+        enrichedRows = await enrichFranchiseCategoryMappingRecords(enrichedRows);
+        recordOut = enrichedRows[0] || recordOut;
         return ok(200, {
             message: 'Franchise category fetched successfully.',
             record: recordOut,
@@ -626,17 +613,8 @@ const update = async (id, body, userId) => {
 
             if (auth.isSuper) {
                 record.categories_list = parsedCategories.entries;
-                record.active_categories = parsedCategories.entries
-                    .filter((e) => e.is_active)
-                    .map((e) => e.category_id);
-                record.inactive_categories = parsedCategories.entries
-                    .filter((e) => !e.is_active)
-                    .map((e) => e.category_id);
                 record.categories_order = categoriesOrderFromEntries;
-                await cascadeInactiveCategoriesToFranchiseServices(
-                    record.franchise_id,
-                    record.inactive_categories
-                );
+                stripDerivedPartitionArraysFromCategoryMapping(record);
             } else if (auth.isEmployee) {
                 return fail(403, 'Franchise employees cannot update categories list.');
             } else if (auth.isFranchiseAdmin) {
@@ -644,17 +622,8 @@ const update = async (id, body, userId) => {
                     return fail(403, 'Access denied.');
                 }
                 record.categories_list = parsedCategories.entries;
-                record.active_categories = parsedCategories.entries
-                    .filter((e) => e.is_active)
-                    .map((e) => e.category_id);
-                record.inactive_categories = parsedCategories.entries
-                    .filter((e) => !e.is_active)
-                    .map((e) => e.category_id);
                 record.categories_order = categoriesOrderFromEntries;
-                await cascadeInactiveCategoriesToFranchiseServices(
-                    record.franchise_id,
-                    record.inactive_categories
-                );
+                stripDerivedPartitionArraysFromCategoryMapping(record);
             } else {
                 return fail(403, 'Access denied.');
             }
@@ -720,9 +689,12 @@ const update = async (id, body, userId) => {
             );
             if (!partitionCheck.ok) return fail(400, partitionCheck.message);
 
-            record.active_categories = activeIds;
-            record.inactive_categories = inactiveIds;
-            await cascadeInactiveCategoriesToFranchiseServices(record.franchise_id, inactiveIds);
+            record.categories_list = applyCategoryPartitionToCategoriesList(
+                normList,
+                activeIds,
+                inactiveIds
+            );
+            stripDerivedPartitionArraysFromCategoryMapping(record);
         }
 
         if (body.categories_order !== undefined) {

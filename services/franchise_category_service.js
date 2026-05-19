@@ -123,10 +123,10 @@ const hasFranchiseIdQueryParam = (query) => {
     return raw !== undefined && raw !== null && String(raw).trim() !== '';
 };
 
-/** When franchise_id is omitted, hide pending catalog requests unless is_request is explicit. */
+/** Hide pending requests in franchise-scoped all_* unless is_request is explicit. */
 const resolveEffectiveIsRequestFilter = (query, listFlags) => {
     if (listFlags.isRequestFilter !== undefined) return listFlags.isRequestFilter;
-    if (!hasFranchiseIdQueryParam(query)) return false;
+    if (hasFranchiseIdQueryParam(query)) return false;
     return undefined;
 };
 

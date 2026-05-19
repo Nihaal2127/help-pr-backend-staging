@@ -4,6 +4,7 @@ const FranchiseCategory = require('../models/franchise_category');
 const FranchiseService = require('../models/franchise_service');
 const Category = require('../models/category');
 const Service = require('../models/service');
+const User = require('../models/user');
 const {
     coerceLegacyCategoryMappingArrays,
     coerceLegacyServiceMappingArrays,
@@ -68,12 +69,42 @@ const resolveLatestCoercedMappingForFranchise = async (franchiseOid, kind) => {
     });
 };
 
+/** User ids tied to franchises (for requested_* counts and list `requested_by` scope). */
+const getFranchiseUserIdsForScope = async (franchiseIdsScope) => {
+    if (!franchiseIdsScope || franchiseIdsScope.length === 0) return [];
+    return User.find({
+        franchise_id: { $in: franchiseIdsScope },
+        deleted_at: null,
+    }).distinct('_id');
+};
+
+/**
+ * Pending catalogue requests raised by users under the franchise scope.
+ * Matches GET /api/category|service/getAll with status=requested* (and franchise admin JWT scope).
+ * @param {mongoose.Types.ObjectId[]} franchiseIdsScope
+ * @param {'category'|'service'} kind
+ */
+const countFranchiseScopedRequestedCatalog = async (franchiseIdsScope, kind) => {
+    const cfg = KIND_CONFIG[kind];
+    if (!cfg) throw new Error(`Invalid catalog kind: ${kind}`);
+
+    const franchiseUserIds = await getFranchiseUserIdsForScope(franchiseIdsScope);
+    if (franchiseUserIds.length === 0) return 0;
+
+    return cfg.CatalogModel.countDocuments({
+        deleted_at: null,
+        is_request: true,
+        requested_by: { $in: franchiseUserIds },
+    });
+};
+
 /**
  * Dashboard category/service counts for franchise scope — aligned with:
- * - GET franchise-category|service/getAll `all_categories` / `all_services` (global catalogue + franchise_active)
+ * - GET franchise-category|service/getAll `all_categories` / `all_services` (approved catalogue only;
+ *   pending requests omitted unless is_request=true)
  * - POST /api/getCount types my-franchise & service-management (with franchise_id)
  *
- * total_*     = all non-deleted global catalogue rows
+ * total_*     = non-deleted global catalogue rows with is_request: false
  * active_*    = sum of active_* array lengths on the latest mapping per franchise (legacy fallback included)
  * inactive_*  = max(0, total - active)
  *
@@ -88,7 +119,7 @@ const countFranchiseScopedCatalogDashboard = async (franchiseIdsScope, kind) => 
         return { total: 0, active: 0, inactive: 0 };
     }
 
-    const total = await cfg.CatalogModel.countDocuments({ deleted_at: null });
+    const total = await cfg.CatalogModel.countDocuments({ deleted_at: null, is_request: false });
 
     let active = 0;
     for (const franchiseOid of franchiseIdsScope) {
@@ -106,5 +137,7 @@ const countFranchiseScopedCatalogDashboard = async (franchiseIdsScope, kind) => 
 
 module.exports = {
     resolveLatestCoercedMappingForFranchise,
+    getFranchiseUserIdsForScope,
+    countFranchiseScopedRequestedCatalog,
     countFranchiseScopedCatalogDashboard,
 };

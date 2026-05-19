@@ -13,7 +13,11 @@ const BusinessInfo = require('../models/business_info');
 const Franchise = require('../models/franchise');
 const { getNewId } = require('../helper/id_generator');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
-const { getServiceCountData, getVerificationCountData } = require('./count_controller');
+const {
+  getServiceCountData,
+  getVerificationCountData,
+  pickFranchiseIdFromRequest,
+} = require('./count_controller');
 
 const { getDocumentList } = require('./document_controller');
 const { createMultiple, getPartnerDocumentList } = require('./partner_document_controller');
@@ -1311,7 +1315,7 @@ const getVerificationAll = async (req, res) => {
       });
     }
 
-    const franchiseIdFilter = typeof req.query.franchise_id === 'string' ? req.query.franchise_id.trim() : null;
+    const franchiseIdFilter = pickFranchiseIdFromRequest(req);
     const callerFranchiseOid = await resolveCallerFranchiseOid(caller, req.user.id);
 
     const verificationStatusRaw = req.query.verification_status;
@@ -1352,6 +1356,8 @@ const getVerificationAll = async (req, res) => {
       });
     }
 
+    const roleFilter = roleResult.roleFilter;
+
     const searchTerm = req.query.keyword ?? req.query.search;
     let regex;
     if (searchTerm) {
@@ -1361,7 +1367,7 @@ const getVerificationAll = async (req, res) => {
     const filter = {
       deleted_at: null,
       type: USER_TYPE_PARTNER,
-      ...roleResult.roleFilter,
+      ...roleFilter,
       ...verificationFilter,
       ...(searchTerm && { name: regex })
     };

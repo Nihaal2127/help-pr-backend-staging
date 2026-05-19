@@ -1,6 +1,32 @@
 const mongoose = require('mongoose');
 const Offer = require('../models/offer');
+const User = require('../models/user');
 const OFFER_TYPES = Offer.OFFER_TYPES;
+
+const USER_TYPE_SUPER_ADMIN = 5;
+const USER_TYPE_STAFF = 6;
+
+/** After authMiddleware — all /api/offer routes: Super Admin (5) or Staff (6) only. */
+const requireOfferCreatePermission = async (req, res, next) => {
+    try {
+        const user = await User.findOne({ _id: req.user.id, deleted_at: null }).select('type');
+        const type = Number(user?.type);
+        if (user && (type === USER_TYPE_SUPER_ADMIN || type === USER_TYPE_STAFF)) {
+            return next();
+        }
+        return res.status(403).json({
+            success: false,
+            status: 403,
+            message: 'You do not have permission to perform this action.',
+        });
+    } catch (err) {
+        return res.status(500).json({
+            success: false,
+            status: 500,
+            message: 'Internal server error.',
+        });
+    }
+};
 
 const PERCENTAGE_AMOUNT_FIELDS = ['value', 'admin_contribution', 'partner_contribution'];
 
@@ -232,6 +258,7 @@ const updateOfferMiddleware = async (req, res, next) => {
 
 module.exports = {
     validateOfferIdParam,
+    requireOfferCreatePermission,
     createOfferMiddleware,
     updateOfferMiddleware,
 };

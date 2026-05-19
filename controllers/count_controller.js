@@ -392,38 +392,50 @@ const buildUserManagementCustomerFilter = async (franchiseScopeOid) => {
     return { ...base, $or: orClause };
 };
 
-/** Partner verification buckets; pending includes unassigned franchise_id (same as user getAll). */
-const buildUserManagementPartnerVerificationFilter = (franchiseScopeOid, verificationStatus) => {
-    const base = { type: 2, deleted_at: null, verification_status: verificationStatus };
+/** Pending partners — all franchises or strict franchise_id when scoped. */
+const buildVerificationPendingPartnerFilter = (franchiseScopeOid) => {
+    const base = { type: 2, deleted_at: null, verification_status: 1 };
     if (!franchiseScopeOid) {
         return base;
-    }
-    if (verificationStatus === 1) {
-        return {
-            ...base,
-            $or: [
-                { franchise_id: franchiseScopeOid },
-                { franchise_id: null },
-                { franchise_id: { $exists: false } },
-            ],
-        };
     }
     return { ...base, franchise_id: franchiseScopeOid };
 };
 
-const buildUserManagementAllPartnersFilter = (franchiseScopeOid) => {
+/** Rejected partners — all franchises or strict franchise_id when scoped. */
+const buildVerificationRejectedPartnerFilter = (franchiseScopeOid) => {
+    const base = { type: 2, deleted_at: null, verification_status: 3 };
     if (!franchiseScopeOid) {
-        return { type: 2, deleted_at: null };
+        return base;
+    }
+    return { ...base, franchise_id: franchiseScopeOid };
+};
+
+/** Verification total: pending + rejected only; scoped by franchise when provided. */
+const buildVerificationTotalPartnerFilter = (franchiseScopeOid) => {
+    if (!franchiseScopeOid) {
+        return { type: 2, deleted_at: null, verification_status: { $in: [1, 3] } };
     }
     return {
         type: 2,
         deleted_at: null,
-        $or: [
-            { franchise_id: franchiseScopeOid },
-            { verification_status: 1, franchise_id: null },
-            { verification_status: 1, franchise_id: { $exists: false } },
-        ],
+        franchise_id: franchiseScopeOid,
+        verification_status: { $in: [1, 3] },
     };
+};
+
+const pickFranchiseIdFromRequest = (req) => {
+    const candidates = [
+        req.query?.franchise_id,
+        req.query?.franchise,
+        req.headers?.franchise_id,
+        req.headers?.franchise,
+    ];
+    for (const value of candidates) {
+        if (value !== undefined && value !== null && String(value).trim() !== '') {
+            return String(value).trim();
+        }
+    }
+    return null;
 };
 
 /**
@@ -438,7 +450,9 @@ const buildUserManagementCountRecord = async (franchiseScopeOid) => {
     const inactive_user = await User.countDocuments({ ...customerFilter, is_active: false });
     const active_user = await User.countDocuments({ ...customerFilter, is_active: true });
 
-    const partnerApprovedFilter = buildUserManagementPartnerVerificationFilter(franchiseScopeOid, 2);
+    const partnerApprovedFilter = franchiseScopeOid
+        ? { type: 2, deleted_at: null, verification_status: 2, franchise_id: franchiseScopeOid }
+        : { type: 2, deleted_at: null, verification_status: 2 };
     const total_partner = await User.countDocuments(partnerApprovedFilter);
     const blocked_partner = await User.countDocuments({
         ...partnerApprovedFilter,
@@ -456,12 +470,14 @@ const buildUserManagementCountRecord = async (franchiseScopeOid) => {
         is_active: true,
     });
 
-    const total_document = await User.countDocuments(buildUserManagementAllPartnersFilter(franchiseScopeOid));
+    const total_document = await User.countDocuments(
+        buildVerificationTotalPartnerFilter(franchiseScopeOid),
+    );
     const pending_document = await User.countDocuments(
-        buildUserManagementPartnerVerificationFilter(franchiseScopeOid, 1),
+        buildVerificationPendingPartnerFilter(franchiseScopeOid),
     );
     const reject_document = await User.countDocuments(
-        buildUserManagementPartnerVerificationFilter(franchiseScopeOid, 3),
+        buildVerificationRejectedPartnerFilter(franchiseScopeOid),
     );
 
     return {
@@ -1272,4 +1288,11 @@ const getHomeCount = async (req, res) => {
 };
 
 
-module.exports = { getCountData, getServiceCountData, getVerificationCountData, getPartnerServiceCount, getHomeCount };
+module.exports = {
+    getCountData,
+    getServiceCountData,
+    getVerificationCountData,
+    getPartnerServiceCount,
+    getHomeCount,
+    pickFranchiseIdFromRequest,
+};

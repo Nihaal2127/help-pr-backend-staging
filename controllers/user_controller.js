@@ -13,7 +13,12 @@ const BusinessInfo = require('../models/business_info');
 const Franchise = require('../models/franchise');
 const { getNewId } = require('../helper/id_generator');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
-const { getServiceCountData, getVerificationCountData } = require('./count_controller');
+const {
+  getServiceCountData,
+  getVerificationCountData,
+  buildVerificationListFranchiseFilter,
+  pickFranchiseIdFromRequest,
+} = require('./count_controller');
 
 const { getDocumentList } = require('./document_controller');
 const { createMultiple, getPartnerDocumentList } = require('./partner_document_controller');
@@ -283,41 +288,6 @@ function buildUserListRoleFilter(caller, { franchiseIdFilter, type, partnerListV
       type: { $in: allowedTypes },
       franchise_id: callerFranchise,
     },
-  };
-}
-
-/**
- * Franchise scope for verification list when super admin/staff selects a franchise.
- * Pending includes unassigned partners; rejected is franchise-only (matches getCount verification cards).
- */
-function buildVerificationFranchiseRoleFilter(franchiseOid, verificationFilter) {
-  const rawStatus = verificationFilter?.verification_status;
-  const statuses = rawStatus?.$in
-    ? rawStatus.$in
-    : rawStatus !== undefined
-      ? [rawStatus]
-      : [1, 3];
-
-  if (statuses.length === 1 && statuses[0] === 3) {
-    return { franchise_id: franchiseOid };
-  }
-
-  if (statuses.length === 1 && statuses[0] === 1) {
-    return {
-      $or: [
-        { franchise_id: franchiseOid },
-        { franchise_id: null },
-        { franchise_id: { $exists: false } },
-      ],
-    };
-  }
-
-  return {
-    $or: [
-      { franchise_id: franchiseOid, verification_status: { $in: [1, 3] } },
-      { verification_status: 1, franchise_id: null },
-      { verification_status: 1, franchise_id: { $exists: false } },
-    ],
   };
 }
 
@@ -1346,7 +1316,7 @@ const getVerificationAll = async (req, res) => {
       });
     }
 
-    const franchiseIdFilter = typeof req.query.franchise_id === 'string' ? req.query.franchise_id.trim() : null;
+    const franchiseIdFilter = pickFranchiseIdFromRequest(req);
     const callerFranchiseOid = await resolveCallerFranchiseOid(caller, req.user.id);
 
     const verificationStatusRaw = req.query.verification_status;
@@ -1389,12 +1359,9 @@ const getVerificationAll = async (req, res) => {
 
     let roleFilter = roleResult.roleFilter;
     let listVerificationFilter = { ...verificationFilter };
-    if (
-      franchiseIdFilter &&
-      [USER_TYPE_SUPER_ADMIN, USER_TYPE_STAFF].includes(caller.type)
-    ) {
+    if (franchiseIdFilter && mongoose.Types.ObjectId.isValid(franchiseIdFilter)) {
       const franchiseOid = new mongoose.Types.ObjectId(franchiseIdFilter);
-      roleFilter = buildVerificationFranchiseRoleFilter(franchiseOid, verificationFilter);
+      roleFilter = buildVerificationListFranchiseFilter(franchiseOid, verificationFilter);
       if (roleFilter.$or?.some((branch) => branch.verification_status !== undefined)) {
         const { verification_status: _vs, ...rest } = listVerificationFilter;
         listVerificationFilter = rest;

@@ -96,19 +96,27 @@ const endOfUtcDay = (instant) => {
     return x;
 };
 
-/** Filters on subscription started_at: from-only (open end), to-only (open start), or closed range. */
-const applyStartedAtDateFilter = (match, fromStart, toEnd) => {
+const buildUtcDayRangeCondition = (fromStart, toEnd) => {
     if (fromStart && toEnd) {
-        match.started_at = { $gte: fromStart, $lte: toEnd };
-        return;
+        return { $gte: fromStart, $lte: toEnd };
     }
     if (fromStart) {
-        match.started_at = { $gte: fromStart };
-        return;
+        return { $gte: fromStart };
     }
     if (toEnd) {
-        match.started_at = { $lte: toEnd };
+        return { $lte: toEnd };
     }
+    return null;
+};
+
+/** Both started_at and expires_at must fall within the UTC day range. */
+const applySubscriptionDateRangeFilter = (match, fromStart, toEnd) => {
+    const cond = buildUtcDayRangeCondition(fromStart, toEnd);
+    if (!cond) {
+        return;
+    }
+    match.started_at = { ...cond };
+    match.expires_at = { ...cond };
 };
 
 const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -222,19 +230,21 @@ const listPartnerSubscriptions = async (query) => {
             }
         }
 
-        const fromParsed = parseOptionalDateQuery(query.from_date, 'from_date');
+        const fromRaw = query.from_date ?? query.start_date;
+        const toRaw = query.to_date ?? query.end_date;
+        const fromParsed = parseOptionalDateQuery(fromRaw, 'start_date');
         if (!fromParsed.ok) return fail(400, fromParsed.message);
-        const toParsed = parseOptionalDateQuery(query.to_date, 'to_date');
+        const toParsed = parseOptionalDateQuery(toRaw, 'end_date');
         if (!toParsed.ok) return fail(400, toParsed.message);
 
         const fromStart = fromParsed.instant ? startOfUtcDay(fromParsed.instant) : null;
         const toEnd = toParsed.instant ? endOfUtcDay(toParsed.instant) : null;
 
         if (fromStart && toEnd && fromStart.getTime() > toEnd.getTime()) {
-            return fail(400, 'from_date must be on or before to_date.');
+            return fail(400, 'start_date must be on or before end_date.');
         }
 
-        applyStartedAtDateFilter(match, fromStart, toEnd);
+        applySubscriptionDateRangeFilter(match, fromStart, toEnd);
 
         const rawSearch = query.search ?? query.partner_name;
         if (rawSearch !== undefined && rawSearch !== null && String(rawSearch).trim() !== '') {

@@ -401,10 +401,10 @@ const buildVerificationRejectedPartnerFilter = (franchiseScopeOid) => {
     return { ...base, franchise_id: franchiseScopeOid };
 };
 
-/** Verification total: franchise pending/rejected + unassigned pending. */
+/** Verification total: pending + rejected only (never includes approved). */
 const buildVerificationTotalPartnerFilter = (franchiseScopeOid) => {
     if (!franchiseScopeOid) {
-        return { type: 2, deleted_at: null };
+        return { type: 2, deleted_at: null, verification_status: { $in: [1, 3] } };
     }
     return {
         type: 2,

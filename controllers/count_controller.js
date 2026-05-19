@@ -474,14 +474,6 @@ const buildUserManagementCustomerFilter = async (franchiseScopeOid) => {
     return { ...base, $or: orClause };
 };
 
-const buildUserManagementFranchiseStaffFilter = (franchiseScopeOid, type) => {
-    const base = { type, deleted_at: null };
-    if (!franchiseScopeOid) {
-        return base;
-    }
-    return { ...base, franchise_id: franchiseScopeOid };
-};
-
 /** Partner verification buckets; pending includes unassigned franchise_id (same as user getAll). */
 const buildUserManagementPartnerVerificationFilter = (franchiseScopeOid, verificationStatus) => {
     const base = { type: 2, deleted_at: null, verification_status: verificationStatus };
@@ -527,12 +519,6 @@ const buildUserManagementCountRecord = async (franchiseScopeOid) => {
     const total_user = await User.countDocuments(customerFilter);
     const inactive_user = await User.countDocuments({ ...customerFilter, is_active: false });
     const active_user = await User.countDocuments({ ...customerFilter, is_active: true });
-    const blocked_user = await User.countDocuments({ ...customerFilter, is_blocked: true });
-
-    const employeeFilter = buildUserManagementFranchiseStaffFilter(franchiseScopeOid, 3);
-    const total_employee = await User.countDocuments(employeeFilter);
-    const inactive_employee = await User.countDocuments({ ...employeeFilter, is_active: false });
-    const active_employee = await User.countDocuments({ ...employeeFilter, is_active: true });
 
     const partnerApprovedFilter = buildUserManagementPartnerVerificationFilter(franchiseScopeOid, 2);
     const total_partner = await User.countDocuments(partnerApprovedFilter);
@@ -556,9 +542,6 @@ const buildUserManagementCountRecord = async (franchiseScopeOid) => {
     const pending_document = await User.countDocuments(
         buildUserManagementPartnerVerificationFilter(franchiseScopeOid, 1),
     );
-    const verified_document = await User.countDocuments(
-        buildUserManagementPartnerVerificationFilter(franchiseScopeOid, 2),
-    );
     const reject_document = await User.countDocuments(
         buildUserManagementPartnerVerificationFilter(franchiseScopeOid, 3),
     );
@@ -567,17 +550,12 @@ const buildUserManagementCountRecord = async (franchiseScopeOid) => {
         total_user,
         inactive_user,
         active_user,
-        blocked_user,
-        total_employee,
-        inactive_employee,
-        active_employee,
         total_partner,
         blocked_partner,
         inactive_partner,
         active_partner,
         total_document,
         pending_document,
-        verified_document,
         reject_document,
     };
 };

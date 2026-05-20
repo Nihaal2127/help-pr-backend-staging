@@ -42,6 +42,11 @@ const partnerWalletLedgerSchema = new mongoose.Schema(
             ref: 'partner_payout',
             default: null,
         },
+        order_payment_id: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'order_payment',
+            default: null,
+        },
         created_at: { type: Date, default: Date.now },
         updated_at: { type: Date, default: Date.now },
         deleted_at: { type: Date, default: null },
@@ -50,13 +55,25 @@ const partnerWalletLedgerSchema = new mongoose.Schema(
 );
 
 partnerWalletLedgerSchema.index(
-    { financial_order_id: 1, transaction_type: 1 },
+    { order_id: 1, transaction_type: 1 },
     {
         unique: true,
         partialFilterExpression: {
             deleted_at: null,
-            financial_order_id: { $type: 'objectId' },
             transaction_type: 'credit',
+            order_payment_id: null,
+            payout_id: null,
+        },
+    }
+);
+partnerWalletLedgerSchema.index(
+    { order_payment_id: 1, transaction_type: 1 },
+    {
+        unique: true,
+        partialFilterExpression: {
+            deleted_at: null,
+            order_payment_id: { $type: 'objectId' },
+            transaction_type: 'debit',
         },
     }
 );

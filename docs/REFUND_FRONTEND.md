@@ -86,6 +86,7 @@ There is **no update** endpoint. To correct a mistake, product/process must defi
 | `_id` on **eligible-orders** row | Picker | Order **MongoDB ObjectId**. Send as `order_id` on **create**. |
 | `order_id` on **eligible-orders** / **getAll** | Display | Order **business code** (`order.unique_id`, e.g. `ORD-1001`). **Display only** on create. |
 | `order_mongo_id` on **getAll** / **getById** | List/detail | Same as order Mongo `_id` (for deep links to order module). |
+| `user_id` / `partner_id` on responses | List/detail | Customer and partner Mongo ids (set on create from order; not in create body). |
 | `_id` on **getAll** row | List | Refund document Mongo `_id`. Use for **getById** path. |
 
 **Common bug:** Sending display `order_id` (`ORD-1001`) as `order_id` on create will fail unless it happens to be a 24-char hex ObjectId.
@@ -142,6 +143,8 @@ Paginated refund history with search, date filter, and sort.
         "_id": "674a1b2c3d4e5f6789012345",
         "order_id": "ORD-1001",
         "order_mongo_id": "664a1b2c3d4e5f6789012345",
+        "user_id": "664b00000000000000000001",
+        "partner_id": "664c00000000000000000002",
         "user_name": "Jane Customer",
         "total_amount": 5000,
         "user_paid": 5000,
@@ -245,6 +248,8 @@ Read-only view of one refund.
     "_id": "674a1b2c3d4e5f6789012345",
     "order_id": "ORD-1001",
     "order_mongo_id": "664a1b2c3d4e5f6789012345",
+    "user_id": "664b00000000000000000001",
+    "partner_id": "664c00000000000000000002",
     "user_name": "Jane Customer",
     "total_amount": 5000,
     "user_paid": 5000,
@@ -264,20 +269,31 @@ Read-only view of one refund.
 
 ### 6.4 `POST /api/refund/create` — record refund
 
-**Body (JSON)**
+**Body (JSON) — send only what the client must choose**
 
 | Field | Required | Description |
 |-------|----------|-------------|
 | `order_id` | **Yes** | Order **MongoDB ObjectId** (`_id` from eligible-orders) |
 | `refund_amount` | **Yes** | Positive number; ≤ current refundable balance |
 | `date` | **Yes** | When refund was performed (ISO 8601) |
-| `user_name` | No | Defaults from customer user `name` |
-| `total_amount` | No | Defaults to `order.total_price` |
-| `user_paid` | No | Defaults to sum of completed customer payments |
 | `from_admin_commission` | No | Default `0`; must be ≥ 0 |
 | `from_partner_wallet` | No | Default `0`; must be ≥ 0 |
 | `notes` | No | Stored on refund + payment note |
 | `payment_method` | No | Label on refund payment row (default `refund`) |
+
+**Server derives from `order_id` — do not send in payload**
+
+| Field | Source |
+|-------|--------|
+| `user_id` | `order.user_id` (customer) |
+| `partner_id` | `order.partner_id` |
+| `user_name` | Customer user `name` |
+| `total_amount` | `order.total_price` |
+| `user_paid` | Sum of completed customer payments on the order |
+| `franchise_id` | `order.franchise_id` |
+| `order_unique_id` | `order.unique_id` |
+
+If the order has no customer or the customer name cannot be loaded → **400**.
 
 **Split rule (server-enforced):**
 
@@ -301,9 +317,6 @@ from_admin_commission + from_partner_wallet === refund_amount
 ```json
 {
   "order_id": "664a1b2c3d4e5f6789012345",
-  "user_name": "Jane Customer",
-  "total_amount": 5000,
-  "user_paid": 5000,
   "refund_amount": 1000,
   "from_admin_commission": 200,
   "from_partner_wallet": 800,
@@ -322,6 +335,8 @@ from_admin_commission + from_partner_wallet === refund_amount
     "_id": "674a1b2c3d4e5f6789012345",
     "order_id": "ORD-1001",
     "order_mongo_id": "664a1b2c3d4e5f6789012345",
+    "user_id": "664b00000000000000000001",
+    "partner_id": "664c00000000000000000002",
     "user_name": "Jane Customer",
     "total_amount": 5000,
     "user_paid": 5000,
@@ -382,12 +397,11 @@ function validateSplit(refund: number, admin: number, partner: number): string |
 
 ### 7.3 Submit payload
 
+Only send fields the user edits. Customer, partner, and order amounts come from the order:
+
 ```ts
 await api.post('/api/refund/create', {
   order_id: selected.orderMongoId,
-  user_name: selected.userName,
-  total_amount: selected.totalAmount,
-  user_paid: selected.maxRefund, // or historical paid if you show it separately
   refund_amount: form.refundAmount,
   from_admin_commission: form.fromAdminCommission,
   from_partner_wallet: form.fromPartnerWallet,
@@ -395,6 +409,8 @@ await api.post('/api/refund/create', {
   notes: form.notes,
 });
 ```
+
+Do **not** send `user_id`, `partner_id`, `user_name`, `total_amount`, or `user_paid` — the server resolves them from `order_id`.
 
 ### 7.4 Full vs partial refund
 
@@ -496,6 +512,8 @@ export interface RefundListRecord {
   _id: string;
   order_id: string;
   order_mongo_id: string;
+  user_id: string | null;
+  partner_id: string | null;
   user_name: string;
   total_amount: number;
   user_paid: number;
@@ -526,9 +544,6 @@ export interface CreateRefundBody {
   order_id: string;
   refund_amount: number;
   date: string;
-  user_name?: string;
-  total_amount?: number;
-  user_paid?: number;
   from_admin_commission?: number;
   from_partner_wallet?: number;
   notes?: string;

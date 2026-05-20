@@ -46,12 +46,16 @@ const {
 const {
   applyNestedResourcesOnUpdate,
 } = require('../services/order_nested_resources_service');
+const { syncOrderPartnerWalletCredit } = require('../services/partner_wallet_order_service');
 const {
   applyOrderFieldsAndServicesUpdate,
 } = require('../services/order_field_update_service');
 const {
   resolveOrderListScope,
   assertOrderRecordAccess,
+  assertCallerCanManageOrders,
+  assertCallerCanAssignFranchise,
+  resolveCallerFranchiseId,
 } = require('../utils/order_access');
 
 const ORDER_DETAIL_POPULATE = [
@@ -907,9 +911,27 @@ const create = async (req, res) => {
   try {
     const { name, email, contact } = req.body;
 
+    const managerCheck = await assertCallerCanManageOrders(req);
+    if (!managerCheck.ok) {
+      return res.status(managerCheck.status).json({
+        success: false,
+        status: managerCheck.status,
+        message: managerCheck.message,
+      });
+    }
+
+    const callerFranchiseId = await resolveCallerFranchiseId(
+      managerCheck.caller,
+      managerCheck.callerId
+    );
+
     let draft;
     try {
-      draft = await createOrderFromBody(req.body, { linkQuote: true });
+      draft = await createOrderFromBody(req.body, {
+        linkQuote: true,
+        callerFranchiseId,
+        callerType: managerCheck.caller.type,
+      });
     } catch (err) {
       if (err instanceof OrderCreationError) {
         return res.status(err.status).json({
@@ -922,6 +944,18 @@ const create = async (req, res) => {
     }
 
     const { newOrder, order_id, pricingMeta } = draft;
+
+    const franchiseCheck = await assertCallerCanAssignFranchise(
+      req,
+      newOrder.franchise_id
+    );
+    if (!franchiseCheck.ok) {
+      return res.status(franchiseCheck.status).json({
+        success: false,
+        status: franchiseCheck.status,
+        message: franchiseCheck.message,
+      });
+    }
 
     if (newOrder.payment_mode_id === "2") {
       const responsePaymentLink = await generatePaymentLink(
@@ -1024,6 +1058,22 @@ const update = async (req, res) => {
         status: access.status,
         message: access.message,
       });
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'franchise_id')) {
+      const franchiseAssignCheck = await assertCallerCanAssignFranchise(
+        req,
+        req.body.franchise_id === null || req.body.franchise_id === ''
+          ? null
+          : req.body.franchise_id
+      );
+      if (!franchiseAssignCheck.ok) {
+        return res.status(franchiseAssignCheck.status).json({
+          success: false,
+          status: franchiseAssignCheck.status,
+          message: franchiseAssignCheck.message,
+        });
+      }
     }
 
     try {
@@ -1208,6 +1258,26 @@ const serviceUpdate = async (req, res) => {
       });
     }
 
+    const parentOrder = await Order.findOne({
+      _id: service.order_id,
+      deleted_at: null,
+    });
+    if (!parentOrder) {
+      return res.status(404).json({
+        success: false,
+        status: 404,
+        message: 'No record found',
+      });
+    }
+    const serviceAccess = await assertOrderRecordAccess(req, parentOrder);
+    if (!serviceAccess.ok) {
+      return res.status(serviceAccess.status).json({
+        success: false,
+        status: serviceAccess.status,
+        message: serviceAccess.message,
+      });
+    }
+
     const originalPartnerId = service.partner_id?.toString();
     const originalServiceDate = service.service_date;
     const originalFromTime = service.service_from_time;
@@ -1374,6 +1444,24 @@ const cancleService = async (req, res) => {
         message: 'No record found'
       });
     }
+
+    if (order.deleted_at) {
+      return res.status(404).json({
+        success: false,
+        status: 404,
+        message: 'No record found',
+      });
+    }
+
+    const cancelServiceAccess = await assertOrderRecordAccess(req, order);
+    if (!cancelServiceAccess.ok) {
+      return res.status(cancelServiceAccess.status).json({
+        success: false,
+        status: cancelServiceAccess.status,
+        message: cancelServiceAccess.message,
+      });
+    }
+
     let body;
     let partner;
     if (!order.service_items.some((sid) => sid.equals(service_items_id))) {
@@ -1495,6 +1583,24 @@ const cancleOrder = async (req, res) => {
         message: 'No record found'
       });
     }
+
+    if (order.deleted_at) {
+      return res.status(404).json({
+        success: false,
+        status: 404,
+        message: 'No record found',
+      });
+    }
+
+    const cancelAccess = await assertOrderRecordAccess(req, order);
+    if (!cancelAccess.ok) {
+      return res.status(cancelAccess.status).json({
+        success: false,
+        status: cancelAccess.status,
+        message: cancelAccess.message,
+      });
+    }
+
     order.order_status = ORDER_STATUS_CANCELLED;
     order.cancellation_reasone = cancellation_reasone || '';
     touchOrderStatusInfo(order, ORDER_STATUS_CANCELLED);
@@ -1509,6 +1615,8 @@ const cancleOrder = async (req, res) => {
         }
       }
     );
+
+    await syncOrderPartnerWalletCredit(order._id);
 
     const orderServices = await OrderService.find({
       _id: { $in: order.service_items }
@@ -1664,6 +1772,14 @@ const deleteOrder = async (req, res) => {
       });
     }
 
+    const deleteAccess = await assertOrderRecordAccess(req, order);
+    if (!deleteAccess.ok) {
+      return res.status(deleteAccess.status).json({
+        success: false,
+        status: deleteAccess.status,
+        message: deleteAccess.message,
+      });
+    }
 
     order.deleted_at = new Date();
 

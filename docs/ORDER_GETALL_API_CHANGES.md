@@ -23,12 +23,16 @@ Implemented in `utils/order_access.js` (`resolveOrderListScope`, `assertOrderRec
 |-------------|----------|-----------|
 | Super admin (5) | All orders; optional `?franchise_id=` | Any order |
 | Staff (6) | Same as super admin | Any order |
-| Franchise admin (1) | Only their franchise; wrong `franchise_id` → **403** | Same franchise only |
-| Franchise employee (3) | Same as franchise admin | Same franchise only |
+| Franchise admin (1) | Their franchise **plus** legacy orders (`franchise_id` null) whose partner, employee, or creator belongs to that franchise; wrong `franchise_id` query → **403** | Same franchise rules as list |
+| Franchise employee (3) | Same as franchise admin | Same franchise rules as list |
 | Partner (2) | **403** | **403** |
 | Customer (4) | **403** | **403** |
 
 `franchise_id` on the query string is **not** a free filter for everyone—it is validated against the caller’s franchise (same rules as quotes).
+
+**Legacy orders:** Rows created without `franchise_id` still appear for franchise admin/employee when `partner_id`, `employee_id`, or `created_by_id` is a user on that franchise. New orders auto-set `franchise_id` from quote, partner, creator, or logged-in franchise user when omitted on create.
+
+**Mutations (same JWT → DB user):** `POST /create`, `PUT /update`, `PUT /cancle`, `PUT /cancleService`, `PUT /serviceUpdate`, `DELETE /delete`, and nested charge/payment routes use `utils/order_access.js` — franchise admin/employee only for their franchise; super admin/staff unrestricted. `GET /getCustomerOrder` is unchanged (customer list by `user_id`).
 
 ---
 

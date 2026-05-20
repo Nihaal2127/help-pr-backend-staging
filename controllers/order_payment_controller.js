@@ -1,8 +1,9 @@
 const mongoose = require("mongoose");
 const Order = require("../models/order");
 const OrderPayment = require("../models/order_payment");
-const { callerMatchesOrderParticipant } = require("../utils/order_access");
+const { assertOrderModifyAccess } = require("../utils/order_access");
 const { syncOrderPaymentStatus } = require("../services/order_payment_status_service");
+const { syncPartnerOrderPaymentWallet } = require("../services/partner_wallet_order_service");
 
 const PAYER_TYPES = new Set(["customer", "partner"]);
 const STATUSES = new Set(["pending", "completed", "failed", "refunded"]);
@@ -53,11 +54,14 @@ const create = async (req, res) => {
       });
     }
 
-    if (!callerMatchesOrderParticipant(req.user?.id, order)) {
-      return res.status(403).json({
+    const access = await assertOrderModifyAccess(req, order);
+    if (!access.ok) {
+      return res.status(access.status).json({
         success: false,
-        status: 403,
-        message: "You are not allowed to record payments on this order.",
+        status: access.status,
+        message:
+          access.message ||
+          "You are not allowed to record payments on this order.",
       });
     }
 
@@ -79,6 +83,7 @@ const create = async (req, res) => {
       notes: notes || "",
     });
     await doc.save();
+    await syncPartnerOrderPaymentWallet(doc);
 
     const { order: syncedOrder, breakdown } = await syncOrderPaymentStatus(order._id);
 
@@ -124,11 +129,12 @@ const listByOrder = async (req, res) => {
         message: "Order not found.",
       });
     }
-    if (!callerMatchesOrderParticipant(req.user?.id, order)) {
-      return res.status(403).json({
+    const access = await assertOrderModifyAccess(req, order);
+    if (!access.ok) {
+      return res.status(access.status).json({
         success: false,
-        status: 403,
-        message: "Forbidden.",
+        status: access.status,
+        message: access.message || "Forbidden.",
       });
     }
 
@@ -184,11 +190,12 @@ const update = async (req, res) => {
         message: "Order not found.",
       });
     }
-    if (!callerMatchesOrderParticipant(req.user?.id, order)) {
-      return res.status(403).json({
+    const access = await assertOrderModifyAccess(req, order);
+    if (!access.ok) {
+      return res.status(access.status).json({
         success: false,
-        status: 403,
-        message: "Forbidden.",
+        status: access.status,
+        message: access.message || "Forbidden.",
       });
     }
 
@@ -240,6 +247,7 @@ const update = async (req, res) => {
     if (notes !== undefined) row.notes = notes;
     row.updated_at = new Date();
     await row.save();
+    await syncPartnerOrderPaymentWallet(row);
 
     const { order: syncedOrder, breakdown } = await syncOrderPaymentStatus(order._id);
 
@@ -294,17 +302,19 @@ const remove = async (req, res) => {
         message: "Order not found.",
       });
     }
-    if (!callerMatchesOrderParticipant(req.user?.id, orderForAuth)) {
-      return res.status(403).json({
+    const access = await assertOrderModifyAccess(req, orderForAuth);
+    if (!access.ok) {
+      return res.status(access.status).json({
         success: false,
-        status: 403,
-        message: "Forbidden.",
+        status: access.status,
+        message: access.message || "Forbidden.",
       });
     }
 
     row.deleted_at = new Date();
     row.updated_at = new Date();
     await row.save();
+    await syncPartnerOrderPaymentWallet(row);
 
     const { breakdown } = await syncOrderPaymentStatus(orderForAuth._id);
 

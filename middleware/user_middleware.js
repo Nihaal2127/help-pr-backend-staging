@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const { checkObjectIdExists } = require('../validator/id_validator');
 const Service = require('../models/service');
 const User = require('../models/user');
+const SubscriptionPlan = require('../models/subscription_plan');
 const {
   parseJSONField,
   parseBooleanField,
@@ -175,6 +176,211 @@ const parsePartnerCatalogFields = (req) => {
   ) {
     req.body.partner_services = partnerServicesAlias;
   }
+};
+
+const parsePartnerNestedObject = (value) => {
+  if (value === undefined || value === null) return {};
+  if (typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return {};
+    try {
+      const parsed = JSON.parse(trimmed);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+};
+
+const pickPartnerCreateValue = (req, keys) => {
+  const bank = parsePartnerNestedObject(req.body.bank_account);
+  const sub = parsePartnerNestedObject(req.body.partner_subscription);
+  for (const key of keys) {
+    for (const source of [req.body, bank, sub]) {
+      const value = source[key];
+      if (value !== undefined && value !== null && String(value).trim() !== '') {
+        return value;
+      }
+    }
+  }
+  return null;
+};
+
+const isValidPartnerDateValue = (raw) => {
+  if (raw === undefined || raw === null || String(raw).trim() === '') return false;
+  const date = raw instanceof Date ? raw : new Date(raw);
+  return !Number.isNaN(date.getTime());
+};
+
+const validatePartnerCreateRequiredFields = async (req, res) => {
+  const { address, password, is_active } = req.body;
+
+  if (!address || String(address).trim() === '') {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Address is required.',
+    });
+    return false;
+  }
+
+  if (!req.body.pincode || String(req.body.pincode).trim() === '') {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Pincode is required.',
+    });
+    return false;
+  }
+
+  const confirmPassword = req.body.confirm_password;
+  if (
+    confirmPassword === undefined ||
+    confirmPassword === null ||
+    String(confirmPassword).trim() === ''
+  ) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Confirm password is required.',
+    });
+    return false;
+  }
+  if (String(password) !== String(confirmPassword)) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Password and confirm password do not match.',
+    });
+    return false;
+  }
+
+  const subscriptionPlanId = pickPartnerCreateValue(req, [
+    'subscription_plan_id',
+    'subscription_plan',
+  ]);
+  if (!subscriptionPlanId || String(subscriptionPlanId).trim() === '') {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Subscription plan is required.',
+    });
+    return false;
+  }
+  if (!mongoose.Types.ObjectId.isValid(String(subscriptionPlanId))) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Invalid subscription plan id.',
+    });
+    return false;
+  }
+  const plan = await SubscriptionPlan.findOne({
+    _id: subscriptionPlanId,
+    deleted_at: null,
+    is_active: true,
+  })
+    .select('_id')
+    .lean();
+  if (!plan) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Subscription plan not found, inactive, or deleted.',
+    });
+    return false;
+  }
+
+  const subscriptionStart = pickPartnerCreateValue(req, [
+    'subscription_start_date',
+    'started_at',
+    'start_date',
+  ]);
+  if (!isValidPartnerDateValue(subscriptionStart)) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Subscription start date is required.',
+    });
+    return false;
+  }
+
+  const subscriptionEnd = pickPartnerCreateValue(req, [
+    'subscription_end_date',
+    'expires_at',
+    'end_date',
+  ]);
+  if (!isValidPartnerDateValue(subscriptionEnd)) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Subscription end date is required.',
+    });
+    return false;
+  }
+
+  const bankName = pickPartnerCreateValue(req, ['bank_name']);
+  if (!bankName || String(bankName).trim() === '') {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Bank name is required.',
+    });
+    return false;
+  }
+
+  const branchName = pickPartnerCreateValue(req, ['branch_name']);
+  if (!branchName || String(branchName).trim() === '') {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Branch name is required.',
+    });
+    return false;
+  }
+
+  const ifscCode = pickPartnerCreateValue(req, ['ifsc_code']);
+  if (!ifscCode || String(ifscCode).trim() === '') {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'IFSC code is required.',
+    });
+    return false;
+  }
+
+  const accountName = pickPartnerCreateValue(req, ['account_name', 'account_holder_name']);
+  if (!accountName || String(accountName).trim() === '') {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Account name is required.',
+    });
+    return false;
+  }
+
+  const accountNumber = pickPartnerCreateValue(req, ['account_number']);
+  if (!accountNumber || String(accountNumber).trim() === '') {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Account number is required.',
+    });
+    return false;
+  }
+
+  if (is_active === undefined) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Status is required.',
+    });
+    return false;
+  }
+
+  return true;
 };
 
 const validatePartnerCatalogPayload = (req, res) => {
@@ -693,6 +899,9 @@ const createUserMiddleware = async (req, res, next) => {
         status: 400,
         message: 'Invalid area id.',
       });
+    }
+    if (!(await validatePartnerCreateRequiredFields(req, res))) {
+      return;
     }
   }
   if (chat !== undefined && typeof chat !== 'boolean') {

@@ -30,11 +30,10 @@ const { sanitizeInput } = require('../validator/search_keyword_validator');
 
 const escapeRegExp = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/** Case-insensitive franchise name uniqueness within a city (non-deleted rows only). */
-const franchiseNameExistsInCity = (trimmedName, cityObjectId, excludeId = null) => {
+/** Case-insensitive global franchise name uniqueness (non-deleted rows only). */
+const franchiseNameExists = (trimmedName, excludeId = null) => {
     const query = {
         deleted_at: null,
-        city_id: cityObjectId,
         name: new RegExp(`^${escapeRegExp(trimmedName)}$`, 'i'),
     };
     if (excludeId) {
@@ -403,11 +402,9 @@ const createFranchise = async (body) => {
             return fail(400, 'Franchise name is required.');
         }
 
-        const existing = await Franchise.findOne(
-            franchiseNameExistsInCity(trimmedName, hierarchy.cityOid)
-        );
+        const existing = await Franchise.findOne(franchiseNameExists(trimmedName));
         if (existing) {
-            return fail(409, 'Franchise name already exists for this city.');
+            return fail(409, 'Franchise name already exists.');
         }
 
         const doc = new Franchise({
@@ -497,10 +494,8 @@ const updateFranchise = async (id, body) => {
             if (!trimmedName) {
                 return fail(400, 'Franchise name is required.');
             }
-            const existing = await Franchise.findOne(
-                franchiseNameExistsInCity(trimmedName, hierarchy.cityOid, id)
-            );
-            if (existing) return fail(409, 'Franchise name already exists for this city.');
+            const existing = await Franchise.findOne(franchiseNameExists(trimmedName, id));
+            if (existing) return fail(409, 'Franchise name already exists.');
             franchise.name = trimmedName;
         }
 
@@ -624,11 +619,9 @@ const importFranchises = async (records) => {
             if (!adminCtx) {
                 return fail(400, `Admin user not found for franchise: ${trimmedName}`);
             }
-            const nameConflict = await Franchise.findOne(
-                franchiseNameExistsInCity(trimmedName, hierarchy.cityOid)
-            );
+            const nameConflict = await Franchise.findOne(franchiseNameExists(trimmedName));
             if (nameConflict) {
-                return fail(409, `Franchise name already exists for this city. (${trimmedName})`);
+                return fail(409, `Franchise name already exists. (${trimmedName})`);
             }
             const { description, desc } = normalizeDescriptionFields({
                 description: rec.description,
@@ -655,12 +648,11 @@ const importFranchises = async (records) => {
             });
         }
 
-        const key = (r) => `${r.city_id.toString()}:${r.name.toLowerCase()}`;
         const seen = new Set();
         for (const r of toInsert) {
-            const k = key(r);
+            const k = r.name.toLowerCase();
             if (seen.has(k)) {
-                return fail(409, 'Duplicate city/name combinations in import file.');
+                return fail(409, 'Duplicate franchise names in import file.');
             }
             seen.add(k);
         }

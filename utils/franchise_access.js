@@ -32,6 +32,25 @@ const pickFranchiseIdRaw = (query = {}, body = {}) => {
     return null;
 };
 
+/** Same sources as GET /api/getCount and user list APIs (query, body, headers). */
+const pickFranchiseIdFromReq = (req) => {
+    if (!req) return null;
+    const candidates = [
+        req.query?.franchise_id,
+        req.query?.franchise,
+        req.body?.franchise_id,
+        req.body?.franchise,
+        req.headers?.franchise_id,
+        req.headers?.franchise,
+    ];
+    for (const raw of candidates) {
+        if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
+            return String(raw).trim();
+        }
+    }
+    return null;
+};
+
 /**
  * Super admin (5) / staff (6): any franchise.
  * Franchise admin (1): own franchise_id or franchises they admin.
@@ -91,5 +110,6 @@ const assertFranchiseAccess = async (authUser, franchiseOid) => {
 module.exports = {
     parseFranchiseObjectId,
     pickFranchiseIdRaw,
+    pickFranchiseIdFromReq,
     assertFranchiseAccess,
 };

@@ -15,6 +15,8 @@ Legacy per-module collections live in **`archive/`** (not for import).
 3. Run **`00 — Auth` → `Login`** — saves JWT to **`accessToken`** and **`token`**
 4. Open any folder (Order, Partner payout, Expense, …)
 
+**Partner payout UI:** see `docs/PARTNER_PAYOUT_FRONTEND.md` and folder **37 — Partner payout**.
+
 ## Regenerate after API changes
 
 ```bash

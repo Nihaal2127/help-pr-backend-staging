@@ -19,7 +19,7 @@ const {
     stripDerivedPartitionArraysFromCategoryMapping,
 } = require('../utils/franchise_catalog_lists');
 const {
-    resolveFranchiseLocalEnabledMaps,
+    resolveFranchiseMappingPreferenceMaps,
     annotateCatalogRowWithAvailability,
     isGlobalCatalogRowActive,
     enrichFranchiseCategoryMappingRecords,
@@ -265,7 +265,7 @@ const buildSyntheticFranchiseCategoryFromFranchiseDoc = async (franchiseOid) => 
  * Every global category (non-deleted), annotated with franchise local preference and effective availability.
  */
 const buildAllCategoriesWithFranchiseMappingStatus = async (franchiseOid) => {
-    const local = await resolveFranchiseLocalEnabledMaps(franchiseOid);
+    const local = await resolveFranchiseMappingPreferenceMaps(franchiseOid);
     const franchiseEnabledMap = local.ok ? local.categoryEnabled : new Map();
 
     const allCats = await Category.find({ deleted_at: null }).lean();

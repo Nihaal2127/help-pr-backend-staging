@@ -104,11 +104,57 @@ const loadLatestFranchiseServiceMapping = async (franchiseOid) => {
     return coerceLegacyServiceMappingArrays(row);
 };
 
+const buildFranchiseEnabledMapsFromSources = ({
+    franchise,
+    fc,
+    fs,
+    restrictToAssigned,
+}) => {
+    const assignedCategorySet = new Set(
+        (Array.isArray(franchise.categories) ? franchise.categories : []).map(toIdStr)
+    );
+    const assignedServiceSet = new Set(
+        (Array.isArray(franchise.services) ? franchise.services : []).map(toIdStr)
+    );
+    const categoryAssignedFilter = restrictToAssigned ? assignedCategorySet : null;
+    const serviceAssignedFilter = restrictToAssigned ? assignedServiceSet : null;
+
+    let categoryEnabled;
+    if (fc && Array.isArray(fc.categories_list) && fc.categories_list.length > 0) {
+        categoryEnabled = buildEnabledMapFromCategoriesList(
+            fc.categories_list,
+            categoryAssignedFilter
+        );
+    } else if (assignedCategorySet.size > 0) {
+        categoryEnabled = new Map();
+        for (const id of assignedCategorySet) categoryEnabled.set(id, true);
+    } else {
+        categoryEnabled = new Map();
+    }
+
+    let serviceEnabled;
+    if (fs && Array.isArray(fs.services_list) && fs.services_list.length > 0) {
+        serviceEnabled = buildEnabledMapFromServicesList(fs.services_list, serviceAssignedFilter);
+    } else if (assignedServiceSet.size > 0) {
+        serviceEnabled = new Map();
+        for (const id of assignedServiceSet) serviceEnabled.set(id, true);
+    } else {
+        serviceEnabled = new Map();
+    }
+
+    return {
+        assignedCategoryIds: [...assignedCategorySet].map((s) => new mongoose.Types.ObjectId(s)),
+        assignedServiceIds: [...assignedServiceSet].map((s) => new mongoose.Types.ObjectId(s)),
+        categoryEnabled,
+        serviceEnabled,
+    };
+};
+
 /**
- * Franchise-local enabled flags from categories_list / services_list (preference only).
- * Falls back to Franchise.categories / Franchise.services as all enabled when no mapping row.
+ * Full mapping preferences from categories_list / services_list (every mapped global row).
+ * Matches GET franchise-category|service getAll all_* and getCount active_* / inactive_*.
  */
-const resolveFranchiseLocalEnabledMaps = async (franchiseId) => {
+const resolveFranchiseMappingPreferenceMaps = async (franchiseId) => {
     const fid =
         franchiseId instanceof mongoose.Types.ObjectId
             ? franchiseId
@@ -121,45 +167,49 @@ const resolveFranchiseLocalEnabledMaps = async (franchiseId) => {
         return { ok: false, status: 404, message: 'Franchise not found.' };
     }
 
-    const assignedCategorySet = new Set(
-        (Array.isArray(franchise.categories) ? franchise.categories : []).map(toIdStr)
-    );
-    const assignedServiceSet = new Set(
-        (Array.isArray(franchise.services) ? franchise.services : []).map(toIdStr)
-    );
+    const fc = await loadLatestFranchiseCategoryMapping(fid);
+    const fs = await loadLatestFranchiseServiceMapping(fid);
+    const maps = buildFranchiseEnabledMapsFromSources({
+        franchise,
+        fc,
+        fs,
+        restrictToAssigned: false,
+    });
+
+    return { ok: true, franchiseId: fid, ...maps };
+};
+
+/**
+ * Franchise.categories / services[] intersected with mapping preferences (assigned subset).
+ * Used for partner-effective franchise catalog resolution.
+ */
+const resolveFranchiseAssignedEnabledMaps = async (franchiseId) => {
+    const fid =
+        franchiseId instanceof mongoose.Types.ObjectId
+            ? franchiseId
+            : new mongoose.Types.ObjectId(String(franchiseId));
+
+    const franchise = await Franchise.findOne({ _id: fid, deleted_at: null })
+        .select('categories services')
+        .lean();
+    if (!franchise) {
+        return { ok: false, status: 404, message: 'Franchise not found.' };
+    }
 
     const fc = await loadLatestFranchiseCategoryMapping(fid);
     const fs = await loadLatestFranchiseServiceMapping(fid);
+    const maps = buildFranchiseEnabledMapsFromSources({
+        franchise,
+        fc,
+        fs,
+        restrictToAssigned: true,
+    });
 
-    let categoryEnabled;
-    if (fc && Array.isArray(fc.categories_list) && fc.categories_list.length > 0) {
-        categoryEnabled = buildEnabledMapFromCategoriesList(fc.categories_list, assignedCategorySet);
-    } else if (assignedCategorySet.size > 0) {
-        categoryEnabled = new Map();
-        for (const id of assignedCategorySet) categoryEnabled.set(id, true);
-    } else {
-        categoryEnabled = new Map();
-    }
-
-    let serviceEnabled;
-    if (fs && Array.isArray(fs.services_list) && fs.services_list.length > 0) {
-        serviceEnabled = buildEnabledMapFromServicesList(fs.services_list, assignedServiceSet);
-    } else if (assignedServiceSet.size > 0) {
-        serviceEnabled = new Map();
-        for (const id of assignedServiceSet) serviceEnabled.set(id, true);
-    } else {
-        serviceEnabled = new Map();
-    }
-
-    return {
-        ok: true,
-        franchiseId: fid,
-        assignedCategoryIds: [...assignedCategorySet].map((s) => new mongoose.Types.ObjectId(s)),
-        assignedServiceIds: [...assignedServiceSet].map((s) => new mongoose.Types.ObjectId(s)),
-        categoryEnabled,
-        serviceEnabled,
-    };
+    return { ok: true, franchiseId: fid, ...maps };
 };
+
+/** Alias: full mapping partition (dashboard + all_* lists). */
+const resolveFranchiseLocalEnabledMaps = resolveFranchiseMappingPreferenceMaps;
 
 const loadGlobalCategoryActiveMap = async (categoryIds) => {
     const unique = [...new Set((categoryIds || []).map(toIdStr).filter(Boolean))];
@@ -202,7 +252,7 @@ const loadGlobalServiceMetaMap = async (serviceIds) => {
  * Effective franchise catalog: global active ∩ franchise locally enabled ∩ assigned.
  */
 const resolveFranchiseEffectiveCatalog = async (franchiseId) => {
-    const local = await resolveFranchiseLocalEnabledMaps(franchiseId);
+    const local = await resolveFranchiseAssignedEnabledMaps(franchiseId);
     if (!local.ok) return local;
 
     const categoryIds = [...local.categoryEnabled.keys()].map(
@@ -444,7 +494,7 @@ const countFranchiseScopedAvailability = async (franchiseIdsScope, kind) => {
     let effectivelyAvailable = 0;
 
     for (const franchiseOid of franchiseIdsScope) {
-        const local = await resolveFranchiseLocalEnabledMaps(franchiseOid);
+        const local = await resolveFranchiseMappingPreferenceMaps(franchiseOid);
         if (!local.ok) continue;
 
         const idMap = kind === 'category' ? local.categoryEnabled : local.serviceEnabled;
@@ -542,7 +592,7 @@ const loadPartnerAvailabilityContext = async (partnerId) => {
     const partnerLocal = await loadPartnerLocalEnabledMaps(partnerId);
     let franchiseLocal = null;
     if (user.franchise_id) {
-        franchiseLocal = await resolveFranchiseLocalEnabledMaps(user.franchise_id);
+        franchiseLocal = await resolveFranchiseAssignedEnabledMaps(user.franchise_id);
         if (!franchiseLocal.ok) return franchiseLocal;
     }
 
@@ -658,7 +708,7 @@ const enrichPartnerServiceApiRecord = (
  */
 const enrichFranchiseCategoryMappingEntries = async (entries, franchiseOid) => {
     if (!entries || entries.length === 0) return entries;
-    const local = await resolveFranchiseLocalEnabledMaps(franchiseOid);
+    const local = await resolveFranchiseMappingPreferenceMaps(franchiseOid);
     const franchiseEnabledMap = local.ok ? local.categoryEnabled : new Map();
 
     return entries.map((e) => {
@@ -680,7 +730,7 @@ const enrichFranchiseCategoryMappingEntries = async (entries, franchiseOid) => {
  */
 const enrichFranchiseServiceMappingEntries = async (entries, franchiseOid) => {
     if (!entries || entries.length === 0) return entries;
-    const local = await resolveFranchiseLocalEnabledMaps(franchiseOid);
+    const local = await resolveFranchiseMappingPreferenceMaps(franchiseOid);
     const franchiseCategoryEnabled = local.ok ? local.categoryEnabled : new Map();
     const franchiseServiceEnabled = local.ok ? local.serviceEnabled : new Map();
 
@@ -784,6 +834,8 @@ module.exports = {
     computeServiceEffectiveActive,
     buildEnabledMapFromCategoriesList,
     buildEnabledMapFromServicesList,
+    resolveFranchiseMappingPreferenceMaps,
+    resolveFranchiseAssignedEnabledMaps,
     resolveFranchiseLocalEnabledMaps,
     resolveFranchiseEffectiveCatalog,
     resolveFranchiseCatalogByFranchiseId,

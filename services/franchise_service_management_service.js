@@ -16,7 +16,7 @@ const {
     stripDerivedPartitionArraysFromServiceMapping,
 } = require('../utils/franchise_catalog_lists');
 const {
-    resolveFranchiseLocalEnabledMaps,
+    resolveFranchiseMappingPreferenceMaps,
     annotateCatalogRowWithAvailability,
     isGlobalCatalogRowActive,
     loadGlobalCategoryActiveMap,
@@ -203,7 +203,7 @@ const buildSyntheticFranchiseServiceFromFranchiseDoc = async (franchiseOid) => {
  * Every global service (non-deleted), annotated with franchise local preference and effective availability.
  */
 const buildAllServicesWithFranchiseMappingStatus = async (franchiseOid) => {
-    const local = await resolveFranchiseLocalEnabledMaps(franchiseOid);
+    const local = await resolveFranchiseMappingPreferenceMaps(franchiseOid);
     const franchiseServiceEnabled = local.ok ? local.serviceEnabled : new Map();
     const franchiseCategoryEnabled = local.ok ? local.categoryEnabled : new Map();
 

@@ -650,6 +650,51 @@ const createUserMiddleware = async (req, res, next) => {
       });
     }
   }
+  if (type === 2) {
+    if (!state_id || String(state_id).trim() === '') {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'State is required.',
+      });
+    }
+    if (!mongoose.Types.ObjectId.isValid(state_id)) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Invalid state id.',
+      });
+    }
+    if (!city_id || String(city_id).trim() === '') {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'City is required.',
+      });
+    }
+    if (!mongoose.Types.ObjectId.isValid(city_id)) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Invalid city id.',
+      });
+    }
+    const areaId = req.body.area_id;
+    if (!areaId || String(areaId).trim() === '') {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Area is required.',
+      });
+    }
+    if (!mongoose.Types.ObjectId.isValid(String(areaId))) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Invalid area id.',
+      });
+    }
+  }
   if (chat !== undefined && typeof chat !== 'boolean') {
     return res.status(400).json({
       success: false,

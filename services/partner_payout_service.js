@@ -1,7 +1,6 @@
 const mongoose = require('mongoose');
 const User = require('../models/user');
 const Franchise = require('../models/franchise');
-const FinancialOrder = require('../models/financial_order');
 const PartnerPayout = require('../models/partner_payout');
 const PartnerWalletLedger = require('../models/partner_wallet_ledger');
 const { PAYMENT_METHODS } = require('../models/partner_payout');
@@ -67,53 +66,8 @@ const formatDateOnly = (date) => {
 
 const roundAmount = (n) => Math.round(Number(n) * 100) / 100;
 
-const syncCreditsFromFinancialOrders = async (partnerIds = null) => {
-    const filter = {
-        deleted_at: null,
-        pending_to_partner: { $gt: 0 },
-    };
-    if (partnerIds && partnerIds.length > 0) {
-        filter.partner_id = { $in: partnerIds };
-    }
-
-    const orders = await FinancialOrder.find(filter).lean();
-    if (!orders.length) return;
-
-    const ops = [];
-    for (const fo of orders) {
-        ops.push({
-            updateOne: {
-                filter: {
-                    financial_order_id: fo._id,
-                    transaction_type: 'credit',
-                    deleted_at: null,
-                },
-                update: {
-                    $setOnInsert: {
-                        partner_id: fo.partner_id,
-                        franchise_id: fo.franchise_id || null,
-                        transaction_type: 'credit',
-                        amount: fo.pending_to_partner,
-                        date: fo.service_date || fo.created_at || new Date(),
-                        description: fo.service_name,
-                        payment_method: null,
-                        order_id: fo.order_id || null,
-                        order_unique_id: fo.order_unique_id || null,
-                        financial_order_id: fo._id,
-                        created_at: new Date(),
-                        updated_at: new Date(),
-                        deleted_at: null,
-                    },
-                },
-                upsert: true,
-            },
-        });
-    }
-
-    if (ops.length) {
-        await PartnerWalletLedger.bulkWrite(ops, { ordered: false });
-    }
-};
+/** @deprecated Wallet credits come from orders via partner_wallet_order_service. */
+const syncCreditsFromFinancialOrders = async () => {};
 
 const getWalletAggregatesForPartners = async (partnerIds) => {
     if (!partnerIds.length) return new Map();
@@ -555,6 +509,7 @@ const getPartnerWalletLedger = async (query) => {
             transaction_type: row.transaction_type,
             order_id: row.order_id || null,
             order_unique_id: row.order_unique_id || null,
+            order_payment_id: row.order_payment_id || null,
             description: row.description,
             payment_method: row.payment_method || null,
             amount: row.amount,
@@ -586,4 +541,5 @@ module.exports = {
     createPartnerPayout,
     getPartnerWalletLedger,
     syncCreditsFromFinancialOrders,
+    getWalletAggregatesForPartners,
 };

@@ -5,6 +5,10 @@ const { OrderCreationError } = require("../errors/order_creation_error");
 const { computeAdditionalChargeLine } = require("../utils/order_pricing");
 const { recalculateOrderTotals } = require("../utils/order_financials");
 const { syncOrderPaymentStatus } = require("../services/order_payment_status_service");
+const {
+  syncPartnerOrderPaymentWallet,
+  syncAllPartnerOrderPaymentsForOrder,
+} = require("../services/partner_wallet_order_service");
 
 const ALLOWED_CHARGE_METHODS = new Set([
   "cash",
@@ -151,6 +155,7 @@ const applyPaymentCreates = async (order, items) => {
     validatePaymentItem(items[i], `order_payments.create[${i}]`);
     const doc = new OrderPayment(buildPaymentDocument(order, items[i]));
     await doc.save();
+    await syncPartnerOrderPaymentWallet(doc);
     created.push(doc);
   }
   return created;
@@ -203,6 +208,7 @@ const softDeletePayments = async (orderId, deleteIds) => {
     row.deleted_at = new Date();
     row.updated_at = new Date();
     await row.save();
+    await syncPartnerOrderPaymentWallet(row);
     deleted.push(oid);
   }
   return deleted;
@@ -322,6 +328,7 @@ const applyPaymentUpdates = async (order, items) => {
     if (item.notes !== undefined) row.notes = item.notes;
     row.updated_at = new Date();
     await row.save();
+    await syncPartnerOrderPaymentWallet(row);
     updated.push(row);
   }
   return updated;
@@ -400,6 +407,9 @@ const applyNestedResourcesOnUpdate = async (order, body) => {
     await recalculateOrderTotals(order._id);
   } else if (paymentsTouched) {
     await syncOrderPaymentStatus(order._id);
+  }
+  if (paymentsTouched) {
+    await syncAllPartnerOrderPaymentsForOrder(order._id);
   }
 
   return {

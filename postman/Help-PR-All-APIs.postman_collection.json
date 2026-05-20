@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-all-apis-merged",
     "name": "Help PR — All APIs (single collection)",
-    "description": "**Single Postman collection** for `help-pr-backend-staging`. Import only this file.\n\n**Generated:** 2026-05-20 via `node postman/merge-all-collections.mjs`\n\n**Sources merged (8) from `postman/archive/`:**\n- `archive/Help-PR-Orders-Module.postman_collection.json`\n- `archive/Help-PR-Order-Charges-Payments.postman_collection.json`\n- `archive/Help-PR-Partner-Franchise-Dropdowns.postman_collection.json`\n- `archive/content-expense-expense-category-management.postman_collection (1).json`\n- `archive/Area-Management.postman_collection.json`\n- `archive/Help-PR-Area-Franchise-Subscription-UserTypes.postman_collection.json`\n- `archive/Help-PR-Area-Franchise-Subscription.postman_collection.json`\n- `archive/Help-PR-Admin-Dashboard.postman_collection.json`\n- Built-in: Partner payout (4 requests)\n\n**Dedup:** Same HTTP method + path template (+ getCount `type` in body) → one request; higher-priority source wins.\n\n**Setup:** Set `baseUrl`. Run **00 — Auth → Login** to set `accessToken` / `token`.\n\n**Docs:** `docs/ORDER_MODULE_FRONTEND.md`, `docs/ORDER_GETALL_API_CHANGES.md`, `docs/PARTNER_PAYOUT_FRONTEND.md`",
+    "description": "**Single Postman collection** for `help-pr-backend-staging`. Import only this file.\n\n**Generated:** 2026-05-20 via `node postman/merge-all-collections.mjs`\n\n**Sources merged (8) from `postman/archive/`:**\n- `archive/Help-PR-Orders-Module.postman_collection.json`\n- `archive/Help-PR-Order-Charges-Payments.postman_collection.json`\n- `archive/Help-PR-Partner-Franchise-Dropdowns.postman_collection.json`\n- `archive/content-expense-expense-category-management.postman_collection (1).json`\n- `archive/Area-Management.postman_collection.json`\n- `archive/Help-PR-Area-Franchise-Subscription-UserTypes.postman_collection.json`\n- `archive/Help-PR-Area-Franchise-Subscription.postman_collection.json`\n- `archive/Help-PR-Admin-Dashboard.postman_collection.json`\n- Built-in: Partner payout (4 requests)\n- Built-in: Order refunds (4 requests)\n\n**Dedup:** Same HTTP method + path template (+ getCount `type` in body) → one request; higher-priority source wins.\n\n**Setup:** Set `baseUrl`. Run **00 — Auth → Login** to set `accessToken` / `token`.\n\n**Docs:** `docs/ORDER_MODULE_FRONTEND.md`, `docs/ORDER_GETALL_API_CHANGES.md`, `docs/PARTNER_PAYOUT_FRONTEND.md`, `docs/REFUND_FRONTEND.md`",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -11588,7 +11588,216 @@
       ]
     },
     {
-      "name": "38 — Chat",
+      "name": "38 — Refunds",
+      "description": "**/api/refund** — Order refunds (creates `order_refund` + customer `order_payment` with status `refunded`; syncs order `payment_status`; optional partner wallet debit).\n\n**Frontend doc:** `docs/REFUND_FRONTEND.md`\n\n**Access:** Super admin (5) & staff (6) — all franchises; optional `franchise_id`. Franchise admin (1) & employee (3) — own franchise only. Partner (2) & customer (4) → **403**.\n\n**Flow:** 1 eligible-orders (pick order) → 2 create → 3 getAll (list) → 4 getById (detail).\n\n**Variables:** Set `orderId` from eligible-orders row `_id` for create. Set `refundMongoId` from getAll row `_id` for getById.",
+      "item": [
+        {
+          "name": "1. Get all — refund list",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/refund/getAll?page=1&limit=10&order_id=&user_name=&from_date=2026-04-01&to_date=2026-05-20&franchise_id={{franchiseId}}&sort_by=refund_date&sort_order=desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "refund",
+                "getAll"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Default 1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Max 100"
+                },
+                {
+                  "key": "order_id",
+                  "value": "",
+                  "description": "Search order unique_id or Mongo ObjectId"
+                },
+                {
+                  "key": "user_name",
+                  "value": "",
+                  "description": "Customer name (case-insensitive)"
+                },
+                {
+                  "key": "from_date",
+                  "value": "2026-04-01",
+                  "description": "Filter refund_date (optional)"
+                },
+                {
+                  "key": "to_date",
+                  "value": "2026-05-20",
+                  "description": "Filter refund_date (optional)"
+                },
+                {
+                  "key": "franchise_id",
+                  "value": "{{franchiseId}}",
+                  "description": "Mongo ObjectId (super admin / staff)"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "refund_date",
+                  "description": "order_id | user_name | refund_date | refund_amount"
+                },
+                {
+                  "key": "sort_order",
+                  "value": "desc",
+                  "description": "asc | desc"
+                }
+              ]
+            },
+            "description": "**GET /api/refund/getAll** — Refund list table.\n\nSee **docs/REFUND_FRONTEND.md** §5.1.\n\n**Response `data.records[]`:** `_id`, `order_id` (business unique_id), `order_mongo_id`, `user_name`, `total_amount`, `user_paid`, `refund_amount`, `from_admin_commission`, `from_partner_wallet`, `date` (YYYY-MM-DD).\n\nCopy row `_id` → `refundMongoId` for getById."
+          },
+          "description": "\n\n_Source: builtin:refund → Order refunds_"
+        },
+        {
+          "name": "2. Eligible orders — create refund picker",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/refund/eligible-orders?page=1&limit=10&order_id=&user_name=&franchise_id={{franchiseId}}&sort_by=order_id&sort_order=asc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "refund",
+                "eligible-orders"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Default 1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Max 100"
+                },
+                {
+                  "key": "order_id",
+                  "value": "",
+                  "description": "Search order unique_id or Mongo ObjectId"
+                },
+                {
+                  "key": "user_name",
+                  "value": "",
+                  "description": "Customer name search"
+                },
+                {
+                  "key": "franchise_id",
+                  "value": "{{franchiseId}}",
+                  "description": "Optional franchise scope"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "order_id",
+                  "description": "order_id | user_name | total_amount | user_paid"
+                },
+                {
+                  "key": "sort_order",
+                  "value": "asc",
+                  "description": "asc | desc"
+                }
+              ]
+            },
+            "description": "**GET /api/refund/eligible-orders** — Orders with refundable customer payments (completed − refunded &gt; 0).\n\nSee **docs/REFUND_FRONTEND.md** §5.2.\n\n**Response `data.records[]`:** `_id` (order Mongo id — use as `order_id` on create), `order_id` (unique_id display), `user_name`, `total_amount`, `user_paid` / `refundable_amount`, `admin_commission`, `partner_wallet_balance`, `payment_status`.\n\nCopy row `_id` → collection variable `orderId` for create."
+          },
+          "description": "\n\n_Source: builtin:refund → Order refunds_"
+        },
+        {
+          "name": "3. Get by id — refund detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/refund/getById/{{refundMongoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "refund",
+                "getById",
+                "{{refundMongoId}}"
+              ]
+            },
+            "description": "**GET /api/refund/getById/:id** — Single refund view.\n\nSee **docs/REFUND_FRONTEND.md** §5.3.\n\n**Path:** `id` = refund Mongo `_id` from getAll (`refundMongoId`)."
+          },
+          "description": "\n\n_Source: builtin:refund → Order refunds_"
+        },
+        {
+          "name": "4. Create — record refund",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"{{orderId}}\",\n  \"user_name\": \"Jane Customer\",\n  \"total_amount\": 5000,\n  \"user_paid\": 5000,\n  \"refund_amount\": 1000,\n  \"from_admin_commission\": 200,\n  \"from_partner_wallet\": 800,\n  \"date\": \"2026-05-15T10:00:00.000Z\",\n  \"notes\": \"Partial refund — service cancelled\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/refund/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "refund",
+                "create"
+              ]
+            },
+            "description": "**POST /api/refund/create** — Create refund (no update endpoint).\n\nSee **docs/REFUND_FRONTEND.md** §5.4.\n\n**Required:** `order_id` (order Mongo `_id` from eligible-orders), `refund_amount`, `date`.\n\n**Split:** `from_admin_commission + from_partner_wallet` must equal `refund_amount`.\n\n**Validations:** refund ≤ refundable balance; admin commission ≤ order admin_commission; partner wallet ≤ balance when `from_partner_wallet` &gt; 0.\n\n**201** on success. Also creates customer `order_payment` (`status: refunded`) and syncs order `payment_status`."
+          },
+          "description": "\n\n_Source: builtin:refund → Order refunds_"
+        }
+      ]
+    },
+    {
+      "name": "39 — Chat",
       "description": "**/api/chat** — 9 request(s). Duplicates merged across source collections.",
       "item": [
         {
@@ -11822,7 +12031,7 @@
       ]
     },
     {
-      "name": "39 — Health",
+      "name": "40 — Health",
       "description": "**/api/health** — 2 request(s). Duplicates merged across source collections.",
       "item": [
         {
@@ -11994,6 +12203,12 @@
       "value": "",
       "type": "string",
       "description": "Partner user _id (Mongo ObjectId)"
+    },
+    {
+      "key": "refundMongoId",
+      "value": "",
+      "type": "string",
+      "description": "order_refund document _id (Mongo ObjectId) for getById"
     },
     {
       "key": "additionalChargeId",

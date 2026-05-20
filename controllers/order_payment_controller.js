@@ -3,6 +3,7 @@ const Order = require("../models/order");
 const OrderPayment = require("../models/order_payment");
 const { assertOrderModifyAccess } = require("../utils/order_access");
 const { syncOrderPaymentStatus } = require("../services/order_payment_status_service");
+const { syncPartnerOrderPaymentWallet } = require("../services/partner_wallet_order_service");
 
 const PAYER_TYPES = new Set(["customer", "partner"]);
 const STATUSES = new Set(["pending", "completed", "failed", "refunded"]);
@@ -82,6 +83,7 @@ const create = async (req, res) => {
       notes: notes || "",
     });
     await doc.save();
+    await syncPartnerOrderPaymentWallet(doc);
 
     const { order: syncedOrder, breakdown } = await syncOrderPaymentStatus(order._id);
 
@@ -245,6 +247,7 @@ const update = async (req, res) => {
     if (notes !== undefined) row.notes = notes;
     row.updated_at = new Date();
     await row.save();
+    await syncPartnerOrderPaymentWallet(row);
 
     const { order: syncedOrder, breakdown } = await syncOrderPaymentStatus(order._id);
 
@@ -311,6 +314,7 @@ const remove = async (req, res) => {
     row.deleted_at = new Date();
     row.updated_at = new Date();
     await row.save();
+    await syncPartnerOrderPaymentWallet(row);
 
     const { breakdown } = await syncOrderPaymentStatus(orderForAuth._id);
 

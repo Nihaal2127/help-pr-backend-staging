@@ -46,6 +46,7 @@ const {
 const {
   applyNestedResourcesOnUpdate,
 } = require('../services/order_nested_resources_service');
+const { syncOrderPartnerWalletCredit } = require('../services/partner_wallet_order_service');
 const {
   applyOrderFieldsAndServicesUpdate,
 } = require('../services/order_field_update_service');
@@ -1614,6 +1615,8 @@ const cancleOrder = async (req, res) => {
         }
       }
     );
+
+    await syncOrderPartnerWalletCredit(order._id);
 
     const orderServices = await OrderService.find({
       _id: { $in: order.service_items }

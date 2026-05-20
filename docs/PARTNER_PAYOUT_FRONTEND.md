@@ -11,11 +11,11 @@
 
 Partner payouts use a **wallet + ledger** model:
 
-- **Credits** — money owed to the partner (synced from `financial_order.pending_to_partner`).
-- **Debits** — withdrawals recorded via **Create payout**.
+- **Credits** — partner share when an **order** is placed/updated: `order_service.partner_earning` (offer-adjusted) **+** `order.additional_charges_total`. Synced automatically on order create, repricing, and additional-charge changes.
+- **Debits** — (1) **Partner `order_payment`** rows (`payer_type: partner`, `status: completed`) on `/api/order-payments`; (2) admin **withdrawals** via **Create payout**; (3) refund `from_partner_wallet`.
 - **Balance** = sum(credits) − sum(debits). Shown as `total_wallet_amount` / `payable_balance`.
 
-This module is separate from the legacy **`order_service.partner_paid_status`** flow (`payComission`, export by status). **Use `/api/partner_payout` for the partner wallet UI.**
+This module is separate from the legacy **`order_service.partner_paid_status`** flow (`payComission`, export by status). **Use `/api/partner_payout` for the partner wallet UI.** Legacy **`financial_order`** rows are **not** synced into the wallet.
 
 **Auth:** All endpoints require `Authorization: Bearer <JWT>` (same as other admin APIs).
 
@@ -200,7 +200,8 @@ Transaction history for one partner.
         "transaction_type": "credit",
         "order_id": "...",
         "order_unique_id": "ORD-9001",
-        "description": "AC Repair",
+        "order_payment_id": null,
+        "description": "Order ORD-9001 — partner earning",
         "payment_method": null,
         "amount": 1500
       },

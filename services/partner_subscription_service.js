@@ -4,7 +4,7 @@ const SubscriptionPlan = require('../models/subscription_plan');
 const User = require('../models/user');
 const {
     parseFranchiseObjectId,
-    pickFranchiseIdRaw,
+    pickFranchiseIdFromReq,
     assertFranchiseAccess,
 } = require('../utils/franchise_access');
 const { loadFranchiseCallerScope } = require('../utils/franchise_user_scope');
@@ -136,18 +136,17 @@ const emptyPartnerSubscriptionList = (page) =>
         records: [],
     });
 
-/** Narrow match.partner_id to partners in candidateIds; returns false if intersection is empty. */
 /**
  * Franchise scope for GET list — aligned with user-management / getCount type 12.
- * Super admin: optional ?franchise_id= or ?franchise=; omit = all franchises.
- * Franchise admin: always scoped to their franchise (query must match if sent).
+ * Super admin: optional franchise_id (query, body, or headers); omit = all franchises.
+ * Franchise admin: always scoped to their franchise (sent id must match if provided).
  */
 const resolveListFranchiseScope = async (req) => {
     if (!req?.user?.id) {
         return { ok: true, franchiseOid: null };
     }
 
-    const raw = pickFranchiseIdRaw(req.query, req.body);
+    const raw = pickFranchiseIdFromReq(req);
     let franchiseOid = null;
 
     if (raw) {

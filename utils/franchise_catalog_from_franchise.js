@@ -20,6 +20,8 @@ const GLOBAL_ACTIVE_SERVICE_FILTER = {
     is_request: { $ne: true },
 };
 
+const toIdStr = (id) => (id ? id.toString() : '');
+
 const loadAssignableGlobalCategoryIds = async () => {
     const rows = await Category.find(GLOBAL_ACTIVE_CATEGORY_FILTER).select('_id').lean();
     return rows.map((row) => row._id);

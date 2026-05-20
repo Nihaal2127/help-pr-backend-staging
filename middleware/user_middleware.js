@@ -217,6 +217,21 @@ const isValidPartnerDateValue = (raw) => {
 const validatePartnerCreateRequiredFields = async (req, res) => {
   const { address, password, is_active } = req.body;
 
+  const experienceRaw = req.body.experience;
+  if (
+    experienceRaw === undefined ||
+    experienceRaw === null ||
+    String(experienceRaw).trim() === ''
+  ) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Experience is required.',
+    });
+    return false;
+  }
+  req.body.experience = String(experienceRaw).trim();
+
   if (!address || String(address).trim() === '') {
     res.status(400).json({
       success: false,

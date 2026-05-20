@@ -2,6 +2,12 @@ const mongoose = require('mongoose');
 const PartnerSubscription = require('../models/partner_subscription');
 const SubscriptionPlan = require('../models/subscription_plan');
 const User = require('../models/user');
+const {
+    parseFranchiseObjectId,
+    pickFranchiseIdRaw,
+    assertFranchiseAccess,
+} = require('../utils/franchise_access');
+const { loadFranchiseCallerScope } = require('../utils/franchise_user_scope');
 /** Same as `user.type` in models/user.js (2 = Partner). */
 const USER_TYPE_PARTNER = 2;
 
@@ -131,6 +137,40 @@ const emptyPartnerSubscriptionList = (page) =>
     });
 
 /** Narrow match.partner_id to partners in candidateIds; returns false if intersection is empty. */
+/**
+ * Franchise scope for GET list — aligned with user-management / getCount type 12.
+ * Super admin: optional ?franchise_id= or ?franchise=; omit = all franchises.
+ * Franchise admin: always scoped to their franchise (query must match if sent).
+ */
+const resolveListFranchiseScope = async (req) => {
+    if (!req?.user?.id) {
+        return { ok: true, franchiseOid: null };
+    }
+
+    const raw = pickFranchiseIdRaw(req.query, req.body);
+    let franchiseOid = null;
+
+    if (raw) {
+        const parsed = parseFranchiseObjectId(raw, 'franchise_id');
+        if (!parsed.ok) {
+            return { ok: false, status: 409, message: 'Invalid franchise id.' };
+        }
+        franchiseOid = parsed.oid;
+        const access = await assertFranchiseAccess(req.user, franchiseOid);
+        if (!access.ok) {
+            return { ok: false, status: access.status, message: access.message };
+        }
+        return { ok: true, franchiseOid };
+    }
+
+    const callerScope = await loadFranchiseCallerScope(req.user.id);
+    if (callerScope?.isFranchiseStaff && callerScope.franchiseOid) {
+        franchiseOid = callerScope.franchiseOid;
+    }
+
+    return { ok: true, franchiseOid };
+};
+
 const restrictPartnerIds = (match, candidateIds) => {
     if (!candidateIds.length) {
         return false;
@@ -165,12 +205,29 @@ const restrictPartnerIds = (match, candidateIds) => {
     return true;
 };
 
-const listPartnerSubscriptions = async (query) => {
+const listPartnerSubscriptions = async (query, req = null) => {
     try {
         const page = parseInt(query.page, 10) || 1;
         const limit = parseInt(query.limit, 10) || 10;
         const skip = (page - 1) * limit;
         const match = { deleted_at: null };
+
+        if (req) {
+            const franchiseScope = await resolveListFranchiseScope(req);
+            if (!franchiseScope.ok) {
+                return fail(franchiseScope.status, franchiseScope.message);
+            }
+            if (franchiseScope.franchiseOid) {
+                const franchisePartnerIds = await User.find({
+                    type: USER_TYPE_PARTNER,
+                    franchise_id: franchiseScope.franchiseOid,
+                    deleted_at: null,
+                }).distinct('_id');
+                if (!restrictPartnerIds(match, franchisePartnerIds)) {
+                    return emptyPartnerSubscriptionList(page);
+                }
+            }
+        }
 
         if (query.status && ['active', 'expired', 'cancelled'].includes(query.status)) {
             match.status = query.status;

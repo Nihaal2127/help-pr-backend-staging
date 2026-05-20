@@ -18,7 +18,7 @@ const sendServiceResult = (res, result) => {
 };
 
 const getAll = async (req, res) => {
-    const result = await partnerSubscriptionService.listPartnerSubscriptions(req.query);
+    const result = await partnerSubscriptionService.listPartnerSubscriptions(req.query, req);
     return sendServiceResult(res, result);
 };
 

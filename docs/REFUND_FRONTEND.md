@@ -223,7 +223,7 @@ Orders where customer **completed** payments minus **refunded** payments &gt; 0 
 | `_id` | Store as selected order; send as `order_id` on create |
 | `order_id` | Display in picker/table |
 | `user_paid` / `refundable_amount` | **Max refund amount** (same value; net paid available to refund) |
-| `admin_commission` | **Max** for `from_admin_commission` field |
+| `admin_commission` | **Max** for `from_admin_commission` — main service commission **+** `additional_charges_commission` on the order |
 | `partner_wallet_balance` | **Max** for `from_partner_wallet` (0 if no partner) |
 | `total_amount` | Pre-fill `total_amount` on create form |
 | `payment_status` | Badge: `paid`, `partially_paid`, etc. |

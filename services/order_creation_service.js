@@ -325,6 +325,7 @@ const createOrderFromBody = async (body, options = {}) => {
       payment_schedule_type === "installments" ? "installments" : "single",
     customer_payment_method: customer_payment_method ?? "",
     additional_charges_subtotal: 0,
+    additional_charges_commission: 0,
     additional_charges_tax: 0,
     additional_charges_total: 0,
   });

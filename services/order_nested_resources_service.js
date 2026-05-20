@@ -9,6 +9,7 @@ const {
   syncPartnerOrderPaymentWallet,
   syncAllPartnerOrderPaymentsForOrder,
 } = require("../services/partner_wallet_order_service");
+const { validatePartnerOrderPayment } = require("../services/partner_order_payment_validation");
 
 const ALLOWED_CHARGE_METHODS = new Set([
   "cash",
@@ -104,12 +105,19 @@ const resolveRowId = (raw) => {
 
 const buildChargeDocument = (order, item) => {
   const taxPercent = Number(order.tax_percent) || 0;
-  const chargeLine = computeAdditionalChargeLine(item.amount, taxPercent);
+  const commissionPercent = Number(order.commission_percent) || 0;
+  const chargeLine = computeAdditionalChargeLine(
+    item.amount,
+    taxPercent,
+    commissionPercent
+  );
   return {
     order_id: order._id,
     label: item.label || "",
     description: item.description || "",
     amount: chargeLine.amount,
+    commission_percent: chargeLine.commission_percent,
+    commission_amount: chargeLine.commission_amount,
     tax_percent: chargeLine.tax_percent,
     tax_amount: chargeLine.tax_amount,
     total_amount: chargeLine.total_amount,
@@ -149,15 +157,47 @@ const applyChargeCreates = async (order, items) => {
   return created;
 };
 
+const assertPartnerPaymentAllowed = async (order, paymentDoc, excludePaymentId = null) => {
+  if (paymentDoc.payer_type !== "partner") return;
+  const check = await validatePartnerOrderPayment(order, {
+    amount: paymentDoc.amount,
+    status: paymentDoc.status,
+    excludePaymentId,
+  });
+  if (!check.ok) {
+    throw new OrderCreationError(check.message, check.status);
+  }
+};
+
+const partitionPaymentCreates = (items) => {
+  const customer = [];
+  const partner = [];
+  items.forEach((item, index) => {
+    validatePaymentItem(item, `order_payments.create[${index}]`);
+    if (item.payer_type === "partner") partner.push(item);
+    else customer.push(item);
+  });
+  return { customer, partner };
+};
+
 const applyPaymentCreates = async (order, items) => {
+  const { customer, partner } = partitionPaymentCreates(items);
   const created = [];
-  for (let i = 0; i < items.length; i += 1) {
-    validatePaymentItem(items[i], `order_payments.create[${i}]`);
-    const doc = new OrderPayment(buildPaymentDocument(order, items[i]));
+
+  for (const item of customer) {
+    const doc = new OrderPayment(buildPaymentDocument(order, item));
+    await doc.save();
+    created.push(doc);
+  }
+
+  for (const item of partner) {
+    const doc = new OrderPayment(buildPaymentDocument(order, item));
+    await assertPartnerPaymentAllowed(order, doc);
     await doc.save();
     await syncPartnerOrderPaymentWallet(doc);
     created.push(doc);
   }
+
   return created;
 };
 
@@ -249,8 +289,15 @@ const applyChargeUpdates = async (order, items) => {
           400
         );
       }
-      const chargeLine = computeAdditionalChargeLine(item.amount, taxPercent);
+      const commissionPercent = Number(order.commission_percent) || 0;
+      const chargeLine = computeAdditionalChargeLine(
+        item.amount,
+        taxPercent,
+        commissionPercent
+      );
       row.amount = chargeLine.amount;
+      row.commission_percent = chargeLine.commission_percent;
+      row.commission_amount = chargeLine.commission_amount;
       row.tax_percent = chargeLine.tax_percent;
       row.tax_amount = chargeLine.tax_amount;
       row.total_amount = chargeLine.total_amount;
@@ -266,9 +313,66 @@ const applyChargeUpdates = async (order, items) => {
   return updated;
 };
 
-const applyPaymentUpdates = async (order, items) => {
-  const updated = [];
+const applyPaymentUpdateToRow = async (order, item, contextLabel) => {
+  const oid = resolveRowId(item);
+  if (!oid) {
+    throw new OrderCreationError(`${contextLabel}: _id is required.`, 400);
+  }
 
+  const row = await OrderPayment.findOne({
+    _id: oid,
+    order_id: order._id,
+    deleted_at: null,
+  });
+  if (!row) {
+    throw new OrderCreationError(
+      `${contextLabel}: payment not found on this order.`,
+      404
+    );
+  }
+
+  if (item.amount !== undefined) {
+    if (Number(item.amount) < 0) {
+      throw new OrderCreationError(`${contextLabel}: amount must be >= 0.`, 400);
+    }
+    row.amount = Number(item.amount);
+  }
+  if (item.payment_method !== undefined) {
+    row.payment_method = String(item.payment_method);
+  }
+  if (item.status !== undefined) {
+    if (!PAYMENT_STATUSES.has(item.status)) {
+      throw new OrderCreationError(`${contextLabel}: invalid status.`, 400);
+    }
+    row.status = item.status;
+  }
+  if (item.transaction_reference !== undefined) {
+    row.transaction_reference = item.transaction_reference;
+  }
+  if (item.installment_index !== undefined) {
+    row.installment_index =
+      item.installment_index === null ? null : Number(item.installment_index);
+  }
+  if (item.due_date !== undefined) {
+    row.due_date = item.due_date ? new Date(item.due_date) : null;
+  }
+  if (item.paid_at !== undefined) {
+    row.paid_at = item.paid_at ? new Date(item.paid_at) : null;
+  }
+  if (item.notes !== undefined) row.notes = item.notes;
+
+  await assertPartnerPaymentAllowed(order, row, row._id);
+  row.updated_at = new Date();
+  await row.save();
+  if (row.payer_type === "partner") {
+    await syncPartnerOrderPaymentWallet(row);
+  }
+  return row;
+};
+
+const partitionPaymentUpdates = async (order, items) => {
+  const customer = [];
+  const partner = [];
   for (let i = 0; i < items.length; i += 1) {
     const item = items[i];
     const oid = resolveRowId(item);
@@ -278,58 +382,46 @@ const applyPaymentUpdates = async (order, items) => {
         400
       );
     }
-
     const row = await OrderPayment.findOne({
       _id: oid,
       order_id: order._id,
       deleted_at: null,
-    });
+    }).select("payer_type");
     if (!row) {
       throw new OrderCreationError(
         `order_payments.update[${i}]: payment not found on this order.`,
         404
       );
     }
+    if (row.payer_type === "partner") {
+      partner.push({ item, index: i });
+    } else {
+      customer.push({ item, index: i });
+    }
+  }
+  return { customer, partner };
+};
 
-    if (item.amount !== undefined) {
-      if (Number(item.amount) < 0) {
-        throw new OrderCreationError(
-          `order_payments.update[${i}]: amount must be >= 0.`,
-          400
-        );
-      }
-      row.amount = Number(item.amount);
-    }
-    if (item.payment_method !== undefined) {
-      row.payment_method = String(item.payment_method);
-    }
-    if (item.status !== undefined) {
-      if (!PAYMENT_STATUSES.has(item.status)) {
-        throw new OrderCreationError(
-          `order_payments.update[${i}]: invalid status.`,
-          400
-        );
-      }
-      row.status = item.status;
-    }
-    if (item.transaction_reference !== undefined) {
-      row.transaction_reference = item.transaction_reference;
-    }
-    if (item.installment_index !== undefined) {
-      row.installment_index =
-        item.installment_index === null ? null : Number(item.installment_index);
-    }
-    if (item.due_date !== undefined) {
-      row.due_date = item.due_date ? new Date(item.due_date) : null;
-    }
-    if (item.paid_at !== undefined) {
-      row.paid_at = item.paid_at ? new Date(item.paid_at) : null;
-    }
-    if (item.notes !== undefined) row.notes = item.notes;
-    row.updated_at = new Date();
-    await row.save();
-    await syncPartnerOrderPaymentWallet(row);
-    updated.push(row);
+const applyPaymentUpdates = async (order, items) => {
+  const { customer, partner } = await partitionPaymentUpdates(order, items);
+  const updated = [];
+  for (const { item, index } of customer) {
+    updated.push(
+      await applyPaymentUpdateToRow(
+        order,
+        item,
+        `order_payments.update[${index}]`
+      )
+    );
+  }
+  for (const { item, index } of partner) {
+    updated.push(
+      await applyPaymentUpdateToRow(
+        order,
+        item,
+        `order_payments.update[${index}]`
+      )
+    );
   }
   return updated;
 };
@@ -397,11 +489,59 @@ const applyNestedResourcesOnUpdate = async (order, body) => {
   const paymentsDeleted = await softDeletePayments(order._id, paymentOps.delete);
   if (paymentsDeleted.length) paymentsTouched = true;
 
-  const paymentsUpdated = await applyPaymentUpdates(order, paymentOps.update);
-  if (paymentsUpdated.length) paymentsTouched = true;
+  const { customer: customerUpdates, partner: partnerUpdates } =
+    await partitionPaymentUpdates(order, paymentOps.update);
 
-  const paymentsCreated = await applyPaymentCreates(order, paymentOps.create);
-  if (paymentsCreated.length) paymentsTouched = true;
+  const customerUpdateResults = [];
+  for (const { item, index } of customerUpdates) {
+    customerUpdateResults.push(
+      await applyPaymentUpdateToRow(
+        order,
+        item,
+        `order_payments.update[${index}]`
+      )
+    );
+  }
+  if (customerUpdateResults.length) paymentsTouched = true;
+
+  const { customer: customerCreates, partner: partnerCreates } =
+    partitionPaymentCreates(paymentOps.create);
+  const customerCreateDocs = [];
+  for (const item of customerCreates) {
+    const doc = new OrderPayment(buildPaymentDocument(order, item));
+    await doc.save();
+    customerCreateDocs.push(doc);
+  }
+  if (customerCreateDocs.length) paymentsTouched = true;
+
+  if (paymentsTouched && !chargesTouched) {
+    await syncOrderPaymentStatus(order._id);
+  }
+
+  const partnerUpdateResults = [];
+  for (const { item, index } of partnerUpdates) {
+    partnerUpdateResults.push(
+      await applyPaymentUpdateToRow(
+        order,
+        item,
+        `order_payments.update[${index}]`
+      )
+    );
+  }
+  if (partnerUpdateResults.length) paymentsTouched = true;
+
+  const partnerCreateDocs = [];
+  for (const item of partnerCreates) {
+    const doc = new OrderPayment(buildPaymentDocument(order, item));
+    await assertPartnerPaymentAllowed(order, doc);
+    await doc.save();
+    await syncPartnerOrderPaymentWallet(doc);
+    partnerCreateDocs.push(doc);
+  }
+  if (partnerCreateDocs.length) paymentsTouched = true;
+
+  const paymentsUpdated = [...customerUpdateResults, ...partnerUpdateResults];
+  const paymentsCreated = [...customerCreateDocs, ...partnerCreateDocs];
 
   if (chargesTouched) {
     await recalculateOrderTotals(order._id);

@@ -5,7 +5,7 @@ const Franchise = require('../models/franchise');
 const PartnerCategory = require('../models/partner_category');
 const PartnerService = require('../models/partner_service');
 const User = require('../models/user');
-const { buildFranchiseEnabledMaps } = require('./franchise_catalog_from_franchise');
+const { buildFranchiseEnabledMaps, GLOBAL_ACTIVE_CATEGORY_FILTER, GLOBAL_ACTIVE_SERVICE_FILTER, countAssignableGlobalServices } = require('./franchise_catalog_from_franchise');
 
 const toIdStr = (id) => (id ? id.toString() : '');
 
@@ -354,7 +354,10 @@ const countFranchiseScopedAvailability = async (franchiseIdsScope, kind) => {
     }
 
     const CatalogModel = kind === 'category' ? Category : Service;
-    const totalGlobal = await CatalogModel.countDocuments({ deleted_at: null, is_request: false });
+    const totalGlobal =
+        kind === 'category'
+            ? await CatalogModel.countDocuments(GLOBAL_ACTIVE_CATEGORY_FILTER)
+            : await countAssignableGlobalServices();
 
     let totalAssigned = 0;
     let locallyEnabled = 0;
@@ -368,7 +371,6 @@ const countFranchiseScopedAvailability = async (franchiseIdsScope, kind) => {
         const idMap = kind === 'category' ? local.categoryEnabled : local.serviceEnabled;
         const ids = [...idMap.keys()];
         totalAssigned += ids.length;
-        locallyEnabled += ids.filter((id) => idMap.get(id) === true).length;
 
         if (ids.length === 0) continue;
 
@@ -376,7 +378,9 @@ const countFranchiseScopedAvailability = async (franchiseIdsScope, kind) => {
         if (kind === 'category') {
             const globalActive = await loadGlobalCategoryActiveMap(oids);
             for (const id of ids) {
+                if (idMap.get(id) !== true) continue;
                 const g = globalActive.get(id) === true;
+                if (g) locallyEnabled += 1;
                 if (g) globallyActive += 1;
                 if (g && idMap.get(id) === true) effectivelyAvailable += 1;
             }
@@ -393,9 +397,13 @@ const countFranchiseScopedAvailability = async (franchiseIdsScope, kind) => {
             for (const id of ids) {
                 const m = meta.get(id);
                 if (!m) continue;
+                if (idMap.get(id) !== true) continue;
                 const gSvc = m.globalServiceActive;
                 const gCat = m.categoryId ? globalCatActive.get(m.categoryId) === true : false;
-                if (gSvc && gCat) globallyActive += 1;
+                if (gSvc && gCat) {
+                    locallyEnabled += 1;
+                    globallyActive += 1;
+                }
             }
         }
     }

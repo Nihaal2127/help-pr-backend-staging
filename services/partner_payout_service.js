@@ -195,10 +195,12 @@ const getWalletAggregatesForPartners = async (partnerIds) => {
     return result;
 };
 
-const buildPartnerBaseFilter = (query) => {
+const buildPartnerBaseFilter = (query, scopeFilter = {}) => {
     const filter = { type: PARTNER_USER_TYPE, deleted_at: null };
 
-    if (query.franchise_id) {
+    if (scopeFilter.franchise_id !== undefined) {
+        filter.franchise_id = scopeFilter.franchise_id;
+    } else if (query.franchise_id) {
         const p = parseObjectId(query.franchise_id, 'franchise_id');
         if (!p.ok) return { error: p.message };
         filter.franchise_id = p.oid;
@@ -216,10 +218,10 @@ const buildPartnerBaseFilter = (query) => {
     return { filter };
 };
 
-const listPartnerPayouts = async (query) => {
+const listPartnerPayouts = async (query, scopeFilter = {}) => {
     try {
         const { page, limit, skip } = parsePagination(query);
-        const base = buildPartnerBaseFilter(query);
+        const base = buildPartnerBaseFilter(query, scopeFilter);
         if (base.error) return fail(400, base.error);
 
         const partners = await User.find(base.filter)
@@ -327,13 +329,13 @@ const listPartnerPayouts = async (query) => {
     }
 };
 
-const listPartnersForDropdown = async (query) => {
+const listPartnersForDropdown = async (query, scopeFilter = {}) => {
     try {
         let limit = parseInt(query.limit, 10);
         if (!Number.isFinite(limit) || limit < 1) limit = MAX_PARTNERS_LIMIT;
         if (limit > MAX_PARTNERS_LIMIT) limit = MAX_PARTNERS_LIMIT;
 
-        const base = buildPartnerBaseFilter(query);
+        const base = buildPartnerBaseFilter(query, scopeFilter);
         if (base.error) return fail(400, base.error);
 
         const partners = await User.find(base.filter)

@@ -121,6 +121,20 @@ const MODULE_LABELS = {
   other: 'Other',
 };
 
+const MODULE_DESCRIPTIONS = {
+  partner_payout: [
+    '**/api/partner_payout** — Partner wallet (credits from `financial_order`, debits from withdrawals).',
+    '',
+    '**Frontend doc:** `docs/PARTNER_PAYOUT_FRONTEND.md`',
+    '',
+    '**Access:** Super admin (5) & staff (6) — all franchises; optional `franchise_id`. Franchise admin (1) & employee (3) — own franchise only; wrong `franchise_id` → **403**. Partner (2) & customer (4) → **403**.',
+    '',
+    '**Flow:** 1 getAll → 2 partners (pay modal) → 3 show (ledger) → 4 create.',
+    '',
+    '**Variable:** Set `partnerMongoId` to a row `_id` from getAll (Mongo ObjectId, not business `partner_id`).',
+  ].join('\n'),
+};
+
 function flattenItems(items, folderPath = [], sourceFile = '') {
   const out = [];
   for (const item of items || []) {
@@ -196,53 +210,100 @@ function collectVariables(collection) {
   return map;
 }
 
+const PARTNER_PAYOUT_DOC = 'docs/PARTNER_PAYOUT_FRONTEND.md';
+
 function partnerPayoutBuiltinItems() {
   const auth = { key: 'Authorization', value: 'Bearer {{accessToken}}', type: 'text' };
   const base = '{{baseUrl}}';
   return [
     {
-      name: 'Get all partner payouts (wallet list)',
+      name: '1. Get all — wallet list',
       request: {
         method: 'GET',
         header: [auth],
         url: {
-          raw: `${base}/api/partner_payout/getAll?page=1&limit=10&search=&wallet_status=pending&from_date=2026-04-01&to_date=2026-05-18&franchise_id={{franchiseId}}&sort_by=partner_name&sort_order=asc`,
+          raw: `${base}/api/partner_payout/getAll?page=1&limit=10&search=&wallet_status=pending&from_date=2026-04-01&to_date=2026-05-20&franchise_id={{franchiseId}}&sort_by=partner_name&sort_order=asc`,
           host: [base],
           path: ['api', 'partner_payout', 'getAll'],
           query: [
-            { key: 'page', value: '1' },
-            { key: 'limit', value: '10' },
-            { key: 'search', value: '' },
+            { key: 'page', value: '1', description: 'Default 1' },
+            { key: 'limit', value: '10', description: 'Max 100' },
+            { key: 'search', value: '', description: 'Partner name or business user_id' },
             { key: 'wallet_status', value: 'pending', description: 'pending | paid' },
-            { key: 'from_date', value: '2026-04-01' },
-            { key: 'to_date', value: '2026-05-18' },
-            { key: 'franchise_id', value: '{{franchiseId}}' },
-            { key: 'sort_by', value: 'partner_name' },
-            { key: 'sort_order', value: 'asc' },
+            { key: 'from_date', value: '2026-04-01', description: 'Filter last_withdraw_date (optional)' },
+            { key: 'to_date', value: '2026-05-20', description: 'Filter last_withdraw_date (optional)' },
+            { key: 'franchise_id', value: '{{franchiseId}}', description: 'Mongo ObjectId' },
+            { key: 'sort_by', value: 'partner_name', description: 'partner_name | total_wallet_amount | last_withdraw_date | wallet_status' },
+            { key: 'sort_order', value: 'asc', description: 'asc | desc' },
           ],
         },
-        description: 'GET /api/partner_payout/getAll',
+        description: [
+          '**GET /api/partner_payout/getAll** — Partner wallet summary table.',
+          '',
+          `See **${PARTNER_PAYOUT_DOC}** §5.1. **Access:** §2.`,
+          '',
+          '**Response `data.records[]`:** `_id` (Mongo id for show/create), `partner_id` (business code), `partner_name`, `total_wallet_amount`, `last_withdraw_amount`, `last_withdraw_date` (YYYY-MM-DD), `wallet_status` (`pending` | `paid`).',
+          '',
+          'Copy row `_id` → collection variable `partnerMongoId` for show/create.',
+        ].join('\n'),
       },
     },
     {
-      name: 'Partners dropdown (pay modal)',
+      name: '2. Partners — pay modal dropdown',
       request: {
         method: 'GET',
         header: [auth],
         url: {
-          raw: `${base}/api/partner_payout/partners?franchise_id={{franchiseId}}&limit=250`,
+          raw: `${base}/api/partner_payout/partners?franchise_id={{franchiseId}}&search=&limit=250`,
           host: [base],
           path: ['api', 'partner_payout', 'partners'],
           query: [
-            { key: 'franchise_id', value: '{{franchiseId}}' },
-            { key: 'limit', value: '250' },
+            { key: 'franchise_id', value: '{{franchiseId}}', description: 'Optional scope' },
+            { key: 'search', value: '', description: 'Partner name or business user_id' },
+            { key: 'limit', value: '250', description: 'Max 250' },
           ],
         },
-        description: 'GET /api/partner_payout/partners',
+        description: [
+          '**GET /api/partner_payout/partners** — Dropdown for “Pay partner” modal.',
+          '',
+          `See **${PARTNER_PAYOUT_DOC}** §5.2. **Access:** §2.`,
+          '',
+          '**Response `data.records[]`:** `_id`, `partner_id`, `partner_name`, `total_wallet_amount`, **`payable_balance`** (max for `pay_now_amount`).',
+        ].join('\n'),
       },
     },
     {
-      name: 'Create partner payout',
+      name: '3. Show — wallet ledger',
+      request: {
+        method: 'GET',
+        header: [auth],
+        url: {
+          raw: `${base}/api/partner_payout/show?id={{partnerMongoId}}&search=&from_date=2026-04-01&to_date=2026-05-20&transaction_type=&page=1&limit=10`,
+          host: [base],
+          path: ['api', 'partner_payout', 'show'],
+          query: [
+            { key: 'id', value: '{{partnerMongoId}}', description: 'Required — partner user._id (24-char ObjectId)' },
+            { key: 'search', value: '', description: 'description | order_unique_id | payment_method' },
+            { key: 'from_date', value: '2026-04-01' },
+            { key: 'to_date', value: '2026-05-20' },
+            { key: 'transaction_type', value: '', description: 'Optional: credit | debit (omit for all)' },
+            { key: 'page', value: '1' },
+            { key: 'limit', value: '10' },
+          ],
+        },
+        description: [
+          '**GET /api/partner_payout/show** — Credits & debits for one partner.',
+          '',
+          `See **${PARTNER_PAYOUT_DOC}** §5.3. **Access:** §2 — partner must be in caller franchise.`,
+          '',
+          '**Query:** `id` = partner Mongo `_id` (not business `partner_id` string).',
+          '',
+          '**Ledger rows:** `transaction_type` `credit` = earning from financial order; `debit` = withdrawal.',
+        ].join('\n'),
+      },
+    },
+    {
+      name: '4. Create — record withdrawal',
       request: {
         method: 'POST',
         header: [auth, { key: 'Content-Type', value: 'application/json', type: 'text' }],
@@ -266,29 +327,15 @@ function partnerPayoutBuiltinItems() {
           host: [base],
           path: ['api', 'partner_payout', 'create'],
         },
-        description: 'POST /api/partner_payout/create',
-      },
-    },
-    {
-      name: 'Wallet ledger (show)',
-      request: {
-        method: 'GET',
-        header: [auth],
-        url: {
-          raw: `${base}/api/partner_payout/show?id={{partnerMongoId}}&search=&from_date=2026-04-01&to_date=2026-05-18&transaction_type=debit&page=1&limit=10`,
-          host: [base],
-          path: ['api', 'partner_payout', 'show'],
-          query: [
-            { key: 'id', value: '{{partnerMongoId}}' },
-            { key: 'search', value: '' },
-            { key: 'from_date', value: '2026-04-01' },
-            { key: 'to_date', value: '2026-05-18' },
-            { key: 'transaction_type', value: 'debit', description: 'credit | debit' },
-            { key: 'page', value: '1' },
-            { key: 'limit', value: '10' },
-          ],
-        },
-        description: 'GET /api/partner_payout/show — wallet ledger for one partner',
+        description: [
+          '**POST /api/partner_payout/create** — Pay partner (creates payout + ledger debit).',
+          '',
+          `See **${PARTNER_PAYOUT_DOC}** §5.4. **Access:** §2 — partner must be in caller franchise.`,
+          '',
+          '**Body:** `partner_id` = Mongo `_id` from list/dropdown; `pay_now_amount` ≤ `payable_balance`; `payment_method`: `upi` | `bank_transfer` | `cash` | `cheque` | `other`; `description` required.',
+          '',
+          '**201** on success. Refresh getAll/show to see updated balance.',
+        ].join('\n'),
       },
     },
   ].map((item) => ({
@@ -375,7 +422,9 @@ function main() {
     const label = MODULE_LABELS[mod] || mod;
     return {
       name: `${num} — ${label}`,
-      description: `**/api/${mod === 'getCount' ? 'getCount' : mod}** — ${entries.length} request(s). Duplicates merged across source collections.`,
+      description:
+        MODULE_DESCRIPTIONS[mod] ||
+        `**/api/${mod === 'getCount' ? 'getCount' : mod}** — ${entries.length} request(s). Duplicates merged across source collections.`,
       item: entries.map((e) => {
         const desc = e.item.description || '';
         const srcNote = e.sourceFile
@@ -436,7 +485,7 @@ function main() {
         '',
         '**Setup:** Set `baseUrl`. Run **00 — Auth → Login** to set `accessToken` / `token`.',
         '',
-        '**Docs:** `docs/ORDER_MODULE_FRONTEND.md`, `docs/ORDER_GETALL_API_CHANGES.md`',
+        '**Docs:** `docs/ORDER_MODULE_FRONTEND.md`, `docs/ORDER_GETALL_API_CHANGES.md`, `docs/PARTNER_PAYOUT_FRONTEND.md`',
       ].join('\n'),
       schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json',
     },

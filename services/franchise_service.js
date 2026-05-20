@@ -27,6 +27,20 @@ const {
     loadFranchiseForCatalog,
 } = require('../utils/franchise_catalog_from_franchise');
 
+const escapeRegExp = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Case-insensitive global franchise name uniqueness (non-deleted rows only). */
+const franchiseNameExists = (trimmedName, excludeId = null) => {
+    const query = {
+        deleted_at: null,
+        name: new RegExp(`^${escapeRegExp(trimmedName)}$`, 'i'),
+    };
+    if (excludeId) {
+        query._id = { $ne: excludeId };
+    }
+    return query;
+};
+
 const parseObjectId = (raw, fieldName = 'id') => {
     if (raw instanceof mongoose.Types.ObjectId) {
         return { ok: true, oid: raw };
@@ -336,17 +350,18 @@ const createFranchise = async (body) => {
 
         const { description, desc } = normalizeDescriptionFields(body);
 
-        const existing = await Franchise.findOne({
-            name,
-            city_id: hierarchy.cityOid,
-            deleted_at: null,
-        });
+        const trimmedName = String(name).trim();
+        if (!trimmedName) {
+            return fail(400, 'Franchise name is required.');
+        }
+
+        const existing = await Franchise.findOne(franchiseNameExists(trimmedName));
         if (existing) {
-            return fail(409, 'Franchise name already exists for this city.');
+            return fail(409, 'Franchise name already exists.');
         }
 
         const doc = new Franchise({
-            name,
+            name: trimmedName,
             state_id: hierarchy.stateOid,
             state_name: hierarchy.state.name,
             city_id: hierarchy.cityOid,
@@ -408,14 +423,13 @@ const updateFranchise = async (id, body) => {
         }
 
         if (body.name !== undefined) {
-            const existing = await Franchise.findOne({
-                name: body.name,
-                city_id: hierarchy.cityOid,
-                deleted_at: null,
-                _id: { $ne: id },
-            });
-            if (existing) return fail(409, 'Franchise name already exists for this city.');
-            franchise.name = body.name;
+            const trimmedName = String(body.name).trim();
+            if (!trimmedName) {
+                return fail(400, 'Franchise name is required.');
+            }
+            const existing = await Franchise.findOne(franchiseNameExists(trimmedName, id));
+            if (existing) return fail(409, 'Franchise name already exists.');
+            franchise.name = trimmedName;
         }
 
         franchise.state_id = hierarchy.stateOid;
@@ -520,6 +534,10 @@ const importFranchises = async (records) => {
             if (!rec.name || !rec.state_id || !rec.city_id || !rec.admin_id) {
                 return fail(400, 'Each record must include name, state_id, city_id, and admin_id.');
             }
+            const trimmedName = String(rec.name).trim();
+            if (!trimmedName) {
+                return fail(400, 'Each record must include a non-empty franchise name.');
+            }
             const hierarchy = await validateFranchiseHierarchy({
                 state_id: rec.state_id,
                 city_id: rec.city_id,
@@ -532,14 +550,18 @@ const importFranchises = async (records) => {
             if (!pAdmin.ok) return fail(400, pAdmin.message);
             const adminCtx = await loadAdmin(pAdmin.oid);
             if (!adminCtx) {
-                return fail(400, `Admin user not found for franchise: ${rec.name}`);
+                return fail(400, `Admin user not found for franchise: ${trimmedName}`);
+            }
+            const nameConflict = await Franchise.findOne(franchiseNameExists(trimmedName));
+            if (nameConflict) {
+                return fail(409, `Franchise name already exists. (${trimmedName})`);
             }
             const { description, desc } = normalizeDescriptionFields({
                 description: rec.description,
                 desc: rec.desc,
             });
             toInsert.push({
-                name: rec.name,
+                name: trimmedName,
                 state_id: hierarchy.stateOid,
                 state_name: hierarchy.state.name,
                 city_id: hierarchy.cityOid,
@@ -559,24 +581,13 @@ const importFranchises = async (records) => {
             });
         }
 
-        const key = (r) => `${r.city_id.toString()}:${r.name}`;
         const seen = new Set();
         for (const r of toInsert) {
-            const k = key(r);
+            const k = r.name.toLowerCase();
             if (seen.has(k)) {
-                return fail(409, 'Duplicate city/name combinations in import file.');
+                return fail(409, 'Duplicate franchise names in import file.');
             }
             seen.add(k);
-        }
-
-        const existing = await Franchise.find({
-            deleted_at: null,
-            $or: toInsert.map((r) => ({ name: r.name, city_id: r.city_id })),
-        }).select('name city_id');
-
-        if (existing.length > 0) {
-            const lines = existing.map((e) => `${e.name} (city ${e.city_id})`).join('\n');
-            return fail(409, `Duplicate records found.\n${lines}`);
         }
 
         const result = await Franchise.insertMany(toInsert, { ordered: false });

@@ -11772,7 +11772,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"order_id\": \"{{orderId}}\",\n  \"user_name\": \"Jane Customer\",\n  \"total_amount\": 5000,\n  \"user_paid\": 5000,\n  \"refund_amount\": 1000,\n  \"from_admin_commission\": 200,\n  \"from_partner_wallet\": 800,\n  \"date\": \"2026-05-15T10:00:00.000Z\",\n  \"notes\": \"Partial refund — service cancelled\"\n}",
+              "raw": "{\n  \"order_id\": \"{{orderId}}\",\n  \"refund_amount\": 1000,\n  \"from_admin_commission\": 200,\n  \"from_partner_wallet\": 800,\n  \"date\": \"2026-05-15T10:00:00.000Z\",\n  \"notes\": \"Partial refund — service cancelled\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -11790,7 +11790,7 @@
                 "create"
               ]
             },
-            "description": "**POST /api/refund/create** — Create refund (no update endpoint).\n\nSee **docs/REFUND_FRONTEND.md** §5.4.\n\n**Required:** `order_id` (order Mongo `_id` from eligible-orders), `refund_amount`, `date`.\n\n**Split:** `from_admin_commission + from_partner_wallet` must equal `refund_amount`.\n\n**Validations:** refund ≤ refundable balance; admin commission ≤ order admin_commission; partner wallet ≤ balance when `from_partner_wallet` &gt; 0.\n\n**201** on success. Also creates customer `order_payment` (`status: refunded`) and syncs order `payment_status`."
+            "description": "**POST /api/refund/create** — Create refund (no update endpoint).\n\nSee **docs/REFUND_FRONTEND.md** §6.4.\n\n**Required body only:** `order_id` (order Mongo `_id` from eligible-orders), `refund_amount`, `date`.\n\n**Server derives from order (do not send):** `user_id`, `partner_id`, `user_name`, `total_amount`, `user_paid`, `franchise_id`.\n\n**Optional:** `from_admin_commission`, `from_partner_wallet` (default 0), `notes`, `payment_method`.\n\n**Split:** `from_admin_commission + from_partner_wallet` must equal `refund_amount`.\n\n**201** on success."
           },
           "description": "\n\n_Source: builtin:refund → Order refunds_"
         }

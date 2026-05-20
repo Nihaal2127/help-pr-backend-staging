@@ -7,7 +7,6 @@ const { validateObjectId } = require('../validator/form_validator');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
 const Service = require("../models/service");
 const Category = require("../models/category");
-const FranchiseService = require('../models/franchise_service');
 const {
   syncPartnerServicesFromPartnerCategories,
   rebuildPartnerCategoriesFromPartnerServices,

@@ -2,17 +2,10 @@ const mongoose = require('mongoose');
 const Category = require('../models/category');
 const Service = require('../models/service');
 const Franchise = require('../models/franchise');
-const FranchiseCategory = require('../models/franchise_category');
-const FranchiseService = require('../models/franchise_service');
 const PartnerCategory = require('../models/partner_category');
 const PartnerService = require('../models/partner_service');
 const User = require('../models/user');
-const {
-    normalizeStoredCategoriesList,
-    normalizeStoredServicesList,
-    coerceLegacyCategoryMappingArrays,
-    coerceLegacyServiceMappingArrays,
-} = require('./franchise_catalog_lists');
+const { buildFranchiseEnabledMaps } = require('./franchise_catalog_from_franchise');
 
 const toIdStr = (id) => (id ? id.toString() : '');
 
@@ -58,101 +51,11 @@ const computeServiceEffectiveActive = ({
             partnerServiceEnabled
     );
 
-const buildEnabledMapFromCategoriesList = (list, assignedIdSet = null) => {
-    const map = new Map();
-    for (const entry of normalizeStoredCategoriesList(list)) {
-        const id = entry.category_id;
-        if (!id) continue;
-        const key = toIdStr(id);
-        if (assignedIdSet && !assignedIdSet.has(key)) continue;
-        map.set(key, isLocallyEnabled(entry.is_active));
-    }
-    return map;
-};
-
-const buildEnabledMapFromServicesList = (list, assignedIdSet = null) => {
-    const map = new Map();
-    for (const entry of normalizeStoredServicesList(list)) {
-        const id = entry.service_id;
-        if (!id) continue;
-        const key = toIdStr(id);
-        if (assignedIdSet && !assignedIdSet.has(key)) continue;
-        map.set(key, isLocallyEnabled(entry.is_active));
-    }
-    return map;
-};
-
-const loadLatestFranchiseCategoryMapping = async (franchiseOid) => {
-    const row = await FranchiseCategory.findOne({
-        franchise_id: franchiseOid,
-        deleted_at: null,
-    })
-        .sort({ created_at: -1 })
-        .lean();
-    if (!row) return null;
-    return coerceLegacyCategoryMappingArrays(row);
-};
-
-const loadLatestFranchiseServiceMapping = async (franchiseOid) => {
-    const row = await FranchiseService.findOne({
-        franchise_id: franchiseOid,
-        deleted_at: null,
-    })
-        .sort({ created_at: -1 })
-        .lean();
-    if (!row) return null;
-    return coerceLegacyServiceMappingArrays(row);
-};
-
-const buildFranchiseEnabledMapsFromSources = ({
-    franchise,
-    fc,
-    fs,
-    restrictToAssigned,
-}) => {
-    const assignedCategorySet = new Set(
-        (Array.isArray(franchise.categories) ? franchise.categories : []).map(toIdStr)
-    );
-    const assignedServiceSet = new Set(
-        (Array.isArray(franchise.services) ? franchise.services : []).map(toIdStr)
-    );
-    const categoryAssignedFilter = restrictToAssigned ? assignedCategorySet : null;
-    const serviceAssignedFilter = restrictToAssigned ? assignedServiceSet : null;
-
-    let categoryEnabled;
-    if (fc && Array.isArray(fc.categories_list) && fc.categories_list.length > 0) {
-        categoryEnabled = buildEnabledMapFromCategoriesList(
-            fc.categories_list,
-            categoryAssignedFilter
-        );
-    } else if (assignedCategorySet.size > 0) {
-        categoryEnabled = new Map();
-        for (const id of assignedCategorySet) categoryEnabled.set(id, true);
-    } else {
-        categoryEnabled = new Map();
-    }
-
-    let serviceEnabled;
-    if (fs && Array.isArray(fs.services_list) && fs.services_list.length > 0) {
-        serviceEnabled = buildEnabledMapFromServicesList(fs.services_list, serviceAssignedFilter);
-    } else if (assignedServiceSet.size > 0) {
-        serviceEnabled = new Map();
-        for (const id of assignedServiceSet) serviceEnabled.set(id, true);
-    } else {
-        serviceEnabled = new Map();
-    }
-
-    return {
-        assignedCategoryIds: [...assignedCategorySet].map((s) => new mongoose.Types.ObjectId(s)),
-        assignedServiceIds: [...assignedServiceSet].map((s) => new mongoose.Types.ObjectId(s)),
-        categoryEnabled,
-        serviceEnabled,
-    };
-};
+/** Franchise.categories[] / services[] — membership in array means locally enabled. */
+const buildFranchiseEnabledMapsFromFranchiseDoc = (franchise) => buildFranchiseEnabledMaps(franchise);
 
 /**
- * Full mapping preferences from categories_list / services_list (every mapped global row).
- * Matches GET franchise-category|service getAll all_* and getCount active_* / inactive_*.
+ * Franchise catalog preferences from franchise.categories[] / services[] only.
  */
 const resolveFranchiseMappingPreferenceMaps = async (franchiseId) => {
     const fid =
@@ -167,48 +70,13 @@ const resolveFranchiseMappingPreferenceMaps = async (franchiseId) => {
         return { ok: false, status: 404, message: 'Franchise not found.' };
     }
 
-    const fc = await loadLatestFranchiseCategoryMapping(fid);
-    const fs = await loadLatestFranchiseServiceMapping(fid);
-    const maps = buildFranchiseEnabledMapsFromSources({
-        franchise,
-        fc,
-        fs,
-        restrictToAssigned: false,
-    });
-
-    return { ok: true, franchiseId: fid, ...maps };
+    return { ok: true, franchiseId: fid, ...buildFranchiseEnabledMapsFromFranchiseDoc(franchise) };
 };
 
-/**
- * Franchise.categories / services[] intersected with mapping preferences (assigned subset).
- * Used for partner-effective franchise catalog resolution.
- */
-const resolveFranchiseAssignedEnabledMaps = async (franchiseId) => {
-    const fid =
-        franchiseId instanceof mongoose.Types.ObjectId
-            ? franchiseId
-            : new mongoose.Types.ObjectId(String(franchiseId));
+/** Alias — franchise arrays are the single source of truth. */
+const resolveFranchiseAssignedEnabledMaps = resolveFranchiseMappingPreferenceMaps;
 
-    const franchise = await Franchise.findOne({ _id: fid, deleted_at: null })
-        .select('categories services')
-        .lean();
-    if (!franchise) {
-        return { ok: false, status: 404, message: 'Franchise not found.' };
-    }
-
-    const fc = await loadLatestFranchiseCategoryMapping(fid);
-    const fs = await loadLatestFranchiseServiceMapping(fid);
-    const maps = buildFranchiseEnabledMapsFromSources({
-        franchise,
-        fc,
-        fs,
-        restrictToAssigned: true,
-    });
-
-    return { ok: true, franchiseId: fid, ...maps };
-};
-
-/** Alias: full mapping partition (dashboard + all_* lists). */
+/** Alias: franchise catalog preferences (dashboard + all_* lists). */
 const resolveFranchiseLocalEnabledMaps = resolveFranchiseMappingPreferenceMaps;
 
 const loadGlobalCategoryActiveMap = async (categoryIds) => {
@@ -832,8 +700,6 @@ module.exports = {
     isGlobalCatalogRowActive,
     computeCategoryEffectiveActive,
     computeServiceEffectiveActive,
-    buildEnabledMapFromCategoriesList,
-    buildEnabledMapFromServicesList,
     resolveFranchiseMappingPreferenceMaps,
     resolveFranchiseAssignedEnabledMaps,
     resolveFranchiseLocalEnabledMaps,

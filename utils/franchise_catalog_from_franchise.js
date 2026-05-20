@@ -7,7 +7,63 @@ const {
     coerceLegacyServiceMappingArrays,
 } = require('./franchise_catalog_lists');
 
-const toIdStr = (id) => (id ? id.toString() : '');
+/** Matches catalog_availability_resolver isGlobalCatalogRowActive — assignable global catalog only. */
+const GLOBAL_ACTIVE_CATEGORY_FILTER = {
+    deleted_at: null,
+    is_active: true,
+    is_request: { $ne: true },
+};
+
+const GLOBAL_ACTIVE_SERVICE_FILTER = {
+    deleted_at: null,
+    is_active: true,
+    is_request: { $ne: true },
+};
+
+const loadAssignableGlobalCategoryIds = async () => {
+    const rows = await Category.find(GLOBAL_ACTIVE_CATEGORY_FILTER).select('_id').lean();
+    return rows.map((row) => row._id);
+};
+
+/**
+ * Globally assignable services: service is globally active AND its parent category is globally active.
+ * Excludes deleted/inactive globals and services under inactive/deleted categories.
+ */
+const loadAssignableGlobalServiceRows = async () => {
+    const services = await Service.find(GLOBAL_ACTIVE_SERVICE_FILTER)
+        .select('_id category_id')
+        .lean();
+    if (services.length === 0) return [];
+
+    const categoryIds = [
+        ...new Set(
+            services
+                .map((s) => (s.category_id ? s.category_id.toString() : ''))
+                .filter(Boolean)
+        ),
+    ].map((id) => new mongoose.Types.ObjectId(id));
+
+    if (categoryIds.length === 0) return [];
+
+    const activeCategories = await Category.find({
+        _id: { $in: categoryIds },
+        ...GLOBAL_ACTIVE_CATEGORY_FILTER,
+    })
+        .select('_id')
+        .lean();
+    const activeCategorySet = new Set(activeCategories.map((c) => c._id.toString()));
+
+    return services.filter((s) => {
+        const catKey = s.category_id ? s.category_id.toString() : '';
+        return catKey && activeCategorySet.has(catKey);
+    });
+};
+
+const countAssignableGlobalServices = async () => {
+    const rows = await loadAssignableGlobalServiceRows();
+    return rows.length;
+};
+
 
 const dedupeIdsPreserveOrder = (oids) => {
     const seen = new Set();
@@ -53,7 +109,8 @@ const buildVirtualCategoryMappingRecord = async (franchiseLean) => {
     const activeIds = dedupeIdsPreserveOrder(franchiseLean.categories || []);
     const activeSet = new Set(activeIds.map(toIdStr));
 
-    const allRows = await Category.find({ deleted_at: null }).select('_id').lean();
+    // Inactive = globally active categories this franchise has not enabled (exclude deleted/inactive globals).
+    const allRows = await Category.find(GLOBAL_ACTIVE_CATEGORY_FILTER).select('_id').lean();
     const inactiveIds = [];
     for (const row of allRows) {
         const key = row._id.toString();
@@ -87,7 +144,8 @@ const buildVirtualServiceMappingRecord = async (franchiseLean) => {
     const activeIds = dedupeIdsPreserveOrder(franchiseLean.services || []);
     const activeSet = new Set(activeIds.map(toIdStr));
 
-    const allRows = await Service.find({ deleted_at: null }).select('_id').lean();
+    // Inactive = globally active services (with active parent category) not enabled on this franchise.
+    const allRows = await loadAssignableGlobalServiceRows();
     const inactiveIds = [];
     for (const row of allRows) {
         const key = row._id.toString();
@@ -181,4 +239,9 @@ module.exports = {
     saveFranchiseServices,
     applyCategoryOrderToFranchiseIds,
     applyServiceOrderToFranchiseIds,
+    GLOBAL_ACTIVE_CATEGORY_FILTER,
+    GLOBAL_ACTIVE_SERVICE_FILTER,
+    loadAssignableGlobalCategoryIds,
+    loadAssignableGlobalServiceRows,
+    countAssignableGlobalServices,
 };

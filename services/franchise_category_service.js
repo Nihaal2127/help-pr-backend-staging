@@ -27,6 +27,7 @@ const {
     activeCategoryIdsFromListEntries,
     saveFranchiseCategories,
     applyCategoryOrderToFranchiseIds,
+    GLOBAL_ACTIVE_CATEGORY_FILTER,
 } = require('../utils/franchise_catalog_from_franchise');
 
 const fail = (status, message, extra = {}) => ({ ok: false, status, message, ...extra });
@@ -260,7 +261,7 @@ const buildAllCategoriesWithFranchiseMappingStatus = async (franchiseOid) => {
     const local = await resolveFranchiseMappingPreferenceMaps(franchiseOid);
     const franchiseEnabledMap = local.ok ? local.categoryEnabled : new Map();
 
-    const allCats = await Category.find({ deleted_at: null }).lean();
+    const allCats = await Category.find(GLOBAL_ACTIVE_CATEGORY_FILTER).lean();
     const svcMap = await loadServicesGroupedByCategoryId(allCats.map((c) => c._id));
     return allCats.map((cat) => {
         const key = cat._id.toString();

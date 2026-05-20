@@ -3,7 +3,7 @@ const Order = require("../models/order");
 const OrderAdditionalCharge = require("../models/order_additional_charge");
 const { recalculateOrderTotals } = require("../utils/order_financials");
 const { computeAdditionalChargeLine } = require("../utils/order_pricing");
-const { callerMatchesOrderParticipant } = require("../utils/order_access");
+const { assertOrderModifyAccess } = require("../utils/order_access");
 
 const ALLOWED_METHODS = new Set([
   "cash",
@@ -52,11 +52,14 @@ const create = async (req, res) => {
       });
     }
 
-    if (!callerMatchesOrderParticipant(req.user?.id, order)) {
-      return res.status(403).json({
+    const access = await assertOrderModifyAccess(req, order);
+    if (!access.ok) {
+      return res.status(access.status).json({
         success: false,
-        status: 403,
-        message: "You are not allowed to modify charges on this order.",
+        status: access.status,
+        message:
+          access.message ||
+          "You are not allowed to modify charges on this order.",
       });
     }
 
@@ -118,11 +121,12 @@ const listByOrder = async (req, res) => {
       });
     }
 
-    if (!callerMatchesOrderParticipant(req.user?.id, order)) {
-      return res.status(403).json({
+    const access = await assertOrderModifyAccess(req, order);
+    if (!access.ok) {
+      return res.status(access.status).json({
         success: false,
-        status: 403,
-        message: "Forbidden.",
+        status: access.status,
+        message: access.message || "Forbidden.",
       });
     }
 
@@ -178,11 +182,12 @@ const update = async (req, res) => {
         message: "Order not found.",
       });
     }
-    if (!callerMatchesOrderParticipant(req.user?.id, order)) {
-      return res.status(403).json({
+    const access = await assertOrderModifyAccess(req, order);
+    if (!access.ok) {
+      return res.status(access.status).json({
         success: false,
-        status: 403,
-        message: "Forbidden.",
+        status: access.status,
+        message: access.message || "Forbidden.",
       });
     }
 
@@ -260,11 +265,12 @@ const remove = async (req, res) => {
         message: "Order not found.",
       });
     }
-    if (!callerMatchesOrderParticipant(req.user?.id, orderForAuth)) {
-      return res.status(403).json({
+    const access = await assertOrderModifyAccess(req, orderForAuth);
+    if (!access.ok) {
+      return res.status(access.status).json({
         success: false,
-        status: 403,
-        message: "Forbidden.",
+        status: access.status,
+        message: access.message || "Forbidden.",
       });
     }
 

@@ -88,6 +88,8 @@ const mapRefundRecord = (row) => ({
     _id: row._id,
     order_id: row.order_unique_id || row.order_id?.toString?.() || row.order_id,
     order_mongo_id: row.order_id,
+    user_id: row.user_id || null,
+    partner_id: row.partner_id || null,
     user_name: row.user_name,
     total_amount: row.total_amount,
     user_paid: row.user_paid,
@@ -100,6 +102,23 @@ const mapRefundRecord = (row) => ({
     notes: row.notes || '',
     created_at: row.created_at,
 });
+
+const resolveCustomerFromOrder = async (order) => {
+    if (!order.user_id) {
+        return { ok: false, message: 'Order has no customer (user_id).' };
+    }
+    const customer = await User.findOne({
+        _id: order.user_id,
+        deleted_at: null,
+    })
+        .select('name')
+        .lean();
+    const userName = (customer?.name || '').trim();
+    if (!userName) {
+        return { ok: false, message: 'Customer name could not be resolved for this order.' };
+    }
+    return { ok: true, user_id: order.user_id, user_name: userName };
+};
 
 const getOrderPaymentBreakdown = async (orderId) => {
     const payments = await OrderPayment.find({
@@ -463,22 +482,12 @@ const createRefund = async (body, createdById = null) => {
             }
         }
 
-        let userName = String(body.user_name || body.userName || '').trim();
-        if (!userName && order.user_id) {
-            const customer = await User.findOne({
-                _id: order.user_id,
-                deleted_at: null,
-            })
-                .select('name')
-                .lean();
-            userName = customer?.name || '';
-        }
-        if (!userName) {
-            return fail(400, 'user_name is required.');
-        }
+        const customerResult = await resolveCustomerFromOrder(order);
+        if (!customerResult.ok) return fail(400, customerResult.message);
 
-        const totalAmount = roundAmount(body.total_amount ?? order.total_price);
-        const userPaid = roundAmount(body.user_paid ?? breakdown.customer_paid_amount);
+        const totalAmount = roundAmount(order.total_price);
+        const userPaid = roundAmount(breakdown.customer_paid_amount);
+        const partnerId = order.partner_id || null;
 
         const now = new Date();
 
@@ -517,9 +526,9 @@ const createRefund = async (body, createdById = null) => {
             order_id: order._id,
             order_unique_id: order.unique_id || '',
             franchise_id: order.franchise_id || null,
-            user_id: order.user_id || null,
-            user_name: userName,
-            partner_id: order.partner_id || null,
+            user_id: customerResult.user_id,
+            user_name: customerResult.user_name,
+            partner_id: partnerId,
             total_amount: totalAmount,
             user_paid: userPaid,
             refund_amount: refundAmount,

@@ -24,6 +24,7 @@ const {
   DEFAULT_ORDER_STATUS,
   buildOrderStatusInfo,
 } = require("../enum/order_status_enum");
+const { resolveOrderFranchiseIdForCreate } = require("../utils/order_access");
 
 const ORDER_TYPE_DEFAULT = 2;
 
@@ -147,6 +148,8 @@ const createOrderFromBody = async (body, options = {}) => {
     linkQuote = true,
     notifyPartners = true,
     order_id: presetOrderId = null,
+    callerFranchiseId = null,
+    callerType = null,
   } = options;
 
   const {
@@ -229,6 +232,23 @@ const createOrderFromBody = async (body, options = {}) => {
   const resolvedPartnerId = partner_id ?? single.partner_id ?? null;
   const resolvedServiceId = service_id ?? single.service_id ?? null;
 
+  let quoteFranchiseId = null;
+  if (resolvedQuoteId) {
+    const quoteFranchiseDoc = await Quote.findOne({ _id: resolvedQuoteId })
+      .select("franchise_id")
+      .lean();
+    quoteFranchiseId = quoteFranchiseDoc?.franchise_id ?? null;
+  }
+
+  const resolvedFranchiseId = await resolveOrderFranchiseIdForCreate({
+    franchiseIdFromBody: franchise_id,
+    partnerId: resolvedPartnerId,
+    createdById: created_by_id,
+    quoteFranchiseId,
+    callerFranchiseId,
+    callerType,
+  });
+
   const { pricing, pricingMeta, orderOfferSnapshot } = await resolveOrderPricing(
     body,
     single,
@@ -286,7 +306,7 @@ const createOrderFromBody = async (body, options = {}) => {
     type,
     partner_id: resolvedPartnerId,
     employee_id: employee_id ?? null,
-    franchise_id: franchise_id ?? null,
+    franchise_id: resolvedFranchiseId,
     address_id: address_id ?? null,
     service_id: resolvedServiceId,
     from_date: from_date ? new Date(from_date) : null,

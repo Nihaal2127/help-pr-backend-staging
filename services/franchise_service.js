@@ -7,16 +7,10 @@ const City = require('../models/city');
 const Area = require('../models/area');
 const User = require('../models/user');
 const Address = require('../models/address');
-const FranchiseCategory = require('../models/franchise_category');
-const FranchiseService = require('../models/franchise_service');
 const PartnerService = require('../models/partner_service');
 const PartnerCategory = require('../models/partner_category');
 const { applyPagination, applyDropDownFilter } = require('../utils/pagination');
 const { loadFranchiseCallerScope } = require('../utils/franchise_user_scope');
-const {
-    coerceLegacyCategoryMappingArrays,
-    coerceLegacyServiceMappingArrays,
-} = require('../utils/franchise_catalog_lists');
 const {
     resolveFranchiseEffectiveCatalog,
     computeServiceEffectiveActive,
@@ -27,6 +21,11 @@ const {
 } = require('../utils/catalog_availability_resolver');
 const { parseBoolean } = require('../utils/parser');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
+const {
+    buildVirtualCategoryMappingRecord,
+    buildVirtualServiceMappingRecord,
+    loadFranchiseForCatalog,
+} = require('../utils/franchise_catalog_from_franchise');
 
 const parseObjectId = (raw, fieldName = 'id') => {
     if (raw instanceof mongoose.Types.ObjectId) {
@@ -122,52 +121,6 @@ const validateServiceIds = async (oids) => {
         };
     }
     return { ok: true };
-};
-
-/**
- * Franchise create: payload categories stay active; every other global (non-deleted) category is inactive.
- * `categories_list` / `categories_order` include the full partition (active first in payload order, then inactive sorted).
- */
-const buildInitialFranchiseCategoryMappingForCreate = async (categoryOids) => {
-    const active_categories = dedupeIdsPreserveOrder(categoryOids || []);
-    const activeSet = new Set(active_categories.map((id) => id.toString()));
-    const allRows = await Category.find({ deleted_at: null }).select('_id').lean();
-    const inactive_categories = [];
-    for (const row of allRows) {
-        const cid = row._id.toString();
-        if (!activeSet.has(cid)) inactive_categories.push(row._id);
-    }
-    inactive_categories.sort((a, b) => a.toString().localeCompare(b.toString()));
-
-    const categories_list = [
-        ...active_categories.map((category_id) => ({ category_id, is_active: true })),
-        ...inactive_categories.map((category_id) => ({ category_id, is_active: false })),
-    ];
-    const categories_order = [...active_categories, ...inactive_categories];
-    return { categories_list, categories_order };
-};
-
-/**
- * Franchise create: payload services stay active; every other global (non-deleted) service is inactive.
- * `services_list` / `services_order` include the full partition (active first in payload order, then inactive sorted).
- */
-const buildInitialFranchiseServiceMappingForCreate = async (serviceOids) => {
-    const active_services = dedupeIdsPreserveOrder(serviceOids || []);
-    const activeSet = new Set(active_services.map((id) => id.toString()));
-    const allRows = await Service.find({ deleted_at: null }).select('_id').lean();
-    const inactive_services = [];
-    for (const row of allRows) {
-        const sid = row._id.toString();
-        if (!activeSet.has(sid)) inactive_services.push(row._id);
-    }
-    inactive_services.sort((a, b) => a.toString().localeCompare(b.toString()));
-
-    const services_list = [
-        ...active_services.map((service_id) => ({ service_id, is_active: true })),
-        ...inactive_services.map((service_id) => ({ service_id, is_active: false })),
-    ];
-    const services_order = [...active_services, ...inactive_services];
-    return { services_list, services_order };
 };
 
 const dedupeIdsPreserveOrder = (oids) => {
@@ -415,26 +368,6 @@ const createFranchise = async (body) => {
         });
 
         const saved = await doc.save();
-        try {
-            const [catMapping, svcMapping] = await Promise.all([
-                buildInitialFranchiseCategoryMappingForCreate(categoryOids),
-                buildInitialFranchiseServiceMappingForCreate(serviceOids),
-            ]);
-            await FranchiseCategory.create({
-                franchise_id: saved._id,
-                categories_list: catMapping.categories_list,
-                categories_order: catMapping.categories_order,
-            });
-            await FranchiseService.create({
-                franchise_id: saved._id,
-                services_list: svcMapping.services_list,
-                services_order: svcMapping.services_order,
-            });
-        } catch (mapError) {
-            await Franchise.findByIdAndDelete(saved._id);
-            console.error('createFranchise.mapping', mapError.message);
-            return fail(500, 'Failed to create franchise category/service mapping records.');
-        }
         return ok(200, { message: 'Franchise created successfully.', record: saved });
     } catch (error) {
         console.error('createFranchise', error.message);
@@ -756,52 +689,6 @@ const isCatalogServiceActive = (doc) =>
             String(doc.approval_status || '').toLowerCase() === 'approve'
     );
 
-/** Merge { category_id, is_active } from franchise_category rows; categories_list is source of truth (local is_enabled). */
-const mergeFranchiseCategoryEntries = (docs) => {
-    const map = new Map();
-    for (const doc of docs) {
-        const list = doc.categories_list || [];
-        for (const row of list) {
-            if (!row) continue;
-            const cid =
-                row.category_id instanceof mongoose.Types.ObjectId
-                    ? row.category_id
-                    : row.category_id?._id || row.category_id;
-            if (!cid) continue;
-            const key = cid.toString();
-            if (map.has(key)) continue;
-            map.set(key, {
-                category_id: cid,
-                is_active: Boolean(row.is_active),
-            });
-        }
-    }
-    return [...map.values()];
-};
-
-/** Merge { service_id, is_active } from franchise_service rows; services_list is source of truth (local is_enabled). */
-const mergeFranchiseServiceEntries = (docs) => {
-    const map = new Map();
-    for (const doc of docs) {
-        const list = doc.services_list || [];
-        for (const row of list) {
-            if (!row) continue;
-            const sid =
-                row.service_id instanceof mongoose.Types.ObjectId
-                    ? row.service_id
-                    : row.service_id?._id || row.service_id;
-            if (!sid) continue;
-            const key = sid.toString();
-            if (map.has(key)) continue;
-            map.set(key, {
-                service_id: sid,
-                is_active: Boolean(row.is_active),
-            });
-        }
-    }
-    return [...map.values()];
-};
-
 /** Area ObjectIds linked on franchise.area_id (same shape as area_service / count_controller). */
 const collectFranchiseAreaIds = (franchiseDocs) => {
     const seen = new Set();
@@ -936,13 +823,8 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
         const franchiseEffective = await resolveFranchiseEffectiveCatalog(parsed.oid);
         if (!franchiseEffective.ok) return fail(franchiseEffective.status, franchiseEffective.message);
 
-        const [fcDocs, fsDocs, partners, employees, customers] = await Promise.all([
-            FranchiseCategory.find({ franchise_id: parsed.oid, deleted_at: null })
-                .sort({ created_at: -1 })
-                .lean(),
-            FranchiseService.find({ franchise_id: parsed.oid, deleted_at: null })
-                .sort({ created_at: -1 })
-                .lean(),
+        const [franchiseCatalog, partners, employees, customers] = await Promise.all([
+            loadFranchiseForCatalog(parsed.oid),
             User.find({
                 franchise_id: parsed.oid,
                 type: USER_TYPE_PARTNER,
@@ -1157,11 +1039,16 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
             };
         });
 
+        const [virtualCategoryMapping, virtualServiceMapping] = await Promise.all([
+            buildVirtualCategoryMappingRecord(franchiseCatalog),
+            buildVirtualServiceMappingRecord(franchiseCatalog),
+        ]);
+
         const franchiseCategoriesEnriched = await enrichFranchiseCategoryMappingRecords(
-            fcDocs.map((d) => coerceLegacyCategoryMappingArrays(d))
+            virtualCategoryMapping ? [virtualCategoryMapping] : []
         );
         const franchiseServicesEnriched = await enrichFranchiseServiceMappingRecords(
-            fsDocs.map((d) => coerceLegacyServiceMappingArrays(d))
+            virtualServiceMapping ? [virtualServiceMapping] : []
         );
 
         const [categories, services] = await Promise.all([

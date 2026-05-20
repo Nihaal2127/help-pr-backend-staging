@@ -11,7 +11,7 @@
 
 Partner payouts use a **wallet + ledger** model:
 
-- **Credits** — partner share when an **order** is placed/updated: `order_service.partner_earning` (offer-adjusted) **+** `order.additional_charges_total`. Synced automatically on order create, repricing, and additional-charge changes.
+- **Credits** — partner share when an **order** is placed/updated: `order_service.partner_earning` (offer-adjusted) **+** `order.additional_charges_subtotal` (base extra charges only — **not** tax or commission on extras). Synced automatically on order create, repricing, and additional-charge changes.
 - **Debits** — (1) **Partner `order_payment`** rows (`payer_type: partner`, `status: completed`) on `/api/order-payments`; (2) admin **withdrawals** via **Create payout**; (3) refund `from_partner_wallet`.
 - **Balance** = sum(credits) − sum(debits). Shown as `total_wallet_amount` / `payable_balance`.
 

@@ -121,6 +121,8 @@ var orderSchema = new schema(
     partner_commison_platform_fee: { type: Number, default: 0, require: true },
     /** Sum of pre-tax additional charge amounts */
     additional_charges_subtotal: { type: Number, default: 0 },
+    /** Sum of commission on additional charges (admin share per line) */
+    additional_charges_commission: { type: Number, default: 0 },
     /** Sum of tax on additional charges */
     additional_charges_tax: { type: Number, default: 0 },
     /** Sum of active order_additional_charge total_amount; maintained by recalculateOrderTotals */

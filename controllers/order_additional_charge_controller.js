@@ -69,13 +69,20 @@ const create = async (req, res) => {
         : "other";
 
     const taxPercent = Number(order.tax_percent) || 0;
-    const chargeLine = computeAdditionalChargeLine(amount, taxPercent);
+    const commissionPercent = Number(order.commission_percent) || 0;
+    const chargeLine = computeAdditionalChargeLine(
+      amount,
+      taxPercent,
+      commissionPercent
+    );
 
     const doc = new OrderAdditionalCharge({
       order_id: order._id,
       label: label || "",
       description: description || "",
       amount: chargeLine.amount,
+      commission_percent: chargeLine.commission_percent,
+      commission_amount: chargeLine.commission_amount,
       tax_percent: chargeLine.tax_percent,
       tax_amount: chargeLine.tax_amount,
       total_amount: chargeLine.total_amount,
@@ -203,8 +210,15 @@ const update = async (req, res) => {
         });
       }
       const taxPercent = Number(order.tax_percent) || 0;
-      const chargeLine = computeAdditionalChargeLine(amount, taxPercent);
+      const commissionPercent = Number(order.commission_percent) || 0;
+      const chargeLine = computeAdditionalChargeLine(
+        amount,
+        taxPercent,
+        commissionPercent
+      );
       row.amount = chargeLine.amount;
+      row.commission_percent = chargeLine.commission_percent;
+      row.commission_amount = chargeLine.commission_amount;
       row.tax_percent = chargeLine.tax_percent;
       row.tax_amount = chargeLine.tax_amount;
       row.total_amount = chargeLine.total_amount;

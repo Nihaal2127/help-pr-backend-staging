@@ -4,6 +4,7 @@ const OrderPayment = require("../models/order_payment");
 const { assertOrderModifyAccess } = require("../utils/order_access");
 const { syncOrderPaymentStatus } = require("../services/order_payment_status_service");
 const { syncPartnerOrderPaymentWallet } = require("../services/partner_wallet_order_service");
+const { validatePartnerOrderPayment } = require("../services/partner_order_payment_validation");
 
 const PAYER_TYPES = new Set(["customer", "partner"]);
 const STATUSES = new Set(["pending", "completed", "failed", "refunded"]);
@@ -66,6 +67,20 @@ const create = async (req, res) => {
     }
 
     const st = status && STATUSES.has(status) ? status : "pending";
+
+    if (payer_type === "partner") {
+      const partnerCheck = await validatePartnerOrderPayment(order, {
+        amount: Number(amount),
+        status: st,
+      });
+      if (!partnerCheck.ok) {
+        return res.status(partnerCheck.status).json({
+          success: false,
+          status: partnerCheck.status,
+          message: partnerCheck.message,
+        });
+      }
+    }
 
     const doc = new OrderPayment({
       order_id: order._id,
@@ -245,6 +260,22 @@ const update = async (req, res) => {
       row.paid_at = paid_at ? new Date(paid_at) : null;
     }
     if (notes !== undefined) row.notes = notes;
+
+    if (row.payer_type === "partner") {
+      const partnerCheck = await validatePartnerOrderPayment(order, {
+        amount: row.amount,
+        status: row.status,
+        excludePaymentId: row._id,
+      });
+      if (!partnerCheck.ok) {
+        return res.status(partnerCheck.status).json({
+          success: false,
+          status: partnerCheck.status,
+          message: partnerCheck.message,
+        });
+      }
+    }
+
     row.updated_at = new Date();
     await row.save();
     await syncPartnerOrderPaymentWallet(row);

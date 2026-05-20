@@ -100,7 +100,7 @@ Order (1) ──has──▶ service_items[] ──▶ OrderService (1 per order
 | `minimum_deposit_percent`, `minimum_deposit_amount` | From `service.minimum_deposit` (%); amount = **final** `total_price` × % |
 | `discount_amount`, `discount_percent`, `discount_code`, `discount_reason` | Set by server when **`offer_id`** applied (`discount_amount` = offer `total_discount`) |
 | `offer_id`, `order_offer_id` | Optional offer on create; see **`order_offer`** snapshot on GET detail |
-| `additional_charges_subtotal`, `additional_charges_tax`, `additional_charges_total` | **Maintained by server** (each charge: pre-tax `amount` + tax) |
+| `additional_charges_subtotal`, `additional_charges_commission`, `additional_charges_tax`, `additional_charges_total` | **Maintained by server** — per charge: `commission` on `amount`, then `tax` on `(amount + commission)`; customer pays line `total_amount`; partner wallet credits **`amount` only** (see partner payout doc) |
 | `admin_commission` | Same as `commission_amount` (reporting) |
 | `admin_earning` | Defaults to `commission_amount` if omitted on create |
 | `total_price` | **Server-calculated** (see §5); client values compared, server wins on mismatch |
@@ -130,8 +130,9 @@ tax_amount          = taxable_subtotal × tax% / 100
 **After create** and whenever additional charges change, **`recalculateOrderTotals`** runs:
 
 ```text
-per additional charge: charge_tax = amount × tax_percent / 100
-                       charge_total = amount + charge_tax
+per additional charge: commission_amount = amount × commission_percent / 100
+                       charge_tax      = (amount + commission_amount) × tax_percent / 100
+                       charge_total    = amount + commission_amount + charge_tax
 
 total_price = taxable_subtotal + tax_amount + sum(charge_total)
 minimum_deposit_amount = total_price × minimum_deposit_percent / 100
@@ -206,7 +207,14 @@ List responses use **case-insensitive collation** for sort. Each record includes
 | PUT | `/update/:id` | Update status, amounts, references, etc. |
 | DELETE | `/delete/:id` | Soft-delete |
 
-**`payer_type`:** `customer` = money from/to customer context; `partner` = partner-side / payout context (business meaning is up to product).
+**`payer_type`:** `customer` = money from/to customer context; `partner` = partner remittance on the order (debits partner wallet when `status` is `completed`).
+
+**Partner payments (`payer_type: partner`, `status: completed`):**
+
+- Allowed only after the customer has paid something on the order (`customer_net_paid` &gt; 0 from completed customer `order_payment` rows).
+- **Cumulative** completed partner payments on the same order cannot exceed **`customer_net_paid`** (money collected from the customer minus refunds).
+- `pending` / `failed` partner rows are not validated or wallet-debited until marked `completed`.
+- On nested create/update, **customer** payment rows are processed **before** partner rows in the same request.
 
 **`status`:** `pending` \| `completed` \| `failed` \| `refunded`. After any change, server runs **`syncOrderPaymentStatus`** on the order.
 

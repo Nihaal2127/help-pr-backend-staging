@@ -38,18 +38,26 @@ assert(nursing.tax_amount === 375, "nursing tax 375");
 assert(nursing.total_price === 4125, "nursing total 4125");
 assert(nursing.minimum_deposit_amount === 1031.25, "nursing min deposit");
 
-// Additional charge with tax
-const line = computeAdditionalChargeLine(500, 10);
-assert(line.tax_amount === 50, "charge tax 50");
-assert(line.total_amount === 550, "charge total 550");
+// Additional charge: base + commission + tax on (base + commission)
+const line = computeAdditionalChargeLine(500, 10, 25);
+assert(line.commission_amount === 125, "charge commission 125");
+assert(line.tax_amount === 62.5, "charge tax 62.5");
+assert(line.total_amount === 687.5, "charge total 687.5");
 
 const agg = aggregateAdditionalCharges([
-  { amount: 500, tax_amount: 50, total_amount: 550 },
+  {
+    amount: 500,
+    commission_amount: 125,
+    tax_amount: 62.5,
+    total_amount: 687.5,
+  },
 ]);
+assert(agg.additional_charges_commission === 125, "agg commission");
+assert(agg.additional_charges_subtotal === 500, "agg subtotal base only");
 const final = finalizeOrderPricing(nursing, agg);
-assert(final.total_price === 4675, "total with extra charge");
+assert(final.total_price === 4812.5, "total with extra charge");
 assert(final.tax_amount === 375, "tax unchanged on base after extras");
-assert(final.minimum_deposit_amount === 1168.75, "min deposit after extras");
+assert(final.minimum_deposit_amount === 1203.13, "min deposit after extras");
 
 const cmp = comparePricing({ total_price: 3600 }, { total_price: 3630 });
 assert(cmp.matches === false && cmp.mismatches.length === 1, "mismatch detect");

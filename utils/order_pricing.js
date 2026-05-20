@@ -108,12 +108,21 @@ const computeBasePricing = ({
   };
 };
 
-const computeAdditionalChargeLine = (amount, tax_percent) => {
+/**
+ * Additional charge line: partner base + commission + tax on (base + commission).
+ * Customer pays total_amount; partner wallet credits base amount only.
+ */
+const computeAdditionalChargeLine = (amount, tax_percent, commission_percent = 0) => {
   const base = clampMoney(amount);
-  const tax_amount = roundMoney((base * (Number(tax_percent) || 0)) / 100);
-  const total_amount = roundMoney(base + tax_amount);
+  const commissionPct = Number(commission_percent) || 0;
+  const commission_amount = roundMoney((base * commissionPct) / 100);
+  const taxable = roundMoney(base + commission_amount);
+  const tax_amount = roundMoney((taxable * (Number(tax_percent) || 0)) / 100);
+  const total_amount = roundMoney(taxable + tax_amount);
   return {
     amount: base,
+    commission_percent: commissionPct,
+    commission_amount,
     tax_percent: Number(tax_percent) || 0,
     tax_amount,
     total_amount,
@@ -241,6 +250,7 @@ const buildOrderPricingFromService = (service, total_service_charge, discount_am
     ...pricing,
     ...rates,
     additional_charges_subtotal: 0,
+    additional_charges_commission: 0,
     additional_charges_tax: 0,
     additional_charges_total: 0,
     total_price: pricing.total_price_before_extras,
@@ -267,6 +277,7 @@ const applyPricingToOrder = (order, pricing) => {
   order.user_paltform_fee = 0;
   order.partner_commison_platform_fee = pricing.commission_amount;
   order.additional_charges_subtotal = pricing.additional_charges_subtotal ?? 0;
+  order.additional_charges_commission = pricing.additional_charges_commission ?? 0;
   order.additional_charges_tax = pricing.additional_charges_tax ?? 0;
   order.additional_charges_total = pricing.additional_charges_total ?? 0;
   order.total_price = pricing.total_price;
@@ -326,11 +337,16 @@ const mapPricingToServiceLine = (pricing, overrides = {}) => ({
 
 const aggregateAdditionalCharges = (rows = []) => {
   let additional_charges_subtotal = 0;
+  let additional_charges_commission = 0;
   let additional_charges_tax = 0;
   let additional_charges_total = 0;
 
   for (const row of rows) {
     const base = Number(row.amount) || 0;
+    const commissionAmt =
+      row.commission_amount !== undefined && row.commission_amount !== null
+        ? Number(row.commission_amount)
+        : 0;
     const taxAmt =
       row.tax_amount !== undefined && row.tax_amount !== null
         ? Number(row.tax_amount)
@@ -338,14 +354,16 @@ const aggregateAdditionalCharges = (rows = []) => {
     const total =
       row.total_amount !== undefined && row.total_amount !== null
         ? Number(row.total_amount)
-        : base + taxAmt;
+        : base + commissionAmt + taxAmt;
     additional_charges_subtotal += base;
+    additional_charges_commission += commissionAmt;
     additional_charges_tax += taxAmt;
     additional_charges_total += total;
   }
 
   return {
     additional_charges_subtotal: roundMoney(additional_charges_subtotal),
+    additional_charges_commission: roundMoney(additional_charges_commission),
     additional_charges_tax: roundMoney(additional_charges_tax),
     additional_charges_total: roundMoney(additional_charges_total),
   };

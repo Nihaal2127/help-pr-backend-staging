@@ -11,15 +11,11 @@ const register = async (req, res) => {
       date_of_birth,
     });
 
-    const token = data.auth_token;
-
     return res.status(200).json({
       success: true,
       status: 200,
       message: 'Partner registered successfully.',
-      token,
-      auth_token: token,
-      record: data,
+      data,
     });
   } catch (error) {
     console.error('mobile partner register', error.message);

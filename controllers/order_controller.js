@@ -29,7 +29,57 @@ const {
 } = require('../enum/order_status_enum');
 const { sendPushNotification } = require('../service/firebase/push_service');
 const { generatePaymentLink } = require('./razorpay_controller');
-const { sanitizeInput } = require('../validator/search_keyword_validator');
+const { escapeRegExp } = require('../utils/string_helpers');
+const { isMongoObjectIdHex, buildObjectIdQueryFilters } = require('../utils/mongoose_helpers');
+const {
+  resolveSortField,
+  resolveSortDir,
+  resolveListStatusFilter,
+  resolveListSearchRegex,
+} = require('../utils/list_query_helpers');
+const { buildOrderDateRangeFilter } = require('../utils/schedule_date_filters');
+const {
+  buildEntityListPipeline,
+  parseFacetListResult,
+  getListCollectionNames,
+} = require('../utils/list_aggregation');
+const {
+  formatOrderForApi,
+  formatOrderRecords,
+  formatOrderServiceItemForApi,
+} = require('../utils/order_api_format');
+
+const ORDER_LIST_SEARCH_FIELDS = [
+  'unique_id',
+  'user_unique_id',
+  'address',
+  'comments',
+  'transaction_id',
+  'payment_mode_id',
+  'discount_code',
+  'customer_description',
+  'order_description',
+  '_quote.quote_sequence_id',
+  '_quote.quote_description',
+  '_user.name',
+  '_user.user_id',
+  '_user.email',
+  '_user.phone_number',
+  '_partner.name',
+  '_partner.user_id',
+  '_partner.email',
+  '_partner.phone_number',
+  '_employee.name',
+  '_employee.user_id',
+  '_created_by.name',
+  '_created_by.user_id',
+  '_category.name',
+  '_category.category_id',
+  '_service.name',
+  '_service.service_id',
+  '_city.name',
+  '_franchise.name',
+];
 const OrderAdditionalCharge = require('../models/order_additional_charge');
 const OrderPayment = require('../models/order_payment');
 const OrderOffer = require('../models/order_offer');
@@ -97,7 +147,7 @@ const ORDER_DETAIL_POPULATE = [
 ];
 
 function shapeOrderDetailResponse(populatedOrderData, additional_charges, order_payments, order_offer) {
-  return {
+  return formatOrderForApi({
     ...populatedOrderData,
     created_by_id: populatedOrderData.created_by_id?._id ?? populatedOrderData.created_by_id,
     created_by_info: populatedOrderData.created_by_id,
@@ -164,20 +214,28 @@ function shapeOrderDetailResponse(populatedOrderData, additional_charges, order_
     additional_charges,
     order_payments,
     order_offer: order_offer || null,
-  };
+  });
 }
 
+/**
+ * Resolve order by Mongo _id (24-char hex) or business unique_id (e.g. O1001, SOS-…).
+ * Excludes soft-deleted orders (deleted_at set).
+ */
 async function resolveOrderByIdParam(id) {
-  if (/^sos-/i.test(id)) {
-    return Order.findOne({
-      unique_id: new RegExp(`^${String(id).trim()}$`, 'i'),
-      deleted_at: null,
-    });
+  const trimmed = String(id ?? '').trim();
+  if (!trimmed || trimmed === ':id') {
+    return null;
   }
-  if (mongoose.Types.ObjectId.isValid(id)) {
-    return Order.findOne({ _id: id, deleted_at: null });
+
+  if (isMongoObjectIdHex(trimmed)) {
+    const byId = await Order.findOne({ _id: trimmed, deleted_at: null });
+    if (byId) return byId;
   }
-  return null;
+
+  return Order.findOne({
+    unique_id: new RegExp(`^${escapeRegExp(trimmed)}$`, 'i'),
+    deleted_at: null,
+  });
 }
 
 async function loadOrderDetailLean(orderMongoId) {
@@ -209,130 +267,11 @@ const ORDER_SORT_WHITELIST = new Set([
   'order_description',
 ]);
 
-const resolveOrderSortField = (sortBy) => {
-  const sb = String(sortBy || '').trim();
-  return ORDER_SORT_WHITELIST.has(sb) ? sb : 'created_at';
-};
-
-const resolveOrderSortDir = (req) => {
-  const so = String(req.query.sort_order || '').toLowerCase();
-  if (so === 'asc') return 1;
-  if (so === 'desc') return -1;
-  if (req.query.sort !== undefined) {
-    const s = parseInt(req.query.sort, 10);
-    return s === 1 ? 1 : -1;
-  }
-  return -1;
-};
-
-const parseOrderFilterDate = (value) => {
-  if (value === undefined || value === null) return null;
-  const trimmed = String(value).trim();
-  if (trimmed === '') return null;
-  const d = new Date(trimmed);
-  return Number.isNaN(d.getTime()) ? null : d;
-};
-
-const startOfUtcDay = (date) => {
-  const d = new Date(date);
-  d.setUTCHours(0, 0, 0, 0);
-  return d;
-};
-
-const endOfUtcDay = (date) => {
-  const d = new Date(date);
-  d.setUTCHours(23, 59, 59, 999);
-  return d;
-};
-
-/**
- * getAll query from_date / to_date — schedule overlap and order_date fallback.
- * Works with only from_date, only to_date, or both (open-ended bounds when one is omitted).
- */
-const buildOrderDateRangeFilter = (query) => {
-  const hasFrom =
-    query.from_date !== undefined &&
-    query.from_date !== null &&
-    String(query.from_date).trim() !== '';
-  const hasTo =
-    query.to_date !== undefined &&
-    query.to_date !== null &&
-    String(query.to_date).trim() !== '';
-
-  if (!hasFrom && !hasTo) {
-    return { ok: true, filter: {} };
-  }
-
-  const parsedFrom = hasFrom ? parseOrderFilterDate(query.from_date) : null;
-  const parsedTo = hasTo ? parseOrderFilterDate(query.to_date) : null;
-
-  if (hasFrom && !parsedFrom) {
-    return { ok: false, message: 'Invalid from_date filter.' };
-  }
-  if (hasTo && !parsedTo) {
-    return { ok: false, message: 'Invalid to_date filter.' };
-  }
-
-  let rangeFrom = parsedFrom ? startOfUtcDay(parsedFrom) : null;
-  let rangeTo = parsedTo ? endOfUtcDay(parsedTo) : null;
-
-  // Only one query param → filter that calendar day (from_date or to_date alone).
-  if (hasFrom && !hasTo && parsedFrom) {
-    rangeTo = endOfUtcDay(parsedFrom);
-  } else if (!hasFrom && hasTo && parsedTo) {
-    rangeFrom = startOfUtcDay(parsedTo);
-  }
-
-  if (rangeFrom && rangeTo && rangeTo < rangeFrom) {
-    return {
-      ok: false,
-      message: 'to_date filter must be on or after from_date filter.',
-    };
-  }
-
-  const branches = [
-    {
-      from_date: { $ne: null, $lte: rangeTo },
-      to_date: { $ne: null, $gte: rangeFrom },
-    },
-    {
-      $and: [
-        { from_date: { $ne: null, $gte: rangeFrom, $lte: rangeTo } },
-        { $or: [{ to_date: null }, { to_date: { $exists: false } }] },
-      ],
-    },
-    {
-      $and: [
-        { to_date: { $ne: null, $gte: rangeFrom, $lte: rangeTo } },
-        { $or: [{ from_date: null }, { from_date: { $exists: false } }] },
-      ],
-    },
-    { order_date: { $gte: rangeFrom, $lte: rangeTo } },
-  ];
-
-  return { ok: true, filter: { $or: branches } };
-};
-
-const resolveOrderListStatusFilter = (orderStatusParam) => {
-  if (orderStatusParam === undefined || orderStatusParam === null) {
-    return { ok: true, filter: {} };
-  }
-
-  const raw = String(orderStatusParam).trim();
-  if (raw === '') {
-    return { ok: true, filter: {} };
-  }
-
-  const statusFilter = buildOrderStatusQueryFilter(raw);
-  if (!statusFilter) {
-    return {
-      ok: false,
-      message: `Invalid order_status. Use one of: ${ORDER_STATUSES.join(', ')}.`,
-    };
-  }
-
-  return { ok: true, filter: statusFilter };
-};
+const resolveOrderListStatusFilter = (orderStatusParam) =>
+  resolveListStatusFilter(orderStatusParam, {
+    buildFilter: (raw) => buildOrderStatusQueryFilter(raw),
+    invalidMessage: `Invalid order_status. Use one of: ${ORDER_STATUSES.join(', ')}.`,
+  });
 
 const getAll = async (req, res) => {
   try {
@@ -381,22 +320,7 @@ const getAll = async (req, res) => {
       });
     }
 
-    const rawSearch = req.query.search;
-    const legacyKeyword =
-      req.query.keyword !== undefined &&
-      req.query.keyword !== null &&
-      String(req.query.keyword).trim() !== ''
-        ? String(req.query.keyword).trim()
-        : '';
-    const searchTerm =
-      rawSearch !== undefined &&
-      rawSearch !== null &&
-      String(rawSearch).trim() !== ''
-        ? sanitizeInput(String(rawSearch).trim())
-        : legacyKeyword
-          ? sanitizeInput(legacyKeyword)
-          : '';
-    const regex = searchTerm ? new RegExp(searchTerm, 'i') : null;
+    const regex = resolveListSearchRegex(req, { legacyKeyword: true });
 
     const dateRangeResult = buildOrderDateRangeFilter(req.query);
     if (!dateRangeResult.ok) {
@@ -414,394 +338,72 @@ const getAll = async (req, res) => {
       ...statusFilterResult.filter,
       ...(is_paid !== null && { is_paid }),
       ...(payment_status_raw && { payment_status: payment_status_raw }),
-      ...(req.query.user_id &&
-        mongoose.Types.ObjectId.isValid(req.query.user_id) && {
-          user_id: new mongoose.Types.ObjectId(req.query.user_id),
-        }),
-      ...(req.query.partner_id &&
-        mongoose.Types.ObjectId.isValid(req.query.partner_id) && {
-          partner_id: new mongoose.Types.ObjectId(req.query.partner_id),
-        }),
-      ...(req.query.employee_id &&
-        mongoose.Types.ObjectId.isValid(req.query.employee_id) && {
-          employee_id: new mongoose.Types.ObjectId(req.query.employee_id),
-        }),
-      ...(req.query.city_id &&
-        mongoose.Types.ObjectId.isValid(req.query.city_id) && {
-          city_id: new mongoose.Types.ObjectId(req.query.city_id),
-        }),
-      ...(req.query.category_id &&
-        mongoose.Types.ObjectId.isValid(req.query.category_id) && {
-          category_id: new mongoose.Types.ObjectId(req.query.category_id),
-        }),
-      ...(req.query.service_id &&
-        mongoose.Types.ObjectId.isValid(req.query.service_id) && {
-          service_id: new mongoose.Types.ObjectId(req.query.service_id),
-        }),
+      ...buildObjectIdQueryFilters(req.query, [
+        'user_id',
+        'partner_id',
+        'employee_id',
+        'city_id',
+        'category_id',
+        'service_id',
+      ]),
     };
 
-    const sortField = resolveOrderSortField(req.query.sort_by);
-    const sortDir = resolveOrderSortDir(req);
+    const sortField = resolveSortField(req.query.sort_by, ORDER_SORT_WHITELIST);
+    const sortDir = resolveSortDir(req);
     const sortStage = { [sortField]: sortDir };
 
-    const usersColl = User.collection.name;
-    const categoriesColl = Category.collection.name;
-    const servicesColl = Service.collection.name;
-    const citiesColl = City.collection.name;
-    const franchiseColl = Franchise.collection.name;
-    const quotesColl = Quote.collection.name;
-    const addressColl = Address.collection.name;
-    const statesColl = State.collection.name;
-
-    const pipeline = [
-      { $match: baseFilter },
-      {
-        $lookup: {
-          from: usersColl,
-          localField: 'user_id',
-          foreignField: '_id',
-          as: '_user',
-        },
-      },
-      {
-        $lookup: {
-          from: usersColl,
-          localField: 'partner_id',
-          foreignField: '_id',
-          as: '_partner',
-        },
-      },
-      {
-        $lookup: {
-          from: usersColl,
-          localField: 'employee_id',
-          foreignField: '_id',
-          as: '_employee',
-        },
-      },
-      {
-        $lookup: {
-          from: usersColl,
-          localField: 'created_by_id',
-          foreignField: '_id',
-          as: '_created_by',
-        },
-      },
-      {
-        $lookup: {
-          from: categoriesColl,
-          localField: 'category_id',
-          foreignField: '_id',
-          as: '_category',
-        },
-      },
-      {
-        $lookup: {
-          from: servicesColl,
-          localField: 'service_id',
-          foreignField: '_id',
-          as: '_service',
-        },
-      },
-      {
-        $lookup: {
-          from: citiesColl,
-          localField: 'city_id',
-          foreignField: '_id',
-          as: '_city',
-        },
-      },
-      {
-        $lookup: {
-          from: franchiseColl,
-          localField: 'franchise_id',
-          foreignField: '_id',
-          as: '_franchise',
-        },
-      },
-      {
-        $lookup: {
-          from: addressColl,
-          localField: 'address_id',
-          foreignField: '_id',
-          as: '_address',
-        },
-      },
-      { $unwind: { path: '$_user', preserveNullAndEmptyArrays: true } },
-      { $unwind: { path: '$_partner', preserveNullAndEmptyArrays: true } },
-      { $unwind: { path: '$_employee', preserveNullAndEmptyArrays: true } },
-      { $unwind: { path: '$_created_by', preserveNullAndEmptyArrays: true } },
-      { $unwind: { path: '$_category', preserveNullAndEmptyArrays: true } },
-      { $unwind: { path: '$_service', preserveNullAndEmptyArrays: true } },
-      { $unwind: { path: '$_city', preserveNullAndEmptyArrays: true } },
-      { $unwind: { path: '$_franchise', preserveNullAndEmptyArrays: true } },
-      { $unwind: { path: '$_address', preserveNullAndEmptyArrays: true } },
-      {
-        $lookup: {
-          from: citiesColl,
-          localField: '_address.city_id',
-          foreignField: '_id',
-          as: '_addr_city',
-        },
-      },
-      {
-        $lookup: {
-          from: statesColl,
-          localField: '_address.state_id',
-          foreignField: '_id',
-          as: '_addr_state',
-        },
-      },
-      { $unwind: { path: '$_addr_city', preserveNullAndEmptyArrays: true } },
-      { $unwind: { path: '$_addr_state', preserveNullAndEmptyArrays: true } },
-      {
-        $lookup: {
-          from: quotesColl,
-          localField: 'quote_id',
-          foreignField: '_id',
-          as: '_quote',
-        },
-      },
-      { $unwind: { path: '$_quote', preserveNullAndEmptyArrays: true } },
-      ...(regex
-        ? [
-            {
-              $match: {
-                $or: [
-                  { unique_id: regex },
-                  { user_unique_id: regex },
-                  { address: regex },
-                  { comments: regex },
-                  { transaction_id: regex },
-                  { payment_mode_id: regex },
-                  { discount_code: regex },
-                  { customer_description: regex },
-                  { order_description: regex },
-                  { '_quote.quote_sequence_id': regex },
-                  { '_quote.quote_description': regex },
-                  { '_user.name': regex },
-                  { '_user.user_id': regex },
-                  { '_user.email': regex },
-                  { '_user.phone_number': regex },
-                  { '_partner.name': regex },
-                  { '_partner.user_id': regex },
-                  { '_partner.email': regex },
-                  { '_partner.phone_number': regex },
-                  { '_employee.name': regex },
-                  { '_employee.user_id': regex },
-                  { '_created_by.name': regex },
-                  { '_created_by.user_id': regex },
-                  { '_category.name': regex },
-                  { '_category.category_id': regex },
-                  { '_service.name': regex },
-                  { '_service.service_id': regex },
-                  { '_city.name': regex },
-                  { '_franchise.name': regex },
-                ],
-              },
-            },
-          ]
-        : []),
-      { $sort: sortStage },
-      {
-        $addFields: {
-          user_name: '$_user.name',
-          user_unique_id: '$_user.user_id',
-          partner_name: '$_partner.name',
-          partner_unique_id: '$_partner.user_id',
-          employee_name: '$_employee.name',
-          category_name: '$_category.name',
-          service_name: '$_service.name',
-          city_name: { $ifNull: ['$_city.name', ''] },
-          user_id: {
-            $cond: [
-              { $ifNull: ['$_user._id', false] },
-              {
-                _id: '$_user._id',
-                name: '$_user.name',
-                user_id: '$_user.user_id',
-                email: '$_user.email',
-                phone_number: '$_user.phone_number',
-                profile_url: '$_user.profile_url',
-                type: '$_user.type',
-              },
-              null,
-            ],
-          },
-          partner_id: {
-            $cond: [
-              { $ifNull: ['$_partner._id', false] },
-              {
-                _id: '$_partner._id',
-                name: '$_partner.name',
-                user_id: '$_partner.user_id',
-                email: '$_partner.email',
-                phone_number: '$_partner.phone_number',
-                profile_url: '$_partner.profile_url',
-                type: '$_partner.type',
-              },
-              null,
-            ],
-          },
-          employee_id: {
-            $cond: [
-              { $ifNull: ['$_employee._id', false] },
-              {
-                _id: '$_employee._id',
-                name: '$_employee.name',
-                user_id: '$_employee.user_id',
-                email: '$_employee.email',
-                phone_number: '$_employee.phone_number',
-                profile_url: '$_employee.profile_url',
-                type: '$_employee.type',
-              },
-              null,
-            ],
-          },
-          created_by_id: {
-            $cond: [
-              { $ifNull: ['$_created_by._id', false] },
-              {
-                _id: '$_created_by._id',
-                name: '$_created_by.name',
-                user_id: '$_created_by.user_id',
-                email: '$_created_by.email',
-                phone_number: '$_created_by.phone_number',
-                profile_url: '$_created_by.profile_url',
-                type: '$_created_by.type',
-              },
-              null,
-            ],
-          },
-          category_id: {
-            $cond: [
-              { $ifNull: ['$_category._id', false] },
-              {
-                _id: '$_category._id',
-                name: '$_category.name',
-                category_id: '$_category.category_id',
-                desc: '$_category.desc',
-                image_url: '$_category.image_url',
-                approval_status: '$_category.approval_status',
-                is_request: '$_category.is_request',
-                is_active: '$_category.is_active',
-                rejection_reason: '$_category.rejection_reason',
-              },
-              null,
-            ],
-          },
-          service_id: {
-            $cond: [
-              { $ifNull: ['$_service._id', false] },
-              {
-                _id: '$_service._id',
-                name: '$_service.name',
-                service_id: '$_service.service_id',
-                desc: '$_service.desc',
-                image_url: '$_service.image_url',
-                approval_status: '$_service.approval_status',
-                is_request: '$_service.is_request',
-                is_active: '$_service.is_active',
-                rejection_reason: '$_service.rejection_reason',
-              },
-              null,
-            ],
-          },
-          franchise_id: {
-            $cond: [
-              { $ifNull: ['$_franchise._id', false] },
-              {
-                _id: '$_franchise._id',
-                name: '$_franchise.name',
-                city_name: '$_franchise.city_name',
-                state_name: '$_franchise.state_name',
-              },
-              null,
-            ],
-          },
-          city_id: {
-            $cond: [
-              { $ifNull: ['$_city._id', false] },
-              { _id: '$_city._id', name: '$_city.name' },
-              null,
-            ],
-          },
-          address_id: {
-            $cond: [
-              { $ifNull: ['$_address._id', false] },
-              {
-                $mergeObjects: [
-                  '$_address',
-                  {
-                    city_id: {
-                      $cond: [
-                        { $ifNull: ['$_addr_city._id', false] },
-                        { _id: '$_addr_city._id', name: '$_addr_city.name' },
-                        '$_address.city_id',
-                      ],
-                    },
-                    state_id: {
-                      $cond: [
-                        { $ifNull: ['$_addr_state._id', false] },
-                        { _id: '$_addr_state._id', name: '$_addr_state.name' },
-                        '$_address.state_id',
-                      ],
-                    },
-                  },
-                ],
-              },
-              null,
-            ],
-          },
-          quote_id: {
-            $cond: [
-              { $ifNull: ['$_quote._id', false] },
-              {
-                _id: '$_quote._id',
-                quote_sequence_id: '$_quote.quote_sequence_id',
-                quote_description: '$_quote.quote_description',
-                status: '$_quote.status',
-              },
-              null,
-            ],
-          },
-        },
-      },
-      {
-        $project: {
-          _user: 0,
-          _partner: 0,
-          _employee: 0,
-          _created_by: 0,
-          _category: 0,
-          _service: 0,
-          _city: 0,
-          _franchise: 0,
-          _address: 0,
-          _addr_city: 0,
-          _addr_state: 0,
-          _quote: 0,
-        },
-      },
-      {
-        $facet: {
-          data: [{ $skip: skip }, { $limit: limit }],
-          totalCount: [{ $count: 'totalCount' }],
-        },
-      },
-    ];
-
-    const agg = Order.aggregate(pipeline).collation({
-      locale: 'en',
-      strength: 2,
+    const collections = getListCollectionNames({
+      users: User,
+      categories: Category,
+      services: Service,
+      cities: City,
+      franchise: Franchise,
+      quotes: Quote,
+      address: Address,
+      states: State,
     });
 
-    const result = await agg.exec();
-    const facet = result[0] || { data: [], totalCount: [] };
-    const orders = facet.data || [];
-    const totalCount =
-      facet.totalCount && facet.totalCount[0] ? facet.totalCount[0].totalCount : 0;
-    const totalPages = Math.ceil(totalCount / limit) || 0;
+    const pipeline = buildEntityListPipeline({
+      baseFilter,
+      sortStage,
+      skip,
+      limit,
+      regex,
+      searchFields: ORDER_LIST_SEARCH_FIELDS,
+      collections,
+      includeRootCityLookup: true,
+      includeQuoteLookup: true,
+      extraAddFields: {
+        city_id: {
+          $cond: [
+            { $ifNull: ['$_city._id', false] },
+            { _id: '$_city._id', name: '$_city.name' },
+            null,
+          ],
+        },
+        quote_id: {
+          $cond: [
+            { $ifNull: ['$_quote._id', false] },
+            {
+              _id: '$_quote._id',
+              quote_sequence_id: '$_quote.quote_sequence_id',
+              quote_description: '$_quote.quote_description',
+              status: '$_quote.status',
+            },
+            null,
+          ],
+        },
+      },
+    });
+
+    const result = await Order.aggregate(pipeline)
+      .collation({ locale: 'en', strength: 2 })
+      .exec();
+
+    const { data: orders, totalCount, totalPages } = parseFacetListResult(
+      result,
+      limit
+    );
 
     res.status(200).json({
       success: true,
@@ -810,7 +412,7 @@ const getAll = async (req, res) => {
       totalItems: totalCount,
       totalPages,
       currentPage: page,
-      records: orders,
+      records: formatOrderRecords(orders),
     });
   } catch (err) {
     console.error('Error fetching orders:', err);
@@ -865,7 +467,7 @@ const getCustomerOrder = async (req, res) => {
       totalItems: totalCount,
       totalPages,
       currentPage,
-      records: orders,
+      records: formatOrderRecords(orders),
     });
   } catch (err) {
     console.error("Error fetching orders list:", err);
@@ -1201,7 +803,7 @@ const update = async (req, res) => {
       success: true,
       status: 200,
       message: 'Order updated successfully',
-      record: updatedOrder,
+      record: formatOrderForApi(updatedOrder),
       ...(nested ? { nested } : {}),
       ...(repriceResult
         ? {
@@ -1412,7 +1014,7 @@ const serviceUpdate = async (req, res) => {
       success: true,
       status: 200,
       message: 'Order Service updated successfully',
-      record: updatedService,
+      record: formatOrderServiceItemForApi(updatedService),
     });
   } catch (error) {
     console.error('Error updating Order Service:', error);
@@ -1560,7 +1162,7 @@ const cancleService = async (req, res) => {
       success: true,
       status: 200,
       message: 'Order updated successfully',
-      record: updatedOrder,
+      record: formatOrderForApi(updatedOrder),
     });
   }
   catch (error) {
@@ -1692,7 +1294,7 @@ const cancleOrder = async (req, res) => {
       success: true,
       status: 200,
       message: 'Order cancelled successfully',
-      record: updatedOrder,
+      record: formatOrderForApi(updatedOrder),
     });
   }
   catch (error) {

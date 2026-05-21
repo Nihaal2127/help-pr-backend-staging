@@ -1,3 +1,5 @@
+const { formatDateOnly } = require("../utils/dateFormatter");
+
 const QUOTE_STATUSES = ["new", "pending", "accepted", "success", "failed"];
 
 const QUOTE_DASHBOARD_BUCKETS = [...QUOTE_STATUSES];
@@ -113,6 +115,13 @@ const formatQuoteForApi = (quote) => {
   const resolved = resolveQuoteStatus(plain);
   if (resolved) {
     plain.status = resolved;
+  }
+
+  if (plain.from_date != null && plain.from_date !== "") {
+    plain.from_date = formatDateOnly(plain.from_date);
+  }
+  if (plain.to_date != null && plain.to_date !== "") {
+    plain.to_date = formatDateOnly(plain.to_date);
   }
 
   return plain;

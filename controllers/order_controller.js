@@ -87,7 +87,10 @@ const OrderPayment = require('../models/order_payment');
 const OrderOffer = require('../models/order_offer');
 const Quote = require('../models/quote');
 const { computeOrderTotal, recalculateOrderTotals } = require('../utils/order_financials');
-const { isValidOrderPaymentStatus } = require('../enum/order_payment_status_enum');
+const {
+  isValidOrderPaymentStatus,
+  isValidPartnerPaymentStatus,
+} = require('../enum/order_payment_status_enum');
 const {
   OrderCreationError,
   createOrderFromBody,
@@ -306,19 +309,46 @@ const getAll = async (req, res) => {
         ? parseBoolean(req.query.is_paid)
         : null;
 
+    const user_payment_status_raw =
+      req.query.user_payment_status !== undefined &&
+      req.query.user_payment_status !== null &&
+      String(req.query.user_payment_status).trim() !== ''
+        ? String(req.query.user_payment_status).trim().toLowerCase()
+        : null;
+
     const payment_status_raw =
-      req.query.payment_status !== undefined &&
+      user_payment_status_raw ||
+      (req.query.payment_status !== undefined &&
       req.query.payment_status !== null &&
       String(req.query.payment_status).trim() !== ''
         ? String(req.query.payment_status).trim().toLowerCase()
-        : null;
+        : null);
 
     if (payment_status_raw && !isValidOrderPaymentStatus(payment_status_raw)) {
       return res.status(409).json({
         success: false,
         status: 409,
         message:
-          'Invalid payment_status. Use: unpaid, paid, partially_paid, refund, partially_refund.',
+          'Invalid user_payment_status / payment_status. Use: unpaid, paid, partially_paid, refund, partially_refund.',
+      });
+    }
+
+    const partner_payment_status_raw =
+      req.query.partner_payment_status !== undefined &&
+      req.query.partner_payment_status !== null &&
+      String(req.query.partner_payment_status).trim() !== ''
+        ? String(req.query.partner_payment_status).trim().toLowerCase()
+        : null;
+
+    if (
+      partner_payment_status_raw &&
+      !isValidPartnerPaymentStatus(partner_payment_status_raw)
+    ) {
+      return res.status(409).json({
+        success: false,
+        status: 409,
+        message:
+          'Invalid partner_payment_status. Use: unpaid, partially_paid, paid.',
       });
     }
 
@@ -339,7 +369,13 @@ const getAll = async (req, res) => {
       ...dateRangeResult.filter,
       ...statusFilterResult.filter,
       ...(is_paid !== null && { is_paid }),
-      ...(payment_status_raw && { payment_status: payment_status_raw }),
+      ...(payment_status_raw && {
+        payment_status: payment_status_raw,
+        user_payment_status: payment_status_raw,
+      }),
+      ...(partner_payment_status_raw && {
+        partner_payment_status: partner_payment_status_raw,
+      }),
       ...buildObjectIdQueryFilters(req.query, [
         'user_id',
         'partner_id',

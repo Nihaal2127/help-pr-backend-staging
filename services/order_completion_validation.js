@@ -18,8 +18,11 @@ const getCustomerPaymentBreakdownForOrder = async (order) => {
   return computeCustomerPaymentStatus(Number(order.total_price) || 0, payments);
 };
 
-const isCustomerPaidInFull = (breakdown) =>
-  breakdown?.payment_status === ORDER_PAYMENT_STATUS_PAID;
+const isCustomerPaidInFull = (breakdown) => {
+  const status =
+    breakdown?.user_payment_status ?? breakdown?.payment_status;
+  return status === ORDER_PAYMENT_STATUS_PAID;
+};
 
 /**
  * Order / line may only move to `completed` when customer net paid >= order.total_price.

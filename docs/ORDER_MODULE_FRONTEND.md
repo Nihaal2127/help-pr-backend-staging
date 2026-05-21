@@ -106,9 +106,12 @@ Order (1) ──has──▶ service_items[] ──▶ OrderService (1 per order
 | `total_price` | **Server-calculated** (see §5); client values compared, server wins on mismatch |
 | `min_deposit` | Legacy alias of `minimum_deposit_amount` |
 | `user_paltform_fee`, `partner_commison_platform_fee` | Legacy; new orders set platform fee **0**, partner fee = `commission_amount` |
-| `payment_status` | **Derived:** `unpaid` \| `paid` \| `partially_paid` \| `refund` \| `partially_refund` (from customer `order_payment` rows) |
-| `customer_paid_amount`, `customer_refunded_amount`, `customer_net_paid`, `customer_due_amount` | Breakdown maintained on sync |
-| `is_paid` | **Derived** — `true` only when `payment_status === paid` (legacy filters) |
+| **`user_payment_status`** | **Use on frontend** — customer payment rollup: `unpaid` \| `paid` \| `partially_paid` \| `refund` \| `partially_refund` (from customer `order_payment` rows) |
+| `payment_status` | Same as `user_payment_status` (kept for older clients) |
+| **`partner_payment_status`** | **Use on frontend** — partner remittance rollup: `unpaid` \| `partially_paid` \| `paid` (completed partner `order_payment` vs `customer_net_paid` allowance) |
+| `customer_paid_amount`, `customer_refunded_amount`, `customer_net_paid`, `customer_due_amount` | Customer breakdown; updated on sync |
+| `partner_paid_amount`, `partner_due_amount` | Completed partner payments sum; remaining remittance allowance |
+| `is_paid` | **Derived** — `true` only when `user_payment_status === paid` (legacy filters) |
 | `payment_mode_id`, `transaction_id` | Legacy + Razorpay link id |
 | `payment_schedule_type` | `"single"` \| `"installments"` |
 | `customer_payment_method` | Label, e.g. cash / upi / card / online / bank_transfer / other |
@@ -218,17 +221,35 @@ List responses use **case-insensitive collation** for sort. Each record includes
 
 **`status`:** `pending` \| `completed` \| `failed` \| `refunded`. After any change, server runs **`syncOrderPaymentStatus`** on the order.
 
-### Customer payment status (on `order`)
+### Customer payment status (on `order`) — `user_payment_status`
 
-| `payment_status` | When |
-|------------------|------|
+| `user_payment_status` | When |
+|-----------------------|------|
 | `unpaid` | No customer `order_payment` rows |
 | `paid` | Sum of **completed** customer payments ≥ `order.total_price` (±₹0.01) |
 | `partially_paid` | Some **completed** payment, net collected &lt; total due |
 | `refund` | **Refunded** amount covers all completed payments or full order value |
 | `partially_refund` | Some refund recorded, not a full refund |
 
+`payment_status` is kept equal to `user_payment_status` for older clients.
+
 Only **`payer_type: customer`** rows count. **`order.total_price`** includes additional charges. Pending/failed payments do not count as paid.
+
+**Synced when:** customer `order_payment` create/update/delete, nested payments on order update, refunds, Razorpay webhook, and **`recalculateOrderTotals`** (additional charges change `total_price`).
+
+### Partner payment status (on `order`) — `partner_payment_status`
+
+| `partner_payment_status` | When |
+|--------------------------|------|
+| `unpaid` | No **completed** partner payments, or `customer_net_paid` is 0 |
+| `partially_paid` | Some **completed** partner payments, sum &lt; `customer_net_paid` |
+| `paid` | Sum of **completed** partner payments ≥ `customer_net_paid` (±₹0.01) |
+
+Also on the order: **`partner_paid_amount`** (completed partner sum), **`partner_due_amount`** (remaining remittance: `customer_net_paid − partner_paid_amount`).
+
+Only **`payer_type: partner`** rows with **`status: completed`** count. Ceiling is **`customer_net_paid`** (not `total_price`).
+
+**Synced when:** same triggers as customer status (any `order_payment` or total change runs **`syncOrderPaymentStatus`**).
 
 Same **403** participant rule as additional charges.
 

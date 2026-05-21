@@ -3636,7 +3636,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Plumbing repair\",\n  \"desc\": \"Standard plumbing service\",\n  \"price\": 499,\n  \"category_id\": \"{{category_id}}\",\n  \"city_ids\": [\"{{city_id}}\"],\n  \"state_ids\": [\"{{state_id}}\"],\n  \"image_url\": \"https://example.com/service.jpg\",\n  \"is_active\": true\n}",
+              "raw": "{\n  \"name\": \"Plumbing repair\",\n  \"desc\": \"Standard plumbing service\",\n  \"category_id\": \"{{category_id}}\",\n  \"city_ids\": [\"{{city_id}}\"],\n  \"state_ids\": [\"{{state_id}}\"],\n  \"image_url\": \"https://example.com/service.jpg\",\n  \"is_active\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3822,7 +3822,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Imported single\",\n  \"desc\": \"Desc\",\n  \"price\": 199,\n  \"category_id\": \"{{category_id}}\",\n  \"city_ids\": [\"{{city_id}}\"],\n  \"state_ids\": [\"{{state_id}}\"],\n  \"image_url\": \"https://example.com/img.jpg\",\n  \"is_active\": true\n}",
+              "raw": "{\n  \"name\": \"Imported single\",\n  \"desc\": \"Desc\",\n  \"category_id\": \"{{category_id}}\",\n  \"city_ids\": [\"{{city_id}}\"],\n  \"state_ids\": [\"{{state_id}}\"],\n  \"image_url\": \"https://example.com/img.jpg\",\n  \"is_active\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3875,7 +3875,7 @@
                 "type": "text"
               }
             ],
-            "description": "**Request body (JSON)** — Required by `createServiceRequestMiddleware`: `name`, `desc`, `image_url`, `category_id` (existing Category ObjectId), `tax`, `commission`, `minimum_deposit` (non-negative numbers), `payment_type` (e.g. `per_hour`, `per_day`, `per_month`, `per_consultancy`). Optional: `price` (defaults 0), `city_ids`, `state_ids` (arrays). Route sets `is_request=true` → `approval_status: \"pending\"`, `requested_by` = JWT user, `is_active` false by default.\n\n**Response (200)** — `{ \"success\": true, \"status\": 200, \"message\": \"Service created successfully.\", \"record\": { ...Service } }`.\n\n**Response (400)** — missing required field messages from middleware or invalid ids.\n\nAlternate: `multipart/form-data` with `image` file per `serviceCreateParser` (still send other fields as form text).",
+            "description": "**Request body (JSON)** — Required by `createServiceRequestMiddleware`: `name`, `desc`, `image_url`, `category_id` (existing Category ObjectId), `tax`, `commission`, `minimum_deposit` (non-negative numbers), `payment_type` (e.g. `per_hour`, `per_day`, `per_month`, `per_consultancy`). Optional: `city_ids`, `state_ids` (arrays). Route sets `is_request=true` → `approval_status: \"pending\"`, `requested_by` = JWT user, `is_active` false by default.\n\n**Response (200)** — `{ \"success\": true, \"status\": 200, \"message\": \"Service created successfully.\", \"record\": { ...Service } }`.\n\n**Response (400)** — missing required field messages from middleware or invalid ids.\n\nAlternate: `multipart/form-data` with `image` file per `serviceCreateParser` (still send other fields as form text).",
             "url": {
               "raw": "{{baseUrl}}/api/service/create-request",
               "host": [
@@ -3889,7 +3889,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Requested Service\",\n  \"desc\": \"Service description for approvers\",\n  \"image_url\": \"https://example.com/svc.png\",\n  \"category_id\": \"{{categoryObjectId}}\",\n  \"price\": 0,\n  \"tax\": 0,\n  \"commission\": 0,\n  \"payment_type\": \"per_hour\",\n  \"minimum_deposit\": 0,\n  \"city_ids\": [],\n  \"state_ids\": []\n}",
+              "raw": "{\n  \"name\": \"Requested Service\",\n  \"desc\": \"Service description for approvers\",\n  \"image_url\": \"https://example.com/svc.png\",\n  \"category_id\": \"{{categoryObjectId}}\",\n  \"tax\": 0,\n  \"commission\": 0,\n  \"payment_type\": \"per_hour\",\n  \"minimum_deposit\": 0,\n  \"city_ids\": [],\n  \"state_ids\": []\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3924,7 +3924,7 @@
               "_postman_previewlanguage": "json",
               "header": [],
               "cookie": [],
-              "body": "{\n  \"success\": true,\n  \"status\": 200,\n  \"message\": \"Service created successfully.\",\n  \"record\": {\n    \"_id\": \"64a700000000000000000020\",\n    \"name\": \"Requested Service\",\n    \"desc\": \"Service description for approvers\",\n    \"price\": 0,\n    \"tax\": 0,\n    \"commission\": 0,\n    \"payment_type\": \"per_hour\",\n    \"minimum_deposit\": 0,\n    \"category_id\": \"64a700000000000000000001\",\n    \"image_url\": \"https://example.com/svc.png\",\n    \"is_active\": false,\n    \"is_request\": true,\n    \"approval_status\": \"pending\",\n    \"requested_by\": \"64a700000000000000000099\"\n  }\n}"
+              "body": "{\n  \"success\": true,\n  \"status\": 200,\n  \"message\": \"Service created successfully.\",\n  \"record\": {\n    \"_id\": \"64a700000000000000000020\",\n    \"name\": \"Requested Service\",\n    \"desc\": \"Service description for approvers\",\n    \"tax\": 0,\n    \"commission\": 0,\n    \"payment_type\": \"per_hour\",\n    \"minimum_deposit\": 0,\n    \"category_id\": \"64a700000000000000000001\",\n    \"image_url\": \"https://example.com/svc.png\",\n    \"is_active\": false,\n    \"is_request\": true,\n    \"approval_status\": \"pending\",\n    \"requested_by\": \"64a700000000000000000099\"\n  }\n}"
             }
           ],
           "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → My Franchise → Services_"
@@ -3964,11 +3964,6 @@
                 {
                   "key": "desc",
                   "value": "Updated description",
-                  "type": "text"
-                },
-                {
-                  "key": "price",
-                  "value": "1200",
                   "type": "text"
                 }
               ]
@@ -4016,11 +4011,6 @@
                 {
                   "key": "category_id",
                   "value": "{{categoryObjectId}}",
-                  "type": "text"
-                },
-                {
-                  "key": "price",
-                  "value": "999",
                   "type": "text"
                 },
                 {
@@ -4115,7 +4105,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated request title\",\n  \"desc\": \"Updated description\",\n  \"price\": 349\n}",
+              "raw": "{\n  \"name\": \"Updated request title\",\n  \"desc\": \"Updated description\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4153,7 +4143,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Requested service\",\n  \"desc\": \"Updated description after feedback\",\n  \"image_url\": \"https://example.com/service.jpg\",\n  \"category_id\": \"{{category_id}}\",\n  \"price\": 299,\n  \"tax\": 5,\n  \"commission\": 10,\n  \"payment_type\": \"per_hour\",\n  \"minimum_deposit\": 0,\n  \"city_ids\": [\"{{city_id}}\"],\n  \"state_ids\": [\"{{state_id}}\"],\n  \"is_active\": false\n}",
+              "raw": "{\n  \"name\": \"Requested service\",\n  \"desc\": \"Updated description after feedback\",\n  \"image_url\": \"https://example.com/service.jpg\",\n  \"category_id\": \"{{category_id}}\",\n  \"tax\": 5,\n  \"commission\": 10,\n  \"payment_type\": \"per_hour\",\n  \"minimum_deposit\": 0,\n  \"city_ids\": [\"{{city_id}}\"],\n  \"state_ids\": [\"{{state_id}}\"],\n  \"is_active\": false\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4161,7 +4151,7 @@
               }
             },
             "url": "{{base_url}}/api/service/update-request/{{service_id}}",
-            "description": "PUT **`/api/service/update-request/:id`**. Uses **`updateServiceRequestMiddleware`** (same required fields as **`POST /api/service/create-request`**): **`name`**, **`desc`**, **`image_url`**, **`category_id`**, **`tax`**, **`commission`**, **`payment_type`**, **`minimum_deposit`**. Server sets **`is_request`: true** before save (unless superseded by **`approval_status`** merge). Include **`price`** and location arrays as needed. Multipart: fields **`image`** or **`service_image`**."
+            "description": "PUT **`/api/service/update-request/:id`**. Uses **`updateServiceRequestMiddleware`** (same required fields as **`POST /api/service/create-request`**): **`name`**, **`desc`**, **`image_url`**, **`category_id`**, **`tax`**, **`commission`**, **`payment_type`**, **`minimum_deposit`**. Server sets **`is_request`: true** before save (unless superseded by **`approval_status`** merge). Include location arrays as needed. Multipart: fields **`image`** or **`service_image`**."
           },
           "description": "\n\n_Source: Help-PR-Area-Franchise-Subscription.postman_collection.json → Service_"
         }

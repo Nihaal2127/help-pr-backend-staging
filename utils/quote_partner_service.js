@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const PartnerService = require("../models/partner_service");
 
 const GLOBAL_SERVICE_SELECT =
-  "name service_id desc image_url price approval_status is_request is_active rejection_reason";
+  "name service_id desc image_url approval_status is_request is_active rejection_reason";
 
 const partnerServicePopulate = {
   path: "service_id",

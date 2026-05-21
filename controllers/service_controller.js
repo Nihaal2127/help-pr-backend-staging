@@ -100,6 +100,8 @@ const stripServiceLocationFields = (serviceRecord) => {
       : { ...serviceRecord };
   delete plainRecord.city_ids;
   delete plainRecord.state_ids;
+  delete plainRecord.price;
+  delete plainRecord.helpers;
   if (Object.prototype.hasOwnProperty.call(plainRecord, "payment_type")) {
     plainRecord.payment_type = normalizePaymentType(plainRecord.payment_type);
   }
@@ -440,9 +442,8 @@ const getAll = async (req, res) => {
     );
 
     const calculateServicePrice = (service) => {
-      const { price } = service;
       const cities = Array.isArray(service.city_ids) ? service.city_ids : [];
-      let service_price = price;
+      let service_price = null;
       if (req.query.city_id) {
         const selectedCityId = new mongoose.Types.ObjectId(req.query.city_id);
         const city =
@@ -453,7 +454,7 @@ const getAll = async (req, res) => {
               typeof c._id.equals === 'function' &&
               c._id.equals(selectedCityId)
           ) || {};
-        service_price = price + (city.city_service_price || 0);
+        service_price = city.city_service_price ?? 0;
       }
       const cat = service.category_id;
       const category_id =
@@ -509,7 +510,6 @@ const create = async (req, res) => {
     const {
       name,
       desc,
-      price,
       tax,
       commission,
       payment_type,
@@ -570,7 +570,6 @@ const create = async (req, res) => {
     const newService = new Service({
       name,
       desc,
-      price: asBodyNumber(price, 0),
       tax: asBodyNumber(tax, 0),
       commission: asBodyNumber(commission, 0),
       payment_type: normalizePaymentType(payment_type),
@@ -645,9 +644,6 @@ const update = async (req, res) => {
   delete updateData.requested_by;
   if (typeof req.path === "string" && req.path.includes("/update-request")) {
     updateData.is_request = true;
-  }
-  if (Object.prototype.hasOwnProperty.call(updateData, "price")) {
-    updateData.price = asBodyNumber(updateData.price, 0);
   }
   if (Object.prototype.hasOwnProperty.call(updateData, "tax")) {
     updateData.tax = asBodyNumber(updateData.tax, 0);
@@ -921,9 +917,8 @@ const getById = async (req, res) => {
         });
       }
       const selectedCityId = new mongoose.Types.ObjectId(req.query.city_id);
-      const { price } = service;
       const city = await City.findById(selectedCityId);
-      response.service_price = price + (city?.city_service_price || 0);
+      response.service_price = city?.city_service_price ?? 0;
     }
     let category_name = null;
     if (service.category_id) {
@@ -1074,7 +1069,7 @@ const importRecords = async (req, res) => {
       success: true,
       status: 200,
       message: `${result.length} records added successfully!`,
-      records: result
+      records: result.map((record) => stripServiceLocationFields(record)),
     });
   } catch (error) {
     console.log("Error is ", error.message);

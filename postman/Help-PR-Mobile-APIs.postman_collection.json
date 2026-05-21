@@ -1,0 +1,172 @@
+{
+  "info": {
+    "_postman_id": "help-pr-mobile-apis-only",
+    "name": "Help PR — Mobile APIs only",
+    "description": "Postman collection for **`routes/mobile`** only (`/api/mobile/*`).\n\n**Partner app:** `POST /api/mobile/partner/register`, `POST /api/mobile/partner/login`\n\n**User app:** no routes in `routes/mobile/user` yet — folder reserved.\n\n**Setup:** Set `baseUrl` (e.g. `http://localhost:5001`). Run **Partner → Register** or **Login** (no auth). Token is saved from `data.auth_token` to `{{token}}`.\n\n**Password:** min 8 chars, upper, lower, number, special `@$!%*?&`\n\n**Email:** local part letters, digits, `.` `_` `-` only; domain with TLD (e.g. `.com`).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Partner",
+      "description": "Partner mobile app — `routes/mobile/partner/index.js`",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const t = j?.data?.auth_token;",
+                  "  if (t) {",
+                  "    pm.collectionVariables.set('token', t);",
+                  "    pm.collectionVariables.set('accessToken', t);",
+                  "  }",
+                  "  if (j?.data?._id) {",
+                  "    pm.collectionVariables.set('partnerId', String(j.data._id));",
+                  "    pm.collectionVariables.set('userId', String(j.data._id));",
+                  "  }",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Priya\",\n  \"date_of_birth\": \"2003-05-23\",\n  \"phone_number\": \"+916309654123\",\n  \"email\": \"partner.mobile+{{$timestamp}}@example.com\",\n  \"password\": \"Priya@123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/partner/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "partner", "register"]
+            },
+            "description": "**POST /api/mobile/partner/register**\n\n- No Authorization header\n- Response: `success`, `message`, `data` (user object; JWT in `data.auth_token`)\n- Pending partner: `data.is_active` false, `data.verification_status` 1"
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const t = j?.data?.auth_token;",
+                  "  if (t) {",
+                  "    pm.collectionVariables.set('token', t);",
+                  "    pm.collectionVariables.set('accessToken', t);",
+                  "  }",
+                  "  if (j?.data?._id) {",
+                  "    pm.collectionVariables.set('partnerId', String(j.data._id));",
+                  "    pm.collectionVariables.set('userId', String(j.data._id));",
+                  "  }",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"device_token\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/partner/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "partner", "login"]
+            },
+            "description": "**POST /api/mobile/partner/login**\n\n- No Authorization header\n- Allows pending partners (`is_active: false`) for onboarding\n- Response: `success`, `status`, `message`, `data` only (JWT in `data.auth_token`; use `data.verification_status`, `data.is_active`, `data.is_blocked` for app state)\n\nDo not use `/api/auth/login` for partner app — that blocks unapproved partners."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "User",
+      "description": "Customer mobile app — `routes/mobile/user/index.js` (no endpoints yet). Add requests here when `/api/mobile/user/*` routes are implemented.",
+      "item": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5001",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "partnerId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "email",
+      "value": "priya@gmail.com",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "Priya@123",
+      "type": "string"
+    }
+  ]
+}

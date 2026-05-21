@@ -858,7 +858,7 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
                     deleted_at: null,
                 })
                     .select(
-                        'partner_id category_id service_id is_accept_request description tax minimum_deposit payment_type price is_active created_at updated_at'
+                        'partner_id category_id service_id is_accept_request description price is_active created_at updated_at'
                     )
                     .lean(),
                 PartnerCategory.find({
@@ -912,7 +912,6 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
         const catById = new Map(categoryRows.map((c) => [c._id.toString(), c]));
 
         const partnerServiceMap = new Map();
-        const partnerServiceAllMap = new Map();
         for (const row of psRows) {
             const svcKey = row.service_id?.toString();
             const catKey = row.category_id?.toString();
@@ -942,18 +941,13 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
                 partnerServiceEnabled: partnerEnabled,
             });
 
-            const globalCommission = Number.isFinite(Number(svc.commission)) ? Number(svc.commission) : 0;
             const item = {
                 _id: row._id,
                 service_id: row.service_id,
                 category_id: row.category_id,
                 is_accept_request: Boolean(row.is_accept_request),
                 description: row.description ?? '',
-                tax: row.tax ?? 0,
-                minimum_deposit: row.minimum_deposit ?? 0,
-                payment_type: row.payment_type ?? '',
                 price: row.price ?? 0,
-                commission: globalCommission,
                 /** Partner local preference (is_enabled). */
                 is_active: partnerEnabled,
                 partner_enabled: partnerEnabled,
@@ -965,9 +959,6 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
                 service: svc,
             };
 
-            if (!partnerServiceAllMap.has(pid)) partnerServiceAllMap.set(pid, []);
-            partnerServiceAllMap.get(pid).push(item);
-
             if (effectiveActive) {
                 if (!partnerServiceMap.has(pid)) partnerServiceMap.set(pid, []);
                 partnerServiceMap.get(pid).push(item);
@@ -975,7 +966,6 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
         }
 
         const partnerCategoryMap = new Map();
-        const partnerCategoryAllMap = new Map();
         for (const row of pcRows) {
             const catKey = row.category_id?.toString();
             const cat = catById.get(catKey);
@@ -1005,9 +995,6 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
                 category: cat,
             };
 
-            if (!partnerCategoryAllMap.has(pid)) partnerCategoryAllMap.set(pid, []);
-            partnerCategoryAllMap.get(pid).push(item);
-
             if (effectiveActive) {
                 if (!partnerCategoryMap.has(pid)) partnerCategoryMap.set(pid, []);
                 partnerCategoryMap.get(pid).push(item);
@@ -1036,9 +1023,6 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
                 /** Effectively available offerings (global ∩ franchise ∩ partner). */
                 active_services_providing: partnerServiceMap.get(key) || [],
                 active_categories_providing: partnerCategoryMap.get(key) || [],
-                /** All partner-assigned rows with availability flags (includes locally off / globally off). */
-                services_providing: partnerServiceAllMap.get(key) || [],
-                categories_providing: partnerCategoryAllMap.get(key) || [],
             };
         });
 

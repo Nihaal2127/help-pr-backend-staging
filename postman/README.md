@@ -17,13 +17,16 @@ Legacy per-module collections live in **`archive/`** (not for import).
 
 **Partner payout UI:** see `docs/PARTNER_PAYOUT_FRONTEND.md` and folder **37 — Partner payout**.
 
+**Partner mobile app:** folder **Mobile → Partner** — start with **01 — Register (mobile app) → Register partner (mobile app)** (`POST /api/mobile/partner/register`). **Customer app:** **Mobile → User**.
+
 ## Regenerate after API changes
 
 ```bash
 node postman/merge-all-collections.mjs
+node postman/build-mobile-folder.mjs
 ```
 
-Reads source files from `postman/archive/`, writes `Help-PR-All-APIs.postman_collection.json`.
+Merge reads `postman/archive/`. **Mobile** (Partner + User subfolders) is rebuilt by `build-mobile-folder.mjs` — run it after merge so partner-related APIs stay grouped under **Mobile → Partner**.
 
 ## Folder layout
 
@@ -31,6 +34,7 @@ Reads source files from `postman/archive/`, writes `Help-PR-All-APIs.postman_col
 postman/
   Help-PR-All-APIs.postman_collection.json   ← import this
   merge-all-collections.mjs
+  build-mobile-folder.mjs
   README.md
   archive/                                    ← source snapshots (do not import)
     Help-PR-Orders-Module.postman_collection.json

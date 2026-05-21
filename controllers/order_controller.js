@@ -19,6 +19,7 @@ const { getOrderId } = require('../helper/id_generator');
 const { checkObjectIdExists } = require('../validator/id_validator');
 const {
   ORDER_STATUS_CANCELLED,
+  ORDER_STATUS_COMPLETED,
   ORDER_STATUS_IN_PROGRESS,
   ORDER_STATUS_REFUNDED,
   ORDER_STATUSES,
@@ -27,6 +28,7 @@ const {
   getOrderStatusLabel,
   touchOrderStatusInfo,
 } = require('../enum/order_status_enum');
+const { assertOrderCanBeMarkedCompleted } = require('../services/order_completion_validation');
 const { sendPushNotification } = require('../service/firebase/push_service');
 const { generatePaymentLink } = require('./razorpay_controller');
 const { escapeRegExp } = require('../utils/string_helpers');
@@ -728,6 +730,8 @@ const update = async (req, res) => {
     const { order_status } = req.body;
 
     const updateData = {};
+    let pendingCompletion = false;
+    let requestedOrderStatus = null;
 
     if (order_status !== undefined) {
       const nextStatus = normalizeOrderStatus(order_status);
@@ -738,10 +742,15 @@ const update = async (req, res) => {
           message: `Invalid order_status. Use one of: ${ORDER_STATUSES.join(', ')}.`,
         });
       }
+      requestedOrderStatus = nextStatus;
       if (nextStatus !== orderToUpdate.order_status) {
-        touchOrderStatusInfo(orderToUpdate, nextStatus);
-        orderToUpdate.order_status = nextStatus;
-        updateData.service_status = nextStatus;
+        if (nextStatus === ORDER_STATUS_COMPLETED) {
+          pendingCompletion = true;
+        } else {
+          touchOrderStatusInfo(orderToUpdate, nextStatus);
+          orderToUpdate.order_status = nextStatus;
+          updateData.service_status = nextStatus;
+        }
       }
     }
 
@@ -776,6 +785,33 @@ const update = async (req, res) => {
 
     if (nested) {
       updatedOrder = await Order.findById(updatedOrder._id);
+    }
+
+    if (
+      pendingCompletion &&
+      requestedOrderStatus === ORDER_STATUS_COMPLETED &&
+      updatedOrder.order_status !== ORDER_STATUS_COMPLETED
+    ) {
+      const completionCheck = await assertOrderCanBeMarkedCompleted(updatedOrder);
+      if (!completionCheck.ok) {
+        return res.status(completionCheck.status).json({
+          success: false,
+          status: completionCheck.status,
+          message: completionCheck.message,
+        });
+      }
+
+      touchOrderStatusInfo(updatedOrder, ORDER_STATUS_COMPLETED);
+      updatedOrder.order_status = ORDER_STATUS_COMPLETED;
+      await OrderService.updateMany(
+        {
+          _id: { $in: updatedOrder.service_items },
+          service_status: { $nin: [ORDER_STATUS_CANCELLED, ORDER_STATUS_REFUNDED] },
+        },
+        { $set: { service_status: ORDER_STATUS_COMPLETED, updated_at: new Date() } }
+      );
+      updatedOrder.updated_at = new Date();
+      updatedOrder = await updatedOrder.save();
     }
 
     const notificationSetting = await NotificationSettings.findOne({
@@ -863,6 +899,9 @@ const serviceUpdate = async (req, res) => {
     updateData.service_status = normalized;
   }
 
+  const wantsLineCompleted =
+    updateData.service_status === ORDER_STATUS_COMPLETED;
+
   try {
     const service = await OrderService.findById(id);
 
@@ -892,6 +931,20 @@ const serviceUpdate = async (req, res) => {
         status: serviceAccess.status,
         message: serviceAccess.message,
       });
+    }
+
+    if (
+      wantsLineCompleted &&
+      service.service_status !== ORDER_STATUS_COMPLETED
+    ) {
+      const completionCheck = await assertOrderCanBeMarkedCompleted(parentOrder);
+      if (!completionCheck.ok) {
+        return res.status(completionCheck.status).json({
+          success: false,
+          status: completionCheck.status,
+          message: completionCheck.message,
+        });
+      }
     }
 
     const originalPartnerId = service.partner_id?.toString();

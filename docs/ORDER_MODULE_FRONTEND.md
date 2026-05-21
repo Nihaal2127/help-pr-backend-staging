@@ -49,7 +49,7 @@ Order (1) ──has──▶ service_items[] ──▶ OrderService (1 per order
 
 **`order_status_info`** — timeline array with one entry per status (`status` string + `updated_at`). On create, only `in-progress` has a timestamp.
 
-**Update order** (`PUT /api/order/update/:id`): pass `order_status` as a string; any valid transition is allowed (e.g. `in-progress` → `completed`, `completed` → `refunded`).
+**Update order** (`PUT /api/order/update/:id`): pass `order_status` as a string. **`completed`** is allowed only when the customer has paid the full **`total_price`** (`payment_status` = `paid`, i.e. completed customer `order_payment` rows sum to total due, ±₹0.01). Otherwise the API returns **409**. Other transitions (e.g. `in-progress` → `cancelled`, `completed` → `refunded`) are unchanged.
 
 **Reprice on update** (optional, same endpoint): send **`total_service_charge`** and/or **`offer_id`**. Server keeps **`tax_percent`**, **`commission_percent`**, **`minimum_deposit_percent`** from the saved order; recalculates **`commission_amount`**, **`tax_amount`**, **`total_price`**, etc. Offer rows are **replaced** from the live **`offers`** table (not merged with old `order_offer`). Send **`offer_id`: `null`** to remove an offer.
 
@@ -364,7 +364,7 @@ Standalone **`/api/order-additional-charges`** and **`/api/order-payments`** rou
 
 | Body field | Effect |
 |------------|--------|
-| `order_status` | Syncs to non-cancelled/refunded line items |
+| `order_status` | Syncs to non-cancelled/refunded line items. **`completed`** requires customer paid in full (`payment_status` = `paid`) → **409** if not |
 | `total_service_charge` (or `service_price`) | Reprice using **saved** % on the order |
 | `offer_id` | Apply/change offer; **`order_offer`** replaced |
 | `offer_id: null` | Remove offer |

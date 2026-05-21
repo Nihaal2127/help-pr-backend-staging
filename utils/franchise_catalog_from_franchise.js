@@ -25,6 +25,15 @@ const GLOBAL_ACTIVE_SERVICE_LIST_FILTER = GLOBAL_ACTIVE_SERVICE_FILTER;
 
 const toIdStr = (id) => (id ? id.toString() : '');
 
+/** Skip invalid franchise catalog ids instead of throwing BSONError on corrupt DB rows. */
+const coerceCatalogObjectId = (raw) => {
+    if (raw === undefined || raw === null) return null;
+    if (raw instanceof mongoose.Types.ObjectId) return raw;
+    const s = String(raw).trim();
+    if (!s || !mongoose.isValidObjectId(s)) return null;
+    return new mongoose.Types.ObjectId(s);
+};
+
 const loadAssignableGlobalCategoryIds = async () => {
     const rows = await Category.find(GLOBAL_ACTIVE_CATEGORY_FILTER).select('_id').lean();
     return rows.map((row) => row._id);
@@ -73,6 +82,40 @@ const countAssignableGlobalServices = async () => {
 const loadGloballyActiveServiceRows = async () =>
     Service.find(GLOBAL_ACTIVE_SERVICE_LIST_FILTER).select('_id category_id').lean();
 
+const GLOBAL_ACTIVE_SERVICE_LIST_SELECT =
+    'name desc image_url category_id is_active is_request approval_status rejection_reason';
+
+/**
+ * Globally active services with category_id populated (batched $in for large catalogs).
+ */
+const loadGloballyActiveServicesPopulated = async (
+    categorySelect = 'name desc image_url is_active is_request category_id approval_status rejection_reason'
+) => {
+    const globalActiveRows = await loadGloballyActiveServiceRows();
+    const ids = globalActiveRows.map((r) => r._id).filter(Boolean);
+    if (ids.length === 0) return [];
+
+    const categoryPopulate = {
+        path: 'category_id',
+        select: categorySelect,
+        match: { deleted_at: null },
+    };
+
+    const BATCH = 500;
+    const out = [];
+    for (let i = 0; i < ids.length; i += BATCH) {
+        const batch = ids.slice(i, i + BATCH);
+        const rows = await Service.find({ _id: { $in: batch } })
+            .select(GLOBAL_ACTIVE_SERVICE_LIST_SELECT)
+            .populate(categoryPopulate)
+            .lean();
+        for (const svc of rows) {
+            if (svc.category_id) out.push(svc);
+        }
+    }
+    return out;
+};
+
 const countGloballyActiveServices = async () =>
     Service.countDocuments(GLOBAL_ACTIVE_SERVICE_LIST_FILTER);
 
@@ -95,11 +138,12 @@ const dedupeIdsPreserveOrder = (oids) => {
     const seen = new Set();
     const out = [];
     for (const oid of oids || []) {
-        if (!oid) continue;
-        const s = oid.toString();
+        const coerced = coerceCatalogObjectId(oid);
+        if (!coerced) continue;
+        const s = coerced.toString();
         if (seen.has(s)) continue;
         seen.add(s);
-        out.push(oid instanceof mongoose.Types.ObjectId ? oid : new mongoose.Types.ObjectId(s));
+        out.push(coerced);
     }
     return out;
 };
@@ -304,10 +348,12 @@ const applyCategoryOrderToFranchiseIds = (activeIds, orderIds) => {
     const ordered = [];
     const seen = new Set();
     for (const oid of orderIds || []) {
-        const key = toIdStr(oid);
+        const coerced = coerceCatalogObjectId(oid);
+        if (!coerced) continue;
+        const key = coerced.toString();
         if (!activeSet.has(key) || seen.has(key)) continue;
         seen.add(key);
-        ordered.push(oid instanceof mongoose.Types.ObjectId ? oid : new mongoose.Types.ObjectId(key));
+        ordered.push(coerced);
     }
     for (const oid of activeIds) {
         const key = toIdStr(oid);
@@ -341,6 +387,7 @@ const paginateArray = (rows, page, limit) => {
 
 module.exports = {
     toIdStr,
+    coerceCatalogObjectId,
     dedupeIdsPreserveOrder,
     buildEnabledMapFromFranchiseIds,
     buildFranchiseEnabledMaps,
@@ -359,6 +406,7 @@ module.exports = {
     loadAssignableGlobalCategoryIds,
     loadAssignableGlobalServiceRows,
     loadGloballyActiveServiceRows,
+    loadGloballyActiveServicesPopulated,
     countAssignableGlobalServices,
     countGloballyActiveServices,
     loadGloballyActiveServiceIdSet,

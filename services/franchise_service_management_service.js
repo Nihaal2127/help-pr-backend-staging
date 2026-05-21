@@ -30,7 +30,8 @@ const {
     saveFranchiseServices,
     applyServiceOrderToFranchiseIds,
     GLOBAL_ACTIVE_CATEGORY_FILTER,
-    loadGloballyActiveServiceRows,
+    loadGloballyActiveServicesPopulated,
+    coerceCatalogObjectId,
     paginateArray,
 } = require('../utils/franchise_catalog_from_franchise');
 
@@ -206,18 +207,8 @@ const buildAllServicesWithFranchiseMappingStatus = async (franchiseOid) => {
     const franchiseServiceEnabled = local.ok ? local.serviceEnabled : new Map();
     const franchiseCategoryEnabled = local.ok ? local.categoryEnabled : new Map();
 
-    const globalActiveRows = await loadGloballyActiveServiceRows();
-    const globalActiveIds = globalActiveRows.map((r) => r._id);
-    if (globalActiveIds.length === 0) return [];
-
-    const allSvcs = await Service.find({ _id: { $in: globalActiveIds } })
-        .populate({
-            path: 'category_id',
-            select: categoryPopulateSelect,
-            match: { deleted_at: null },
-        })
-        .lean()
-        .then((rows) => rows.filter((svc) => svc.category_id));
+    const allSvcs = await loadGloballyActiveServicesPopulated(categoryPopulateSelect);
+    if (allSvcs.length === 0) return [];
 
     const catIds = [
         ...new Set(
@@ -225,11 +216,15 @@ const buildAllServicesWithFranchiseMappingStatus = async (franchiseOid) => {
                 .map((s) => {
                     const c = s.category_id;
                     if (!c) return null;
-                    return c._id ? c._id.toString() : c.toString();
+                    const raw = c._id ? c._id : c;
+                    const oid = coerceCatalogObjectId(raw);
+                    return oid ? oid.toString() : null;
                 })
                 .filter(Boolean)
         ),
-    ].map((s) => new mongoose.Types.ObjectId(s));
+    ]
+        .map((s) => coerceCatalogObjectId(s))
+        .filter(Boolean);
     const globalCatActive = await loadGlobalCategoryActiveMap(catIds);
 
     return allSvcs.map((svc) => {
@@ -482,7 +477,7 @@ const list = async (query, userId) => {
             currentPage,
         });
     } catch (error) {
-        console.error('franchiseService.list', error.message);
+        console.error('franchiseService.list', error);
         return fail(500, 'Internal server error.');
     }
 };

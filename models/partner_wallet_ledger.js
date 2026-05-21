@@ -54,18 +54,19 @@ const partnerWalletLedgerSchema = new mongoose.Schema(
     { timestamps: false }
 );
 
+/** One active credit per partner order_payment (payment-to-partner wallet model). */
 partnerWalletLedgerSchema.index(
-    { order_id: 1, transaction_type: 1 },
+    { order_payment_id: 1, transaction_type: 1 },
     {
         unique: true,
         partialFilterExpression: {
             deleted_at: null,
+            order_payment_id: { $type: 'objectId' },
             transaction_type: 'credit',
-            order_payment_id: null,
-            payout_id: null,
         },
     }
 );
+/** Payout withdrawals and legacy partner-payment debits. */
 partnerWalletLedgerSchema.index(
     { order_payment_id: 1, transaction_type: 1 },
     {
@@ -79,6 +80,7 @@ partnerWalletLedgerSchema.index(
 );
 partnerWalletLedgerSchema.index({ partner_id: 1, date: -1, deleted_at: 1 });
 partnerWalletLedgerSchema.index({ franchise_id: 1, deleted_at: 1 });
+partnerWalletLedgerSchema.index({ order_id: 1, deleted_at: 1 });
 
 module.exports = mongoose.model('partner_wallet_ledger', partnerWalletLedgerSchema);
 module.exports.TRANSACTION_TYPES = TRANSACTION_TYPES;

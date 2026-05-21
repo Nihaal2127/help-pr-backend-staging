@@ -6,6 +6,17 @@ Legacy `/api/financial-order/*` routes and the `financial_order` collection are 
 
 ---
 
+## Postman
+
+Import **`postman/Help-PR-All-APIs.postman_collection.json`** → folder **`23A — Financial order payments`**.
+
+Also: **`postman/Help-PR-Financial-Order-Payments.postman_collection.json`** (standalone).  
+Dashboard only: **`02 — getCount`** → **getCount — financials (order payments)**.
+
+Legacy **`/api/financial-order`** requests are **not** in the collection (archived).
+
+---
+
 ## 1. Endpoints
 
 | Method | Path | Purpose |
@@ -157,6 +168,8 @@ Use the **order module**:
 - **Standalone payment line:** `POST /api/order-payments` (see order-payments routes)
 
 Customer/partner amounts and statuses on the overview update automatically via `syncOrderPaymentStatus`.
+
+**Partner wallet (separate module):** This API does not read `partner_wallet_ledger`. Wallet credits are created when **completed** `payer_type: partner` rows are recorded (`/api/order-payments`), capped by **partner entitlement** (`partner_earning` + base `additional_charges_subtotal`, not tax/commission on extras) and by **`customer_net_paid`**. See `docs/PARTNER_PAYOUT_FRONTEND.md`.
 
 ---
 

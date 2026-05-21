@@ -9,7 +9,7 @@ const {
     buildFranchiseEnabledMaps,
     GLOBAL_ACTIVE_CATEGORY_FILTER,
     GLOBAL_ACTIVE_SERVICE_FILTER,
-    countAssignableGlobalServices,
+    countGloballyActiveServices,
     pruneAndPersistFranchiseCatalogIds,
 } = require('./franchise_catalog_from_franchise');
 
@@ -361,7 +361,7 @@ const countFranchiseScopedAvailability = async (franchiseIdsScope, kind) => {
     const totalGlobal =
         kind === 'category'
             ? await CatalogModel.countDocuments(GLOBAL_ACTIVE_CATEGORY_FILTER)
-            : await countAssignableGlobalServices();
+            : await countGloballyActiveServices();
 
     let totalAssigned = 0;
     let locallyEnabled = 0;

@@ -204,8 +204,11 @@ const buildServiceMappingRecordFromFranchise = async (franchiseOid) => {
  */
 const buildAllServicesWithFranchiseMappingStatus = async (franchiseOid) => {
     const local = await resolveFranchiseMappingPreferenceMaps(franchiseOid);
-    const franchiseServiceEnabled = local.ok ? local.serviceEnabled : new Map();
-    const franchiseCategoryEnabled = local.ok ? local.categoryEnabled : new Map();
+    if (!local.ok) {
+        throw new Error(local.message || 'Failed to load franchise service preferences.');
+    }
+    const franchiseServiceEnabled = local.serviceEnabled;
+    const franchiseCategoryEnabled = local.categoryEnabled;
 
     const allSvcs = await loadGloballyActiveServicesPopulated(categoryPopulateSelect);
     if (allSvcs.length === 0) return [];
@@ -431,6 +434,16 @@ const franchiseMetaFromDoc = (franchise) =>
 
 const list = async (query, userId) => {
     try {
+        console.error(
+            '[franchiseService.list] start',
+            JSON.stringify({
+                franchise_id: query?.franchise_id ?? null,
+                page: query?.page,
+                limit: query?.limit,
+                userId: userId ?? null,
+            })
+        );
+
         const page = parseInt(query.page, 10) || 1;
         const limit = parseInt(query.limit, 10) || 10;
 
@@ -468,6 +481,11 @@ const list = async (query, userId) => {
             limit
         );
 
+        console.error(
+            '[franchiseService.list] ok',
+            JSON.stringify({ totalItems, totalPages, currentPage, returned: data.length })
+        );
+
         return ok(200, {
             message: 'Franchise service list fetched successfully.',
             franchise: franchiseMetaFromDoc(franchise),
@@ -477,8 +495,10 @@ const list = async (query, userId) => {
             currentPage,
         });
     } catch (error) {
-        console.error('franchiseService.list', error);
-        return fail(500, 'Internal server error.');
+        console.error('[franchiseService.list] failed', error?.message, error?.stack);
+        return fail(500, 'Internal server error.', {
+            error: error?.message || String(error),
+        });
     }
 };
 

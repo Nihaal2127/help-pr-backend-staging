@@ -109,7 +109,7 @@ userSchema.methods.generateAuthToken = function () {
 
   // Generate JWT
   const token = jwt.sign(
-    { id: this._id, email: this.email, type: this.phone_number },
+    { id: this._id, email: this.email, type: this.type },
     process.env.JWT_SECRET,
     // { expiresIn: '1h' } // Token expiration time
   );

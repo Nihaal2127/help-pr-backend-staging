@@ -215,7 +215,25 @@ const server = awsServerlessExpress.createServer(app);
 //   return await awsServerlessExpress.proxy(server, event, context, 'PROMISE').promise;
 // };
 exports.handler = async (event, context) => {
-  return await awsServerlessExpress.proxy(server, event, context, 'PROMISE').promise;
+  context.callbackWaitsForEmptyEventLoop = false;
+  try {
+    await connectDB();
+  } catch (err) {
+    console.error('Lambda connectDB failed:', err);
+    return {
+      statusCode: 503,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+      body: JSON.stringify({
+        success: false,
+        status: 503,
+        message: 'Database unavailable.',
+      }),
+    };
+  }
+  return awsServerlessExpress.proxy(server, event, context, 'PROMISE').promise;
 };
 
 console.log("Server is running...");

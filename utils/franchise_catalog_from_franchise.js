@@ -55,7 +55,9 @@ const loadAssignableGlobalServiceRows = async () => {
                 .map((s) => (s.category_id ? s.category_id.toString() : ''))
                 .filter(Boolean)
         ),
-    ].map((id) => new mongoose.Types.ObjectId(id));
+    ]
+        .map((id) => coerceCatalogObjectId(id))
+        .filter(Boolean);
 
     if (categoryIds.length === 0) return [];
 
@@ -204,7 +206,11 @@ const pruneAndPersistFranchiseCatalogIds = async (franchiseOid) => {
         franchise.categories = categories;
         franchise.services = services;
         franchise.updated_at = new Date();
-        await franchise.save();
+        try {
+            await franchise.save();
+        } catch (saveErr) {
+            console.error('pruneAndPersistFranchiseCatalogIds save failed', saveErr);
+        }
     }
 
     return Franchise.findOne({ _id: franchiseOid, deleted_at: null })

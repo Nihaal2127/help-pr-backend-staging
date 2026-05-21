@@ -63,7 +63,9 @@ Query parameters — reference
   is_active            optional true|false — when true, only services with
                        franchise_enabled === true (assigned on the franchise).
                        When false, only services not assigned to the franchise.
-                       Omit for the full assignable catalog.
+                       Omit for the full globally active service catalog (same count as
+                       super-admin active services). Includes services under inactive
+                       categories; those have effective_active: false until the category is on.
 
   is_request           optional — filters by Service.is_request
 
@@ -89,7 +91,7 @@ Query parameters — reference
 Examples
 --------------------------------------------------------------------------------
 
-  All assignable services (franchise admin):
+  Full catalog (franchise admin):
 
     GET /api/franchise-service/getAll?page=1&limit=50
 

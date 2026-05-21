@@ -30,7 +30,7 @@ const {
     saveFranchiseServices,
     applyServiceOrderToFranchiseIds,
     GLOBAL_ACTIVE_CATEGORY_FILTER,
-    loadAssignableGlobalServiceRows,
+    loadGloballyActiveServiceRows,
     paginateArray,
 } = require('../utils/franchise_catalog_from_franchise');
 
@@ -199,22 +199,22 @@ const buildServiceMappingRecordFromFranchise = async (franchiseOid) => {
 };
 
 /**
- * Every globally assignable service, annotated with franchise local preference and effective availability.
+ * Every globally active service (same set as super-admin active services), annotated with franchise preference and effective availability.
  */
 const buildAllServicesWithFranchiseMappingStatus = async (franchiseOid) => {
     const local = await resolveFranchiseMappingPreferenceMaps(franchiseOid);
     const franchiseServiceEnabled = local.ok ? local.serviceEnabled : new Map();
     const franchiseCategoryEnabled = local.ok ? local.categoryEnabled : new Map();
 
-    const assignableRows = await loadAssignableGlobalServiceRows();
-    const assignableIds = assignableRows.map((r) => r._id);
-    if (assignableIds.length === 0) return [];
+    const globalActiveRows = await loadGloballyActiveServiceRows();
+    const globalActiveIds = globalActiveRows.map((r) => r._id);
+    if (globalActiveIds.length === 0) return [];
 
-    const allSvcs = await Service.find({ _id: { $in: assignableIds } })
+    const allSvcs = await Service.find({ _id: { $in: globalActiveIds } })
         .populate({
             path: 'category_id',
             select: categoryPopulateSelect,
-            match: GLOBAL_ACTIVE_CATEGORY_FILTER,
+            match: { deleted_at: null },
         })
         .lean()
         .then((rows) => rows.filter((svc) => svc.category_id));

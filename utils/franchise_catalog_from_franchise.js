@@ -20,6 +20,9 @@ const GLOBAL_ACTIVE_SERVICE_FILTER = {
     is_request: { $ne: true },
 };
 
+/** Super-admin “active services” list/count (service active; parent category may be inactive). */
+const GLOBAL_ACTIVE_SERVICE_LIST_FILTER = GLOBAL_ACTIVE_SERVICE_FILTER;
+
 const toIdStr = (id) => (id ? id.toString() : '');
 
 const loadAssignableGlobalCategoryIds = async () => {
@@ -64,6 +67,18 @@ const loadAssignableGlobalServiceRows = async () => {
 const countAssignableGlobalServices = async () => {
     const rows = await loadAssignableGlobalServiceRows();
     return rows.length;
+};
+
+/** All globally active services (matches GET /api/service?is_active=true totals). */
+const loadGloballyActiveServiceRows = async () =>
+    Service.find(GLOBAL_ACTIVE_SERVICE_LIST_FILTER).select('_id category_id').lean();
+
+const countGloballyActiveServices = async () =>
+    Service.countDocuments(GLOBAL_ACTIVE_SERVICE_LIST_FILTER);
+
+const loadGloballyActiveServiceIdSet = async () => {
+    const rows = await loadGloballyActiveServiceRows();
+    return new Set(rows.map((r) => toIdStr(r._id)).filter(Boolean));
 };
 
 const loadAssignableGlobalCategoryIdSet = async () => {
@@ -128,7 +143,7 @@ const pruneAndPersistFranchiseCatalogIds = async (franchiseOid) => {
 
     const [assignableCategorySet, assignableServiceSet] = await Promise.all([
         loadAssignableGlobalCategoryIdSet(),
-        loadAssignableGlobalServiceIdSet(),
+        loadGloballyActiveServiceIdSet(),
     ]);
 
     const { categories, services } = pruneFranchiseCatalogIdArrays(
@@ -219,8 +234,8 @@ const buildVirtualServiceMappingRecord = async (franchiseLean) => {
     const activeIds = dedupeIdsPreserveOrder(franchiseLean.services || []);
     const activeSet = new Set(activeIds.map(toIdStr));
 
-    // Inactive = globally active services (with active parent category) not enabled on this franchise.
-    const allRows = await loadAssignableGlobalServiceRows();
+    // Inactive = globally active services not enabled on this franchise (parent category may be inactive).
+    const allRows = await loadGloballyActiveServiceRows();
     const inactiveIds = [];
     for (const row of allRows) {
         const key = row._id.toString();
@@ -340,9 +355,13 @@ module.exports = {
     applyServiceOrderToFranchiseIds,
     GLOBAL_ACTIVE_CATEGORY_FILTER,
     GLOBAL_ACTIVE_SERVICE_FILTER,
+    GLOBAL_ACTIVE_SERVICE_LIST_FILTER,
     loadAssignableGlobalCategoryIds,
     loadAssignableGlobalServiceRows,
+    loadGloballyActiveServiceRows,
     countAssignableGlobalServices,
+    countGloballyActiveServices,
+    loadGloballyActiveServiceIdSet,
     loadAssignableGlobalCategoryIdSet,
     loadAssignableGlobalServiceIdSet,
     pruneFranchiseCatalogIdArrays,

@@ -3,7 +3,7 @@ const Order = require("../models/order");
 const OrderPayment = require("../models/order_payment");
 const { assertOrderModifyAccess } = require("../utils/order_access");
 const { syncOrderPaymentStatus } = require("../services/order_payment_status_service");
-const { syncPartnerOrderPaymentWallet } = require("../services/partner_wallet_order_service");
+const { syncAllPartnerOrderPaymentsForOrder } = require("../services/partner_wallet_order_service");
 const { validatePartnerOrderPayment } = require("../services/partner_order_payment_validation");
 
 const PAYER_TYPES = new Set(["customer", "partner"]);
@@ -98,9 +98,9 @@ const create = async (req, res) => {
       notes: notes || "",
     });
     await doc.save();
-    await syncPartnerOrderPaymentWallet(doc);
 
     const { order: syncedOrder, breakdown } = await syncOrderPaymentStatus(order._id);
+    await syncAllPartnerOrderPaymentsForOrder(order._id);
 
     return res.status(201).json({
       success: true,
@@ -278,9 +278,9 @@ const update = async (req, res) => {
 
     row.updated_at = new Date();
     await row.save();
-    await syncPartnerOrderPaymentWallet(row);
 
     const { order: syncedOrder, breakdown } = await syncOrderPaymentStatus(order._id);
+    await syncAllPartnerOrderPaymentsForOrder(order._id);
 
     return res.status(200).json({
       success: true,
@@ -345,9 +345,9 @@ const remove = async (req, res) => {
     row.deleted_at = new Date();
     row.updated_at = new Date();
     await row.save();
-    await syncPartnerOrderPaymentWallet(row);
 
     const { breakdown } = await syncOrderPaymentStatus(orderForAuth._id);
+    await syncAllPartnerOrderPaymentsForOrder(orderForAuth._id);
 
     return res.status(200).json({
       success: true,

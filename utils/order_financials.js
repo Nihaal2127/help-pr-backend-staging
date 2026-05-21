@@ -1,7 +1,7 @@
 const Order = require("../models/order");
 const OrderAdditionalCharge = require("../models/order_additional_charge");
 const { syncOrderPaymentStatus } = require("../services/order_payment_status_service");
-const { syncOrderPartnerWalletCredit } = require("../services/partner_wallet_order_service");
+const { syncAllPartnerOrderPaymentsForOrder } = require("../services/partner_wallet_order_service");
 const {
   computeOrderTotal,
   aggregateAdditionalCharges,
@@ -81,7 +81,7 @@ const recalculateOrderTotals = async (orderId) => {
   order.updated_at = new Date();
   await order.save();
   await syncOrderPaymentStatus(orderId);
-  await syncOrderPartnerWalletCredit(orderId);
+  await syncAllPartnerOrderPaymentsForOrder(orderId);
   return Order.findById(orderId);
 };
 

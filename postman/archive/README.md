@@ -8,6 +8,8 @@ These files are **not** for day-to-day use. They are kept as merge inputs and hi
 |------|--------|
 | `Help-PR-Financial-Order-Legacy.postman_collection.json` | Points to `/api/order/financial-payments/*` (old `/api/financial-order` removed) |
 
+**Active (repo root `postman/`):** `Help-PR-Financial-Order-Payments.postman_collection.json` — also merged into All APIs as **23A — Financial order payments**.
+
 To rebuild the unified collection after editing a source file here:
 
 ```bash

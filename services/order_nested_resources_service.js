@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const Order = require("../models/order");
 const OrderAdditionalCharge = require("../models/order_additional_charge");
 const OrderPayment = require("../models/order_payment");
 const { OrderCreationError } = require("../errors/order_creation_error");
@@ -486,6 +487,14 @@ const applyNestedResourcesOnUpdate = async (order, body) => {
   const chargesCreated = await applyChargeCreates(order, chargeOps.create);
   if (chargesCreated.length) chargesTouched = true;
 
+  if (chargesTouched) {
+    await recalculateOrderTotals(order._id);
+    const refreshed = await Order.findById(order._id);
+    if (refreshed) {
+      order.set(refreshed.toObject());
+    }
+  }
+
   const paymentsDeleted = await softDeletePayments(order._id, paymentOps.delete);
   if (paymentsDeleted.length) paymentsTouched = true;
 
@@ -514,8 +523,12 @@ const applyNestedResourcesOnUpdate = async (order, body) => {
   }
   if (customerCreateDocs.length) paymentsTouched = true;
 
-  if (paymentsTouched && !chargesTouched) {
+  if (customerUpdateResults.length || customerCreateDocs.length) {
     await syncOrderPaymentStatus(order._id);
+    const refreshedAfterCustomer = await Order.findById(order._id);
+    if (refreshedAfterCustomer) {
+      order.set(refreshedAfterCustomer.toObject());
+    }
   }
 
   const partnerUpdateResults = [];
@@ -543,12 +556,8 @@ const applyNestedResourcesOnUpdate = async (order, body) => {
   const paymentsUpdated = [...customerUpdateResults, ...partnerUpdateResults];
   const paymentsCreated = [...customerCreateDocs, ...partnerCreateDocs];
 
-  if (chargesTouched) {
-    await recalculateOrderTotals(order._id);
-  } else if (paymentsTouched) {
-    await syncOrderPaymentStatus(order._id);
-  }
   if (paymentsTouched) {
+    await syncOrderPaymentStatus(order._id);
     await syncAllPartnerOrderPaymentsForOrder(order._id);
   }
 

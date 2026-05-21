@@ -50,6 +50,7 @@ const financialOrderRoutes = require('./routes/financial_order_routes');
 const partnerPayoutRoutes = require('./routes/partner_payout_routes');
 const refundRoutes = require('./routes/refund_routes');
 const { chatRoutes, registerChatSocket } = require('./src/modules/chat');
+const mobileRoutes = require('./routes/mobile');
 const { publicImageUrlsResponseMiddleware } = require('./middleware/public_image_urls_response_middleware');
 
 // Load environment variables
@@ -145,6 +146,7 @@ app.use('/api/financial-order', financialOrderRoutes);
 app.use('/api/partner_payout', partnerPayoutRoutes);
 app.use('/api/refund', refundRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/mobile', mobileRoutes);
 
 // app.use('/login', loginRoute);
 

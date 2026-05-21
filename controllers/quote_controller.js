@@ -658,7 +658,6 @@ const getAll = async (req, res) => {
                 service_id: "$_service.service_id",
                 desc: "$_service.desc",
                 image_url: "$_service.image_url",
-                price: "$_service.price",
                 approval_status: "$_service.approval_status",
                 is_request: "$_service.is_request",
                 is_active: "$_service.is_active",

@@ -25,14 +25,12 @@ Request body (JSON) — required fields enforced by createServiceRequestMiddlewa
   "commission": 0,
   "payment_type": "per_hour | per_day | per_month | per_consultancy (or similar string; stored normalized)",
   "minimum_deposit": 0,
-  "price": 0,
   "is_active": false,
   "city_ids": [],
   "state_ids": []
 }
 
 Notes:
-- price defaults to 0 if omitted (controller).
 - is_active defaults to false for requests if omitted.
 - Middleware sets is_request=true internally for this route.
 - Duplicate name + same category_id returns 409.
@@ -47,7 +45,6 @@ Success response — HTTP 200:
     "name": "...",
     "service_id": "...",
     "desc": "...",
-    "price": 0,
     "tax": 0,
     "commission": 0,
     "payment_type": "per_hour",

@@ -237,9 +237,6 @@ const exportService = async (req, res) => {
                     service_name: '$name',
                     description: '$desc',
                     category: { $arrayElemAt: ['$category.name', 0] },
-                    city_service_price: '$city_service_price',
-                    price: '$price',
-                    helpers: '$helpers',
                     status: {
                         $cond: { if: { $eq: ['$is_active', true] }, then: 'Active', else: 'Inactive' },
                     },
@@ -252,8 +249,6 @@ const exportService = async (req, res) => {
             'Service Name',
             'Description',
             'Category',
-            'Price',
-            'Helpers',
             'Status',
         ];
 

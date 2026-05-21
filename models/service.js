@@ -5,8 +5,6 @@ const serviceSchema = new mongoose.Schema(
         name: { type: String, required: true },
         service_id: { type: String, required: false,default:""},
         desc: { type: String, required: true },
-        helpers: { type: Number, required: false, default: 0 },
-        price: { type: Number, required: false, default: 0 },
         tax: { type: Number, required: false, default: 0 },
         commission: { type: Number, required: false, default: 0 },
         payment_type: { type: String, required: false, default: "" },

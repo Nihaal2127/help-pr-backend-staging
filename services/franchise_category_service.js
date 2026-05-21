@@ -173,7 +173,7 @@ const listPopulateFields = [
 
 /** Global `services` where `service.category_id` matches the category (_id). */
 const RELATED_SERVICE_FIELDS =
-    'name desc image_url category_id is_active is_request price helpers service_id tax commission payment_type minimum_deposit approval_status rejection_reason requested_by created_at updated_at';
+    'name desc image_url category_id is_active is_request service_id tax commission payment_type minimum_deposit approval_status rejection_reason requested_by created_at updated_at';
 
 const loadServicesGroupedByCategoryId = async (categoryObjectIds) => {
     const map = new Map();

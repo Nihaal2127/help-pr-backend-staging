@@ -813,7 +813,7 @@ const fetchCustomersMatchingFranchiseAreaPincodes = async (franchiseLean) => {
 
 /** Global catalog fields for franchise related-catalog partner hydration. */
 const RELATED_CATALOG_SERVICE_SELECT =
-    'service_id name desc image_url category_id is_active is_request price helpers tax commission payment_type minimum_deposit approval_status rejection_reason requested_by created_at updated_at';
+    'service_id name desc image_url category_id is_active is_request tax commission payment_type minimum_deposit approval_status rejection_reason requested_by created_at updated_at';
 
 const RELATED_CATALOG_CATEGORY_SELECT =
     'category_id name desc image_url is_active is_request approval_status rejection_reason requested_by created_at updated_at';

@@ -61,7 +61,7 @@ const getAll = async (req, res) => {
     const populatedServices = await PartnerService.populate(services, [
       {
         path: 'service_id',
-        select: 'name image_url price category_id is_active is_request approval_status',
+        select: 'name image_url category_id is_active is_request approval_status',
       },
       { path: 'category_id', select: 'name is_active is_request approval_status' },
     ]);
@@ -239,19 +239,11 @@ const create = async (req, res) => {
     const errorMessages = [];
 
 
-    const category = await Category.findById(records[0].category_id);
-    category.helpers = category.helpers + 1;
-    await category.save();
-
     for (const record of records) {
       const key = `${record.partner_id}-${record.service_id}`;
 
       // If service_id & partner_id combination does not exist, add to insert list
       if (!existingServiceMap.has(key)) {
-        const service = await Service.findById(record.service_id);
-        service.helpers = service.helpers + 1;
-        await service.save();
-
         servicesToInsert.push({
           partner_id: new mongoose.Types.ObjectId(record.partner_id),
           service_id: new mongoose.Types.ObjectId(record.service_id),
@@ -435,7 +427,10 @@ const getDropDown = async (req, res) => {
     );
 
     const populatedServices = await PartnerService.populate(services, [
-      { path: "service_id" },
+      {
+        path: 'service_id',
+        select: 'name image_url category_id is_active is_request approval_status',
+      },
     ]);
 
 
@@ -524,7 +519,7 @@ const getMyServices = async (req, res) => {
     const populated = await PartnerService.populate(services, [
       {
         path: 'service_id',
-        select: 'name image_url price category_id is_active is_request approval_status',
+        select: 'name image_url category_id is_active is_request approval_status',
       },
       { path: 'category_id', select: 'name is_active is_request approval_status' },
     ]);
@@ -545,7 +540,7 @@ const getMyServices = async (req, res) => {
         service_id: service_id?._id || null,
         service_name: service_id?.name || null,
         service_image: service_id?.image_url || null,
-        service_price: service_id?.price ?? null,
+        service_price: rest.price ?? null,
         category_id: category_id?._id || null,
         category_name: category_id?.name || null,
       };
@@ -628,7 +623,6 @@ const getAvailableServices = async (req, res) => {
       _id: s._id,
       name: s.name,
       desc: s.desc,
-      price: s.price,
       tax: s.tax,
       image_url: s.image_url,
       category_id: s.category_id?._id || null,
@@ -836,7 +830,6 @@ const getAvailableFranchiseServices = async (req, res) => {
       _id: s._id,
       name: s.name,
       desc: s.desc,
-      price: s.price,
       tax: s.tax,
       image_url: s.image_url,
       category_id: s.category_id?._id || null,
@@ -929,7 +922,6 @@ const addMyServices = async (req, res) => {
 
     const toInsert = [];
     const errorMessages = [];
-    const touchedCategories = new Set();
 
     for (const r of records) {
       if (existingSet.has(r.service_id.toString())) {
@@ -983,15 +975,6 @@ const addMyServices = async (req, res) => {
           errorMessages.push(`Category ${r.category_id} is not available to add.`);
           continue;
         }
-      }
-
-      service.helpers = (service.helpers || 0) + 1;
-      await service.save();
-
-      if (!touchedCategories.has(r.category_id.toString())) {
-        category.helpers = (category.helpers || 0) + 1;
-        await category.save();
-        touchedCategories.add(r.category_id.toString());
       }
 
       toInsert.push({
@@ -1271,7 +1254,7 @@ const getFranchiseCategoryServicesIntersection = async (req, res) => {
       _id: { $in: intersectionIds },
       deleted_at: null,
     })
-      .select('name desc price tax image_url category_id is_active approval_status')
+      .select('name desc tax image_url category_id is_active approval_status')
       .lean();
 
     const byId = new Map(services.map((s) => [String(s._id), s]));
@@ -1281,7 +1264,6 @@ const getFranchiseCategoryServicesIntersection = async (req, res) => {
       _id: s._id,
       name: s.name,
       desc: s.desc,
-      price: s.price,
       tax: s.tax,
       image_url: s.image_url,
       category_id: s.category_id,

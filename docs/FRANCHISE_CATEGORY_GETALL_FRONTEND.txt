@@ -12,158 +12,85 @@ Authentication
 --------------
   Required: Bearer JWT (same as other franchise-category routes).
 
-  Roles allowed: Super Admin, Staff, Franchise Admin, Franchise Employee
-  (see role_middleware: requireSuperAdminStaffFranchiseAdminEmployee).
+  Roles allowed: Super Admin, Staff, Franchise Admin, Franchise Employee.
 
   Franchise Admin / Employee:
     - The server forces the list to their own franchise.
-    - They must not rely on passing a different franchise_id; if they send
-      franchise_id, it must match their user.franchise_id or the API returns 403.
+    - If they send franchise_id, it must match their user.franchise_id (403 otherwise).
 
   Super Admin / Staff:
-    - May omit franchise_id (see “Response: all_categories” below) or pass
-      franchise_id to scope the list to one franchise.
+    - franchise_id query parameter is required (400 if omitted).
 
 --------------------------------------------------------------------------------
 Response shape (high level)
 --------------------------------------------------------------------------------
 
-  On success (200), JSON includes:
+  On success (200):
 
-  - success, status, message
-  - totalItems, totalPages, currentPage   (pagination for mapping **records**)
-  - records                              (franchise_category mapping documents,
-                                         paginated; each has categories_list,
-                                         active_categories, inactive_categories,
-                                         categories_order, etc.)
-  - all_categories                       (optional; see below)
+  - franchise            { _id, name, admin_name, is_active }
+  - categories           paginated array of global categories for that franchise
+  - totalItems           total categories after filters
+  - totalPages, currentPage — pagination over **categories**
 
-  “records” = rows from the franchise_category **mapping** collection (per page).
+  Each item in **categories** includes:
 
-  “all_categories” = full **global** category catalog for that franchise, each
-  row augmented with:
-    - franchise_active  (boolean) — whether that global category is “on” for
-                        this franchise in the latest mapping logic
-    - related_services  (array)   — global Service documents for that category
-                        (non-deleted), sorted by name
+    - franchise_enabled   true if the category id is in franchise.categories[]
+    - related_services    global services under that category (non-deleted)
+    - global_active, franchise_active, effective_active (same semantics as services)
 
-  all_categories is only included when the request is scoped to a single
-  franchise_id (see below). Use it for admin UIs that show every global
-  category with on/off state and related services (search/sort apply here).
+  No records / active_categories / inactive_categories / all_categories split.
 
 --------------------------------------------------------------------------------
 Query parameters — reference
 --------------------------------------------------------------------------------
 
-  Pagination (mapping “records” only)
-  -----------------------------------
-  page        number, default 1
-  limit       number, default 10
+  Pagination (categories)
+  -----------------------
+  page, limit          defaults: page=1, limit=10
 
   Franchise scope
   ----------------
-  franchise_id   MongoDB ObjectId string (24 hex chars)
-                 Super Admin / Staff: use to scope the list; required if you need
-                 all_categories in the response.
-                 Franchise users: usually omitted; server uses JWT franchise_id.
+  franchise_id         Super Admin / Staff: required.
+                       Franchise users: implied from JWT.
 
-  Mapping list filter (affects “records”, not all_categories)
-  ------------------------------------------------------------
-  is_active      optional boolean as string: "true" | "false" | "1" | "0"
-                 When set, “records” are filtered so each returned mapping row
-                 only includes category entries that match the franchise on/off
-                 state for the mapping (see service: filterRecordsByFranchiseMappingToggle).
-                 Omit to return both active and inactive mapping entries in records.
+  Catalog filters
+  ---------------
+  is_active            optional true|false — filters by franchise_enabled
+                       (assigned on the franchise). Omit for full catalog.
 
-  is_request     optional boolean (same string forms)
-                 When set, filters category **catalog** fields on items within
-                 records (Category.is_request — e.g. pending vs approved global
-                 categories). Omit for no catalog filter on is_request.
+  is_request           optional — filters by Category.is_request
 
-  Global catalog: search (affects all_categories only)
-  ------------------------------------------------------
-  search         optional string; case-insensitive substring search.
-  q              alias of search (same behavior). If both are sent, search
-                 takes precedence in current implementation (pass one).
+  Search (categories)
+  -------------------
+  search, q            category name first; if no name match, match related_services[].name
 
-  Behavior (two steps):
-    1) If any global category’s **name** contains the search text, return only
-       those categories.
-    2) If **no** category name matches, return categories where at least one
-       **related_services[].name** (global service name) contains the search text.
-
-  Empty or omitted search: no search filter; full catalog (for that franchise
-  scope) is returned before sort.
-
-  Global catalog: sort (affects all_categories only)
-  ----------------------------------------------------
-  sort_by       optional; default: name
-                Allowed values: name | id | _id
-                - name — sort by category name (case-insensitive locale sort)
-                - id / _id — sort by MongoDB category document _id (string compare)
-
-  sort_order    optional; default: asc
-                Allowed values: asc | desc
-
-  order         alias of sort_order (same meaning)
-
-  Invalid sort_by or sort_order returns 400 with a short message.
-
-  Note: Search and sort are applied only when all_categories is built
-        (i.e. when franchise_id is resolved for the request).
+  Sort
+  ----
+  sort_by              name | id | _id  (default: name)
+  sort_order, order    asc | desc (default: asc)
 
 --------------------------------------------------------------------------------
-When is all_categories present?
+Examples
 --------------------------------------------------------------------------------
 
-  - Franchise Admin / Employee: franchise_id is always implied from the JWT, so
-    all_categories is included (subject to auth).
+  Full catalog (franchise admin):
 
-  - Super Admin / Staff: pass franchise_id on the query string to include
-    all_categories. If franchise_id is omitted, the handler may not have a
-    single franchise scope and all_categories may be omitted — use franchise_id
-    when the UI needs the global catalog sidebar/list.
+    GET /api/franchise-category/getAll?page=1&limit=50
 
---------------------------------------------------------------------------------
-Example requests
---------------------------------------------------------------------------------
+  Only categories enabled on the franchise:
 
-  Page of mapping records for a franchise (super admin):
+    GET /api/franchise-category/getAll?page=1&limit=50&is_active=true
 
-    GET /api/franchise-category/getAll?page=1&limit=10&franchise_id=<FRANCHISE_OID>
+  Super admin:
 
-  Same + filter mapping rows by active toggle on categories (records filter):
-
-    GET /api/franchise-category/getAll?page=1&limit=10&franchise_id=<ID>&is_active=true
-
-  Global catalog for UI: search + sort (names matching “plumb”, then name Z→A):
-
-    GET /api/franchise-category/getAll?franchise_id=<ID>&search=plumb&sort_by=name&sort_order=desc
-
-  Sort catalog by category id ascending:
-
-    GET /api/franchise-category/getAll?franchise_id=<ID>&sort_by=id&sort_order=asc
-
-  Alias for search / order:
-
-    GET /api/franchise-category/getAll?franchise_id=<ID>&q=clean&order=desc
+    GET /api/franchise-category/getAll?franchise_id=<FRANCHISE_OID>&page=1&limit=50
 
 --------------------------------------------------------------------------------
-Frontend checklist
+getById / update
 --------------------------------------------------------------------------------
 
-  [ ] Use getAll for listing mapping pages; read totalItems / records for tables.
-
-  [ ] For “pick from full global catalog” screens, read all_categories when
-      present; apply search/sort via query params instead of only client-side
-      filtering if you want server-side consistency.
-
-  [ ] Do not confuse:
-        - is_active on this route (mapping / catalog filters for **records**)
-        - franchise_active on each all_categories item (franchise toggle for
-          that global category in the catalog view).
-
-  [ ] Super Admin must send franchise_id to receive all_categories.
+  GET /get/:id and PUT /update/:id still use the legacy mapping record shape for
+  toggle/reorder. Use getAll for the flat category catalog list UI.
 
 ================================================================================
   End of document

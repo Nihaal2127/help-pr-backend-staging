@@ -1,3 +1,4 @@
+const fs = require('fs');
 const mongoose = require('mongoose');
 const Order = require('../models/order');
 const User = require('../models/user');
@@ -13,6 +14,7 @@ const { applyPagination } = require('../utils/pagination');
 const { validationResult } = require('express-validator');
 const { parseBoolean } = require('../utils/parser');
 const { sendTemplateEmail } = require('../helper/mail');
+const { buildOrderInvoiceHtml } = require('../utils/order_invoice_html');
 const { getOrderId } = require('../helper/id_generator');
 const { checkObjectIdExists } = require('../validator/id_validator');
 const {
@@ -163,6 +165,19 @@ function shapeOrderDetailResponse(populatedOrderData, additional_charges, order_
     order_payments,
     order_offer: order_offer || null,
   };
+}
+
+async function resolveOrderByIdParam(id) {
+  if (/^sos-/i.test(id)) {
+    return Order.findOne({
+      unique_id: new RegExp(`^${String(id).trim()}$`, 'i'),
+      deleted_at: null,
+    });
+  }
+  if (mongoose.Types.ObjectId.isValid(id)) {
+    return Order.findOne({ _id: id, deleted_at: null });
+  }
+  return null;
 }
 
 async function loadOrderDetailLean(orderMongoId) {
@@ -1801,36 +1816,131 @@ const deleteOrder = async (req, res) => {
   }
 };
 
-const sendInvoiceEmail = async (req, res) => {
-  const {
-    email,
-    html_content,
-  } = req.body;
+const downloadOrderInvoice = async (req, res) => {
+  const { id } = req.params;
 
-  const file = req.file;
-  console.log(file);
   try {
+    const order = await resolveOrderByIdParam(id);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        status: 404,
+        message: 'No record found',
+      });
+    }
 
-    if (!file) {
+    const access = await assertOrderRecordAccess(req, order);
+    if (!access.ok) {
+      return res.status(access.status).json({
+        success: false,
+        status: access.status,
+        message: access.message,
+      });
+    }
+
+    const record = await loadOrderDetailLean(order._id);
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        status: 404,
+        message: 'No record found',
+      });
+    }
+
+    const html = buildOrderInvoiceHtml(record);
+    const safeId = String(record.unique_id || order._id).replace(/[^\w-]/g, '_');
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="invoice-${safeId}.html"`);
+    return res.status(200).send(html);
+  } catch (error) {
+    console.error('Error downloading order invoice:', error);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Internal server error.',
+    });
+  }
+};
+
+const sendInvoiceEmail = async (req, res) => {
+  const { email, html_content, order_id } = req.body;
+  const file = req.file;
+
+  try {
+    let toEmail = email ? String(email).trim() : '';
+    let html = html_content || '';
+    const attachments = [];
+
+    if (order_id) {
+      const order = await resolveOrderByIdParam(order_id);
+      if (!order) {
+        return res.status(404).json({
+          success: false,
+          status: 404,
+          message: 'No record found',
+        });
+      }
+
+      const access = await assertOrderRecordAccess(req, order);
+      if (!access.ok) {
+        return res.status(access.status).json({
+          success: false,
+          status: access.status,
+          message: access.message,
+        });
+      }
+
+      const record = await loadOrderDetailLean(order._id);
+      if (!record) {
+        return res.status(404).json({
+          success: false,
+          status: 404,
+          message: 'No record found',
+        });
+      }
+
+      if (!html) {
+        html = buildOrderInvoiceHtml(record);
+      }
+      if (!toEmail) {
+        toEmail = record.user_info?.email ? String(record.user_info.email).trim() : '';
+      }
+    }
+
+    if (!toEmail) {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: 'No images uploaded.'
+        message: 'email is required (or provide order_id with a customer email on the order).',
       });
     }
-    const attachments = [
-      {
+
+    if (!html && !file) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'html_content, order_id, or a PDF file upload is required.',
+      });
+    }
+
+    if (file) {
+      attachments.push({
         filename: 'invoice.pdf',
         path: file.path,
-      },
-    ]
-    await sendTemplateEmail(email, 'SOS Order Invoice', html_content, 'Please find your invoice attached.', attachments);
-    // await sendTemplateEmail('ishu624746@gmail.com','SOS Order Invoice',html_content,'Please find your invoice attached.',attachments);
+      });
+    }
 
-    if (file && file.path) {
+    await sendTemplateEmail(
+      toEmail,
+      'SOS Order Invoice',
+      html,
+      'Please find your invoice attached.',
+      attachments
+    );
+
+    if (file?.path) {
       fs.unlinkSync(file.path);
-    } else {
-      console.error("File path is undefined");
     }
 
     return res.status(200).json({
@@ -1839,13 +1949,33 @@ const sendInvoiceEmail = async (req, res) => {
       message: 'Invoice sent successfully!',
     });
   } catch (error) {
+    if (file?.path) {
+      try {
+        fs.unlinkSync(file.path);
+      } catch (_) {
+        /* ignore cleanup errors */
+      }
+    }
     console.error('Error Sending Mail:', error);
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.'
+      message: 'Internal server error.',
     });
   }
 };
 
-module.exports = { getAll, create, update, getById, cancleOrder, deleteOrder, sendInvoiceEmail, getCustomerOrder, getCustomerOrderDetails, cancleService, serviceUpdate };
+module.exports = {
+  getAll,
+  create,
+  update,
+  getById,
+  cancleOrder,
+  deleteOrder,
+  sendInvoiceEmail,
+  downloadOrderInvoice,
+  getCustomerOrder,
+  getCustomerOrderDetails,
+  cancleService,
+  serviceUpdate,
+};

@@ -1,7 +1,11 @@
 const mongoose = require('mongoose');
 const User = require('../../../models/user');
 const notificationSetting = require('../../../models/notification_settings');
+const SubscriptionPlan = require('../../../models/subscription_plan');
+const PartnerSubscription = require('../../../models/partner_subscription');
 const { getNewId } = require('../../../helper/id_generator');
+
+const DEFAULT_PARTNER_PLAN_NAME = 'basic';
 
 const USER_TYPE_PARTNER = 2;
 const REGISTRATION_TYPE_NORMAL = 1;
@@ -31,6 +35,24 @@ const registerPartner = async ({ name, email, phone_number, password, date_of_bi
   const savedUser = await newUser.save();
 
   await notificationSetting.create({ user_id: savedUser._id });
+
+  const basicPlan = await SubscriptionPlan.findOne({
+    plan_name: DEFAULT_PARTNER_PLAN_NAME,
+    is_active: true,
+    deleted_at: null,
+  });
+  if (!basicPlan) {
+    throw new Error('Default subscription plan "basic" is not configured.');
+  }
+
+  await PartnerSubscription.create({
+    partner_id: savedUser._id,
+    subscription_plan_id: basicPlan._id,
+    started_at: savedUser.created_at,
+    expires_at: null,
+    status: 'active',
+    notes: 'Auto-assigned on mobile registration',
+  });
 
   const data = savedUser.toObject();
   delete data.password;

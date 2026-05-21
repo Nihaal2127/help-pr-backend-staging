@@ -5,7 +5,13 @@ const Franchise = require('../models/franchise');
 const PartnerCategory = require('../models/partner_category');
 const PartnerService = require('../models/partner_service');
 const User = require('../models/user');
-const { buildFranchiseEnabledMaps, GLOBAL_ACTIVE_CATEGORY_FILTER, GLOBAL_ACTIVE_SERVICE_FILTER, countAssignableGlobalServices } = require('./franchise_catalog_from_franchise');
+const {
+    buildFranchiseEnabledMaps,
+    GLOBAL_ACTIVE_CATEGORY_FILTER,
+    GLOBAL_ACTIVE_SERVICE_FILTER,
+    countAssignableGlobalServices,
+    pruneAndPersistFranchiseCatalogIds,
+} = require('./franchise_catalog_from_franchise');
 
 const toIdStr = (id) => (id ? id.toString() : '');
 
@@ -63,9 +69,7 @@ const resolveFranchiseMappingPreferenceMaps = async (franchiseId) => {
             ? franchiseId
             : new mongoose.Types.ObjectId(String(franchiseId));
 
-    const franchise = await Franchise.findOne({ _id: fid, deleted_at: null })
-        .select('categories services')
-        .lean();
+    const franchise = await pruneAndPersistFranchiseCatalogIds(fid);
     if (!franchise) {
         return { ok: false, status: 404, message: 'Franchise not found.' };
     }

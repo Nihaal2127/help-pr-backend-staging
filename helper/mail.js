@@ -1,21 +1,34 @@
 const nodemailer = require('nodemailer');
-const sendEmail = async (to, subject, text) => {
-  const transporter = nodemailer.createTransport({
-    service: 'Gmail', // Use your email service provider
+
+const createTransporter = () =>
+  nodemailer.createTransport({
+    service: 'Gmail',
     auth: {
-      user: process.env.EMAIL_USER, // Your email
-      pass: process.env.EMAIL_PASS, // Your email password or app password
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
     },
   });
 
-  const mailOptions = {
+const sendEmail = async (to, subject, text) => {
+  const transporter = createTransporter();
+  await transporter.sendMail({
     from: process.env.EMAIL_USER,
     to,
     subject,
     text,
-  };
-
-  await transporter.sendMail(mailOptions);
+  });
 };
 
-module.exports = {sendEmail};
+const sendTemplateEmail = async (to, subject, html, text, attachments = []) => {
+  const transporter = createTransporter();
+  await transporter.sendMail({
+    from: process.env.EMAIL_USER,
+    to,
+    subject,
+    text: text || 'Please find your invoice attached.',
+    html: html || undefined,
+    attachments: attachments.length > 0 ? attachments : undefined,
+  });
+};
+
+module.exports = { sendEmail, sendTemplateEmail };

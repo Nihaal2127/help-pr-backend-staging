@@ -1,5 +1,6 @@
 const User = require('../models/user');
 const Franchise = require('../models/franchise');
+const { parseObjectId } = require('./franchise_catalog_lists');
 
 const USER_TYPE_ADMIN = 1;
 const USER_TYPE_EMPLOYEE = 3;
@@ -77,6 +78,47 @@ const loadFranchiseCallerScope = async (userId) => {
     };
 };
 
+/**
+ * Resolve franchise_id for franchise-category / franchise-service getAll (flat catalog list).
+ * Franchise staff: always their franchise. Super/staff: franchise_id query required.
+ */
+const resolveFranchiseCatalogListScope = async (query, userId) => {
+    if (userId) {
+        const scope = await loadFranchiseCallerScope(userId);
+        if (!scope) {
+            return { ok: false, status: 403, message: 'Access denied.' };
+        }
+        if (scope.isFranchiseAdmin || scope.isEmployee) {
+            if (!scope.franchiseOid) {
+                return { ok: false, status: 403, message: 'Access denied.' };
+            }
+            if (query.franchise_id) {
+                const parsed = parseObjectId(query.franchise_id, 'franchise_id');
+                if (!parsed.ok) return { ok: false, status: 400, message: parsed.message };
+                if (String(parsed.oid) !== String(scope.franchiseOid)) {
+                    return { ok: false, status: 403, message: 'Access denied.' };
+                }
+            }
+            return { ok: true, franchiseOid: scope.franchiseOid };
+        }
+        if (scope.isSuper) {
+            if (!query.franchise_id) {
+                return { ok: false, status: 400, message: 'franchise_id is required.' };
+            }
+            const parsed = parseObjectId(query.franchise_id, 'franchise_id');
+            if (!parsed.ok) return { ok: false, status: 400, message: parsed.message };
+            return { ok: true, franchiseOid: parsed.oid };
+        }
+        return { ok: false, status: 403, message: 'Access denied.' };
+    }
+    if (!query.franchise_id) {
+        return { ok: false, status: 400, message: 'franchise_id is required.' };
+    }
+    const parsed = parseObjectId(query.franchise_id, 'franchise_id');
+    if (!parsed.ok) return { ok: false, status: 400, message: parsed.message };
+    return { ok: true, franchiseOid: parsed.oid };
+};
+
 module.exports = {
     USER_TYPE_ADMIN,
     USER_TYPE_EMPLOYEE,
@@ -86,4 +128,5 @@ module.exports = {
     isFranchiseStaffType,
     resolveUserFranchiseOid,
     loadFranchiseCallerScope,
+    resolveFranchiseCatalogListScope,
 };

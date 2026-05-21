@@ -66,6 +66,15 @@ const countAssignableGlobalServices = async () => {
     return rows.length;
 };
 
+const loadAssignableGlobalCategoryIdSet = async () => {
+    const ids = await loadAssignableGlobalCategoryIds();
+    return new Set(ids.map(toIdStr).filter(Boolean));
+};
+
+const loadAssignableGlobalServiceIdSet = async () => {
+    const rows = await loadAssignableGlobalServiceRows();
+    return new Set(rows.map((r) => toIdStr(r._id)).filter(Boolean));
+};
 
 const dedupeIdsPreserveOrder = (oids) => {
     const seen = new Set();
@@ -78,6 +87,70 @@ const dedupeIdsPreserveOrder = (oids) => {
         out.push(oid instanceof mongoose.Types.ObjectId ? oid : new mongoose.Types.ObjectId(s));
     }
     return out;
+};
+
+/** Compare two ObjectId arrays in order (after normalizing to strings). */
+const catalogIdArraysEqual = (before, after) => {
+    const a = dedupeIdsPreserveOrder(before || []).map(toIdStr);
+    const b = dedupeIdsPreserveOrder(after || []).map(toIdStr);
+    if (a.length !== b.length) return false;
+    return a.every((s, i) => s === b[i]);
+};
+
+/**
+ * Drop franchise catalog IDs that are no longer globally assignable (deleted / inactive / request, or bad parent for services).
+ */
+const pruneFranchiseCatalogIdArrays = (
+    categoryIds,
+    serviceIds,
+    assignableCategorySet,
+    assignableServiceSet
+) => {
+    const categories = dedupeIdsPreserveOrder(
+        (categoryIds || []).filter((id) => assignableCategorySet.has(toIdStr(id)))
+    );
+    const services = dedupeIdsPreserveOrder(
+        (serviceIds || []).filter((id) => assignableServiceSet.has(toIdStr(id)))
+    );
+    return { categories, services };
+};
+
+const FRANCHISE_CATALOG_SELECT =
+    '_id categories services created_at updated_at name admin_name is_active admin_id';
+
+/**
+ * On read: remove stale category/service IDs from franchise doc and persist when changed.
+ * Keeps getCount active_* aligned with getAll active_categories / active_services lengths.
+ */
+const pruneAndPersistFranchiseCatalogIds = async (franchiseOid) => {
+    const franchise = await Franchise.findOne({ _id: franchiseOid, deleted_at: null });
+    if (!franchise) return null;
+
+    const [assignableCategorySet, assignableServiceSet] = await Promise.all([
+        loadAssignableGlobalCategoryIdSet(),
+        loadAssignableGlobalServiceIdSet(),
+    ]);
+
+    const { categories, services } = pruneFranchiseCatalogIdArrays(
+        franchise.categories,
+        franchise.services,
+        assignableCategorySet,
+        assignableServiceSet
+    );
+
+    const categoriesChanged = !catalogIdArraysEqual(franchise.categories, categories);
+    const servicesChanged = !catalogIdArraysEqual(franchise.services, services);
+
+    if (categoriesChanged || servicesChanged) {
+        franchise.categories = categories;
+        franchise.services = services;
+        franchise.updated_at = new Date();
+        await franchise.save();
+    }
+
+    return Franchise.findOne({ _id: franchiseOid, deleted_at: null })
+        .select(FRANCHISE_CATALOG_SELECT)
+        .lean();
 };
 
 /** Enabled map from franchise.categories[] or franchise.services[] (membership = enabled). */
@@ -174,10 +247,7 @@ const buildVirtualServiceMappingRecord = async (franchiseLean) => {
     });
 };
 
-const loadFranchiseForCatalog = async (franchiseOid) =>
-    Franchise.findOne({ _id: franchiseOid, deleted_at: null })
-        .select('_id categories services created_at updated_at name admin_name is_active admin_id')
-        .lean();
+const loadFranchiseForCatalog = async (franchiseOid) => pruneAndPersistFranchiseCatalogIds(franchiseOid);
 
 const activeCategoryIdsFromListEntries = (entries) =>
     dedupeIdsPreserveOrder(
@@ -192,7 +262,11 @@ const activeServiceIdsFromListEntries = (entries) =>
 const saveFranchiseCategories = async (franchiseOid, categoryIds) => {
     const franchise = await Franchise.findOne({ _id: franchiseOid, deleted_at: null });
     if (!franchise) return null;
-    franchise.categories = dedupeIdsPreserveOrder(categoryIds);
+
+    const assignableCategorySet = await loadAssignableGlobalCategoryIdSet();
+    franchise.categories = dedupeIdsPreserveOrder(
+        (categoryIds || []).filter((id) => assignableCategorySet.has(toIdStr(id)))
+    );
     franchise.updated_at = new Date();
     return franchise.save();
 };
@@ -200,7 +274,11 @@ const saveFranchiseCategories = async (franchiseOid, categoryIds) => {
 const saveFranchiseServices = async (franchiseOid, serviceIds) => {
     const franchise = await Franchise.findOne({ _id: franchiseOid, deleted_at: null });
     if (!franchise) return null;
-    franchise.services = dedupeIdsPreserveOrder(serviceIds);
+
+    const assignableServiceSet = await loadAssignableGlobalServiceIdSet();
+    franchise.services = dedupeIdsPreserveOrder(
+        (serviceIds || []).filter((id) => assignableServiceSet.has(toIdStr(id)))
+    );
     franchise.updated_at = new Date();
     return franchise.save();
 };
@@ -227,6 +305,25 @@ const applyCategoryOrderToFranchiseIds = (activeIds, orderIds) => {
 const applyServiceOrderToFranchiseIds = (activeIds, orderIds) =>
     applyCategoryOrderToFranchiseIds(activeIds, orderIds);
 
+/** Paginate an in-memory catalog array (services/categories), not Franchise documents. */
+const paginateArray = (rows, page, limit) => {
+    const p = Math.max(1, parseInt(page, 10) || 1);
+    const l = Math.max(1, parseInt(limit, 10) || 10);
+    const totalItems = Array.isArray(rows) ? rows.length : 0;
+    if (totalItems === 0) {
+        return { data: [], totalItems: 0, totalPages: 0, currentPage: 1 };
+    }
+    const totalPages = Math.ceil(totalItems / l);
+    const currentPage = Math.min(p, totalPages);
+    const skip = (currentPage - 1) * l;
+    return {
+        data: rows.slice(skip, skip + l),
+        totalItems,
+        totalPages,
+        currentPage,
+    };
+};
+
 module.exports = {
     toIdStr,
     dedupeIdsPreserveOrder,
@@ -246,4 +343,9 @@ module.exports = {
     loadAssignableGlobalCategoryIds,
     loadAssignableGlobalServiceRows,
     countAssignableGlobalServices,
+    loadAssignableGlobalCategoryIdSet,
+    loadAssignableGlobalServiceIdSet,
+    pruneFranchiseCatalogIdArrays,
+    pruneAndPersistFranchiseCatalogIds,
+    paginateArray,
 };

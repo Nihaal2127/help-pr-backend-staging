@@ -17,27 +17,27 @@ const sendServiceResult = (res, result) => {
 };
 
 const getAll = async (req, res) => {
-    const result = await financialOrderService.listFinancialOrders(req.query);
+    const result = await financialOrderService.listFinancialOrders(req);
     return sendServiceResult(res, result);
 };
 
 const create = async (req, res) => {
-    const result = await financialOrderService.createFinancialOrder(req.body);
+    const result = await financialOrderService.createFinancialOrder();
     return sendServiceResult(res, result);
 };
 
 const update = async (req, res) => {
-    const result = await financialOrderService.updateFinancialOrder(req.params.id, req.body);
+    const result = await financialOrderService.updateFinancialOrder();
     return sendServiceResult(res, result);
 };
 
 const getById = async (req, res) => {
-    const result = await financialOrderService.getFinancialOrderById(req.params.id);
+    const result = await financialOrderService.getFinancialOrderById(req, req.params.id);
     return sendServiceResult(res, result);
 };
 
 const deleteFinancialOrder = async (req, res) => {
-    const result = await financialOrderService.softDeleteFinancialOrder(req.params.id);
+    const result = await financialOrderService.softDeleteFinancialOrder();
     return sendServiceResult(res, result);
 };
 

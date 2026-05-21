@@ -67,7 +67,6 @@ const MODULE_ORDER = [
   'content-management',
   'expense-category-management',
   'expense-management',
-  'financial-order',
   'partner_payout',
   'chat',
   'health',
@@ -113,7 +112,6 @@ const MODULE_LABELS = {
   'content-management': 'Content management',
   'expense-category-management': 'Expense category management',
   'expense-management': 'Expense management',
-  'financial-order': 'Financial order',
   partner_payout: 'Partner payout',
   chat: 'Chat',
   health: 'Health',
@@ -123,7 +121,7 @@ const MODULE_LABELS = {
 
 const MODULE_DESCRIPTIONS = {
   partner_payout: [
-    '**/api/partner_payout** — Partner wallet (credits from `financial_order`, debits from withdrawals).',
+    '**/api/partner_payout** — Partner wallet (credits from orders, debits from withdrawals).',
     '',
     '**Frontend doc:** `docs/PARTNER_PAYOUT_FRONTEND.md`',
     '',
@@ -298,7 +296,7 @@ function partnerPayoutBuiltinItems() {
           '',
           '**Query:** `id` = partner Mongo `_id` (not business `partner_id` string).',
           '',
-          '**Ledger rows:** `transaction_type` `credit` = earning from financial order; `debit` = withdrawal.',
+          '**Ledger rows:** `transaction_type` `credit` = order partner earning; `debit` = withdrawal.',
         ].join('\n'),
       },
     },

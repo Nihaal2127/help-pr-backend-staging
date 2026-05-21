@@ -483,7 +483,7 @@ Variables: `baseUrl`, `accessToken`, `orderId`, `orderServiceId`, filter vars (`
 
 Standalone CRUD for `/api/order-additional-charges` and `/api/order-payments` (optional if you use nested payloads on create/update). Variables: `orderId`, `additionalChargeId`, `orderPaymentId`.
 
-Other routes (`serviceUpdate`, `cancle`, `getCustomerOrder`, `order_service`, `financial-order`, `getCount`, Razorpay) are in the same All APIs collection or documented in §6.
+Other routes (`serviceUpdate`, `cancle`, `getCustomerOrder`, `order_service`, `order/financial-payments`, `getCount`, Razorpay) are in the same All APIs collection or documented in §6. Legacy `financial-order` module: `archive/financial-order/`.
 
 Replace placeholder ObjectIds in example bodies with real IDs from your environment.
 

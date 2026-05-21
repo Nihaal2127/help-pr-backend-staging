@@ -3,7 +3,10 @@ const OrderService = require("../models/order_services");
 const OrderPayment = require("../models/order_payment");
 const {
   ORDER_PAYMENT_STATUS_PAID,
+  ORDER_PAYMENT_STATUS_UNPAID,
+  PARTNER_PAYMENT_STATUS_UNPAID,
   computeCustomerPaymentStatus,
+  computePartnerPaymentStatus,
 } = require("../enum/order_payment_status_enum");
 const {
   ORDER_STATUS_CANCELLED,
@@ -11,7 +14,8 @@ const {
 } = require("../enum/order_status_enum");
 
 /**
- * Recompute and persist order.payment_status from customer order_payment rows.
+ * Recompute and persist customer + partner payment rollups on the order.
+ * Call after customer/partner order_payment changes or order total changes.
  */
 const syncOrderPaymentStatus = async (orderId) => {
   const order = await Order.findOne({ _id: orderId, deleted_at: null });
@@ -19,21 +23,31 @@ const syncOrderPaymentStatus = async (orderId) => {
 
   const payments = await OrderPayment.find({
     order_id: order._id,
-    payer_type: "customer",
     deleted_at: null,
   }).lean();
 
-  const breakdown = computeCustomerPaymentStatus(
+  const customerBreakdown = computeCustomerPaymentStatus(
     Number(order.total_price) || 0,
     payments
   );
+  const partnerBreakdown = computePartnerPaymentStatus(
+    customerBreakdown.customer_net_paid,
+    payments
+  );
 
-  order.payment_status = breakdown.payment_status;
-  order.customer_paid_amount = breakdown.customer_paid_amount;
-  order.customer_refunded_amount = breakdown.customer_refunded_amount;
-  order.customer_net_paid = breakdown.customer_net_paid;
-  order.customer_due_amount = breakdown.customer_due_amount;
-  order.is_paid = breakdown.payment_status === ORDER_PAYMENT_STATUS_PAID;
+  order.payment_status = customerBreakdown.payment_status;
+  order.user_payment_status =
+    customerBreakdown.user_payment_status ?? customerBreakdown.payment_status;
+  order.customer_paid_amount = customerBreakdown.customer_paid_amount;
+  order.customer_refunded_amount = customerBreakdown.customer_refunded_amount;
+  order.customer_net_paid = customerBreakdown.customer_net_paid;
+  order.customer_due_amount = customerBreakdown.customer_due_amount;
+  order.is_paid = customerBreakdown.payment_status === ORDER_PAYMENT_STATUS_PAID;
+
+  order.partner_payment_status = partnerBreakdown.partner_payment_status;
+  order.partner_paid_amount = partnerBreakdown.partner_paid_amount;
+  order.partner_due_amount = partnerBreakdown.partner_due_amount;
+
   order.updated_at = new Date();
   await order.save();
 
@@ -48,7 +62,29 @@ const syncOrderPaymentStatus = async (orderId) => {
     );
   }
 
-  return { order, breakdown };
+  return {
+    order,
+    breakdown: customerBreakdown,
+    partnerBreakdown,
+  };
 };
 
-module.exports = { syncOrderPaymentStatus };
+/** Defaults when pricing is first applied (before any payments). */
+const applyInitialPaymentStatusFields = (order, totalPrice = 0) => {
+  const due = Number(totalPrice) || 0;
+  order.payment_status = ORDER_PAYMENT_STATUS_UNPAID;
+  order.user_payment_status = ORDER_PAYMENT_STATUS_UNPAID;
+  order.customer_paid_amount = 0;
+  order.customer_refunded_amount = 0;
+  order.customer_net_paid = 0;
+  order.customer_due_amount = due;
+  order.is_paid = false;
+  order.partner_payment_status = PARTNER_PAYMENT_STATUS_UNPAID;
+  order.partner_paid_amount = 0;
+  order.partner_due_amount = 0;
+};
+
+module.exports = {
+  syncOrderPaymentStatus,
+  applyInitialPaymentStatusFields,
+};

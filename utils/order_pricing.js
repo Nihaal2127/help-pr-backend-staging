@@ -10,6 +10,8 @@
  *   total             = taxable_subtotal + tax_amount
  */
 
+const { applyInitialPaymentStatusFields } = require("../services/order_payment_status_service");
+
 const PRICING_TOLERANCE = 0.01;
 
 const roundMoney = (value) => {
@@ -305,10 +307,14 @@ const applyPricingToOrder = (order, pricing) => {
       ? pricing.admin_earning
       : pricing.commission_amount;
 
-  if (order.payment_status === undefined || order.payment_status === null) {
-    order.payment_status = "unpaid";
-  }
-  if (order.customer_due_amount === undefined || order.customer_due_amount === null) {
+  if (
+    order.payment_status === undefined ||
+    order.payment_status === null ||
+    order.user_payment_status === undefined ||
+    order.user_payment_status === null
+  ) {
+    applyInitialPaymentStatusFields(order, pricing.total_price ?? 0);
+  } else if (order.customer_due_amount === undefined || order.customer_due_amount === null) {
     order.customer_due_amount = pricing.total_price ?? 0;
   }
 };

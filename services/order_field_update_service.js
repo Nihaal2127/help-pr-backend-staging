@@ -12,8 +12,10 @@ const { checkObjectIdExists } = require("../validator/id_validator");
 const {
   normalizeOrderStatus,
   ORDER_STATUS_CANCELLED,
+  ORDER_STATUS_COMPLETED,
   ORDER_STATUS_REFUNDED,
 } = require("../enum/order_status_enum");
+const { assertOrderCanBeMarkedCompletedOrThrow } = require("./order_completion_validation");
 
 const PAYMENT_SCHEDULE_TYPES = new Set(["single", "installments"]);
 
@@ -326,6 +328,12 @@ const applyServiceItemsUpdate = async (order, body) => {
           `service_items.update[${i}]: invalid service_status.`,
           409
         );
+      }
+      if (
+        normalized === ORDER_STATUS_COMPLETED &&
+        line.service_status !== ORDER_STATUS_COMPLETED
+      ) {
+        await assertOrderCanBeMarkedCompletedOrThrow(order);
       }
       line.service_status = normalized;
     }

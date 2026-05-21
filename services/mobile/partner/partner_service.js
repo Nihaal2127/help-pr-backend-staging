@@ -6,23 +6,6 @@ const { getNewId } = require('../../../helper/id_generator');
 const USER_TYPE_PARTNER = 2;
 const REGISTRATION_TYPE_NORMAL = 1;
 
-const buildPartnerLoginFlags = (user) => {
-  const verificationStatus = Number(user.verification_status);
-  const isActive = user.is_active === true;
-  const isVerified = verificationStatus === 2;
-
-  return {
-    can_access_app: true,
-    can_accept_jobs: isActive && isVerified && user.is_blocked !== true,
-    partner_account_status:
-      verificationStatus === 3
-        ? 'rejected'
-        : isActive && isVerified
-          ? 'active'
-          : 'pending',
-  };
-};
-
 const registerPartner = async ({ name, email, phone_number, password, date_of_birth }) => {
   const registration_id = await getNewId(0);
   const user_id = await getNewId(USER_TYPE_PARTNER);
@@ -108,12 +91,9 @@ const loginPartner = async ({ email, password, device_token }) => {
   };
   delete data.password;
 
-  const flags = buildPartnerLoginFlags(user);
-
   return {
     ok: true,
     data,
-    ...flags,
   };
 };
 

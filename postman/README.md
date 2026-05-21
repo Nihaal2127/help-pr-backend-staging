@@ -4,7 +4,8 @@ Use **one** collection for all APIs:
 
 | File | Purpose |
 |------|---------|
-| **`Help-PR-All-APIs.postman_collection.json`** | **Import this only** — all modules, deduplicated |
+| **`Help-PR-All-APIs.postman_collection.json`** | All modules, deduplicated |
+| **`Help-PR-Mobile-APIs.postman_collection.json`** | **Mobile only** — `/api/mobile/partner` register & login |
 
 Legacy per-module collections live in **`archive/`** (not for import).
 
@@ -17,7 +18,7 @@ Legacy per-module collections live in **`archive/`** (not for import).
 
 **Partner payout UI:** see `docs/PARTNER_PAYOUT_FRONTEND.md` and folder **37 — Partner payout**.
 
-**Partner mobile app:** folder **Mobile → Partner** — start with **01 — Register (mobile app) → Register partner (mobile app)** (`POST /api/mobile/partner/register`). **Customer app:** **Mobile → User**.
+**Partner mobile app (full collection):** **Mobile → Partner**. **Mobile-only collection:** import **`Help-PR-Mobile-APIs.postman_collection.json`** — **Partner → Register** then **Login**.
 
 ## Regenerate after API changes
 
@@ -32,7 +33,8 @@ Merge reads `postman/archive/`. **Mobile** (Partner + User subfolders) is rebuil
 
 ```
 postman/
-  Help-PR-All-APIs.postman_collection.json   ← import this
+  Help-PR-All-APIs.postman_collection.json   ← all APIs
+  Help-PR-Mobile-APIs.postman_collection.json   ← mobile routes only
   merge-all-collections.mjs
   build-mobile-folder.mjs
   README.md

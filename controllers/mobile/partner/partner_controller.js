@@ -40,25 +40,13 @@ const login = async (req, res) => {
       });
     }
 
-    const {
-      data,
-      can_access_app,
-      can_accept_jobs,
-      partner_account_status,
-    } = result;
-
-    const token = data.auth_token;
+    const { data } = result;
 
     return res.status(200).json({
       success: true,
       status: 200,
       message: 'Login successfully.',
-      token,
-      auth_token: token,
-      record: data,
-      can_access_app,
-      can_accept_jobs,
-      partner_account_status,
+      data,
     });
   } catch (error) {
     console.error('mobile partner login', error.message);

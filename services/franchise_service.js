@@ -16,16 +16,9 @@ const {
     computeServiceEffectiveActive,
     computeCategoryEffectiveActive,
     isGlobalCatalogRowActive,
-    enrichFranchiseCategoryMappingRecords,
-    enrichFranchiseServiceMappingRecords,
 } = require('../utils/catalog_availability_resolver');
 const { parseBoolean } = require('../utils/parser');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
-const {
-    buildVirtualCategoryMappingRecord,
-    buildVirtualServiceMappingRecord,
-    loadFranchiseForCatalog,
-} = require('../utils/franchise_catalog_from_franchise');
 
 const escapeRegExp = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -813,7 +806,7 @@ const fetchCustomersMatchingFranchiseAreaPincodes = async (franchiseLean) => {
 
 /** Global catalog fields for franchise related-catalog partner hydration. */
 const RELATED_CATALOG_SERVICE_SELECT =
-    'service_id name desc image_url category_id is_active is_request price helpers tax commission payment_type minimum_deposit approval_status rejection_reason requested_by created_at updated_at';
+    'service_id name desc image_url category_id is_active is_request tax commission payment_type minimum_deposit approval_status rejection_reason requested_by created_at updated_at';
 
 const RELATED_CATALOG_CATEGORY_SELECT =
     'category_id name desc image_url is_active is_request approval_status rejection_reason requested_by created_at updated_at';
@@ -834,8 +827,7 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
         const franchiseEffective = await resolveFranchiseEffectiveCatalog(parsed.oid);
         if (!franchiseEffective.ok) return fail(franchiseEffective.status, franchiseEffective.message);
 
-        const [franchiseCatalog, partners, employees, customers] = await Promise.all([
-            loadFranchiseForCatalog(parsed.oid),
+        const [partners, employees, customers] = await Promise.all([
             User.find({
                 franchise_id: parsed.oid,
                 type: USER_TYPE_PARTNER,
@@ -1050,46 +1042,10 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
             };
         });
 
-        const [virtualCategoryMapping, virtualServiceMapping] = await Promise.all([
-            buildVirtualCategoryMappingRecord(franchiseCatalog),
-            buildVirtualServiceMappingRecord(franchiseCatalog),
-        ]);
-
-        const franchiseCategoriesEnriched = await enrichFranchiseCategoryMappingRecords(
-            virtualCategoryMapping ? [virtualCategoryMapping] : []
-        );
-        const franchiseServicesEnriched = await enrichFranchiseServiceMappingRecords(
-            virtualServiceMapping ? [virtualServiceMapping] : []
-        );
-
-        const [categories, services] = await Promise.all([
-            franchiseEffective.effectiveCategoryIds.length === 0
-                ? []
-                : Category.find({
-                      _id: { $in: franchiseEffective.effectiveCategoryIds },
-                      deleted_at: null,
-                  })
-                      .select(RELATED_CATALOG_CATEGORY_SELECT)
-                      .lean(),
-            franchiseEffective.effectiveServiceIds.length === 0
-                ? []
-                : Service.find({
-                      _id: { $in: franchiseEffective.effectiveServiceIds },
-                      deleted_at: null,
-                  })
-                      .select(RELATED_CATALOG_SERVICE_SELECT)
-                      .lean(),
-        ]);
-
         return ok(200, {
             message: 'Franchise catalog fetched successfully.',
             record: {
                 franchise: franchise,
-                franchise_categories: franchiseCategoriesEnriched,
-                franchise_services: franchiseServicesEnriched,
-                /** Effectively available global catalog for this franchise (resolver-driven). */
-                categories,
-                services,
                 partners: partnersWithServices,
                 employees,
                 customers,

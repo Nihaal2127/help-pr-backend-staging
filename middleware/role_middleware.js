@@ -1,5 +1,9 @@
 const User = require('../models/user');
-const { loadFranchiseCallerScope, resolveUserFranchiseOid } = require('../utils/franchise_user_scope');
+const {
+    loadFranchiseCallerScope,
+    resolveUserFranchiseOid,
+    resolveReqUserId,
+} = require('../utils/franchise_user_scope');
 
 const USER_TYPE_ADMIN = 1;
 const USER_TYPE_PARTNER = 2;
@@ -96,7 +100,15 @@ const requireFranchiseDropDownAccess = async (req, res, next) => {
  */
 const requireSuperAdminStaffFranchiseAdminEmployee = async (req, res, next) => {
     try {
-        const scope = await loadFranchiseCallerScope(req.user?.id);
+        const callerId = resolveReqUserId(req.user);
+        if (!callerId) {
+            return res.status(401).json({
+                success: false,
+                status: 401,
+                message: 'Invalid or missing user id in token.',
+            });
+        }
+        const scope = await loadFranchiseCallerScope(callerId);
         if (!scope) {
             return res.status(403).json({
                 success: false,
@@ -115,7 +127,7 @@ const requireSuperAdminStaffFranchiseAdminEmployee = async (req, res, next) => {
         }
         next();
     } catch (err) {
-        console.error('requireSuperAdminStaffFranchiseAdminEmployee', err.message);
+        console.error('requireSuperAdminStaffFranchiseAdminEmployee', err);
         return res.status(500).json({
             success: false,
             status: 500,

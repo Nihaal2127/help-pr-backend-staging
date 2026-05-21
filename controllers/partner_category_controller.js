@@ -45,7 +45,6 @@ const mapPartnerCategoryRows = (data, ctx) =>
                   _id: s._id,
                   name: s.name,
                   desc: s.desc,
-                  price: s.price,
                   tax: s.tax,
                   image_url: s.image_url,
                   category_id: s.category_id,
@@ -112,7 +111,7 @@ const getMyCategories = async (req, res) => {
       {},
       [
         { path: 'category_id', select: 'name desc image_url is_active is_request approval_status' },
-        { path: 'services', select: 'name desc price tax image_url category_id is_active approval_status' },
+        { path: 'services', select: 'name desc tax image_url category_id is_active approval_status' },
       ]
     );
 
@@ -203,7 +202,7 @@ const getAll = async (req, res) => {
       {},
       [
         { path: 'category_id', select: 'name desc image_url is_active is_request approval_status' },
-        { path: 'services', select: 'name desc price image_url category_id is_active approval_status' },
+        { path: 'services', select: 'name desc image_url category_id is_active approval_status' },
       ]
     );
 

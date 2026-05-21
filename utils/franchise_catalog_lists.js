@@ -472,6 +472,7 @@ const stripDerivedPartitionArraysFromServiceMapping = (record) => {
 };
 
 module.exports = {
+    parseObjectId,
     dedupeObjectIdsPreserveOrder,
     parseObjectIdArray,
     parseObjectIdArrayOrdered,

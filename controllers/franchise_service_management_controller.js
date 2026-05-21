@@ -1,4 +1,5 @@
 const franchiseServiceManagementService = require('../services/franchise_service_management_service');
+const { resolveReqUserId } = require('../utils/franchise_user_scope');
 
 const sendServiceResult = (res, result) => {
     if (!result.ok) {
@@ -22,8 +23,21 @@ const create = async (req, res) => {
 };
 
 const getAll = async (req, res) => {
-    const result = await franchiseServiceManagementService.list(req.query, req.user?.id);
-    return sendServiceResult(res, result);
+    try {
+        const result = await franchiseServiceManagementService.list(
+            req.query,
+            resolveReqUserId(req.user)
+        );
+        return sendServiceResult(res, result);
+    } catch (err) {
+        console.error('franchiseService.getAll controller', err);
+        return res.status(500).json({
+            success: false,
+            status: 500,
+            message: 'Internal server error.',
+            error: err?.message || String(err),
+        });
+    }
 };
 
 const getById = async (req, res) => {

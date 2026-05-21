@@ -1,6 +1,16 @@
+const mongoose = require('mongoose');
 const User = require('../models/user');
 const Franchise = require('../models/franchise');
 const { parseObjectId } = require('./franchise_catalog_lists');
+
+/** JWT may use `id` or `_id` depending on login path. */
+const resolveReqUserId = (user) => {
+    if (!user) return null;
+    const raw = user.id ?? user._id ?? user.user_id;
+    if (raw === undefined || raw === null || String(raw).trim() === '') return null;
+    const s = String(raw).trim();
+    return mongoose.isValidObjectId(s) ? s : null;
+};
 
 const USER_TYPE_ADMIN = 1;
 const USER_TYPE_EMPLOYEE = 3;
@@ -55,7 +65,16 @@ const resolveUserFranchiseOid = async (userId, userLean = null) => {
  * @param {string|import('mongoose').Types.ObjectId} userId
  */
 const loadFranchiseCallerScope = async (userId) => {
-    const user = await User.findOne({ _id: userId, deleted_at: null })
+    const idStr = resolveReqUserId(
+        typeof userId === 'object' && userId !== null && !(userId instanceof mongoose.Types.ObjectId)
+            ? userId
+            : { id: userId }
+    );
+    if (!idStr) {
+        return null;
+    }
+
+    const user = await User.findOne({ _id: idStr, deleted_at: null })
         .select('type franchise_id')
         .lean();
     if (!user) {
@@ -65,7 +84,7 @@ const loadFranchiseCallerScope = async (userId) => {
     const type = Number(user.type);
     const isSuper = isSuperAdminOrStaffType(type);
     const isFranchiseStaff = isFranchiseStaffType(type);
-    const franchiseOid = isFranchiseStaff ? await resolveUserFranchiseOid(userId, user) : null;
+    const franchiseOid = isFranchiseStaff ? await resolveUserFranchiseOid(idStr, user) : null;
 
     return {
         user,
@@ -120,6 +139,7 @@ const resolveFranchiseCatalogListScope = async (query, userId) => {
 };
 
 module.exports = {
+    resolveReqUserId,
     USER_TYPE_ADMIN,
     USER_TYPE_EMPLOYEE,
     USER_TYPE_SUPER_ADMIN,

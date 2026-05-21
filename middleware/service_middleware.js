@@ -1,5 +1,5 @@
 const { isArray } = require("../validator/array_validator");
-const { isValidPrice, validateObjectId } = require("../validator/form_validator");
+const { validateObjectId } = require("../validator/form_validator");
 const { handleImageUpload } = require("../helper/image_uploader");
 const { getUploadType } = require("../enum/upload_type_enum");
 const { uploadImages } = require("../utils/fileUpload");
@@ -67,10 +67,17 @@ const isValidNonNegativeNumber = (value) => {
   return parsed >= 0;
 };
 
+const stripLegacyServicePricingFields = (body) => {
+  if (!body || typeof body !== "object") return;
+  delete body.price;
+  delete body.helpers;
+};
+
 const prepareServiceCreateBody = async (req, res, next) => {
   try {
     mapCategoryToCategoryId(req.body);
     mapDescriptionToDesc(req.body);
+    stripLegacyServicePricingFields(req.body);
     if (isMultipart(req)) {
       if (req.file) {
         req.body.image_url = await handleImageUpload(
@@ -105,6 +112,7 @@ const prepareServiceUpdateBody = async (req, res, next) => {
   try {
     mapCategoryToCategoryId(req.body);
     mapDescriptionToDesc(req.body);
+    stripLegacyServicePricingFields(req.body);
     if (isMultipart(req)) {
       if (req.file) {
         req.body.image_url = await handleImageUpload(
@@ -178,7 +186,6 @@ const createServiceMiddleware = (req, res, next) => {
   const {
     name,
     desc,
-    price,
     tax,
     commission,
     payment_type,
@@ -217,14 +224,6 @@ const createServiceMiddleware = (req, res, next) => {
     return next();
   }
 
-  const priceData = isValidPrice(price);
-  if (priceData.valid === false) {
-    return res.status(400).json({
-      success: false,
-      status: 400,
-      message: priceData.message ?? "",
-    });
-  }
   if (tax === undefined || tax === null || String(tax).trim() === "") {
     return res.status(400).json({
       success: false,
@@ -390,7 +389,6 @@ const updateServiceMiddleware = (req, res, next) => {
   const {
     name,
     desc,
-    price,
     tax,
     commission,
     payment_type,
@@ -411,14 +409,6 @@ const updateServiceMiddleware = (req, res, next) => {
       success: false,
       status: 400,
       message: "Service description is required.",
-    });
-  }
-  const validationData = isValidPrice(price);
-  if (price !== undefined && validationData.valid === false) {
-    return res.status(400).json({
-      success: false,
-      status: 400,
-      message: validationData.message,
     });
   }
   if (

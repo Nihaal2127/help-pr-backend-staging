@@ -12,6 +12,17 @@ const ORDER_PAYMENT_STATUSES = [
   ORDER_PAYMENT_STATUS_PARTIALLY_REFUND,
 ];
 
+/** Partner remittance on order (completed partner order_payment vs customer_net_paid). */
+const PARTNER_PAYMENT_STATUS_UNPAID = "unpaid";
+const PARTNER_PAYMENT_STATUS_PARTIALLY_PAID = "partially_paid";
+const PARTNER_PAYMENT_STATUS_PAID = "paid";
+
+const PARTNER_PAYMENT_STATUSES = [
+  PARTNER_PAYMENT_STATUS_UNPAID,
+  PARTNER_PAYMENT_STATUS_PARTIALLY_PAID,
+  PARTNER_PAYMENT_STATUS_PAID,
+];
+
 const PAYMENT_STATUS_TOLERANCE = 0.01;
 
 const roundMoney = (value) => {
@@ -25,6 +36,13 @@ const isValidOrderPaymentStatus = (value) => {
     return false;
   }
   return ORDER_PAYMENT_STATUSES.includes(String(value).trim().toLowerCase());
+};
+
+const isValidPartnerPaymentStatus = (value) => {
+  if (value === undefined || value === null || String(value).trim() === "") {
+    return false;
+  }
+  return PARTNER_PAYMENT_STATUSES.includes(String(value).trim().toLowerCase());
 };
 
 /**
@@ -86,10 +104,49 @@ const computeCustomerPaymentStatus = (orderTotal, payments = []) => {
 
   return {
     payment_status,
+    user_payment_status: payment_status,
     customer_paid_amount: completedSum,
     customer_refunded_amount: refundedSum,
     customer_net_paid: netPaid,
     customer_due_amount: dueAmount,
+  };
+};
+
+/**
+ * Partner remittance status: sum of completed partner order_payment rows vs
+ * customer_net_paid (max partner payout allowed on this order).
+ */
+const computePartnerPaymentStatus = (customerNetPaid, payments = []) => {
+  const allowance = roundMoney(customerNetPaid);
+  const rows = (payments || []).filter(
+    (p) => String(p.payer_type).toLowerCase() === "partner"
+  );
+
+  let completedSum = 0;
+  for (const row of rows) {
+    if (String(row.status || "").toLowerCase() === "completed") {
+      completedSum += roundMoney(row.amount);
+    }
+  }
+  completedSum = roundMoney(completedSum);
+  const dueAmount = roundMoney(Math.max(0, allowance - completedSum));
+
+  let partner_payment_status = PARTNER_PAYMENT_STATUS_UNPAID;
+  if (allowance <= PAYMENT_STATUS_TOLERANCE) {
+    partner_payment_status = PARTNER_PAYMENT_STATUS_UNPAID;
+  } else if (completedSum <= PAYMENT_STATUS_TOLERANCE) {
+    partner_payment_status = PARTNER_PAYMENT_STATUS_UNPAID;
+  } else if (completedSum >= allowance - PAYMENT_STATUS_TOLERANCE) {
+    partner_payment_status = PARTNER_PAYMENT_STATUS_PAID;
+  } else {
+    partner_payment_status = PARTNER_PAYMENT_STATUS_PARTIALLY_PAID;
+  }
+
+  return {
+    partner_payment_status,
+    partner_paid_amount: completedSum,
+    partner_due_amount: dueAmount,
+    partner_remittance_allowance: allowance,
   };
 };
 
@@ -111,8 +168,14 @@ module.exports = {
   ORDER_PAYMENT_STATUS_REFUND,
   ORDER_PAYMENT_STATUS_PARTIALLY_REFUND,
   ORDER_PAYMENT_STATUSES,
+  PARTNER_PAYMENT_STATUS_UNPAID,
+  PARTNER_PAYMENT_STATUS_PARTIALLY_PAID,
+  PARTNER_PAYMENT_STATUS_PAID,
+  PARTNER_PAYMENT_STATUSES,
   PAYMENT_STATUS_TOLERANCE,
   isValidOrderPaymentStatus,
+  isValidPartnerPaymentStatus,
   computeCustomerPaymentStatus,
+  computePartnerPaymentStatus,
   getOrderPaymentStatusLabel,
 };

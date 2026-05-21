@@ -15,7 +15,7 @@ Partner payouts use a **wallet + ledger** model:
 - **Debits** — (1) **Partner `order_payment`** rows (`payer_type: partner`, `status: completed`) on `/api/order-payments`; (2) admin **withdrawals** via **Create payout**; (3) refund `from_partner_wallet`.
 - **Balance** = sum(credits) − sum(debits). Shown as `total_wallet_amount` / `payable_balance`.
 
-This module is separate from the legacy **`order_service.partner_paid_status`** flow (`payComission`, export by status). **Use `/api/partner_payout` for the partner wallet UI.** Legacy **`financial_order`** rows are **not** synced into the wallet.
+This module is separate from the legacy **`order_service.partner_paid_status`** flow (`payComission`, export by status). **Use `/api/partner_payout` for the partner wallet UI.** The archived **`financial_order`** collection is **not** used for wallet credits.
 
 **Auth:** All endpoints require `Authorization: Bearer <JWT>` (same as other admin APIs).
 
@@ -302,9 +302,9 @@ Example:
 
 ## 7. Data source (credits)
 
-Credits are **upserted** from `financial_order` rows where `pending_to_partner > 0` whenever list/dropdown/show/create runs. Each financial order contributes at most one **credit** ledger line.
+Credits are **upserted from orders** (`order_service.partner_earning` + `order.additional_charges_subtotal`) via `partner_wallet_order_service` when orders are created or repriced.
 
-**Note:** Create payout does **not** update `financial_order.pending_to_partner`. Balance is always **ledger-based** (credits − debits). Financial-order admin screens may still show pending amounts until those rows are updated separately.
+**Note:** Create payout does **not** change order payment rollups. Balance is always **ledger-based** (credits − debits). Financial overview UI uses **`GET /api/order/financial-payments/getAll`** (see `docs/FINANCIAL_ORDER_PAYMENTS_API.md`).
 
 ---
 
@@ -313,7 +313,7 @@ Credits are **upserted** from `financial_order` rows where `pending_to_partner >
 | API | Use |
 |-----|-----|
 | `POST /api/getCount` with `"type": "partner-payment"` (5) | Legacy dashboard: sums `order_service.partner_earning` by `partner_paid_status` |
-| `POST /api/getCount` with `"type": "order-payment"` (4) | Sums `financial_order.pending_to_partner` (financial dashboard) |
+| `POST /api/getCount` with `"type": "order-payment"` (4) | Sums `order.partner_due_amount` (financial dashboard; see `docs/FINANCIAL_ORDER_PAYMENTS_API.md`) |
 | `POST /api/export/partner_payments` | Excel export by legacy `partner_paid_status` (1 Pending, 2 Completed, 3 Return) |
 | `POST /api/order-service/payComission` | Bulk-update legacy `partner_paid_status` only |
 

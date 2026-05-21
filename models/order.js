@@ -56,8 +56,16 @@ var orderSchema = new schema(
     is_paid: { type: Boolean, default: false },
     /**
      * Derived from customer order_payment rows: unpaid | paid | partially_paid | refund | partially_refund
+     * @deprecated Prefer user_payment_status; kept in sync for older clients.
      */
     payment_status: {
+      type: String,
+      default: "unpaid",
+      enum: ["unpaid", "paid", "partially_paid", "refund", "partially_refund"],
+      trim: true,
+    },
+    /** Customer (user) payment rollup — same values as payment_status; updated by syncOrderPaymentStatus. */
+    user_payment_status: {
       type: String,
       default: "unpaid",
       enum: ["unpaid", "paid", "partially_paid", "refund", "partially_refund"],
@@ -67,6 +75,18 @@ var orderSchema = new schema(
     customer_refunded_amount: { type: Number, default: 0 },
     customer_net_paid: { type: Number, default: 0 },
     customer_due_amount: { type: Number, default: 0 },
+    /**
+     * Partner remittance rollup from order_payment (payer_type partner):
+     * unpaid | partially_paid | paid vs customer_net_paid allowance.
+     */
+    partner_payment_status: {
+      type: String,
+      default: "unpaid",
+      enum: ["unpaid", "partially_paid", "paid"],
+      trim: true,
+    },
+    partner_paid_amount: { type: Number, default: 0 },
+    partner_due_amount: { type: Number, default: 0 },
     /** Legacy / integration id (e.g. Razorpay flow uses "2") */
     payment_mode_id: { type: String, default: "", trim: true },
     transaction_id: { type: String, default: "", trim: true },
@@ -155,6 +175,8 @@ orderSchema.index({ category_id: 1 });
 orderSchema.index({ order_status: 1 });
 orderSchema.index({ is_paid: 1 });
 orderSchema.index({ payment_status: 1 });
+orderSchema.index({ user_payment_status: 1 });
+orderSchema.index({ partner_payment_status: 1 });
 orderSchema.index({ address_id: 1 });
 orderSchema.index({ service_id: 1 });
 orderSchema.index({ quote_id: 1 });

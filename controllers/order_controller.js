@@ -19,6 +19,7 @@ const { getOrderId } = require('../helper/id_generator');
 const { checkObjectIdExists } = require('../validator/id_validator');
 const {
   ORDER_STATUS_CANCELLED,
+  ORDER_STATUS_COMPLETED,
   ORDER_STATUS_IN_PROGRESS,
   ORDER_STATUS_REFUNDED,
   ORDER_STATUSES,
@@ -27,6 +28,7 @@ const {
   getOrderStatusLabel,
   touchOrderStatusInfo,
 } = require('../enum/order_status_enum');
+const { assertOrderCanBeMarkedCompleted } = require('../services/order_completion_validation');
 const { sendPushNotification } = require('../service/firebase/push_service');
 const { generatePaymentLink } = require('./razorpay_controller');
 const { escapeRegExp } = require('../utils/string_helpers');
@@ -85,7 +87,10 @@ const OrderPayment = require('../models/order_payment');
 const OrderOffer = require('../models/order_offer');
 const Quote = require('../models/quote');
 const { computeOrderTotal, recalculateOrderTotals } = require('../utils/order_financials');
-const { isValidOrderPaymentStatus } = require('../enum/order_payment_status_enum');
+const {
+  isValidOrderPaymentStatus,
+  isValidPartnerPaymentStatus,
+} = require('../enum/order_payment_status_enum');
 const {
   OrderCreationError,
   createOrderFromBody,
@@ -304,19 +309,46 @@ const getAll = async (req, res) => {
         ? parseBoolean(req.query.is_paid)
         : null;
 
+    const user_payment_status_raw =
+      req.query.user_payment_status !== undefined &&
+      req.query.user_payment_status !== null &&
+      String(req.query.user_payment_status).trim() !== ''
+        ? String(req.query.user_payment_status).trim().toLowerCase()
+        : null;
+
     const payment_status_raw =
-      req.query.payment_status !== undefined &&
+      user_payment_status_raw ||
+      (req.query.payment_status !== undefined &&
       req.query.payment_status !== null &&
       String(req.query.payment_status).trim() !== ''
         ? String(req.query.payment_status).trim().toLowerCase()
-        : null;
+        : null);
 
     if (payment_status_raw && !isValidOrderPaymentStatus(payment_status_raw)) {
       return res.status(409).json({
         success: false,
         status: 409,
         message:
-          'Invalid payment_status. Use: unpaid, paid, partially_paid, refund, partially_refund.',
+          'Invalid user_payment_status / payment_status. Use: unpaid, paid, partially_paid, refund, partially_refund.',
+      });
+    }
+
+    const partner_payment_status_raw =
+      req.query.partner_payment_status !== undefined &&
+      req.query.partner_payment_status !== null &&
+      String(req.query.partner_payment_status).trim() !== ''
+        ? String(req.query.partner_payment_status).trim().toLowerCase()
+        : null;
+
+    if (
+      partner_payment_status_raw &&
+      !isValidPartnerPaymentStatus(partner_payment_status_raw)
+    ) {
+      return res.status(409).json({
+        success: false,
+        status: 409,
+        message:
+          'Invalid partner_payment_status. Use: unpaid, partially_paid, paid.',
       });
     }
 
@@ -337,7 +369,13 @@ const getAll = async (req, res) => {
       ...dateRangeResult.filter,
       ...statusFilterResult.filter,
       ...(is_paid !== null && { is_paid }),
-      ...(payment_status_raw && { payment_status: payment_status_raw }),
+      ...(payment_status_raw && {
+        payment_status: payment_status_raw,
+        user_payment_status: payment_status_raw,
+      }),
+      ...(partner_payment_status_raw && {
+        partner_payment_status: partner_payment_status_raw,
+      }),
       ...buildObjectIdQueryFilters(req.query, [
         'user_id',
         'partner_id',
@@ -728,6 +766,8 @@ const update = async (req, res) => {
     const { order_status } = req.body;
 
     const updateData = {};
+    let pendingCompletion = false;
+    let requestedOrderStatus = null;
 
     if (order_status !== undefined) {
       const nextStatus = normalizeOrderStatus(order_status);
@@ -738,10 +778,15 @@ const update = async (req, res) => {
           message: `Invalid order_status. Use one of: ${ORDER_STATUSES.join(', ')}.`,
         });
       }
+      requestedOrderStatus = nextStatus;
       if (nextStatus !== orderToUpdate.order_status) {
-        touchOrderStatusInfo(orderToUpdate, nextStatus);
-        orderToUpdate.order_status = nextStatus;
-        updateData.service_status = nextStatus;
+        if (nextStatus === ORDER_STATUS_COMPLETED) {
+          pendingCompletion = true;
+        } else {
+          touchOrderStatusInfo(orderToUpdate, nextStatus);
+          orderToUpdate.order_status = nextStatus;
+          updateData.service_status = nextStatus;
+        }
       }
     }
 
@@ -776,6 +821,33 @@ const update = async (req, res) => {
 
     if (nested) {
       updatedOrder = await Order.findById(updatedOrder._id);
+    }
+
+    if (
+      pendingCompletion &&
+      requestedOrderStatus === ORDER_STATUS_COMPLETED &&
+      updatedOrder.order_status !== ORDER_STATUS_COMPLETED
+    ) {
+      const completionCheck = await assertOrderCanBeMarkedCompleted(updatedOrder);
+      if (!completionCheck.ok) {
+        return res.status(completionCheck.status).json({
+          success: false,
+          status: completionCheck.status,
+          message: completionCheck.message,
+        });
+      }
+
+      touchOrderStatusInfo(updatedOrder, ORDER_STATUS_COMPLETED);
+      updatedOrder.order_status = ORDER_STATUS_COMPLETED;
+      await OrderService.updateMany(
+        {
+          _id: { $in: updatedOrder.service_items },
+          service_status: { $nin: [ORDER_STATUS_CANCELLED, ORDER_STATUS_REFUNDED] },
+        },
+        { $set: { service_status: ORDER_STATUS_COMPLETED, updated_at: new Date() } }
+      );
+      updatedOrder.updated_at = new Date();
+      updatedOrder = await updatedOrder.save();
     }
 
     const notificationSetting = await NotificationSettings.findOne({
@@ -863,6 +935,9 @@ const serviceUpdate = async (req, res) => {
     updateData.service_status = normalized;
   }
 
+  const wantsLineCompleted =
+    updateData.service_status === ORDER_STATUS_COMPLETED;
+
   try {
     const service = await OrderService.findById(id);
 
@@ -892,6 +967,20 @@ const serviceUpdate = async (req, res) => {
         status: serviceAccess.status,
         message: serviceAccess.message,
       });
+    }
+
+    if (
+      wantsLineCompleted &&
+      service.service_status !== ORDER_STATUS_COMPLETED
+    ) {
+      const completionCheck = await assertOrderCanBeMarkedCompleted(parentOrder);
+      if (!completionCheck.ok) {
+        return res.status(completionCheck.status).json({
+          success: false,
+          status: completionCheck.status,
+          message: completionCheck.message,
+        });
+      }
     }
 
     const originalPartnerId = service.partner_id?.toString();

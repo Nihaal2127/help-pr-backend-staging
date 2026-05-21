@@ -49,7 +49,7 @@ Order (1) ──has──▶ service_items[] ──▶ OrderService (1 per order
 
 **`order_status_info`** — timeline array with one entry per status (`status` string + `updated_at`). On create, only `in-progress` has a timestamp.
 
-**Update order** (`PUT /api/order/update/:id`): pass `order_status` as a string; any valid transition is allowed (e.g. `in-progress` → `completed`, `completed` → `refunded`).
+**Update order** (`PUT /api/order/update/:id`): pass `order_status` as a string. **`completed`** is allowed only when the customer has paid the full **`total_price`** (`payment_status` = `paid`, i.e. completed customer `order_payment` rows sum to total due, ±₹0.01). Otherwise the API returns **409**. Other transitions (e.g. `in-progress` → `cancelled`, `completed` → `refunded`) are unchanged.
 
 **Reprice on update** (optional, same endpoint): send **`total_service_charge`** and/or **`offer_id`**. Server keeps **`tax_percent`**, **`commission_percent`**, **`minimum_deposit_percent`** from the saved order; recalculates **`commission_amount`**, **`tax_amount`**, **`total_price`**, etc. Offer rows are **replaced** from the live **`offers`** table (not merged with old `order_offer`). Send **`offer_id`: `null`** to remove an offer.
 
@@ -106,9 +106,12 @@ Order (1) ──has──▶ service_items[] ──▶ OrderService (1 per order
 | `total_price` | **Server-calculated** (see §5); client values compared, server wins on mismatch |
 | `min_deposit` | Legacy alias of `minimum_deposit_amount` |
 | `user_paltform_fee`, `partner_commison_platform_fee` | Legacy; new orders set platform fee **0**, partner fee = `commission_amount` |
-| `payment_status` | **Derived:** `unpaid` \| `paid` \| `partially_paid` \| `refund` \| `partially_refund` (from customer `order_payment` rows) |
-| `customer_paid_amount`, `customer_refunded_amount`, `customer_net_paid`, `customer_due_amount` | Breakdown maintained on sync |
-| `is_paid` | **Derived** — `true` only when `payment_status === paid` (legacy filters) |
+| **`user_payment_status`** | **Use on frontend** — customer payment rollup: `unpaid` \| `paid` \| `partially_paid` \| `refund` \| `partially_refund` (from customer `order_payment` rows) |
+| `payment_status` | Same as `user_payment_status` (kept for older clients) |
+| **`partner_payment_status`** | **Use on frontend** — partner remittance rollup: `unpaid` \| `partially_paid` \| `paid` (completed partner `order_payment` vs `customer_net_paid` allowance) |
+| `customer_paid_amount`, `customer_refunded_amount`, `customer_net_paid`, `customer_due_amount` | Customer breakdown; updated on sync |
+| `partner_paid_amount`, `partner_due_amount` | Completed partner payments sum; remaining remittance allowance |
+| `is_paid` | **Derived** — `true` only when `user_payment_status === paid` (legacy filters) |
 | `payment_mode_id`, `transaction_id` | Legacy + Razorpay link id |
 | `payment_schedule_type` | `"single"` \| `"installments"` |
 | `customer_payment_method` | Label, e.g. cash / upi / card / online / bank_transfer / other |
@@ -218,17 +221,35 @@ List responses use **case-insensitive collation** for sort. Each record includes
 
 **`status`:** `pending` \| `completed` \| `failed` \| `refunded`. After any change, server runs **`syncOrderPaymentStatus`** on the order.
 
-### Customer payment status (on `order`)
+### Customer payment status (on `order`) — `user_payment_status`
 
-| `payment_status` | When |
-|------------------|------|
+| `user_payment_status` | When |
+|-----------------------|------|
 | `unpaid` | No customer `order_payment` rows |
 | `paid` | Sum of **completed** customer payments ≥ `order.total_price` (±₹0.01) |
 | `partially_paid` | Some **completed** payment, net collected &lt; total due |
 | `refund` | **Refunded** amount covers all completed payments or full order value |
 | `partially_refund` | Some refund recorded, not a full refund |
 
+`payment_status` is kept equal to `user_payment_status` for older clients.
+
 Only **`payer_type: customer`** rows count. **`order.total_price`** includes additional charges. Pending/failed payments do not count as paid.
+
+**Synced when:** customer `order_payment` create/update/delete, nested payments on order update, refunds, Razorpay webhook, and **`recalculateOrderTotals`** (additional charges change `total_price`).
+
+### Partner payment status (on `order`) — `partner_payment_status`
+
+| `partner_payment_status` | When |
+|--------------------------|------|
+| `unpaid` | No **completed** partner payments, or `customer_net_paid` is 0 |
+| `partially_paid` | Some **completed** partner payments, sum &lt; `customer_net_paid` |
+| `paid` | Sum of **completed** partner payments ≥ `customer_net_paid` (±₹0.01) |
+
+Also on the order: **`partner_paid_amount`** (completed partner sum), **`partner_due_amount`** (remaining remittance: `customer_net_paid − partner_paid_amount`).
+
+Only **`payer_type: partner`** rows with **`status: completed`** count. Ceiling is **`customer_net_paid`** (not `total_price`).
+
+**Synced when:** same triggers as customer status (any `order_payment` or total change runs **`syncOrderPaymentStatus`**).
 
 Same **403** participant rule as additional charges.
 
@@ -364,7 +385,7 @@ Standalone **`/api/order-additional-charges`** and **`/api/order-payments`** rou
 
 | Body field | Effect |
 |------------|--------|
-| `order_status` | Syncs to non-cancelled/refunded line items |
+| `order_status` | Syncs to non-cancelled/refunded line items. **`completed`** requires customer paid in full (`payment_status` = `paid`) → **409** if not |
 | `total_service_charge` (or `service_price`) | Reprice using **saved** % on the order |
 | `offer_id` | Apply/change offer; **`order_offer`** replaced |
 | `offer_id: null` | Remove offer |
@@ -462,7 +483,7 @@ Variables: `baseUrl`, `accessToken`, `orderId`, `orderServiceId`, filter vars (`
 
 Standalone CRUD for `/api/order-additional-charges` and `/api/order-payments` (optional if you use nested payloads on create/update). Variables: `orderId`, `additionalChargeId`, `orderPaymentId`.
 
-Other routes (`serviceUpdate`, `cancle`, `getCustomerOrder`, `order_service`, `financial-order`, `getCount`, Razorpay) are in the same All APIs collection or documented in §6.
+Other routes (`serviceUpdate`, `cancle`, `getCustomerOrder`, `order_service`, `order/financial-payments`, `getCount`, Razorpay) are in the same All APIs collection or documented in §6. Legacy `financial-order` module: `archive/financial-order/`.
 
 Replace placeholder ObjectIds in example bodies with real IDs from your environment.
 

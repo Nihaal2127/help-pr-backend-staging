@@ -18,14 +18,14 @@ const validateFinancialOrderIdParam = (req, res, next) => {
         return res.status(400).json({
             success: false,
             status: 400,
-            message: 'Financial order id is required.',
+            message: 'Order id is required.',
         });
     }
     if (!isValidObjectIdString(id)) {
         return res.status(400).json({
             success: false,
             status: 400,
-            message: 'Invalid financial order id.',
+            message: 'Invalid order id.',
         });
     }
     next();

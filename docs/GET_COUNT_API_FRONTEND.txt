@@ -84,8 +84,8 @@ FRANCHISE PARAMETER — WHAT CHANGES PER "type"
      User counts filtered by user.franchise_id = that franchise.
 
   4  financials / order-payment / financial-order-payments
-     Aggregates financial_order rows. Optional franchise / franchise_id filters
-     by financial_order.franchise_id. See “FINANCIAL ORDER PAYMENTS (TYPE 4)”.
+     Aggregates order rows (same scope as GET /api/order/getAll). See
+     “FINANCIAL ORDER PAYMENTS (TYPE 4)” and docs/FINANCIAL_ORDER_PAYMENTS_API.md.
 
   5  partner-payment
      Completed order services; franchise scope via quotes/staff orders (legacy).
@@ -129,13 +129,13 @@ FRANCHISE PARAMETER — WHAT CHANGES PER "type"
 FINANCIAL ORDER PAYMENTS (TYPE 4) — "record" KEYS (four dashboard cards)
 --------------------------------------------------------------------------------
 
-  Matches Financial — Order Payments UI. Data source: financial_order collection
-  (same as GET /api/financial-order/getAll).
+  Matches Financial — Order Payments UI. Data source: order collection
+  (same as GET /api/order/financial-payments/getAll).
 
   total_completed_orders       Count where order_status = "completed"
   total_in_progress_orders     Count where order_status = "in_progress"
-  total_partner_pending_amount Sum of pending_to_partner (₹, rounded to 2 decimals)
-  total_user_pending_amount    Sum of customer_pending_amount (₹, rounded to 2 decimals)
+  total_partner_pending_amount Sum of order.partner_due_amount (₹, rounded to 2 decimals)
+  total_user_pending_amount    Sum of order.customer_due_amount (₹, rounded to 2 decimals)
 
   Example:
     POST /api/getCount

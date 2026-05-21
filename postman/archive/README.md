@@ -4,6 +4,10 @@ These files are **not** for day-to-day use. They are kept as merge inputs and hi
 
 **Use instead:** `../Help-PR-All-APIs.postman_collection.json` (import that in Postman).
 
+| File | Notes |
+|------|--------|
+| `Help-PR-Financial-Order-Legacy.postman_collection.json` | Points to `/api/order/financial-payments/*` (old `/api/financial-order` removed) |
+
 To rebuild the unified collection after editing a source file here:
 
 ```bash

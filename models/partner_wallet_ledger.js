@@ -32,9 +32,9 @@ const partnerWalletLedgerSchema = new mongoose.Schema(
             default: null,
         },
         order_unique_id: { type: String, default: null, trim: true },
+        /** Legacy link to archived financial_order collection; always null for new credits. */
         financial_order_id: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'financial_order',
             default: null,
         },
         payout_id: {

@@ -7293,6 +7293,50 @@
           "description": "\n\n_Source: Help-PR-Orders-Module.postman_collection.json_"
         },
         {
+          "name": "2a. Financial payments list",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/order/financial-payments/getAll?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order", "financial-payments", "getAll"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            },
+            "description": "**GET /api/order/financial-payments/getAll** — Financial — Order Payments grid (one row per order).\n\n**Doc:** `docs/FINANCIAL_ORDER_PAYMENTS_API.md`\n\n**Fields:** order_unique_id, user_name, partner_name, service_name, service_date, total_amount, commission/tax %, customer/partner paid & pending, payment statuses, order_status.\n\n**Filters:** franchise_id, order_status, customer_payment_status, partner_payment_status, search, from_date, to_date, sort_by, sort_order."
+          },
+          "response": []
+        },
+        {
+          "name": "2b. Financial payment detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/order/financial-payments/get/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "order", "financial-payments", "get", "{{orderId}}"]
+            },
+            "description": "**GET /api/order/financial-payments/get/:id** — Same shape as one list row; `:id` = order `_id`."
+          },
+          "response": []
+        },
+        {
           "name": "3. Create order",
           "request": {
             "method": "POST",
@@ -11358,7 +11402,7 @@
     },
     {
       "name": "37 — Partner payout",
-      "description": "**/api/partner_payout** — Partner wallet (credits from `financial_order`, debits from withdrawals).\n\n**Frontend doc:** `docs/PARTNER_PAYOUT_FRONTEND.md`\n\n**Access:** Super admin (5) & staff (6) — all franchises; optional `franchise_id`. Franchise admin (1) & employee (3) — own franchise only; wrong `franchise_id` → **403**. Partner (2) & customer (4) → **403**.\n\n**Flow:** 1 getAll → 2 partners (pay modal) → 3 show (ledger) → 4 create.\n\n**Variable:** Set `partnerMongoId` to a row `_id` from getAll (Mongo ObjectId, not business `partner_id`).",
+      "description": "**/api/partner_payout** — Partner wallet (credits from orders, debits from withdrawals).\n\n**Frontend doc:** `docs/PARTNER_PAYOUT_FRONTEND.md`\n\n**Access:** Super admin (5) & staff (6) — all franchises; optional `franchise_id`. Franchise admin (1) & employee (3) — own franchise only; wrong `franchise_id` → **403**. Partner (2) & customer (4) → **403**.\n\n**Flow:** 1 getAll → 2 partners (pay modal) → 3 show (ledger) → 4 create.\n\n**Variable:** Set `partnerMongoId` to a row `_id` from getAll (Mongo ObjectId, not business `partner_id`).",
       "item": [
         {
           "name": "1. Get all — wallet list",
@@ -11531,7 +11575,7 @@
                 }
               ]
             },
-            "description": "**GET /api/partner_payout/show** — Credits & debits for one partner.\n\nSee **docs/PARTNER_PAYOUT_FRONTEND.md** §4.3.\n\n**Query:** `id` = partner Mongo `_id` (not business `partner_id` string).\n\n**Ledger rows:** `transaction_type` `credit` = earning from financial order; `debit` = withdrawal."
+            "description": "**GET /api/partner_payout/show** — Credits & debits for one partner.\n\nSee **docs/PARTNER_PAYOUT_FRONTEND.md** §4.3.\n\n**Query:** `id` = partner Mongo `_id` (not business `partner_id` string).\n\n**Ledger rows:** `transaction_type` `credit` = order partner earning; `debit` = withdrawal."
           },
           "description": "\n\n_Source: builtin:partner_payout → Partner payout_"
         },
@@ -16207,7 +16251,7 @@
                         }
                       ]
                     },
-                    "description": "**GET /api/partner_payout/show** — Credits & debits for one partner.\n\nSee **docs/PARTNER_PAYOUT_FRONTEND.md** §4.3.\n\n**Query:** `id` = partner Mongo `_id` (not business `partner_id` string).\n\n**Ledger rows:** `transaction_type` `credit` = earning from financial order; `debit` = withdrawal."
+                    "description": "**GET /api/partner_payout/show** — Credits & debits for one partner.\n\nSee **docs/PARTNER_PAYOUT_FRONTEND.md** §4.3.\n\n**Query:** `id` = partner Mongo `_id` (not business `partner_id` string).\n\n**Ledger rows:** `transaction_type` `credit` = order partner earning; `debit` = withdrawal."
                   },
                   "description": "\n\n_Source: builtin:partner_payout → Partner payout_"
                 },

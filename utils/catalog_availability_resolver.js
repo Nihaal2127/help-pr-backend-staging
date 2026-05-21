@@ -67,7 +67,12 @@ const resolveFranchiseMappingPreferenceMaps = async (franchiseId) => {
     const fid =
         franchiseId instanceof mongoose.Types.ObjectId
             ? franchiseId
-            : new mongoose.Types.ObjectId(String(franchiseId));
+            : mongoose.isValidObjectId(String(franchiseId))
+              ? new mongoose.Types.ObjectId(String(franchiseId))
+              : null;
+    if (!fid) {
+        return { ok: false, status: 400, message: 'franchise_id must be a valid MongoDB ObjectId.' };
+    }
 
     const franchise = await pruneAndPersistFranchiseCatalogIds(fid);
     if (!franchise) {

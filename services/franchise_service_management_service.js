@@ -3,7 +3,6 @@ const Franchise = require('../models/franchise');
 const FranchiseService = require('../models/franchise_service');
 const Service = require('../models/service');
 const User = require('../models/user');
-const { applyPagination } = require('../utils/pagination');
 const {
     normalizeStoredServicesList,
     parseObjectIdArray,
@@ -20,7 +19,10 @@ const {
     loadGlobalCategoryActiveMap,
     enrichFranchiseServiceMappingRecords,
 } = require('../utils/catalog_availability_resolver');
-const { loadFranchiseCallerScope } = require('../utils/franchise_user_scope');
+const {
+    loadFranchiseCallerScope,
+    resolveFranchiseCatalogListScope,
+} = require('../utils/franchise_user_scope');
 const {
     buildVirtualServiceMappingRecord,
     loadFranchiseForCatalog,
@@ -28,7 +30,9 @@ const {
     saveFranchiseServices,
     applyServiceOrderToFranchiseIds,
     GLOBAL_ACTIVE_CATEGORY_FILTER,
-    loadAssignableGlobalServiceRows,
+    loadGloballyActiveServicesPopulated,
+    coerceCatalogObjectId,
+    paginateArray,
 } = require('../utils/franchise_catalog_from_franchise');
 
 const fail = (status, message, extra = {}) => ({ ok: false, status, message, ...extra });
@@ -196,25 +200,15 @@ const buildServiceMappingRecordFromFranchise = async (franchiseOid) => {
 };
 
 /**
- * Every globally assignable service, annotated with franchise local preference and effective availability.
+ * Every globally active service (same set as super-admin active services), annotated with franchise preference and effective availability.
  */
 const buildAllServicesWithFranchiseMappingStatus = async (franchiseOid) => {
     const local = await resolveFranchiseMappingPreferenceMaps(franchiseOid);
     const franchiseServiceEnabled = local.ok ? local.serviceEnabled : new Map();
     const franchiseCategoryEnabled = local.ok ? local.categoryEnabled : new Map();
 
-    const assignableRows = await loadAssignableGlobalServiceRows();
-    const assignableIds = assignableRows.map((r) => r._id);
-    if (assignableIds.length === 0) return [];
-
-    const allSvcs = await Service.find({ _id: { $in: assignableIds } })
-        .populate({
-            path: 'category_id',
-            select: categoryPopulateSelect,
-            match: GLOBAL_ACTIVE_CATEGORY_FILTER,
-        })
-        .lean()
-        .then((rows) => rows.filter((svc) => svc.category_id));
+    const allSvcs = await loadGloballyActiveServicesPopulated(categoryPopulateSelect);
+    if (allSvcs.length === 0) return [];
 
     const catIds = [
         ...new Set(
@@ -222,11 +216,15 @@ const buildAllServicesWithFranchiseMappingStatus = async (franchiseOid) => {
                 .map((s) => {
                     const c = s.category_id;
                     if (!c) return null;
-                    return c._id ? c._id.toString() : c.toString();
+                    const raw = c._id ? c._id : c;
+                    const oid = coerceCatalogObjectId(raw);
+                    return oid ? oid.toString() : null;
                 })
                 .filter(Boolean)
         ),
-    ].map((s) => new mongoose.Types.ObjectId(s));
+    ]
+        .map((s) => coerceCatalogObjectId(s))
+        .filter(Boolean);
     const globalCatActive = await loadGlobalCategoryActiveMap(catIds);
 
     return allSvcs.map((svc) => {
@@ -421,108 +419,65 @@ const filterFranchiseServiceMappingRecordsBySearch = (records, searchRaw) => {
     });
 };
 
+const franchiseMetaFromDoc = (franchise) =>
+    franchise
+        ? {
+              _id: franchise._id,
+              name: franchise.name,
+              admin_name: franchise.admin_name ?? null,
+              is_active: franchise.is_active,
+          }
+        : null;
+
 const list = async (query, userId) => {
     try {
         const page = parseInt(query.page, 10) || 1;
         const limit = parseInt(query.limit, 10) || 10;
-        const filter = { deleted_at: null };
 
-        if (userId) {
-            const auth = await loadUserFranchiseAuth(userId);
-            if (!auth) return fail(403, 'Access denied.');
-            if (auth.isFranchiseAdmin || auth.isEmployee) {
-                if (!auth.franchise_id) return fail(403, 'Access denied.');
-                if (query.franchise_id) {
-                    const parsed = parseObjectId(query.franchise_id, 'franchise_id');
-                    if (!parsed.ok) return fail(400, parsed.message);
-                    if (String(parsed.oid) !== String(auth.franchise_id)) {
-                        return fail(403, 'Access denied.');
-                    }
-                }
-                filter._id = auth.franchise_id;
-            } else if (auth.isSuper) {
-                if (query.franchise_id) {
-                    const parsed = parseObjectId(query.franchise_id, 'franchise_id');
-                    if (!parsed.ok) return fail(400, parsed.message);
-                    filter._id = parsed.oid;
-                }
-            } else {
-                return fail(403, 'Access denied.');
-            }
-        } else if (query.franchise_id) {
-            const parsed = parseObjectId(query.franchise_id, 'franchise_id');
-            if (!parsed.ok) return fail(400, parsed.message);
-            filter._id = parsed.oid;
-        }
+        const scope = await resolveFranchiseCatalogListScope(query, userId);
+        if (!scope.ok) return fail(scope.status, scope.message);
 
         const listFlags = resolveFranchiseMappingListQuery(query);
         if (!listFlags.ok) return fail(400, listFlags.message);
         const isRequestFilter = resolveEffectiveIsRequestFilter(query, listFlags);
 
-        const { data, totalCount, totalPages, currentPage } = await applyPagination(
-            Franchise,
-            filter,
-            page,
-            limit,
-            { created_at: -1 },
-            { _id: 1, services: 1, created_at: 1, updated_at: 1 },
-            []
-        );
+        const franchise = await loadFranchiseForCatalog(scope.franchiseOid);
+        if (!franchise) return fail(404, 'Franchise not found.');
 
-        const virtualRows = await Promise.all(
-            data.map((fr) => buildServiceMappingRecordFromFranchise(fr._id))
-        );
+        const sortOpts = parseFranchiseServiceCatalogSort(query);
+        if (!sortOpts.ok) return fail(400, sortOpts.message);
 
-        let records = filterRecordsByFranchiseMappingToggle(
-            applyServiceCatalogFiltersToRecords(
-                virtualRows.filter(Boolean),
-                undefined,
-                isRequestFilter
-            ).map((row) => coerceLegacyServiceMappingArrays(row)),
-            listFlags.mappingActiveFilter,
-            'services_list',
-            'active_services',
-            'inactive_services',
-            'service_id'
-        );
+        let services = await buildAllServicesWithFranchiseMappingStatus(scope.franchiseOid);
 
-        const searchTerm = query.search ?? query.q;
-        if (normalizeFranchiseServiceSearchInput(searchTerm)) {
-            records = filterFranchiseServiceMappingRecordsBySearch(records, searchTerm);
-        }
-
-        records = await enrichFranchiseServiceMappingRecords(records);
-
-        let all_services;
-        const franchiseScopeId = filter._id ?? (data[0] && data[0]._id);
-        if (franchiseScopeId) {
-            const sortOpts = parseFranchiseServiceCatalogSort(query);
-            if (!sortOpts.ok) return fail(400, sortOpts.message);
-
-            all_services = await buildAllServicesWithFranchiseMappingStatus(franchiseScopeId);
-            if (isRequestFilter !== undefined) {
-                all_services = all_services.filter(
-                    (svc) => Boolean(svc.is_request) === isRequestFilter
-                );
-            }
-            all_services = filterAllServicesBySearch(all_services, searchTerm);
-            all_services = sortAllServicesRows(
-                all_services,
-                sortOpts.sortBy,
-                sortOpts.sortOrder
+        if (listFlags.mappingActiveFilter !== undefined) {
+            services = services.filter(
+                (svc) => Boolean(svc.franchise_enabled) === listFlags.mappingActiveFilter
             );
         }
+        if (isRequestFilter !== undefined) {
+            services = services.filter((svc) => Boolean(svc.is_request) === isRequestFilter);
+        }
+
+        const searchTerm = query.search ?? query.q;
+        services = filterAllServicesBySearch(services, searchTerm);
+        services = sortAllServicesRows(services, sortOpts.sortBy, sortOpts.sortOrder);
+
+        const { data, totalItems, totalPages, currentPage } = paginateArray(
+            services,
+            page,
+            limit
+        );
 
         return ok(200, {
             message: 'Franchise service list fetched successfully.',
-            totalItems: totalCount,
+            franchise: franchiseMetaFromDoc(franchise),
+            services: data,
+            totalItems,
             totalPages,
             currentPage,
-            records,
-            ...(all_services !== undefined && { all_services }),
         });
     } catch (error) {
-        console.error('franchiseService.list', error.message);
+        console.error('franchiseService.list', error);
         return fail(500, 'Internal server error.');
     }
 };

@@ -25,21 +25,23 @@ const recalculateOrderTotals = async (orderId) => {
     order.tax_percent !== undefined && order.tax_percent !== null
       ? Number(order.tax_percent)
       : 0;
+  const commissionPercent =
+    order.commission_percent !== undefined && order.commission_percent !== null
+      ? Number(order.commission_percent)
+      : 0;
 
   for (const row of rows) {
-    if (
-      row.total_amount !== undefined &&
-      row.total_amount !== null &&
-      row.tax_amount !== undefined &&
-      row.tax_amount !== null
-    ) {
-      continue;
-    }
-    const line = computeAdditionalChargeLine(row.amount, taxPercent);
+    const line = computeAdditionalChargeLine(
+      row.amount,
+      taxPercent,
+      commissionPercent
+    );
     await OrderAdditionalCharge.updateOne(
       { _id: row._id },
       {
         $set: {
+          commission_percent: line.commission_percent,
+          commission_amount: line.commission_amount,
           tax_percent: line.tax_percent,
           tax_amount: line.tax_amount,
           total_amount: line.total_amount,
@@ -47,6 +49,8 @@ const recalculateOrderTotals = async (orderId) => {
         },
       }
     );
+    row.commission_percent = line.commission_percent;
+    row.commission_amount = line.commission_amount;
     row.tax_amount = line.tax_amount;
     row.total_amount = line.total_amount;
   }
@@ -66,6 +70,7 @@ const recalculateOrderTotals = async (orderId) => {
   );
 
   order.additional_charges_subtotal = finalized.additional_charges_subtotal;
+  order.additional_charges_commission = finalized.additional_charges_commission;
   order.additional_charges_tax = finalized.additional_charges_tax;
   order.additional_charges_total = finalized.additional_charges_total;
   order.tax_amount = finalized.tax_amount;

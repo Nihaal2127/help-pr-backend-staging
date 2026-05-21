@@ -24,6 +24,13 @@ const ok = (status, data) => ({ ok: true, status, data });
 
 const roundAmount = (n) => Math.round(Number(n) * 100) / 100;
 
+/** Main service admin commission + commission on additional charges. */
+const getOrderAdminCommissionCap = (order) =>
+    roundAmount(
+        (Number(order?.admin_commission ?? order?.commission_amount) || 0) +
+            (Number(order?.additional_charges_commission) || 0)
+    );
+
 const parseObjectId = (raw, fieldName = 'id') => {
     if (raw instanceof mongoose.Types.ObjectId) {
         return { ok: true, oid: raw };
@@ -345,6 +352,7 @@ const listEligibleOrders = async (query, scopeFilter = {}) => {
                     completed_sum: 1,
                     refunded_sum: 1,
                     admin_commission: '$order.admin_commission',
+                    additional_charges_commission: '$order.additional_charges_commission',
                     partner_id: '$order.partner_id',
                     franchise_id: '$order.franchise_id',
                     payment_status: '$order.payment_status',
@@ -373,7 +381,10 @@ const listEligibleOrders = async (query, scopeFilter = {}) => {
                     total_amount: roundAmount(row.total_amount),
                     user_paid: roundAmount(row.user_paid),
                     refundable_amount: roundAmount(row.refundable_amount),
-                    admin_commission: roundAmount(row.admin_commission),
+                    admin_commission: getOrderAdminCommissionCap({
+                        admin_commission: row.admin_commission,
+                        additional_charges_commission: row.additional_charges_commission,
+                    }),
                     partner_wallet_balance: roundAmount(partner_wallet_balance),
                     payment_status: row.payment_status,
                     franchise_id: row.franchise_id || null,
@@ -461,7 +472,7 @@ const createRefund = async (body, createdById = null) => {
             );
         }
 
-        const adminCommission = roundAmount(order.admin_commission ?? order.commission_amount ?? 0);
+        const adminCommission = getOrderAdminCommissionCap(order);
         if (fromAdminCommission > adminCommission + PAYMENT_STATUS_TOLERANCE) {
             return fail(
                 400,

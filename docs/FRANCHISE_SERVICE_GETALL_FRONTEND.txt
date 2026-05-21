@@ -19,7 +19,7 @@ Authentication
     - If they send franchise_id, it must match their user.franchise_id (403 otherwise).
 
   Super Admin / Staff:
-    - Pass franchise_id when you need all_services in the response.
+    - franchise_id query parameter is required (400 if omitted).
 
 --------------------------------------------------------------------------------
 Response shape (high level)
@@ -27,98 +27,93 @@ Response shape (high level)
 
   On success (200):
 
-  - totalItems, totalPages, currentPage — pagination for mapping **records**
-  - records — franchise_service mapping documents (paginated); services_list,
-    active_services, inactive_services, services_order, etc.
-  - all_services — optional; see below
+  - franchise          { _id, name, admin_name, is_active } — scoped franchise
+  - services           paginated array of global services for that franchise
+  - totalItems         total services after filters (not franchise row count)
+  - totalPages, currentPage — pagination over **services**
 
-  “records” = rows from the franchise_service **mapping** collection.
+  Each item in **services** is a global Service document (populated category_id)
+  plus availability flags:
 
-  “all_services” = full **global** service catalog (non-deleted services), each row has:
-    - franchise_active (boolean) — on/off for this franchise in the latest mapping
-    - category_id (populated category doc when present) — use for category name in UI
+    - franchise_enabled   true if the service id is in franchise.services[]
+    - global_active       global service + parent category active
+    - franchise_active    alias of franchise_enabled
+    - partner_enabled     partner-side preference (when resolved)
+    - effective_active    true only when globally and franchise-visible for customers
 
-  all_services is included only when the request is scoped to one franchise_id.
+  There is no records / services_list / active_services / inactive_services /
+  all_services split. Use franchise_enabled for on/off UI; use effective_active
+  when showing what end users can book.
 
 --------------------------------------------------------------------------------
 Query parameters — reference
 --------------------------------------------------------------------------------
 
-  Pagination (mapping “records”)
-  --------------------------------
+  Pagination (services)
+  ---------------------
   page, limit          defaults: page=1, limit=10
 
   Franchise scope
   ----------------
-  franchise_id         Super Admin / Staff: pass to scope list + all_services.
+  franchise_id         Super Admin / Staff: required.
                        Franchise users: implied from JWT.
 
-  Mapping list filters (affect “records”)
-  ----------------------------------------
-  is_active            optional true|false — filters mapping entries by franchise on/off
-  is_request           optional — filters by Service.is_request on items in records
+  Catalog filters (apply to services before pagination)
+  -------------------------------------------------------
+  is_active            optional true|false — when true, only services with
+                       franchise_enabled === true (assigned on the franchise).
+                       When false, only services not assigned to the franchise.
+                       Omit for the full globally active service catalog (same count as
+                       super-admin active services). Includes services under inactive
+                       categories; those have effective_active: false until the category is on.
 
-  Global catalog: search (all_services and mapping records)
-  -----------------------------------------------------------
+  is_request           optional — filters by Service.is_request
+
+  Search
+  ------
   search               optional string; case-insensitive substring.
   q                    alias of search.
-                       “+” in the value is treated as space (helps URL query strings).
+                       “+” in the value is treated as space.
 
-  When search is non-empty:
+  Logic:
+    1) If any service **name** matches, keep only those rows.
+    2) If no service name matches, keep rows whose **category name** matches.
 
-  - **all_services** — filtered global catalog (same rules as before).
-  - **records** — each mapping row’s **services_list** is reduced to matching entries only,
-    and **active_services**, **inactive_services**, and **services_order** are trimmed to
-    that subset (original order preserved where possible). This keeps list payloads small
-    when the UI searches (e.g. one franchise row no longer returns every mapped service).
-
-  Logic (two steps), for both all_services and each record’s services_list:
-
-    1) If any service **name** matches, keep only those rows / entries.
-    2) If no service name matches, keep rows / entries whose **category name**
-       (populated category_id.name) matches.
-
-  Omitted/empty search: no search filter on records or all_services.
-
-  Global catalog: sort (all_services only)
+  Sort (full filtered list, then paginate)
   ----------------------------------------
   sort_by              optional; default: name
-                       - name            — service name
-                       - id  or  _id     — service MongoDB _id (string order)
-                       - category_name
-                       - category        (alias of category_name)
-                       Sort by parent category name; ties broken by service name.
+                       name | id | _id | category_name | category
 
-  sort_order           optional; default: asc
-                       asc | desc
-
+  sort_order           optional; default: asc — asc | desc
   order                alias of sort_order
-
-  Invalid sort_by or sort_order → 400 with a short message.
 
 --------------------------------------------------------------------------------
 Examples
 --------------------------------------------------------------------------------
 
-  GET /api/franchise-service/getAll?page=1&limit=10&franchise_id=<FRANCHISE_OID>
+  Full catalog (franchise admin):
 
-  Search + sort by category name, descending:
+    GET /api/franchise-service/getAll?page=1&limit=50
 
-    ?franchise_id=<ID>&search=plumb&sort_by=category_name&sort_order=desc
+  Only services enabled on the franchise:
 
-  Sort by service id:
+    GET /api/franchise-service/getAll?page=1&limit=50&is_active=true
 
-    ?franchise_id=<ID>&sort_by=id&sort_order=asc
+  Super admin (franchise_id required):
+
+    GET /api/franchise-service/getAll?page=1&limit=50&franchise_id=<FRANCHISE_OID>
+
+  Search + sort:
+
+    ?search=wash&sort_by=category_name&sort_order=desc
 
 --------------------------------------------------------------------------------
-Parity with franchise-category getAll
+getById / update
 --------------------------------------------------------------------------------
 
-  Search trims the global catalog (**all_services**). Franchise service list also trims
-  each **records** mapping row’s **services_list** (and **active_services** /
-  **inactive_services** / **services_order**) when search is set, so responses stay small.
-  **sort_by** / **sort_order** apply only to **all_services**. Mapping filters
-  (**is_active**, **is_request**) still apply before search trimming.
+  GET /get/:id and PUT /update/:id still return the legacy mapping record shape
+  (services_list, active_services, inactive_services, services_order) for
+  toggle/reorder flows. Use getAll for the flat catalog list UI only.
 
 ================================================================================
   End of document

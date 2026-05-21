@@ -57,8 +57,9 @@ const computeOrderPartnerCreditAmount = async (orderDoc) => {
         }
     }
 
-    const additionalCharges = roundAmount(order.additional_charges_total || 0);
-    const amount = roundAmount(partnerEarning + additionalCharges);
+    /** Partner receives base additional charge amounts only (not tax or commission). */
+    const additionalChargesBase = roundAmount(order.additional_charges_subtotal || 0);
+    const amount = roundAmount(partnerEarning + additionalChargesBase);
 
     return {
         partnerId: order.partner_id,
@@ -69,7 +70,7 @@ const computeOrderPartnerCreditAmount = async (orderDoc) => {
 };
 
 /**
- * Upsert order-level wallet credit: partner_earning + additional_charges_total.
+ * Upsert order-level wallet credit: partner_earning + additional_charges_subtotal (base only).
  */
 const syncOrderPartnerWalletCredit = async (orderId) => {
     try {

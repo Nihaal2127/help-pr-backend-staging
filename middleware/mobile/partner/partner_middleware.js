@@ -2,8 +2,9 @@ const User = require('../../../models/user');
 
 const MIN_NAME_LENGTH = 2;
 const MAX_NAME_LENGTH = 50;
-const MIN_PASSWORD_LENGTH = 6;
 const MIN_USER_AGE_YEARS = 18;
+const PASSWORD_REGEX =
+  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
 
 const calculateAgeFromBirthDate = (birthDate) => {
   const today = new Date();
@@ -125,11 +126,12 @@ const partnerRegisterMiddleware = async (req, res, next) => {
       message: 'Password is required.',
     });
   }
-  if (String(password).length < MIN_PASSWORD_LENGTH) {
+  if (!PASSWORD_REGEX.test(String(password))) {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters long.`,
+      message:
+        'Password must be at least 8 characters long, contain an uppercase letter, a lowercase letter, a number, and a special character.',
     });
   }
 
@@ -166,4 +168,40 @@ const partnerRegisterMiddleware = async (req, res, next) => {
   next();
 };
 
-module.exports = { partnerRegisterMiddleware };
+const partnerLoginMiddleware = (req, res, next) => {
+  const { email, password } = req.body;
+
+  if (!email || String(email).trim() === '') {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Email is required.',
+    });
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const normalizedEmail = String(email).trim().toLowerCase();
+  if (!emailRegex.test(normalizedEmail)) {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Invalid email format.',
+    });
+  }
+  req.body.email = normalizedEmail;
+
+  if (!password || String(password).trim() === '') {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Password is required.',
+    });
+  }
+
+  next();
+};
+
+module.exports = {
+  partnerRegisterMiddleware,
+  partnerLoginMiddleware,
+};

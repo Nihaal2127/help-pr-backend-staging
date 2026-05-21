@@ -3,7 +3,7 @@ const { registerPartner, loginPartner } = require('../../../services/mobile/part
 const register = async (req, res) => {
   try {
     const { name, email, phone_number, password, date_of_birth } = req.body;
-    const { token, auth_token, record } = await registerPartner({
+    const { data } = await registerPartner({
       name,
       email,
       phone_number,
@@ -11,13 +11,15 @@ const register = async (req, res) => {
       date_of_birth,
     });
 
+    const token = data.auth_token;
+
     return res.status(200).json({
       success: true,
       status: 200,
       message: 'Partner registered successfully.',
       token,
-      auth_token,
-      record,
+      auth_token: token,
+      record: data,
     });
   } catch (error) {
     console.error('mobile partner register', error.message);
@@ -43,21 +45,21 @@ const login = async (req, res) => {
     }
 
     const {
-      token,
-      auth_token,
-      record,
+      data,
       can_access_app,
       can_accept_jobs,
       partner_account_status,
     } = result;
+
+    const token = data.auth_token;
 
     return res.status(200).json({
       success: true,
       status: 200,
       message: 'Login successfully.',
       token,
-      auth_token,
-      record,
+      auth_token: token,
+      record: data,
       can_access_app,
       can_accept_jobs,
       partner_account_status,

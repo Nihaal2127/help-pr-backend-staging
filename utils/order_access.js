@@ -1,101 +1,22 @@
 const mongoose = require("mongoose");
 const User = require("../models/user");
-const Franchise = require("../models/franchise");
-
-const USER_TYPE_ADMIN = 1;
-const USER_TYPE_PARTNER = 2;
-const USER_TYPE_EMPLOYEE = 3;
-const USER_TYPE_CUSTOMER = 4;
-const USER_TYPE_SUPER_ADMIN = 5;
-const USER_TYPE_STAFF = 6;
-
-const BACKOFFICE_TYPES = new Set([
+const {
   USER_TYPE_ADMIN,
   USER_TYPE_EMPLOYEE,
   USER_TYPE_SUPER_ADMIN,
   USER_TYPE_STAFF,
-]);
-
-const getCallerId = (req) =>
-  (req && req.user && (req.user.id || req.user._id)) || null;
-
-const loadCaller = async (req) => {
-  const callerId = getCallerId(req);
-  if (!callerId || !mongoose.Types.ObjectId.isValid(callerId)) {
-    return { ok: false, status: 401, message: "Access denied. Invalid token." };
-  }
-
-  const caller = await User.findOne({ _id: callerId, deleted_at: null })
-    .select("type franchise_id")
-    .lean();
-
-  if (!caller) {
-    return { ok: false, status: 401, message: "User not found." };
-  }
-
-  return { ok: true, caller, callerId };
-};
-
-const resolveCallerFranchiseId = async (caller, callerId) => {
-  if (caller.franchise_id) {
-    return caller.franchise_id;
-  }
-  if (Number(caller.type) === USER_TYPE_ADMIN) {
-    const franchise = await Franchise.findOne({
-      admin_id: callerId,
-      deleted_at: null,
-    })
-      .select("_id")
-      .lean();
-    return franchise?._id || null;
-  }
-  return null;
-};
-
-const parseOptionalFranchiseQuery = (raw) => {
-  if (raw === undefined || raw === null || String(raw).trim() === "") {
-    return { ok: true, oid: null };
-  }
-  const s = String(raw).trim();
-  if (!mongoose.Types.ObjectId.isValid(s)) {
-    return { ok: false, status: 409, message: "Invalid franchise id." };
-  }
-  return { ok: true, oid: new mongoose.Types.ObjectId(s) };
-};
-
-const emptyFranchiseFilter = () => ({
-  franchise_id: { $in: [] },
-});
-
-const nullOrMissingFranchiseClause = () => ({
-  $or: [{ franchise_id: null }, { franchise_id: { $exists: false } }],
-});
-
-/**
- * User ids tied to a franchise (employees, partners, franchise admin on Franchise.admin_id).
- */
-const fetchFranchiseMemberUserIds = async (franchiseOid) => {
-  const franchise = await Franchise.findOne({
-    _id: franchiseOid,
-    deleted_at: null,
-  })
-    .select("admin_id")
-    .lean();
-
-  const orClauses = [{ franchise_id: franchiseOid }];
-  if (franchise?.admin_id) {
-    orClauses.push({ _id: franchise.admin_id });
-  }
-
-  const users = await User.find({
-    deleted_at: null,
-    $or: orClauses,
-  })
-    .select("_id")
-    .lean();
-
-  return users.map((u) => u._id);
-};
+  BACKOFFICE_TYPES,
+} = require("../constants/user_types");
+const { getCallerId, loadCaller } = require("./auth_caller");
+const {
+  resolveCallerFranchiseId,
+  nullOrMissingFranchiseClause,
+  fetchFranchiseMemberUserIds,
+} = require("./franchise_caller");
+const {
+  resolveFranchiseListScope,
+  assertFranchiseRecordAccess,
+} = require("./franchise_scope_access");
 
 /**
  * List filter: explicit franchise_id OR legacy rows (franchise_id null) whose
@@ -134,6 +55,11 @@ const orderMatchesFranchiseMembers = (order, memberUserIds) => {
   if (!memberUserIds.length) return false;
   const memberSet = new Set(memberUserIds.map((id) => String(id)));
   return orderParticipantIds(order).some((id) => memberSet.has(id));
+};
+
+const legacyOrderMatchFn = async (order, franchiseOid) => {
+  const memberUserIds = await fetchFranchiseMemberUserIds(franchiseOid);
+  return orderMatchesFranchiseMembers(order, memberUserIds);
 };
 
 /**
@@ -273,127 +199,21 @@ const assertCallerCanAssignFranchise = async (req, franchiseIdToAssign) => {
   };
 };
 
-/**
- * List/count scope from JWT + optional ?franchise_id (same rules as quotes).
- * Super admin & staff: all orders, optional franchise filter.
- * Franchise admin & employee: their franchise + legacy orders (franchise_id null)
- * linked via partner / employee / creator on that franchise.
- */
-const resolveOrderListScope = async (req, { franchiseIdFromQuery } = {}) => {
-  const callerResult = await loadCaller(req);
-  if (!callerResult.ok) return callerResult;
-
-  const { caller, callerId } = callerResult;
-  const callerType = Number(caller.type);
-
-  const parsedFranchise = parseOptionalFranchiseQuery(franchiseIdFromQuery);
-  if (!parsedFranchise.ok) return parsedFranchise;
-
-  if (
-    callerType === USER_TYPE_SUPER_ADMIN ||
-    callerType === USER_TYPE_STAFF
-  ) {
-    if (parsedFranchise.oid) {
-      return { ok: true, filter: { franchise_id: parsedFranchise.oid } };
-    }
-    return { ok: true, filter: {} };
-  }
-
-  if (callerType === USER_TYPE_ADMIN || callerType === USER_TYPE_EMPLOYEE) {
-    const franchiseOid = await resolveCallerFranchiseId(caller, callerId);
-    if (!franchiseOid) {
-      return { ok: true, filter: emptyFranchiseFilter(), noFranchise: true };
-    }
-
-    if (
-      parsedFranchise.oid &&
-      parsedFranchise.oid.toString() !== franchiseOid.toString()
-    ) {
-      return {
-        ok: false,
-        status: 403,
-        message: "You are not allowed to view orders for this franchise.",
-      };
-    }
-
-    const memberUserIds = await fetchFranchiseMemberUserIds(franchiseOid);
-    return {
-      ok: true,
-      filter: buildFranchiseOrderListFilter(franchiseOid, memberUserIds),
-    };
-  }
-
-  return {
-    ok: false,
-    status: 403,
-    message: "You are not allowed to access orders.",
-  };
-};
-
-/**
- * Single-order access for getById / update / delete.
- */
-const assertOrderRecordAccess = async (req, order) => {
-  if (!order) {
-    return { ok: false, status: 404, message: "No record found" };
-  }
-
-  const callerResult = await loadCaller(req);
-  if (!callerResult.ok) return callerResult;
-
-  const { caller, callerId } = callerResult;
-  const callerType = Number(caller.type);
-
-  if (
-    callerType === USER_TYPE_SUPER_ADMIN ||
-    callerType === USER_TYPE_STAFF
-  ) {
-    return { ok: true };
-  }
-
-  if (callerType === USER_TYPE_ADMIN || callerType === USER_TYPE_EMPLOYEE) {
-    const franchiseOid = await resolveCallerFranchiseId(caller, callerId);
-    if (!franchiseOid) {
-      return {
-        ok: false,
-        status: 403,
-        message: "You are not allowed to access this order.",
-      };
-    }
-
-    const orderFranchiseId = order.franchise_id?._id ?? order.franchise_id;
-    if (
-      orderFranchiseId &&
-      String(orderFranchiseId) === String(franchiseOid)
-    ) {
-      return { ok: true };
-    }
-
-    const isLegacyUnscoped =
-      orderFranchiseId == null ||
-      orderFranchiseId === undefined ||
-      String(orderFranchiseId).trim() === "";
-
-    if (isLegacyUnscoped) {
+const resolveOrderListScope = async (req, { franchiseIdFromQuery } = {}) =>
+  resolveFranchiseListScope(req, {
+    franchiseIdFromQuery,
+    entityLabel: "orders",
+    buildAdminFranchiseFilter: async (franchiseOid) => {
       const memberUserIds = await fetchFranchiseMemberUserIds(franchiseOid);
-      if (orderMatchesFranchiseMembers(order, memberUserIds)) {
-        return { ok: true };
-      }
-    }
+      return buildFranchiseOrderListFilter(franchiseOid, memberUserIds);
+    },
+  });
 
-    return {
-      ok: false,
-      status: 403,
-      message: "You are not allowed to access this order.",
-    };
-  }
-
-  return {
-    ok: false,
-    status: 403,
-    message: "You are not allowed to access this order.",
-  };
-};
+const assertOrderRecordAccess = async (req, order) =>
+  assertFranchiseRecordAccess(req, order, {
+    entityLabel: "this order",
+    legacyMatchFn: legacyOrderMatchFn,
+  });
 
 /**
  * Back-office franchise access, or direct participant (e.g. partner on the order).

@@ -80,11 +80,11 @@ Order (1) ──has──▶ service_items[] ──▶ OrderService (1 per order
 
 | Field | Notes |
 |-------|--------|
-| `from_date`, `to_date` | Dates |
+| `from_date`, `to_date` | Calendar dates — API responses use **`YYYY-MM-DD`** (not full ISO datetime) |
 | `work_hours_per_day`, `total_work_hours` | Numbers |
 | `work_start_time`, `work_end_time` | Strings |
 | `service_price` | Mirror / base service price |
-| `order_date` | Fitting / primary date |
+| `order_date` | Fitting / primary date — responses: **`YYYY-MM-DD`** |
 | `customer_description`, `rejection_reason` | Text (legacy / extra customer notes) |
 | **`order_description`** | Free-text summary of the job — same role as **`quote.quote_description`** on quotes |
 | **`quote_id`** | Reference to **`quote`** when the order was created from a quote (**`convertToOrder`** sets this); populated in **`GET /api/order/get/:id`** as **`quote_info`** |
@@ -248,6 +248,17 @@ Same **403** participant rule as additional charges.
 | GET | `/callback` | Browser redirect success page |
 
 Frontend normally only opens **`payment_url`** returned from order create when `payment_mode_id === "2"`.
+
+### API response date formats (GET list / GET detail / update)
+
+| Field | Response format |
+|-------|-----------------|
+| `from_date`, `to_date`, `order_date` | **`YYYY-MM-DD`** |
+| `service_items[].service_date` | **`YYYY-MM-DD`** |
+| `quote_info.from_date`, `quote_info.to_date` | **`YYYY-MM-DD`** |
+| `service_from_time`, `service_to_time`, `paid_at`, `due_date`, `created_at` | Full **ISO 8601** datetime (unchanged) |
+
+**Create/update requests** still accept ISO strings or `YYYY-MM-DD`; storage remains `Date` in MongoDB.
 
 ---
 

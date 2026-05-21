@@ -49,13 +49,11 @@ const registerPartner = async ({ name, email, phone_number, password, date_of_bi
 
   await notificationSetting.create({ user_id: savedUser._id });
 
-  const record = savedUser.toObject();
-  delete record.password;
+  const data = savedUser.toObject();
+  delete data.password;
 
   return {
-    token,
-    auth_token: token,
-    record,
+    data,
   };
 };
 
@@ -103,20 +101,18 @@ const loginPartner = async ({ email, password, device_token }) => {
   await user.save();
 
   const populated = await User.findById(user._id).populate([{ path: 'city_id' }]).lean();
-  const record = {
+  const data = {
     ...populated,
     city_id: populated?.city_id?._id || null,
     city_name: populated?.city_id?.name || null,
   };
-  delete record.password;
+  delete data.password;
 
   const flags = buildPartnerLoginFlags(user);
 
   return {
     ok: true,
-    token,
-    auth_token: token,
-    record,
+    data,
     ...flags,
   };
 };

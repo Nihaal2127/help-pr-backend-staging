@@ -5,6 +5,8 @@ const MAX_NAME_LENGTH = 50;
 const MIN_USER_AGE_YEARS = 18;
 const PASSWORD_REGEX =
   /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+/** Local part: letters, digits, . _ - only; domain with TLD (min 2 letters). */
+const EMAIL_REGEX = /^[a-z0-9._-]+@[a-z0-9.-]+\.[a-z]{2,}$/;
 
 const calculateAgeFromBirthDate = (birthDate) => {
   const today = new Date();
@@ -79,7 +81,6 @@ const partnerRegisterMiddleware = async (req, res, next) => {
   if (validatedName === null) return;
   req.body.name = validatedName;
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!email || String(email).trim() === '') {
     return res.status(400).json({
       success: false,
@@ -88,7 +89,7 @@ const partnerRegisterMiddleware = async (req, res, next) => {
     });
   }
   const normalizedEmail = String(email).trim().toLowerCase();
-  if (!emailRegex.test(normalizedEmail)) {
+  if (!EMAIL_REGEX.test(normalizedEmail)) {
     return res.status(400).json({
       success: false,
       status: 400,
@@ -179,9 +180,8 @@ const partnerLoginMiddleware = (req, res, next) => {
     });
   }
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const normalizedEmail = String(email).trim().toLowerCase();
-  if (!emailRegex.test(normalizedEmail)) {
+  if (!EMAIL_REGEX.test(normalizedEmail)) {
     return res.status(400).json({
       success: false,
       status: 400,

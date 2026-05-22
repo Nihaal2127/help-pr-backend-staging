@@ -1,5 +1,10 @@
 const mongoose = require('mongoose');
 const User = require('../../../models/user');
+const State = require('../../../models/state');
+const City = require('../../../models/city');
+const Area = require('../../../models/area');
+const Category = require('../../../models/category');
+const Service = require('../../../models/service');
 const {
   parseJSONField,
   parseOptionalDateField,
@@ -354,7 +359,236 @@ const validateRequiredPartnerCatalog = (req, res) => {
   return true;
 };
 
-const validatePartnerUpdateRequiredFields = (req, res) => {
+const collectPartnerCatalogRows = (body) => {
+  const rows = [];
+  const partnerServices = body.partner_services;
+  if (Array.isArray(partnerServices) && partnerServices.length > 0) {
+    for (const item of partnerServices) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+      if (Array.isArray(item.services)) {
+        const parentCategoryId = item.category_id;
+        for (const svc of item.services) {
+          if (!svc || typeof svc !== 'object' || Array.isArray(svc)) continue;
+          rows.push({
+            category_id: svc.category_id ?? parentCategoryId,
+            service_id: svc.service_id ?? svc.serviceId,
+          });
+        }
+      } else {
+        rows.push({
+          category_id: item.category_id,
+          service_id: item.service_id ?? item.serviceId,
+        });
+      }
+    }
+    return rows;
+  }
+
+  let serviceIds = body.service_ids;
+  if (
+    !Array.isArray(serviceIds) &&
+    typeof serviceIds === 'string' &&
+    mongoose.Types.ObjectId.isValid(String(serviceIds).trim())
+  ) {
+    serviceIds = [String(serviceIds).trim()];
+  }
+  if (!Array.isArray(serviceIds)) return rows;
+
+  let categoryIds = body.category_ids;
+  if (
+    !Array.isArray(categoryIds) &&
+    typeof categoryIds === 'string' &&
+    mongoose.Types.ObjectId.isValid(String(categoryIds).trim())
+  ) {
+    categoryIds = [String(categoryIds).trim()];
+  }
+  if (!Array.isArray(categoryIds)) return rows;
+
+  for (let i = 0; i < serviceIds.length; i++) {
+    const categoryId =
+      i < categoryIds.length && categoryIds[i] != null && String(categoryIds[i]).trim() !== ''
+        ? categoryIds[i]
+        : categoryIds[categoryIds.length - 1];
+    rows.push({ category_id: categoryId, service_id: serviceIds[i] });
+  }
+  return rows;
+};
+
+const validatePartnerLocationInDb = async (state_id, city_id, area_id, pincode, res) => {
+  const stateOid = new mongoose.Types.ObjectId(String(state_id));
+  const cityOid = new mongoose.Types.ObjectId(String(city_id));
+  const areaOid = new mongoose.Types.ObjectId(String(area_id));
+
+  const state = await State.findOne({ _id: stateOid, deleted_at: null }).lean();
+  if (!state) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'State not found.',
+    });
+    return false;
+  }
+  if (state.is_active === false) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'State is not active.',
+    });
+    return false;
+  }
+
+  const city = await City.findOne({ _id: cityOid, deleted_at: null }).lean();
+  if (!city) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'City not found.',
+    });
+    return false;
+  }
+  if (String(city.state_id) !== String(stateOid)) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'City does not belong to the selected state.',
+    });
+    return false;
+  }
+  if (city.is_active === false) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'City is not active.',
+    });
+    return false;
+  }
+
+  const area = await Area.findOne({ _id: areaOid, deleted_at: null }).lean();
+  if (!area) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Area not found.',
+    });
+    return false;
+  }
+  if (String(area.city_id) !== String(cityOid)) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Area does not belong to the selected city.',
+    });
+    return false;
+  }
+  if (String(area.state_id) !== String(stateOid)) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Area does not belong to the selected state.',
+    });
+    return false;
+  }
+  if (area.is_active === false) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Area is not active.',
+    });
+    return false;
+  }
+
+  const pincodeValue = String(pincode).trim();
+  const areaPincodes = Array.isArray(area.pincodes)
+    ? area.pincodes.map((p) => String(p).trim())
+    : [];
+  if (!areaPincodes.includes(pincodeValue)) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Pincode is not valid for the selected area.',
+    });
+    return false;
+  }
+
+  return true;
+};
+
+const validatePartnerCatalogInDb = async (req, res) => {
+  const rows = collectPartnerCatalogRows(req.body);
+  const seen = new Set();
+
+  for (const row of rows) {
+    const categoryId = row.category_id;
+    const serviceId = row.service_id;
+    if (!categoryId || !serviceId) continue;
+
+    const dedupeKey = `${String(categoryId)}:${String(serviceId)}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+
+    const category = await Category.findOne({
+      _id: categoryId,
+      deleted_at: null,
+    }).lean();
+    if (!category) {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Category not found.',
+      });
+      return false;
+    }
+    if (
+      !category.is_active ||
+      category.is_request ||
+      category.approval_status !== 'approve'
+    ) {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Category is not available.',
+      });
+      return false;
+    }
+
+    const service = await Service.findOne({
+      _id: serviceId,
+      deleted_at: null,
+    }).lean();
+    if (!service) {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Service not found.',
+      });
+      return false;
+    }
+    if (String(service.category_id) !== String(categoryId)) {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Service does not belong to the selected category.',
+      });
+      return false;
+    }
+    if (
+      !service.is_active ||
+      service.is_request ||
+      service.approval_status !== 'approve'
+    ) {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Service is not available.',
+      });
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const validatePartnerUpdateRequiredFields = async (req, res) => {
   const { address, state_id, city_id, area_id, pincode, gender, experience } = req.body;
 
   if (!req.files?.image?.[0]) {
@@ -443,14 +677,6 @@ const validatePartnerUpdateRequiredFields = (req, res) => {
     });
     return false;
   }
-  if (!mongoose.Types.ObjectId.isValid(String(pincode))) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'Invalid pincode id.',
-    });
-    return false;
-  }
 
   if (gender === undefined || gender === null || String(gender).trim() === '') {
     res.status(400).json({
@@ -532,6 +758,13 @@ const validatePartnerUpdateRequiredFields = (req, res) => {
     return false;
   }
 
+  if (!(await validatePartnerLocationInDb(state_id, city_id, area_id, pincode, res))) {
+    return false;
+  }
+  if (!(await validatePartnerCatalogInDb(req, res))) {
+    return false;
+  }
+
   return true;
 };
 
@@ -581,6 +814,16 @@ const validateDateOfBirth = (dobRaw, res) => {
   return birthDate;
 };
 
+const capitalizePersonName = (name) =>
+  String(name)
+    .trim()
+    .split(/\s+/)
+    .map((word) => {
+      if (!word) return word;
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(' ');
+
 const validatePersonName = (name, res) => {
   const trimmed = String(name).trim();
   if (trimmed.length < MIN_NAME_LENGTH || trimmed.length > MAX_NAME_LENGTH) {
@@ -591,7 +834,7 @@ const validatePersonName = (name, res) => {
     });
     return null;
   }
-  return trimmed;
+  return capitalizePersonName(trimmed);
 };
 
 const partnerRegisterMiddleware = async (req, res, next) => {
@@ -797,8 +1040,17 @@ const partnerUpdateMiddleware = async (req, res, next) => {
   parseOptionalDateField(req, 'date_of_birth');
   trimOptionalStringField(req, 'experience');
 
-  if (!validatePartnerUpdateRequiredFields(req, res)) {
-    return;
+  try {
+    if (!(await validatePartnerUpdateRequiredFields(req, res))) {
+      return;
+    }
+  } catch (err) {
+    console.error('partnerUpdateMiddleware required fields', err.message);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Internal server error.',
+    });
   }
 
   const { name, email, phone_number, password, state_id, city_id, area_id, date_of_birth, gender } =

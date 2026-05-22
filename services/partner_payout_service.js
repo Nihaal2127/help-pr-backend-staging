@@ -66,7 +66,7 @@ const formatDateOnly = (date) => {
 
 const roundAmount = (n) => Math.round(Number(n) * 100) / 100;
 
-/** @deprecated Wallet credits come from orders via partner_wallet_order_service. */
+/** @deprecated Wallet credits come from partner order_payment rows via partner_wallet_order_service. */
 const syncCreditsFromFinancialOrders = async () => {};
 
 const getWalletAggregatesForPartners = async (partnerIds) => {

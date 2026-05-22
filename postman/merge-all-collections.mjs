@@ -54,6 +54,7 @@ const MODULE_ORDER = [
   'order',
   'order-additional-charges',
   'order-payments',
+  'financial-order-payments',
   'quote',
   'order_service',
   'address',
@@ -99,6 +100,7 @@ const MODULE_LABELS = {
   order: 'Order',
   'order-additional-charges': 'Order additional charges',
   'order-payments': 'Order payments',
+  'financial-order-payments': 'Financial order payments',
   quote: 'Quote',
   order_service: 'Order service',
   address: 'Address',
@@ -119,7 +121,18 @@ const MODULE_LABELS = {
   other: 'Other',
 };
 
+const FINANCIAL_PAYMENTS_DOC = 'docs/FINANCIAL_ORDER_PAYMENTS_API.md';
+
 const MODULE_DESCRIPTIONS = {
+  'financial-order-payments': [
+    '**/api/order/financial-payments** — Financial — Order Payments overview (from `order` rows).',
+    '',
+    `**Doc:** \`${FINANCIAL_PAYMENTS_DOC}\``,
+    '',
+    '**Access:** Same as order getAll (super admin / staff / franchise admin / employee). Partner & customer → 403.',
+    '',
+    'Legacy `/api/financial-order/*` is archived under `archive/financial-order/`.',
+  ].join('\n'),
   partner_payout: [
     '**/api/partner_payout** — Partner wallet (credits from orders, debits from withdrawals).',
     '',
@@ -174,13 +187,17 @@ function normalizePath(pathStr) {
 }
 
 function getModuleKey(pathStr) {
-  const m = normalizePath(pathStr).match(/\/api\/([^/]+)/);
+  const normalized = normalizePath(pathStr);
+  const m = normalized.match(/\/api\/([^/]+)/);
   if (!m) {
-    if (normalizePath(pathStr).includes('/health')) return 'health';
+    if (normalized.includes('/health')) return 'health';
     return 'other';
   }
   const seg = m[1];
   if (seg === 'getcount' || pathStr.toLowerCase().includes('getcount')) return 'getCount';
+  if (seg === 'order' && normalized.includes('/financial-payments')) {
+    return 'financial-order-payments';
+  }
   return seg;
 }
 
@@ -343,6 +360,48 @@ function partnerPayoutBuiltinItems() {
   }));
 }
 
+function financialOrderPaymentsBuiltinItems() {
+  const auth = { key: 'Authorization', value: 'Bearer {{accessToken}}', type: 'text' };
+  const base = '{{baseUrl}}';
+  return [
+    {
+      name: '1. List — financial payments grid',
+      request: {
+        method: 'GET',
+        header: [auth],
+        url: {
+          raw: `${base}/api/order/financial-payments/getAll?page=1&limit=20&franchise_id={{franchiseId}}`,
+          host: [base],
+          path: ['api', 'order', 'financial-payments', 'getAll'],
+          query: [
+            { key: 'page', value: '1' },
+            { key: 'limit', value: '20' },
+            { key: 'franchise_id', value: '{{franchiseId}}' },
+          ],
+        },
+        description: `**GET /api/order/financial-payments/getAll** — See **${FINANCIAL_PAYMENTS_DOC}**.`,
+      },
+    },
+    {
+      name: '2. Detail — one order',
+      request: {
+        method: 'GET',
+        header: [auth],
+        url: {
+          raw: `${base}/api/order/financial-payments/get/{{orderId}}`,
+          host: [base],
+          path: ['api', 'order', 'financial-payments', 'get', '{{orderId}}'],
+        },
+        description: '**GET /api/order/financial-payments/get/:id** — order Mongo `_id`.',
+      },
+    },
+  ].map((item) => ({
+    item,
+    folderPath: ['Financial order payments'],
+    sourceFile: 'builtin:financial-order-payments',
+  }));
+}
+
 function main() {
   const seen = new Map();
   const allVariables = new Map();
@@ -396,6 +455,11 @@ function main() {
   }
 
   for (const entry of partnerPayoutBuiltinItems()) {
+    const key = getRequestKey(entry.item.request);
+    if (!seen.has(key)) seen.set(key, entry);
+  }
+
+  for (const entry of financialOrderPaymentsBuiltinItems()) {
     const key = getRequestKey(entry.item.request);
     if (!seen.has(key)) seen.set(key, entry);
   }
@@ -477,7 +541,8 @@ function main() {
         '',
         '**Sources merged (' + sourcesLoaded.length + ') from `postman/archive/`:**',
         ...sourcesLoaded.map((f) => `- \`archive/${f}\``),
-        '- Built-in: Partner payout (4 requests)',
+        '- Built-in: Partner payout (4 requests), Financial order payments (2 requests)',
+        '- Standalone: `Help-PR-Financial-Order-Payments.postman_collection.json` (includes getCount type 4)',
         '',
         '**Dedup:** Same HTTP method + path template (+ getCount `type` in body) → one request; higher-priority source wins.',
         '',

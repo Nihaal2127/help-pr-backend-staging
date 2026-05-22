@@ -9,6 +9,7 @@ const {
     PAYMENT_STATUS_TOLERANCE,
 } = require('../enum/order_payment_status_enum');
 const { syncOrderPaymentStatus } = require('./order_payment_status_service');
+const { syncAllPartnerOrderPaymentsForOrder } = require('./partner_wallet_order_service');
 const {
     syncCreditsFromFinancialOrders,
     getWalletAggregatesForPartners,
@@ -554,6 +555,7 @@ const createRefund = async (body, createdById = null) => {
         });
 
         await syncOrderPaymentStatus(order._id);
+        await syncAllPartnerOrderPaymentsForOrder(order._id);
 
         return ok(201, {
             message: 'Refund created successfully.',

@@ -11,8 +11,8 @@
 
 Partner payouts use a **wallet + ledger** model:
 
-- **Credits** — partner share when an **order** is placed/updated: `order_service.partner_earning` (offer-adjusted) **+** `order.additional_charges_subtotal` (base extra charges only — **not** tax or commission on extras). Synced automatically on order create, repricing, and additional-charge changes.
-- **Debits** — (1) **Partner `order_payment`** rows (`payer_type: partner`, `status: completed`) on `/api/order-payments`; (2) admin **withdrawals** via **Create payout**; (3) refund `from_partner_wallet`.
+- **Credits** — when a **partner `order_payment`** is **`completed`** (`payer_type: partner` on `/api/order-payments` or nested `order_payments`). Each payment credits the wallet (one ledger row per payment). **No credit on order create.** Total credits per order are capped by **`customer_net_paid`** and by order entitlement (`order_service.partner_earning` + `order.additional_charges_subtotal` base only — not tax/commission on extras).
+- **Debits** — (1) admin **withdrawals** via **Create payout**; (2) refund `from_partner_wallet`.
 - **Balance** = sum(credits) − sum(debits). Shown as `total_wallet_amount` / `payable_balance`.
 
 This module is separate from the legacy **`order_service.partner_paid_status`** flow (`payComission`, export by status). **Use `/api/partner_payout` for the partner wallet UI.** The archived **`financial_order`** collection is **not** used for wallet credits.
@@ -302,7 +302,7 @@ Example:
 
 ## 7. Data source (credits)
 
-Credits are **upserted from orders** (`order_service.partner_earning` + `order.additional_charges_subtotal`) via `partner_wallet_order_service` when orders are created or repriced.
+Credits are **synced from completed partner `order_payment` rows** via `partner_wallet_order_service.syncAllPartnerOrderPaymentsForOrder` (also after repricing, refunds, and order cancel). Run `node scripts/migrate-partner-wallet-payment-credits.js` once when upgrading from the old order-level credit model.
 
 **Note:** Create payout does **not** change order payment rollups. Balance is always **ledger-based** (credits − debits). Financial overview UI uses **`GET /api/order/financial-payments/getAll`** (see `docs/FINANCIAL_ORDER_PAYMENTS_API.md`).
 

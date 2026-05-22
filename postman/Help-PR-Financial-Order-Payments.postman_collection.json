@@ -1,0 +1,75 @@
+{
+  "info": {
+    "name": "Help PR — Financial order payments",
+    "description": "**/api/order/financial-payments** — Financial — Order Payments overview (derived from `order` rows).\n\n**Doc:** `docs/FINANCIAL_ORDER_PAYMENTS_API.md`\n\n**Access:** Same as `GET /api/order/getAll` (super admin / staff / franchise admin / employee). Partner & customer → 403.\n\n**Note:** Legacy `/api/financial-order/*` is archived — not in this collection.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "accessToken", "value": "" },
+    { "key": "orderId", "value": "" },
+    { "key": "franchiseId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. List — financial payments grid",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/order/financial-payments/getAll?page=1&limit=20&franchise_id={{franchiseId}}&order_status=&customer_payment_status=&partner_payment_status=&search=&from_date=&to_date=&sort_by=created_at&sort_order=desc",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "order", "financial-payments", "getAll"],
+          "query": [
+            { "key": "page", "value": "1" },
+            { "key": "limit", "value": "20" },
+            { "key": "franchise_id", "value": "{{franchiseId}}", "description": "Super/staff: optional. Franchise admin/employee: must match own franchise or 403." },
+            { "key": "order_status", "value": "", "description": "in_progress | completed | in-progress | cancelled | refunded" },
+            { "key": "customer_payment_status", "value": "", "description": "unpaid | paid | partially_paid | refund | partially_refund" },
+            { "key": "partner_payment_status", "value": "", "description": "unpaid | partially_paid | paid" },
+            { "key": "search", "value": "", "description": "order id, user, partner, service names" },
+            { "key": "from_date", "value": "" },
+            { "key": "to_date", "value": "" },
+            { "key": "sort_by", "value": "created_at" },
+            { "key": "sort_order", "value": "desc" }
+          ]
+        },
+        "description": "**GET /api/order/financial-payments/getAll** — one row per order with financial overview columns."
+      }
+    },
+    {
+      "name": "2. Detail — one order",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/order/financial-payments/get/{{orderId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "order", "financial-payments", "get", "{{orderId}}"]
+        },
+        "description": "**GET /api/order/financial-payments/get/:id** — `:id` = order Mongo `_id` from list `order_id`."
+      }
+    },
+    {
+      "name": "3. Dashboard cards (getCount type 4)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"type\": \"financial-order-payments\",\n  \"franchise_id\": \"{{franchiseId}}\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/getCount",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "getCount"]
+        },
+        "description": "**POST /api/getCount** type **4** — `total_completed_orders`, `total_in_progress_orders`, `total_partner_pending_amount`, `total_user_pending_amount`. Aliases: `financials`, `order-payment`."
+      }
+    }
+  ]
+}

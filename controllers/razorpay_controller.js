@@ -4,6 +4,7 @@ const Order = require('../models/order');
 const OrderService = require('../models/order_services');
 const OrderPayment = require('../models/order_payment');
 const { syncOrderPaymentStatus } = require('../services/order_payment_status_service');
+const { syncAllPartnerOrderPaymentsForOrder } = require('../services/partner_wallet_order_service');
 const path = require('path');
 
 const generatePaymentLink = async (name, email, contact, amount) => {
@@ -97,6 +98,7 @@ const handleRazorpayWebhook = async (req, res) => {
             }
 
             await syncOrderPaymentStatus(order._id);
+            await syncAllPartnerOrderPaymentsForOrder(order._id);
             console.log(`✅ Order ${order._id} payment synced from Razorpay`);
         } else {
             console.log('⚠️ No matching order found for payment link ID:', paymentLinkId);

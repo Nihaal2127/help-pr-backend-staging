@@ -12,8 +12,6 @@ const getAll = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    const partner_paid_status = parseInt(req.query.partner_paid_status) || null;
-
     const serviceStatusRaw =
       req.query.service_status !== undefined && req.query.service_status !== null
         ? String(req.query.service_status).trim()
@@ -32,7 +30,6 @@ const getAll = async (req, res) => {
       deleted_at: null,
       ...(service_status && { service_status }),
       ...(req.query.is_paid !== undefined && req.query.is_paid !== '' && { is_paid: is_paid }),
-      ...(req.query.partner_paid_status && { partner_paid_status: partner_paid_status }),
     };
 
     if (req.query.unique_id) {
@@ -281,29 +278,4 @@ const getLastServiceDate = async (user_id) => {
   }
 };
 
-const payComission = async (req, res) => {
-
-  const { order_service_ids, partner_paid_status } = req.body;
-  try {
-
-    const updateField = { partner_paid_status: partner_paid_status };
-    await OrderServices.updateMany(
-      { _id: { $in: order_service_ids } },
-      { $set: updateField }
-    );
-    return res.status(200).json({
-      success: true,
-      status: 200,
-      message: 'Commision paid successfully',
-    });
-  }
-  catch (error) {
-    console.error('Error pay comission :', error);
-    res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.'
-    });
-  }
-};
-module.exports = { getAll, create, getById, deleteAccount, getLastServiceDate, payComission };
+module.exports = { getAll, create, getById, deleteAccount, getLastServiceDate };

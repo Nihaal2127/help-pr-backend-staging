@@ -456,7 +456,6 @@ const buildCreateInputFromQuote = async (quote) => {
         total_service_charge: price,
         service_price: price,
         is_paid: false,
-        partner_paid_status: 1,
         rating: 0,
       },
     ],

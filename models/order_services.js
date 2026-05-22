@@ -41,7 +41,6 @@ var orderServiceSchema = new schema(
     partner_earning: { type: Number, default: 0, require: true },
     admin_earning: { type: Number, default: 0, require: true },
     is_paid: { type: Boolean, default: false },
-    partner_paid_status: { type: Number, default: 1 },//1 Pending 2 Paid 3 return
     cancellation_reasone: { type: String, default: "", require: false },
     rating: { type: Number, default: 0, require: true },
 
@@ -57,7 +56,6 @@ var orderServiceSchema = new schema(
 
 orderServiceSchema.index({ order_id: 1 });
 orderServiceSchema.index({ service_status: 1 });
-orderServiceSchema.index({ partner_paid_status: 1 });
 orderServiceSchema.index({ is_paid: 1 });
 orderServiceSchema.index({ user_id: 1 });
 orderServiceSchema.index({ partner_id: 1 });

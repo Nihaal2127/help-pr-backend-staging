@@ -47,7 +47,6 @@ OPTIONAL — franchise scope
   financials                    4   (aliases: order-payment, financial-order-payments → 4)
   order-payment                 4
   financial-order-payments      4
-  partner-payment               5
   franchise-management          6
   expenses                      7
   settings-expense-categories   8
@@ -86,9 +85,6 @@ FRANCHISE PARAMETER — WHAT CHANGES PER "type"
   4  financials / order-payment / financial-order-payments
      Aggregates order rows (same scope as GET /api/order/getAll). See
      “FINANCIAL ORDER PAYMENTS (TYPE 4)” and docs/FINANCIAL_ORDER_PAYMENTS_API.md.
-
-  5  partner-payment
-     Completed order services; franchise scope via quotes/staff orders (legacy).
 
   6  franchise-management
      Counts only that franchise row.

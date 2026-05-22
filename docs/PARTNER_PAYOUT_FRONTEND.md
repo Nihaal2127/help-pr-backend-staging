@@ -15,7 +15,7 @@ Partner payouts use a **wallet + ledger** model:
 - **Debits** — (1) admin **withdrawals** via **Create payout**; (2) refund `from_partner_wallet`.
 - **Balance** = sum(credits) − sum(debits). Shown as `total_wallet_amount` / `payable_balance`.
 
-This module is separate from the legacy **`order_service.partner_paid_status`** flow (`payComission`, export by status). **Use `/api/partner_payout` for the partner wallet UI.** The archived **`financial_order`** collection is **not** used for wallet credits.
+**Use `/api/partner_payout` for the partner wallet UI.** Wallet credits come from completed partner **`order_payment`** rows (`payer_type: partner`), not from a separate financial-order table.
 
 **Auth:** All endpoints require `Authorization: Bearer <JWT>` (same as other admin APIs).
 
@@ -308,16 +308,13 @@ Credits are **synced from completed partner `order_payment` rows** via `partner_
 
 ---
 
-## 8. Related APIs (not wallet module)
+## 8. Related APIs
 
 | API | Use |
 |-----|-----|
-| `POST /api/getCount` with `"type": "partner-payment"` (5) | Legacy dashboard: sums `order_service.partner_earning` by `partner_paid_status` |
-| `POST /api/getCount` with `"type": "order-payment"` (4) | Sums `order.partner_due_amount` (financial dashboard; see `docs/FINANCIAL_ORDER_PAYMENTS_API.md`) |
-| `POST /api/export/partner_payments` | Excel export by legacy `partner_paid_status` (1 Pending, 2 Completed, 3 Return) |
-| `POST /api/order-service/payComission` | Bulk-update legacy `partner_paid_status` only |
-
-Do **not** mix legacy `payComission` with wallet **create** for the same payout unless product explicitly requires both.
+| `POST /api/getCount` with `"type": "financial-order-payments"` (4) | Financial dashboard cards from `order` rollups — see `docs/FINANCIAL_ORDER_PAYMENTS_API.md` |
+| `GET /api/order/financial-payments/getAll` | Order-level partner/customer payment overview |
+| `POST /api/export/partner` | Partner directory export; **Wallet Balance** column uses ledger (credits − debits) |
 
 ---
 

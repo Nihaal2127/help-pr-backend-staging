@@ -400,12 +400,30 @@ const buildCreateInputFromQuote = async (quote) => {
     );
   }
 
-  const price = parseFloat(quote.service_price) || 0;
+  const charge =
+    Number(quote.total_service_charge) || Number(quote.service_price) || 0;
+  if (!(charge > 0)) {
+    throw new OrderCreationError(
+      "Quote must have total_service_charge (or service_price) greater than 0 before converting to an order.",
+      409
+    );
+  }
   const addressStr =
     addressDoc.address ||
     [addressDoc.landmark, addressDoc.area].filter(Boolean).join(", ") ||
     "";
   const quoteDescription = (quote.quote_description || "").trim();
+
+  const pricingFromQuote = {
+    total_service_charge: charge,
+    service_price: charge,
+    commission_amount: Number(quote.commission_amount) || 0,
+    tax_amount: Number(quote.tax_amount) || 0,
+    sub_total: Number(quote.sub_total) || 0,
+    total_price: Number(quote.total_price) || 0,
+    minimum_deposit_amount: Number(quote.minimum_deposit_amount) || 0,
+    discount_amount: null,
+  };
 
   return {
     user_id: quote.user_id,
@@ -418,9 +436,7 @@ const buildCreateInputFromQuote = async (quote) => {
     created_by_id:
       quote.created_by_id != null ? quote.created_by_id : quote.user_id,
     order_date: quote.from_date,
-    total_service_charge: price,
-    service_price: price,
-    discount_amount: null,
+    ...pricingFromQuote,
     address: addressStr,
     type: ORDER_TYPE_DEFAULT,
     partner_id: quote.partner_id,
@@ -434,7 +450,6 @@ const buildCreateInputFromQuote = async (quote) => {
     total_work_hours: quote.total_work_hours ?? 0,
     work_start_time: quote.work_start_time || "",
     work_end_time: quote.work_end_time || "",
-    service_price: price,
     customer_description: quoteDescription,
     order_description: quoteDescription,
     quote_id: quote._id,
@@ -453,8 +468,7 @@ const buildCreateInputFromQuote = async (quote) => {
         service_date: quote.from_date,
         service_from_time,
         service_to_time,
-        total_service_charge: price,
-        service_price: price,
+        ...pricingFromQuote,
         is_paid: false,
         rating: 0,
       },

@@ -56,6 +56,13 @@ const {
   createOrderFromQuote,
 } = require("../services/order_creation_service");
 const {
+  resolveQuotePricing,
+  applyPricingToQuote,
+  quotePricingInputChanged,
+  buildQuotePricingBody,
+  ensureQuotePricingForConversion,
+} = require("../services/quote_pricing_service");
+const {
   attachPartnerServiceToQuote,
   attachPartnerServiceToQuotes,
 } = require("../utils/quote_partner_service");
@@ -91,7 +98,9 @@ const QUOTE_SORT_WHITELIST = new Set([
   "updated_at",
   "from_date",
   "to_date",
+  "total_service_charge",
   "service_price",
+  "total_price",
   "status",
   "quote_sequence_id",
 ]);
@@ -204,10 +213,30 @@ const appendQuoteHistory = async (
   });
 };
 
+const handleQuotePricingError = (res, error) => {
+  if (error instanceof OrderCreationError) {
+    return res.status(error.status).json({
+      success: false,
+      status: error.status,
+      message: error.message,
+    });
+  }
+  return null;
+};
+
 const create = async (req, res) => {
   try {
     const body = req.body;
     const quote_sequence_id = await getQuoteSequenceId();
+
+    let pricing;
+    try {
+      ({ pricing } = await resolveQuotePricing(body));
+    } catch (pricingErr) {
+      const handled = handleQuotePricingError(res, pricingErr);
+      if (handled) return handled;
+      throw pricingErr;
+    }
 
     const quote = new Quote({
       quote_sequence_id,
@@ -229,7 +258,6 @@ const create = async (req, res) => {
       service_id: body.service_id,
       franchise_id: body.franchise_id,
       address_id: body.address_id,
-      service_price: parseFloat(body.service_price),
       status: body.partner_id ? "pending" : "new",
       from_date: body.from_date,
       to_date: body.to_date,
@@ -243,6 +271,8 @@ const create = async (req, res) => {
           : "",
     });
 
+    applyPricingToQuote(quote, pricing);
+
     await appendQuoteHistory(quote, req, "created", [], "Quote created.");
     await quote.save();
 
@@ -250,7 +280,22 @@ const create = async (req, res) => {
       success: true,
       status: 200,
       message: "Quote created successfully.",
-      record: { quote_id: quote._id, quote_sequence_id: quote.quote_sequence_id },
+      record: {
+        quote_id: quote._id,
+        quote_sequence_id: quote.quote_sequence_id,
+        pricing: {
+          total_service_charge: quote.total_service_charge,
+          commission_percent: quote.commission_percent,
+          commission_amount: quote.commission_amount,
+          tax_percent: quote.tax_percent,
+          tax_amount: quote.tax_amount,
+          sub_total: quote.sub_total,
+          total_price: quote.total_price,
+          minimum_deposit_percent: quote.minimum_deposit_percent,
+          minimum_deposit_amount: quote.minimum_deposit_amount,
+          service_price: quote.service_price,
+        },
+      },
     });
   } catch (error) {
     console.error("Error creating quote:", error);
@@ -566,7 +611,6 @@ const QUOTE_FIELD_UPDATE_KEYS = [
   "service_id",
   "franchise_id",
   "address_id",
-  "service_price",
   "from_date",
   "to_date",
   "work_hours_per_day",
@@ -593,9 +637,7 @@ const applyQuoteFieldUpdates = (quote, body) => {
       quote.employee_id = null;
     } else if (key === "created_by_id" && (body[key] === null || body[key] === "")) {
       quote.created_by_id = null;
-    } else if (
-      ["service_price", "work_hours_per_day", "total_work_hours"].includes(key)
-    ) {
+    } else if (["work_hours_per_day", "total_work_hours"].includes(key)) {
       quote[key] = parseFloat(body[key]);
     } else if (key === "quote_description") {
       quote.quote_description =
@@ -649,9 +691,9 @@ const update = async (req, res) => {
     }
     const currentStatus = resolveQuoteStatus(quote);
     const hasStatusUpdate = body.status !== undefined;
-    const hasFieldUpdates = QUOTE_FIELD_UPDATE_KEYS.some(
-      (key) => body[key] !== undefined
-    );
+    const hasFieldUpdates =
+      QUOTE_FIELD_UPDATE_KEYS.some((key) => body[key] !== undefined) ||
+      quotePricingInputChanged(body);
 
     if (hasFieldUpdates && !["new", "pending"].includes(currentStatus)) {
       return res.status(409).json({
@@ -665,6 +707,37 @@ const update = async (req, res) => {
 
     if (hasFieldUpdates) {
       const previousValues = applyQuoteFieldUpdates(quote, body);
+
+      if (quotePricingInputChanged(body)) {
+        const pricingSnapshotBefore = {
+          total_service_charge: quote.total_service_charge,
+          commission_amount: quote.commission_amount,
+          tax_amount: quote.tax_amount,
+          sub_total: quote.sub_total,
+          total_price: quote.total_price,
+        };
+
+        try {
+          const { pricing } = await resolveQuotePricing(
+            buildQuotePricingBody(quote, body)
+          );
+          applyPricingToQuote(quote, pricing);
+        } catch (pricingErr) {
+          const handled = handleQuotePricingError(res, pricingErr);
+          if (handled) return handled;
+          throw pricingErr;
+        }
+
+        for (const key of Object.keys(pricingSnapshotBefore)) {
+          const change = buildHistoryChange(
+            key,
+            pricingSnapshotBefore[key],
+            quote[key]
+          );
+          if (change) historyChanges.push(change);
+        }
+      }
+
       for (const key of Object.keys(previousValues)) {
         const change = buildHistoryChange(
           key,
@@ -723,9 +796,35 @@ const update = async (req, res) => {
           });
         }
 
+        try {
+          await ensureQuotePricingForConversion(quote, body);
+        } catch (pricingErr) {
+          const handled = handleQuotePricingError(res, pricingErr);
+          if (handled) return handled;
+          throw pricingErr;
+        }
+
+        if (hasFieldUpdates) {
+          if (historyChanges.length > 0) {
+            await appendQuoteHistory(
+              quote,
+              req,
+              "updated",
+              historyChanges,
+              "Quote details updated before order conversion."
+            );
+          }
+          quote.updated_at = new Date();
+          await quote.save();
+        } else if (quote.isModified()) {
+          quote.updated_at = new Date();
+          await quote.save();
+        }
+
         const oldStatus = quote.status;
         const oldOrderId = quote.order_id;
-        const { order, unique_id } = await createOrderFromQuote(quote);
+        const quoteForOrder = await Quote.findById(quote._id);
+        const { order, unique_id } = await createOrderFromQuote(quoteForOrder);
         const linkedQuote = await Quote.findById(quote._id);
 
         await appendQuoteHistory(

@@ -6,10 +6,16 @@ const {
   areas,
   pincodes,
 } = require('../../../controllers/mobile/partner/location_controller');
+const {
+  validateStatesQuery,
+  validateCitiesQuery,
+  validateAreasQuery,
+  validatePincodesQuery,
+} = require('../../../middleware/mobile/partner/location_middleware');
 
-router.get('/states', states);
-router.get('/cities', cities);
-router.get('/areas', areas);
-router.get('/pincodes', pincodes);
+router.get('/states', validateStatesQuery, states);
+router.get('/cities', validateCitiesQuery, cities);
+router.get('/areas', validateAreasQuery, areas);
+router.get('/pincodes', validatePincodesQuery, pincodes);
 
 module.exports = router;

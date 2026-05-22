@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { register, login, update } = require('../../../controllers/mobile/partner/partner_controller');
+const { categories, services } = require('../../../controllers/mobile/partner/catalog_controller');
 const {
   partnerRegisterMiddleware,
   partnerLoginMiddleware,
@@ -8,7 +9,7 @@ const {
   partnerProfileImageSizeMiddleware,
   partnerRequireMultipartMiddleware,
 } = require('../../../middleware/mobile/partner/partner_middleware');
-const authMiddleware = require('../../../middleware/auth_middleware');
+const mobileAuthMiddleware = require('../../../middleware/mobile/auth_middleware');
 const { upload } = require('../../../utils/fileUpload');
 
 const PARTNER_MULTIPART_FIELDS = [
@@ -26,12 +27,14 @@ router.post('/register', partnerRegisterMiddleware, register);
 router.post('/login', partnerLoginMiddleware, login);
 router.put(
   '/update',
-  authMiddleware,
+  mobileAuthMiddleware,
   partnerRequireMultipartMiddleware,
   partnerMultipartUpload,
   partnerProfileImageSizeMiddleware,
   partnerUpdateMiddleware,
   update
 );
+router.get('/categories', mobileAuthMiddleware, categories);
+router.get('/services', mobileAuthMiddleware, services);
 
 module.exports = router;

@@ -76,8 +76,9 @@ var orderSchema = new schema(
     customer_net_paid: { type: Number, default: 0 },
     customer_due_amount: { type: Number, default: 0 },
     /**
-     * Partner remittance rollup from order_payment (payer_type partner):
-     * unpaid | partially_paid | paid vs customer_net_paid allowance.
+     * Partner payout rollup from order_payment (payer_type partner):
+     * unpaid | partially_paid | paid vs min(customer_net_paid, partner entitlement).
+     * partner_due_amount is remaining partner share still to pay out.
      */
     partner_payment_status: {
       type: String,

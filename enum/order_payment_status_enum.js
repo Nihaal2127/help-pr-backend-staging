@@ -113,11 +113,40 @@ const computeCustomerPaymentStatus = (orderTotal, payments = []) => {
 };
 
 /**
- * Partner remittance status: sum of completed partner order_payment rows vs
- * customer_net_paid (max partner payout allowed on this order).
+ * Partner payout rollup: completed partner order_payment rows vs amount still owed
+ * to the partner. Allowance is min(customer_net_paid, partner_entitlement) when
+ * entitlement is provided; otherwise falls back to customer_net_paid only.
+ *
+ * @param {number} customerNetPaid
+ * @param {Array} payments
+ * @param {number|null|undefined} partnerEntitlement - partner_earning + eligible additional charges
  */
-const computePartnerPaymentStatus = (customerNetPaid, payments = []) => {
-  const allowance = roundMoney(customerNetPaid);
+const resolvePartnerRemittanceAllowance = (
+  customerNetPaid,
+  partnerEntitlement = null
+) => {
+  const netPaid = roundMoney(customerNetPaid);
+  if (
+    partnerEntitlement === null ||
+    partnerEntitlement === undefined
+  ) {
+    return netPaid;
+  }
+  if (netPaid <= PAYMENT_STATUS_TOLERANCE) {
+    return 0;
+  }
+  return roundMoney(Math.min(netPaid, roundMoney(partnerEntitlement)));
+};
+
+const computePartnerPaymentStatus = (
+  customerNetPaid,
+  payments = [],
+  partnerEntitlement = null
+) => {
+  const allowance = resolvePartnerRemittanceAllowance(
+    customerNetPaid,
+    partnerEntitlement
+  );
   const rows = (payments || []).filter(
     (p) => String(p.payer_type).toLowerCase() === "partner"
   );
@@ -176,6 +205,7 @@ module.exports = {
   isValidOrderPaymentStatus,
   isValidPartnerPaymentStatus,
   computeCustomerPaymentStatus,
+  resolvePartnerRemittanceAllowance,
   computePartnerPaymentStatus,
   getOrderPaymentStatusLabel,
 };

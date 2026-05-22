@@ -11,7 +11,9 @@ const {
 const {
     isValidOrderPaymentStatus,
     isValidPartnerPaymentStatus,
+    computePartnerPaymentStatus,
 } = require('../enum/order_payment_status_enum');
+const { syncOrderPaymentStatus } = require('./order_payment_status_service');
 const { resolveOrderListScope, assertOrderRecordAccess } = require('../utils/order_access');
 const { buildOrderDateRangeFilter } = require('../utils/schedule_date_filters');
 const { resolveListSearchRegex } = require('../utils/list_query_helpers');
@@ -41,6 +43,39 @@ const formatDateOnly = (date) => {
     const d = new Date(date);
     if (Number.isNaN(d.getTime())) return null;
     return d.toISOString().slice(0, 10);
+};
+
+/** Ignore legacy time-only placeholders (e.g. 2000-01-01 from service_from_time). */
+const resolveServiceDateForFinancial = (row) => {
+    const candidates = [row.service_date, row.order_date, row.created_at];
+    for (const raw of candidates) {
+        if (!raw) continue;
+        const d = new Date(raw);
+        if (Number.isNaN(d.getTime()) || d.getUTCFullYear() < 2010) continue;
+        return formatDateOnly(d);
+    }
+    return formatDateOnly(row.order_date) || formatDateOnly(row.created_at);
+};
+
+const resolvePartnerFinancialFields = (row, totalPartnerAmount) => {
+    const customerNetPaid = roundMoney(row.customer_net_paid);
+    const paidToPartner = roundMoney(row.partner_paid_amount);
+    const syntheticPayments =
+        paidToPartner > 0
+            ? [{ payer_type: 'partner', amount: paidToPartner, status: 'completed' }]
+            : [];
+
+    const partnerBreakdown = computePartnerPaymentStatus(
+        customerNetPaid,
+        syntheticPayments,
+        totalPartnerAmount
+    );
+
+    return {
+        paid_to_partner: partnerBreakdown.partner_paid_amount,
+        pending_to_partner: partnerBreakdown.partner_due_amount,
+        partner_payment_status: partnerBreakdown.partner_payment_status,
+    };
 };
 
 /** Financial UI uses in_progress; orders store in-progress. */
@@ -102,6 +137,7 @@ const shapeFinancialOverviewRecord = (row, srNo) => {
     const partnerEarning = roundMoney(row._line_partner_earning);
     const additionalBase = roundMoney(row.additional_charges_subtotal);
     const totalPartnerAmount = roundMoney(partnerEarning + additionalBase);
+    const partnerFinancial = resolvePartnerFinancialFields(row, totalPartnerAmount);
 
     return {
         sr_no: srNo,
@@ -114,19 +150,21 @@ const shapeFinancialOverviewRecord = (row, srNo) => {
         partner_id: row.partner_id || null,
         partner_name: row._partner_name || '',
         service_name: row._service_name || '',
-        service_date: formatDateOnly(row.service_date),
+        service_date: resolveServiceDateForFinancial(row),
         total_amount: roundMoney(row.total_price),
         total_price: roundMoney(row.total_price),
         commission_percentage: roundMoney(row.commission_percent),
+        commission_amount: roundMoney(row.commission_amount),
         tax_percentage: roundMoney(row.tax_percent),
+        tax_amount: roundMoney(row.tax_amount),
         customer_paid_amount: roundMoney(row.customer_paid_amount),
         customer_pending_amount: roundMoney(row.customer_due_amount),
         total_service_amount: roundMoney(row.sub_total ?? row.total_service_charge),
         total_partner_amount: totalPartnerAmount,
-        paid_to_partner: roundMoney(row.partner_paid_amount),
-        pending_to_partner: roundMoney(row.partner_due_amount),
+        paid_to_partner: partnerFinancial.paid_to_partner,
+        pending_to_partner: partnerFinancial.pending_to_partner,
         customer_payment_status: row.user_payment_status || row.payment_status || 'unpaid',
-        partner_payment_status: row.partner_payment_status || 'unpaid',
+        partner_payment_status: partnerFinancial.partner_payment_status,
         order_status: toFinancialOrderStatus(row.order_status),
         order_status_canonical: row.order_status,
         created_at: row.created_at,
@@ -197,6 +235,7 @@ const buildFinancialOverviewPipeline = ({
                 service_date: {
                     $ifNull: ['$_line.service_date', '$order_date', '$created_at'],
                 },
+                order_date: 1,
             },
         },
     ];
@@ -398,6 +437,8 @@ const getFinancialOrderPaymentById = async (req, orderId) => {
         if (!access.ok) {
             return fail(access.status, access.message || 'Forbidden.');
         }
+
+        await syncOrderPaymentStatus(order._id);
 
         const collections = getListCollectionNames({
             users: User,

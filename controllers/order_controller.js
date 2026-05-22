@@ -399,6 +399,7 @@ const getAll = async (req, res) => {
       quotes: Quote,
       address: Address,
       states: State,
+      orderServices: OrderService,
     });
 
     const pipeline = buildEntityListPipeline({
@@ -411,6 +412,7 @@ const getAll = async (req, res) => {
       collections,
       includeRootCityLookup: true,
       includeQuoteLookup: true,
+      includeServiceItemsLookup: true,
       extraAddFields: {
         city_id: {
           $cond: [

@@ -26,9 +26,40 @@ const formatQuoteEmbedForApi = (quote) => {
   return applyCalendarDateFields({ ...quote }, QUOTE_EMBED_CALENDAR_DATE_KEYS);
 };
 
+const objectIdBytesToHex = (bytes) => Buffer.from(bytes).toString('hex');
+
+/** Normalize Mongo ObjectId / Buffer leak to a 24-char hex string. */
+const serializeObjectId = (value) => {
+  if (value == null) return value;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object' && value.buffer?.type === 'Buffer' && Array.isArray(value.buffer.data)) {
+    return objectIdBytesToHex(value.buffer.data);
+  }
+  if (typeof value.toHexString === 'function') return value.toHexString();
+  if (typeof value.toString === 'function' && value._bsontype === 'ObjectId') {
+    return value.toString();
+  }
+  return value;
+};
+
 const formatOrderServiceItemForApi = (item) => {
-  if (!item || typeof item !== 'object') return item;
-  return applyCalendarDateFields({ ...item }, SERVICE_LINE_CALENDAR_DATE_KEYS);
+  if (item == null) return item;
+  if (typeof item !== 'object') return item;
+
+  // Unpopulated ObjectId serialized as { buffer: { type, data } } from aggregate JSON.
+  if (item.buffer?.type === 'Buffer' && Array.isArray(item.buffer.data) && item._id == null) {
+    return { _id: objectIdBytesToHex(item.buffer.data) };
+  }
+
+  const id = serializeObjectId(item._id ?? item);
+  if (typeof item === 'object' && item._id == null && typeof id === 'string') {
+    return { _id: id };
+  }
+
+  const plain = toPlainObject(item);
+  if (plain._id != null) plain._id = serializeObjectId(plain._id);
+  if (plain.order_id != null) plain.order_id = serializeObjectId(plain.order_id);
+  return applyCalendarDateFields(plain, SERVICE_LINE_CALENDAR_DATE_KEYS);
 };
 
 /**
@@ -58,4 +89,5 @@ module.exports = {
   formatOrderRecords,
   formatOrderServiceItemForApi,
   formatQuoteEmbedForApi,
+  serializeObjectId,
 };

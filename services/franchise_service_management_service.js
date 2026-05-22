@@ -38,6 +38,7 @@ const {
     diffRemovedIds,
     onFranchiseServicesRemoved,
 } = require('./catalog_cascade_service');
+const { getFranchiseUserIdsForScope } = require('../utils/franchise_catalog_dashboard_counts');
 
 const fail = (status, message, extra = {}) => ({ ok: false, status, message, ...extra });
 const ok = (status, data) => ({ ok: true, status, data });
@@ -259,6 +260,105 @@ const buildAllServicesWithFranchiseMappingStatus = async (franchiseOid) => {
     });
 };
 
+const attachRequestedByUser = async (records) => {
+    if (!Array.isArray(records) || records.length === 0) return records;
+
+    const requestedByIds = [
+        ...new Set(
+            records
+                .map((record) => record?.requested_by)
+                .filter((id) => mongoose.Types.ObjectId.isValid(String(id)))
+                .map((id) => String(id))
+        ),
+    ];
+
+    if (requestedByIds.length === 0) return records;
+
+    const users = await User.find({
+        _id: { $in: requestedByIds },
+        deleted_at: null,
+    }).select('name');
+
+    const userMap = new Map(users.map((user) => [String(user._id), user]));
+
+    return records.map((record) => {
+        const plainRecord =
+            record && typeof record.toObject === 'function' ? record.toObject() : record;
+        const requestedById = plainRecord?.requested_by ? String(plainRecord.requested_by) : null;
+        const requestedByUser = requestedById ? userMap.get(requestedById) : null;
+        return {
+            ...plainRecord,
+            requested_by: requestedByUser
+                ? { id: requestedByUser._id, name: requestedByUser.name }
+                : plainRecord.requested_by,
+        };
+    });
+};
+
+/**
+ * Pending service requests raised by users under this franchise (matches GET /api/service/getAll?is_request=true scope).
+ */
+const buildFranchiseRequestServices = async (franchiseOid) => {
+    const franchiseUserIds = await getFranchiseUserIdsForScope([franchiseOid]);
+    if (franchiseUserIds.length === 0) return [];
+
+    const local = await resolveFranchiseMappingPreferenceMaps(franchiseOid);
+    if (!local.ok) return [];
+
+    const franchiseServiceEnabled = local.serviceEnabled;
+    const franchiseCategoryEnabled = local.categoryEnabled;
+
+    const requestSvcs = await Service.find({
+        deleted_at: null,
+        is_request: true,
+        requested_by: { $in: franchiseUserIds },
+    })
+        .select(
+            'name desc image_url category_id is_active is_request service_id tax commission payment_type minimum_deposit approval_status rejection_reason requested_by created_at updated_at'
+        )
+        .populate({ path: 'category_id', select: categoryPopulateSelect, match: { deleted_at: null } })
+        .sort({ name: 1 })
+        .lean();
+
+    const catIds = [
+        ...new Set(
+            requestSvcs
+                .map((s) => {
+                    const c = s.category_id;
+                    if (!c) return null;
+                    const raw = c._id ? c._id : c;
+                    const oid = coerceCatalogObjectId(raw);
+                    return oid ? oid.toString() : null;
+                })
+                .filter(Boolean)
+        ),
+    ]
+        .map((s) => coerceCatalogObjectId(s))
+        .filter(Boolean);
+    const globalCatActive = await loadGlobalCategoryActiveMap(catIds);
+
+    const rows = requestSvcs.map((svc) => {
+        const svcKey = svc._id.toString();
+        const catRef = svc.category_id;
+        const catKey = catRef ? (catRef._id ? catRef._id.toString() : catRef.toString()) : '';
+        const globalServiceActive = isGlobalCatalogRowActive(svc);
+        const globalCategoryActive = catKey ? globalCatActive.get(catKey) === true : false;
+        const franchiseServiceEnabledFlag = franchiseServiceEnabled.get(svcKey) === true;
+        const franchiseCategoryEnabledFlag = catKey
+            ? franchiseCategoryEnabled.get(catKey) === true
+            : false;
+
+        return annotateCatalogRowWithAvailability(svc, {
+            kind: 'service',
+            globalActive: globalServiceActive,
+            globalCategoryActive,
+            franchiseEnabled: franchiseServiceEnabledFlag,
+            franchiseCategoryEnabled: franchiseCategoryEnabledFlag,
+        });
+    });
+    return attachRequestedByUser(rows);
+};
+
 const normalizeFranchiseServiceSearchInput = (searchRaw) => {
     if (searchRaw === undefined || searchRaw === null) return '';
     return String(searchRaw)
@@ -464,15 +564,18 @@ const list = async (query, userId) => {
         const sortOpts = parseFranchiseServiceCatalogSort(query);
         if (!sortOpts.ok) return fail(400, sortOpts.message);
 
-        let services = await buildAllServicesWithFranchiseMappingStatus(scope.franchiseOid);
+        let services =
+            isRequestFilter === true
+                ? await buildFranchiseRequestServices(scope.franchiseOid)
+                : await buildAllServicesWithFranchiseMappingStatus(scope.franchiseOid);
 
         if (listFlags.mappingActiveFilter !== undefined) {
             services = services.filter(
                 (svc) => Boolean(svc.franchise_enabled) === listFlags.mappingActiveFilter
             );
         }
-        if (isRequestFilter !== undefined) {
-            services = services.filter((svc) => Boolean(svc.is_request) === isRequestFilter);
+        if (isRequestFilter === false) {
+            services = services.filter((svc) => Boolean(svc.is_request) === false);
         }
 
         const searchTerm = query.search ?? query.q;

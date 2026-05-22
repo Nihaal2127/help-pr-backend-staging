@@ -8,6 +8,7 @@ const {
   computeCustomerPaymentStatus,
   computePartnerPaymentStatus,
 } = require("../enum/order_payment_status_enum");
+const { computeOrderPartnerCreditAmount } = require("./partner_wallet_order_service");
 const {
   ORDER_STATUS_CANCELLED,
   ORDER_STATUS_REFUNDED,
@@ -30,9 +31,15 @@ const syncOrderPaymentStatus = async (orderId) => {
     Number(order.total_price) || 0,
     payments
   );
+  let partnerEntitlement = 0;
+  if (order.partner_id) {
+    const credit = await computeOrderPartnerCreditAmount(order);
+    partnerEntitlement = credit?.amount ?? 0;
+  }
   const partnerBreakdown = computePartnerPaymentStatus(
     customerBreakdown.customer_net_paid,
-    payments
+    payments,
+    partnerEntitlement
   );
 
   order.payment_status = customerBreakdown.payment_status;

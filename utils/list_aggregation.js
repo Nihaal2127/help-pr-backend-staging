@@ -189,6 +189,40 @@ const buildListFacetStages = (skip, limit) => [
   },
 ];
 
+/** Populate order.service_items (ObjectId[]) with order_service documents for list APIs. */
+const buildServiceItemsLookupStage = (orderServicesColl) => ({
+  $lookup: {
+    from: orderServicesColl,
+    let: { lineIds: "$service_items" },
+    pipeline: [
+      {
+        $match: {
+          $expr: { $in: ["$_id", "$$lineIds"] },
+          deleted_at: null,
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+          order_id: 1,
+          order_unique_id: 1,
+          service_status: 1,
+          service_date: 1,
+          service_from_time: 1,
+          service_to_time: 1,
+          is_paid: 1,
+          service_price: 1,
+          total_service_charge: 1,
+          total_price: 1,
+          partner_earning: 1,
+          admin_earning: 1,
+        },
+      },
+    ],
+    as: "service_items",
+  },
+});
+
 const DEFAULT_STRIP_INTERNAL = [
   "_user",
   "_partner",
@@ -210,9 +244,10 @@ const DEFAULT_STRIP_INTERNAL = [
  * @param {number} config.limit
  * @param {RegExp|null} [config.regex]
  * @param {string[]} [config.searchFields]
- * @param {object} config.collections - { users, categories, services, franchise, address, cities, states, areas?, quotes? }
+ * @param {object} config.collections - { users, categories, services, franchise, address, cities, states, areas?, quotes?, orderServices? }
  * @param {boolean} [config.includeRootCityLookup]
  * @param {boolean} [config.includeQuoteLookup]
+ * @param {boolean} [config.includeServiceItemsLookup]
  * @param {boolean} [config.includeAreaOnAddress]
  * @param {object} [config.extraAddFields] - merged into hydration $addFields
  * @param {object} [config.extraProject] - merged into final $project (e.g. { history: 0 })
@@ -229,6 +264,7 @@ const buildEntityListPipeline = (config) => {
     collections,
     includeRootCityLookup = false,
     includeQuoteLookup = false,
+    includeServiceItemsLookup = false,
     includeAreaOnAddress = false,
     extraAddFields = {},
     extraProject = {},
@@ -245,6 +281,7 @@ const buildEntityListPipeline = (config) => {
     states,
     areas = null,
     quotes = null,
+    orderServices = null,
   } = collections;
 
   const stripFields = [...(stripInternalFields || DEFAULT_STRIP_INTERNAL)];
@@ -297,6 +334,9 @@ const buildEntityListPipeline = (config) => {
           unwind("$_quote"),
         ]
       : []),
+    ...(includeServiceItemsLookup && orderServices
+      ? [buildServiceItemsLookupStage(orderServices)]
+      : []),
     ...buildSearchMatchStage(regex, searchFields),
     { $sort: sortStage },
     { $addFields: displayAddFields },
@@ -329,6 +369,7 @@ const getListCollectionNames = (models) => {
 
 module.exports = {
   buildEntityListPipeline,
+  buildServiceItemsLookupStage,
   parseFacetListResult,
   getListCollectionNames,
   buildSearchMatchStage,

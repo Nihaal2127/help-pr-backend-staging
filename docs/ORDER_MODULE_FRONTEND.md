@@ -31,7 +31,7 @@ Order (1) ──has──▶ service_items[] ──▶ OrderService (1 per order
 ```
 
 - **Order** holds customer-facing totals, payment flags, quote-aligned fields (partner, franchise, schedule, etc.), and references **`order_service`** documents via **`service_items`** (array of ObjectIds; **length must be 1** on create).
-- **OrderService** holds per-job execution fields (partner, service window, line pricing, **`is_paid`**, **`partner_paid_status`**, etc.).
+- **OrderService** holds per-job execution fields (partner, service window, line pricing, **`is_paid`**, etc.). Partner remittance uses **`order.partner_*`** rollups and **`/api/partner_payout`** (wallet).
 - **`total_price`** is **calculated on the server** from `total_service_charge`, service table rates, taxed additional charges, and discount (see §5). Optional client mirrors are compared; **server values are always saved**.
 
 ---
@@ -52,8 +52,6 @@ Order (1) ──has──▶ service_items[] ──▶ OrderService (1 per order
 **Update order** (`PUT /api/order/update/:id`): pass `order_status` as a string. **`completed`** is allowed only when the customer has paid the full **`total_price`** (`payment_status` = `paid`, i.e. completed customer `order_payment` rows sum to total due, ±₹0.01). Otherwise the API returns **409**. Other transitions (e.g. `in-progress` → `cancelled`, `completed` → `refunded`) are unchanged.
 
 **Reprice on update** (optional, same endpoint): send **`total_service_charge`** and/or **`offer_id`**. Server keeps **`tax_percent`**, **`commission_percent`**, **`minimum_deposit_percent`** from the saved order; recalculates **`commission_amount`**, **`tax_amount`**, **`total_price`**, etc. Offer rows are **replaced** from the live **`offers`** table (not merged with old `order_offer`). Send **`offer_id`: `null`** to remove an offer.
-
-**Partner payout field** on **`order_service`**: **`partner_paid_status`** — `1` Pending, `2` Paid, `3` return (per existing comment).
 
 ---
 
@@ -258,9 +256,8 @@ Same **403** participant rule as additional charges.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/getAll` | Paginated filters: `user_id`, `partner_id`, `service_status`, `is_paid`, `partner_paid_status`, `unique_id` (matches **`order_unique_id`**), `keyword`, `page`, `limit`, `sort` |
+| GET | `/getAll` | Paginated filters: `user_id`, `partner_id`, `service_status`, `is_paid`, `unique_id` (matches **`order_unique_id`**), `search`, `page`, `limit`, `sort` |
 | GET | `/get/:id` | Single `order_service` |
-| POST | `/payComission` | Body: `order_service_ids` (array), `partner_paid_status` (1–3) |
 
 ### Razorpay — `/api/razorpay`
 
@@ -484,7 +481,7 @@ Variables: `baseUrl`, `accessToken`, `orderId`, `orderServiceId`, filter vars (`
 
 Standalone CRUD for `/api/order-additional-charges` and `/api/order-payments` (optional if you use nested payloads on create/update). Variables: `orderId`, `additionalChargeId`, `orderPaymentId`.
 
-Other routes (`serviceUpdate`, `cancle`, `getCustomerOrder`, `order_service`, `order/financial-payments`, `getCount`, Razorpay) are in the same All APIs collection or documented in §6. Legacy `financial-order` module: `archive/financial-order/`.
+Other routes (`serviceUpdate`, `cancle`, `getCustomerOrder`, `order_service`, `order/financial-payments`, `partner_payout`, `getCount`, Razorpay) are in the same All APIs collection or documented in §6.
 
 Replace placeholder ObjectIds in example bodies with real IDs from your environment.
 

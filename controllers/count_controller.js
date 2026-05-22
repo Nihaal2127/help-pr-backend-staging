@@ -108,44 +108,6 @@ const assertFranchiseAccess = async (req, franchiseOid) => {
     return { ok: false, status: 403, message: 'You are not allowed to view counts for this franchise.' };
 };
 
-/** Order model has no franchise_id; scope via quotes + staff-created orders. */
-const buildFranchiseScopedCompletedOrderIds = async (franchiseOid) => {
-    const staffIds = await User.find({
-        franchise_id: franchiseOid,
-        type: { $in: [1, 3] },
-        deleted_at: null,
-    }).distinct('_id');
-
-    const quoteOrderIds = await Quote.find({
-        franchise_id: franchiseOid,
-        deleted_at: null,
-        order_id: { $ne: null },
-    }).distinct('order_id');
-
-    const idSet = new Set();
-    for (const id of quoteOrderIds) {
-        if (id) idSet.add(id.toString());
-    }
-    if (staffIds.length > 0) {
-        const staffOrderIds = await Order.find({
-            deleted_at: null,
-            created_by_id: { $in: staffIds },
-        }).distinct('_id');
-        for (const id of staffOrderIds) {
-            if (id) idSet.add(id.toString());
-        }
-    }
-    if (idSet.size === 0) {
-        return [];
-    }
-    const candidates = Array.from(idSet, (s) => new mongoose.Types.ObjectId(s));
-    return Order.find({
-        _id: { $in: candidates },
-        deleted_at: null,
-        order_status: 'completed',
-    }).distinct('_id');
-};
-
 const resolveCountType = (type) => {
     if (typeof type === 'number' && !Number.isNaN(type)) return type;
     if (typeof type !== 'string') return null;
@@ -182,7 +144,6 @@ const resolveCountType = (type) => {
         'financial-order-payments': 4,
         financial_order_payments: 4,
         'partner-management': 12,
-        'partner-payment': 5,
         'franchise-management': 6,
         'expenses': 7,
         'settings-expense-categories': 8,
@@ -648,44 +609,6 @@ const getCountData = async (req, res) => {
                 response,
                 await buildFinancialOrderPaymentsCountFromOrders(financialScope.filter)
             );
-        } else if (resolvedType === 5) {
-            // Partner Payment
-            const osMatch = {
-                deleted_at: null,
-                service_status: 'completed',
-                ...(franchiseScopeOid
-                    ? { order_id: { $in: await buildFranchiseScopedCompletedOrderIds(franchiseScopeOid) } }
-                    : {}),
-            };
-            const result = await OrderService.aggregate([
-                {
-                    $match: osMatch,
-                },
-                {
-                    $group: {
-                        _id: null,
-                        completed_amount: {
-                            $sum: { $cond: [{ $eq: ["$partner_paid_status", 2] }, "$partner_earning", 0] }
-                        },
-                        pending_amount: {
-                            $sum: { $cond: [{ $eq: ["$partner_paid_status", 1] }, "$partner_earning", 0] }
-                        },
-                        returned_amount: {
-                            $sum: { $cond: [{ $eq: ["$partner_paid_status", 3] }, "$partner_earning", 0] }
-                        },
-                    }
-                },
-            ]);
-            if (result.length > 0) {
-                const data = result[0];
-                response.completed_amount = data.completed_amount;
-                response.pending_amount = data.pending_amount;
-                response.returned_amount = data.returned_amount;
-            } else {
-                response.completed_amount = 0;
-                response.pending_amount = 0;
-                response.returned_amount = 0;
-            }
         } else if (resolvedType === 6) {
             // Franchise Management
             const caller = await User.findOne({ _id: req.user.id, deleted_at: null }).select('type franchise_id');

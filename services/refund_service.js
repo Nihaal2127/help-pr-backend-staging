@@ -10,10 +10,7 @@ const {
 } = require('../enum/order_payment_status_enum');
 const { syncOrderPaymentStatus } = require('./order_payment_status_service');
 const { syncAllPartnerOrderPaymentsForOrder } = require('./partner_wallet_order_service');
-const {
-    syncCreditsFromFinancialOrders,
-    getWalletAggregatesForPartners,
-} = require('./partner_payout_service');
+const { getWalletAggregatesForPartners } = require('./partner_payout_service');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
 
 const MAX_PAGE_SIZE = 100;
@@ -151,7 +148,6 @@ const getRefundableAmountForOrder = async (order) => {
 
 const getPartnerWalletBalance = async (partnerId) => {
     if (!partnerId) return 0;
-    await syncCreditsFromFinancialOrders([partnerId]);
     const walletMap = await getWalletAggregatesForPartners([partnerId]);
     const wallet = walletMap.get(partnerId.toString());
     return wallet ? wallet.payable_balance : 0;

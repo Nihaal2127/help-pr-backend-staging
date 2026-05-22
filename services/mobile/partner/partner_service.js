@@ -12,8 +12,6 @@ const { createMultiple } = require('../../../controllers/partner_document_contro
 const { handleImageUpload } = require('../../../helper/image_uploader');
 const { getUploadType } = require('../../../enum/upload_type_enum');
 const { replacePartnerCatalogFromNormalizedRows } = require('../../../services/partner_category_service');
-const partnerSubscriptionService = require('../../../services/partner_subscription_service');
-
 const DEFAULT_PARTNER_PLAN_NAME = 'basic';
 
 const USER_TYPE_PARTNER = 2;
@@ -302,21 +300,6 @@ const normalizePartnerBankAccount = (payload) => {
     bank_name: parsed.bank_name ?? '',
     branch_name: parsed.branch_name ?? '',
     is_primary: normalizedPrimary,
-  };
-};
-
-const normalizePartnerSubscriptionPayload = (payload) => {
-  const parsed = parseJsonIfString(payload, null);
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-  return {
-    partner_id: parsed.partner_id ?? parsed.partner ?? null,
-    subscription_plan_id: parsed.subscription_plan_id ?? parsed.subscription_plan ?? null,
-    started_at:
-      parsed.started_at ?? parsed.subscription_start_date ?? parsed.start_date ?? null,
-    expires_at:
-      parsed.expires_at ?? parsed.subscription_end_date ?? parsed.end_date ?? null,
-    status: parsed.status ?? null,
-    notes: parsed.notes ?? '',
   };
 };
 
@@ -740,8 +723,6 @@ const updatePartner = async ({ partnerId, body, files }) => {
     updateData.bank_account !== undefined ||
     updateData.account_number !== undefined ||
     updateData.account_holder_name !== undefined ||
-    updateData.partner_subscription !== undefined ||
-    updateData.subscription_plan_id !== undefined ||
     hasPartnerDocFiles;
 
   if (shouldRunPartnerExtras) {
@@ -785,50 +766,6 @@ const updatePartner = async ({ partnerId, body, files }) => {
       );
       if (!bankResult.ok) {
         return { ok: false, status: bankResult.status, message: bankResult.message };
-      }
-    }
-
-    const hasSubscriptionPayload =
-      updateData.partner_subscription !== undefined ||
-      updateData.subscription_plan_id !== undefined;
-    if (hasSubscriptionPayload) {
-      const normalizedSubscription = normalizePartnerSubscriptionPayload(
-        updateData.partner_subscription ?? {
-          partner_id: updateData.partner_id,
-          subscription_plan_id: updateData.subscription_plan_id,
-          subscription_start_date: updateData.subscription_start_date,
-          started_at: updateData.started_at,
-          start_date: updateData.start_date,
-          subscription_end_date: updateData.subscription_end_date,
-          expires_at: updateData.expires_at,
-          end_date: updateData.end_date,
-          status: updateData.status,
-          notes: updateData.notes,
-        }
-      );
-      if (normalizedSubscription && normalizedSubscription.subscription_plan_id) {
-        const resolvedStatus =
-          normalizedSubscription.status === 'inactive'
-            ? 'cancelled'
-            : normalizedSubscription.status;
-        const subscriptionResult = await partnerSubscriptionService.createPartnerSubscription(
-          {
-            partner_id: updatedUser._id,
-            subscription_plan_id: normalizedSubscription.subscription_plan_id,
-            started_at: normalizedSubscription.started_at,
-            expires_at: normalizedSubscription.expires_at,
-            status: resolvedStatus,
-            notes: normalizedSubscription.notes,
-          },
-          null
-        );
-        if (!subscriptionResult.ok) {
-          return {
-            ok: false,
-            status: subscriptionResult.status,
-            message: subscriptionResult.message,
-          };
-        }
       }
     }
   }

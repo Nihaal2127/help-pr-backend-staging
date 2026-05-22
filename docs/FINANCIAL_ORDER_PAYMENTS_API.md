@@ -81,13 +81,15 @@ Authorization: Bearer <token>
       "total_amount": 3540,
       "total_price": 3540,
       "commission_percentage": 10,
+      "commission_amount": 300,
       "tax_percentage": 18,
+      "tax_amount": 540,
       "customer_paid_amount": 2000,
       "customer_pending_amount": 1540,
       "total_service_amount": 3000,
       "total_partner_amount": 2700,
       "paid_to_partner": 1000,
-      "pending_to_partner": 1000,
+      "pending_to_partner": 1700,
       "customer_payment_status": "partially_paid",
       "partner_payment_status": "partially_paid",
       "order_status": "in_progress",
@@ -111,14 +113,16 @@ Authorization: Bearer <token>
 | Service Date | `service_date` | `order_service.service_date` or `order.order_date` |
 | Total Amount | `total_amount` / `total_price` | `order.total_price` |
 | Commission (%) | `commission_percentage` | `order.commission_percent` |
+| Commission amount | `commission_amount` | `order.commission_amount` |
 | Tax (%) | `tax_percentage` | `order.tax_percent` |
+| Tax amount | `tax_amount` | `order.tax_amount` |
 | Customer Paid Amount | `customer_paid_amount` | `order.customer_paid_amount` |
 | Customer Pending Amount | `customer_pending_amount` | `order.customer_due_amount` |
 | Total Partner Amount | `total_partner_amount` | `order_service.partner_earning` + `order.additional_charges_subtotal` |
 | Paid to Partner | `paid_to_partner` | `order.partner_paid_amount` |
-| Pending to Partner | `pending_to_partner` | `order.partner_due_amount` |
+| Pending to Partner | `pending_to_partner` | `total_partner_amount − paid_to_partner` (partner share still to pay; shown even if customer has not paid) |
 | Customer Payment Status | `customer_payment_status` | `order.user_payment_status` |
-| Partner Payment Status | `partner_payment_status` | `order.partner_payment_status` |
+| Partner Payment Status | `partner_payment_status` | `unpaid` / `partially_paid` / `paid` vs `total_partner_amount` |
 | Order status | `order_status` | `in-progress` → `in_progress`; see `order_status_canonical` |
 
 ---
@@ -153,7 +157,7 @@ Aliases: `financials`, `order-payment`, `financial_order_payments` → type **4*
 |-----|---------|
 | `total_completed_orders` | Orders with status completed |
 | `total_in_progress_orders` | Orders in progress |
-| `total_partner_pending_amount` | Sum of `order.partner_due_amount` |
+| `total_partner_pending_amount` | Sum per order of `total_partner_amount − partner_paid_amount` (same rule as list `pending_to_partner`) |
 | `total_user_pending_amount` | Sum of `order.customer_due_amount` |
 
 ---

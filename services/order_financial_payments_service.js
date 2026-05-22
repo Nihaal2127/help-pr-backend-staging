@@ -5,13 +5,17 @@ const Service = require('../models/service');
 const {
     ORDER_STATUS_IN_PROGRESS,
     ORDER_STATUS_COMPLETED,
+    ORDER_STATUS_CANCELLED,
+    ORDER_STATUS_REFUNDED,
     buildOrderStatusQueryFilter,
     normalizeOrderStatus,
 } = require('../enum/order_status_enum');
 const {
     isValidOrderPaymentStatus,
     isValidPartnerPaymentStatus,
+    computePartnerPaymentStatus,
 } = require('../enum/order_payment_status_enum');
+const { syncOrderPaymentStatus } = require('./order_payment_status_service');
 const { resolveOrderListScope, assertOrderRecordAccess } = require('../utils/order_access');
 const { buildOrderDateRangeFilter } = require('../utils/schedule_date_filters');
 const { resolveListSearchRegex } = require('../utils/list_query_helpers');
@@ -41,6 +45,39 @@ const formatDateOnly = (date) => {
     const d = new Date(date);
     if (Number.isNaN(d.getTime())) return null;
     return d.toISOString().slice(0, 10);
+};
+
+/** Ignore legacy time-only placeholders (e.g. 2000-01-01 from service_from_time). */
+const resolveServiceDateForFinancial = (row) => {
+    const candidates = [row.service_date, row.order_date, row.created_at];
+    for (const raw of candidates) {
+        if (!raw) continue;
+        const d = new Date(raw);
+        if (Number.isNaN(d.getTime()) || d.getUTCFullYear() < 2010) continue;
+        return formatDateOnly(d);
+    }
+    return formatDateOnly(row.order_date) || formatDateOnly(row.created_at);
+};
+
+const resolvePartnerFinancialFields = (row, totalPartnerAmount) => {
+    const customerNetPaid = roundMoney(row.customer_net_paid);
+    const paidToPartner = roundMoney(row.partner_paid_amount);
+    const syntheticPayments =
+        paidToPartner > 0
+            ? [{ payer_type: 'partner', amount: paidToPartner, status: 'completed' }]
+            : [];
+
+    const partnerBreakdown = computePartnerPaymentStatus(
+        customerNetPaid,
+        syntheticPayments,
+        totalPartnerAmount
+    );
+
+    return {
+        paid_to_partner: partnerBreakdown.partner_paid_amount,
+        pending_to_partner: partnerBreakdown.partner_due_amount,
+        partner_payment_status: partnerBreakdown.partner_payment_status,
+    };
 };
 
 /** Financial UI uses in_progress; orders store in-progress. */
@@ -102,6 +139,7 @@ const shapeFinancialOverviewRecord = (row, srNo) => {
     const partnerEarning = roundMoney(row._line_partner_earning);
     const additionalBase = roundMoney(row.additional_charges_subtotal);
     const totalPartnerAmount = roundMoney(partnerEarning + additionalBase);
+    const partnerFinancial = resolvePartnerFinancialFields(row, totalPartnerAmount);
 
     return {
         sr_no: srNo,
@@ -114,19 +152,21 @@ const shapeFinancialOverviewRecord = (row, srNo) => {
         partner_id: row.partner_id || null,
         partner_name: row._partner_name || '',
         service_name: row._service_name || '',
-        service_date: formatDateOnly(row.service_date),
+        service_date: resolveServiceDateForFinancial(row),
         total_amount: roundMoney(row.total_price),
         total_price: roundMoney(row.total_price),
         commission_percentage: roundMoney(row.commission_percent),
+        commission_amount: roundMoney(row.commission_amount),
         tax_percentage: roundMoney(row.tax_percent),
+        tax_amount: roundMoney(row.tax_amount),
         customer_paid_amount: roundMoney(row.customer_paid_amount),
         customer_pending_amount: roundMoney(row.customer_due_amount),
         total_service_amount: roundMoney(row.sub_total ?? row.total_service_charge),
         total_partner_amount: totalPartnerAmount,
-        paid_to_partner: roundMoney(row.partner_paid_amount),
-        pending_to_partner: roundMoney(row.partner_due_amount),
+        paid_to_partner: partnerFinancial.paid_to_partner,
+        pending_to_partner: partnerFinancial.pending_to_partner,
         customer_payment_status: row.user_payment_status || row.payment_status || 'unpaid',
-        partner_payment_status: row.partner_payment_status || 'unpaid',
+        partner_payment_status: partnerFinancial.partner_payment_status,
         order_status: toFinancialOrderStatus(row.order_status),
         order_status_canonical: row.order_status,
         created_at: row.created_at,
@@ -158,7 +198,14 @@ const buildFinancialOverviewPipeline = ({
             from: collections.orderServices,
             let: { lineId: { $arrayElemAt: ['$service_items', 0] } },
             pipeline: [
-                { $match: { $expr: { $eq: ['$_id', '$$lineId'] }, deleted_at: null } },
+                {
+                    $match: {
+                        $and: [
+                            { $expr: { $eq: ['$_id', '$$lineId'] } },
+                            { deleted_at: null },
+                        ],
+                    },
+                },
                 { $limit: 1 },
                 {
                     $project: {
@@ -190,6 +237,7 @@ const buildFinancialOverviewPipeline = ({
                 service_date: {
                     $ifNull: ['$_line.service_date', '$order_date', '$created_at'],
                 },
+                order_date: 1,
             },
         },
     ];
@@ -202,8 +250,8 @@ const buildFinancialOverviewPipeline = ({
         { $sort: sortStage },
         {
             $facet: {
-                metadata: [{ $count: 'total' }],
                 data: [{ $skip: skip }, { $limit: limit }],
+                totalCount: [{ $count: 'totalCount' }],
             },
         }
     );
@@ -211,14 +259,77 @@ const buildFinancialOverviewPipeline = ({
     return stages;
 };
 
+const buildPartnerPendingLookupStages = (orderServicesCollection) => [
+    {
+        $lookup: {
+            from: orderServicesCollection,
+            let: { lineId: { $arrayElemAt: ['$service_items', 0] } },
+            pipeline: [
+                {
+                    $match: {
+                        $and: [
+                            { $expr: { $eq: ['$_id', '$$lineId'] } },
+                            { deleted_at: null },
+                        ],
+                    },
+                },
+                { $limit: 1 },
+                { $project: { partner_earning: 1 } },
+            ],
+            as: '_line',
+        },
+    },
+    { $unwind: { path: '$_line', preserveNullAndEmptyArrays: true } },
+    {
+        $addFields: {
+            _partner_entitlement: {
+                $cond: [
+                    {
+                        $in: [
+                            '$order_status',
+                            ['cancelled', 'refunded', ORDER_STATUS_CANCELLED, ORDER_STATUS_REFUNDED],
+                        ],
+                    },
+                    0,
+                    {
+                        $add: [
+                            { $ifNull: ['$_line.partner_earning', 0] },
+                            { $ifNull: ['$additional_charges_subtotal', 0] },
+                        ],
+                    },
+                ],
+            },
+        },
+    },
+    {
+        $addFields: {
+            _partner_pending: {
+                $max: [
+                    0,
+                    {
+                        $subtract: [
+                            '$_partner_entitlement',
+                            { $ifNull: ['$partner_paid_amount', 0] },
+                        ],
+                    },
+                ],
+            },
+        },
+    },
+];
+
 /**
  * Dashboard cards for Financial — Order Payments (derived from orders).
  */
 const buildFinancialOrderPaymentsCountFromOrders = async (scopeFilter = {}) => {
     const match = { deleted_at: null, ...scopeFilter };
+    const collections = getListCollectionNames({
+        orderServices: require('../models/order_services'),
+    });
 
     const result = await Order.aggregate([
         { $match: match },
+        ...buildPartnerPendingLookupStages(collections.orderServices),
         {
             $group: {
                 _id: null,
@@ -260,7 +371,7 @@ const buildFinancialOrderPaymentsCountFromOrders = async (scopeFilter = {}) => {
                         ],
                     },
                 },
-                total_partner_pending_amount: { $sum: '$partner_due_amount' },
+                total_partner_pending_amount: { $sum: '$_partner_pending' },
                 total_user_pending_amount: { $sum: '$customer_due_amount' },
             },
         },
@@ -334,7 +445,7 @@ const listFinancialOrderPayments = async (req) => {
             baseFilter.partner_payment_status = String(query.partner_payment_status).trim().toLowerCase();
         }
 
-        const searchRegex = resolveListSearchRegex(query);
+        const searchRegex = resolveListSearchRegex(req);
         const { sort: sortStage, collation } = buildListSort(query);
         const collections = getListCollectionNames({
             users: User,
@@ -371,7 +482,7 @@ const listFinancialOrderPayments = async (req) => {
             records,
         });
     } catch (err) {
-        console.error('listFinancialOrderPayments', err.message);
+        console.error('listFinancialOrderPayments', err);
         return fail(500, 'Internal server error.');
     }
 };
@@ -391,6 +502,8 @@ const getFinancialOrderPaymentById = async (req, orderId) => {
         if (!access.ok) {
             return fail(access.status, access.message || 'Forbidden.');
         }
+
+        await syncOrderPaymentStatus(order._id);
 
         const collections = getListCollectionNames({
             users: User,
@@ -419,7 +532,7 @@ const getFinancialOrderPaymentById = async (req, orderId) => {
             record: shapeFinancialOverviewRecord(row, 1),
         });
     } catch (err) {
-        console.error('getFinancialOrderPaymentById', err.message);
+        console.error('getFinancialOrderPaymentById', err);
         return fail(500, 'Internal server error.');
     }
 };

@@ -158,7 +158,14 @@ const buildFinancialOverviewPipeline = ({
             from: collections.orderServices,
             let: { lineId: { $arrayElemAt: ['$service_items', 0] } },
             pipeline: [
-                { $match: { $expr: { $eq: ['$_id', '$$lineId'] }, deleted_at: null } },
+                {
+                    $match: {
+                        $and: [
+                            { $expr: { $eq: ['$_id', '$$lineId'] } },
+                            { deleted_at: null },
+                        ],
+                    },
+                },
                 { $limit: 1 },
                 {
                     $project: {
@@ -202,8 +209,8 @@ const buildFinancialOverviewPipeline = ({
         { $sort: sortStage },
         {
             $facet: {
-                metadata: [{ $count: 'total' }],
                 data: [{ $skip: skip }, { $limit: limit }],
+                totalCount: [{ $count: 'totalCount' }],
             },
         }
     );
@@ -334,7 +341,7 @@ const listFinancialOrderPayments = async (req) => {
             baseFilter.partner_payment_status = String(query.partner_payment_status).trim().toLowerCase();
         }
 
-        const searchRegex = resolveListSearchRegex(query);
+        const searchRegex = resolveListSearchRegex(req);
         const { sort: sortStage, collation } = buildListSort(query);
         const collections = getListCollectionNames({
             users: User,
@@ -371,7 +378,7 @@ const listFinancialOrderPayments = async (req) => {
             records,
         });
     } catch (err) {
-        console.error('listFinancialOrderPayments', err.message);
+        console.error('listFinancialOrderPayments', err);
         return fail(500, 'Internal server error.');
     }
 };
@@ -419,7 +426,7 @@ const getFinancialOrderPaymentById = async (req, orderId) => {
             record: shapeFinancialOverviewRecord(row, 1),
         });
     } catch (err) {
-        console.error('getFinancialOrderPaymentById', err.message);
+        console.error('getFinancialOrderPaymentById', err);
         return fail(500, 'Internal server error.');
     }
 };

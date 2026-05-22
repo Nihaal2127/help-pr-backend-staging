@@ -132,6 +132,96 @@ const pickPartnerUpdateValue = (req, keys) => {
 const isPresentFieldValue = (value) =>
   value !== undefined && value !== null && String(value).trim() !== '';
 
+const CATALOG_MESSAGE_TO_KEY = {
+  'Category is required.': 'category',
+  'Service is required.': 'service',
+  'Description is required.': 'description',
+  'Price is required.': 'price',
+  'Category not found.': 'category',
+  'Category is not available.': 'category',
+  'Service not found.': 'service',
+  'Service is not available.': 'service',
+  'Service does not belong to the selected category.': 'service',
+};
+
+const catalogMessagesToKeyedErrors = (messages) => {
+  const errors = {};
+  for (const msg of messages) {
+    const key = CATALOG_MESSAGE_TO_KEY[msg];
+    if (key && !errors[key]) errors[key] = msg;
+  }
+  return errors;
+};
+
+const respondPartnerCatalogValidationErrors = (res, messages) => {
+  const errors = catalogMessagesToKeyedErrors(messages);
+  const messageList = Object.values(errors);
+  res.status(400).json({
+    success: false,
+    status: 400,
+    message: messageList[0] || 'Validation failed.',
+    errors,
+  });
+  return false;
+};
+
+const hasPartnerCatalogPayload = (body) =>
+  body.partner_services !== undefined ||
+  body.partner_categories !== undefined ||
+  body.service_ids !== undefined ||
+  body.category_ids !== undefined ||
+  body.service_descriptions !== undefined ||
+  body.service_prices !== undefined;
+
+const hasBankPayload = (body) =>
+  body.bank_account !== undefined ||
+  body.bank_name !== undefined ||
+  body.branch_name !== undefined ||
+  body.account_holder_name !== undefined ||
+  body.account_name !== undefined ||
+  body.account_number !== undefined ||
+  body.ifsc_code !== undefined;
+
+const getMissingFlatCatalogFields = (item) => {
+  const missing = [];
+  const categoryId = item?.category_id;
+  const serviceId = item?.service_id ?? item?.serviceId;
+  if (!categoryId || !mongoose.Types.ObjectId.isValid(String(categoryId))) {
+    missing.push('Category is required.');
+  }
+  if (!serviceId || !mongoose.Types.ObjectId.isValid(String(serviceId))) {
+    missing.push('Service is required.');
+  }
+  if (!isPresentFieldValue(item?.description)) {
+    missing.push('Description is required.');
+  }
+  if (!isPresentFieldValue(item?.price)) {
+    missing.push('Price is required.');
+  }
+  return missing;
+};
+
+const getMissingNestedServiceFields = (svc) => {
+  const missing = [];
+  if (typeof svc === 'string' || typeof svc === 'number') {
+    return ['Service is required.', 'Description is required.', 'Price is required.'];
+  }
+  if (!svc || typeof svc !== 'object' || Array.isArray(svc)) {
+    return ['Service is required.', 'Description is required.', 'Price is required.'];
+  }
+  const serviceId = svc.service_id ?? svc.serviceId;
+  if (!serviceId || !mongoose.Types.ObjectId.isValid(String(serviceId))) {
+    missing.push('Service is required.');
+  }
+  if (!isPresentFieldValue(svc.description)) {
+    missing.push('Description is required.');
+  }
+  if (!isPresentFieldValue(svc.price)) {
+    missing.push('Price is required.');
+  }
+  return missing;
+};
+
 const coerceSingleOidToArray = (body, field) => {
   const v = body[field];
   if (v === undefined || v === null || Array.isArray(v)) return;
@@ -141,8 +231,12 @@ const coerceSingleOidToArray = (body, field) => {
   }
 };
 
-const validateRequiredPartnerCatalog = (req, res) => {
+const validatePartnerCatalogIfPresent = (req, res) => {
   const body = req.body;
+  if (!hasPartnerCatalogPayload(body)) {
+    return true;
+  }
+
   coerceSingleOidToArray(body, 'service_ids');
   coerceSingleOidToArray(body, 'category_ids');
 
@@ -164,103 +258,35 @@ const validateRequiredPartnerCatalog = (req, res) => {
       }
 
       if (Array.isArray(item.services)) {
+        const missing = [];
         if (!item.category_id || !mongoose.Types.ObjectId.isValid(String(item.category_id))) {
-          res.status(400).json({
-            success: false,
-            status: 400,
-            message: `Category is required in partner_services[${i}].`,
-          });
-          return false;
+          missing.push('Category is required.');
         }
-        if (item.services.length === 0) {
-          res.status(400).json({
-            success: false,
-            status: 400,
-            message: `Services are required in partner_services[${i}].`,
-          });
-          return false;
+        if (!Array.isArray(item.services) || item.services.length === 0) {
+          missing.push('Service is required.');
+        } else {
+          for (let j = 0; j < item.services.length; j++) {
+            const svcMissing = getMissingNestedServiceFields(item.services[j]);
+            for (const msg of svcMissing) {
+              if (!missing.includes(msg)) missing.push(msg);
+            }
+          }
         }
-        for (let j = 0; j < item.services.length; j++) {
-          const svc = item.services[j];
-          if (typeof svc === 'string' || typeof svc === 'number') {
-            res.status(400).json({
-              success: false,
-              status: 400,
-              message: `partner_services[${i}].services[${j}] must include service, price, and description.`,
-            });
-            return false;
-          }
-          if (!svc || typeof svc !== 'object' || Array.isArray(svc)) {
-            res.status(400).json({
-              success: false,
-              status: 400,
-              message: `partner_services[${i}].services[${j}] must be an object.`,
-            });
-            return false;
-          }
-          const serviceId = svc.service_id ?? svc.serviceId;
-          if (!serviceId || !mongoose.Types.ObjectId.isValid(String(serviceId))) {
-            res.status(400).json({
-              success: false,
-              status: 400,
-              message: `Service is required in partner_services[${i}].services[${j}].`,
-            });
-            return false;
-          }
-          if (!isPresentFieldValue(svc.price)) {
-            res.status(400).json({
-              success: false,
-              status: 400,
-              message: `Price is required in partner_services[${i}].services[${j}].`,
-            });
-            return false;
-          }
-          if (!isPresentFieldValue(svc.description)) {
-            res.status(400).json({
-              success: false,
-              status: 400,
-              message: `Description is required in partner_services[${i}].services[${j}].`,
-            });
-            return false;
-          }
+        if (missing.length > 0) {
+          return respondPartnerCatalogValidationErrors(res, missing);
         }
         continue;
       }
 
-      if (!item.category_id || !mongoose.Types.ObjectId.isValid(String(item.category_id))) {
-        res.status(400).json({
-          success: false,
-          status: 400,
-          message: `Category is required in partner_services[${i}].`,
-        });
-        return false;
-      }
-      const serviceId = item.service_id ?? item.serviceId;
-      if (!serviceId || !mongoose.Types.ObjectId.isValid(String(serviceId))) {
-        res.status(400).json({
-          success: false,
-          status: 400,
-          message: `Service is required in partner_services[${i}].`,
-        });
-        return false;
-      }
-      if (!isPresentFieldValue(item.price)) {
-        res.status(400).json({
-          success: false,
-          status: 400,
-          message: `Price is required in partner_services[${i}].`,
-        });
-        return false;
-      }
-      if (!isPresentFieldValue(item.description)) {
-        res.status(400).json({
-          success: false,
-          status: 400,
-          message: `Description is required in partner_services[${i}].`,
-        });
-        return false;
+      const flatMissing = getMissingFlatCatalogFields(item);
+      if (flatMissing.length > 0) {
+        return respondPartnerCatalogValidationErrors(res, flatMissing);
       }
     }
+    return true;
+  }
+
+  if (body.service_ids === undefined && body.category_ids === undefined) {
     return true;
   }
 
@@ -272,14 +298,6 @@ const validateRequiredPartnerCatalog = (req, res) => {
   ) {
     serviceIds = [String(serviceIds).trim()];
   }
-  if (!Array.isArray(serviceIds) || serviceIds.length === 0) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'partner_services (category, service, price, description) is required.',
-    });
-    return false;
-  }
 
   let categoryIds = body.category_ids;
   if (
@@ -289,71 +307,62 @@ const validateRequiredPartnerCatalog = (req, res) => {
   ) {
     categoryIds = [String(categoryIds).trim()];
   }
-  if (!Array.isArray(categoryIds) || categoryIds.length === 0) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'category_ids is required.',
-    });
-    return false;
-  }
 
   const descriptions = body.service_descriptions;
   const prices = body.service_prices;
-  if (!Array.isArray(descriptions)) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'service_descriptions is required for each service.',
-    });
-    return false;
+  const parallelMissing = new Set();
+
+  if (body.category_ids !== undefined) {
+    if (!Array.isArray(categoryIds) || categoryIds.length === 0) {
+      parallelMissing.add('Category is required.');
+    }
   }
-  if (!Array.isArray(prices)) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'service_prices is required for each service.',
-    });
-    return false;
+  if (body.service_ids !== undefined) {
+    if (!Array.isArray(serviceIds) || serviceIds.length === 0) {
+      parallelMissing.add('Service is required.');
+    }
+  }
+  if (body.service_descriptions !== undefined && !Array.isArray(descriptions)) {
+    parallelMissing.add('Description is required.');
+  }
+  if (body.service_prices !== undefined && !Array.isArray(prices)) {
+    parallelMissing.add('Price is required.');
   }
 
-  for (let i = 0; i < serviceIds.length; i++) {
-    if (!serviceIds[i] || !mongoose.Types.ObjectId.isValid(String(serviceIds[i]))) {
-      res.status(400).json({
-        success: false,
-        status: 400,
-        message: `service_ids[${i}] must be a valid ObjectId.`,
-      });
-      return false;
+  if (Array.isArray(serviceIds)) {
+    for (let i = 0; i < serviceIds.length; i++) {
+      if (!serviceIds[i] || !mongoose.Types.ObjectId.isValid(String(serviceIds[i]))) {
+        parallelMissing.add('Service is required.');
+      }
+      if (body.category_ids !== undefined) {
+        const categoryId =
+          Array.isArray(categoryIds) &&
+          (i < categoryIds.length && categoryIds[i] != null && String(categoryIds[i]).trim() !== ''
+            ? categoryIds[i]
+            : categoryIds?.[categoryIds.length - 1]);
+        if (!categoryId || !mongoose.Types.ObjectId.isValid(String(categoryId))) {
+          parallelMissing.add('Category is required.');
+        }
+      }
+      if (
+        body.service_descriptions !== undefined &&
+        Array.isArray(descriptions) &&
+        !isPresentFieldValue(descriptions[i])
+      ) {
+        parallelMissing.add('Description is required.');
+      }
+      if (
+        body.service_prices !== undefined &&
+        Array.isArray(prices) &&
+        !isPresentFieldValue(prices[i])
+      ) {
+        parallelMissing.add('Price is required.');
+      }
     }
-    const categoryId =
-      i < categoryIds.length && categoryIds[i] != null && String(categoryIds[i]).trim() !== ''
-        ? categoryIds[i]
-        : categoryIds[categoryIds.length - 1];
-    if (!categoryId || !mongoose.Types.ObjectId.isValid(String(categoryId))) {
-      res.status(400).json({
-        success: false,
-        status: 400,
-        message: `Category is required for service at index ${i}.`,
-      });
-      return false;
-    }
-    if (!isPresentFieldValue(descriptions[i])) {
-      res.status(400).json({
-        success: false,
-        status: 400,
-        message: `Description is required for service at index ${i}.`,
-      });
-      return false;
-    }
-    if (!isPresentFieldValue(prices[i])) {
-      res.status(400).json({
-        success: false,
-        status: 400,
-        message: `Price is required for service at index ${i}.`,
-      });
-      return false;
-    }
+  }
+
+  if (parallelMissing.size > 0) {
+    return respondPartnerCatalogValidationErrors(res, [...parallelMissing]);
   }
 
   return true;
@@ -414,106 +423,131 @@ const collectPartnerCatalogRows = (body) => {
   return rows;
 };
 
-const validatePartnerLocationInDb = async (state_id, city_id, area_id, pincode, res) => {
-  const stateOid = new mongoose.Types.ObjectId(String(state_id));
-  const cityOid = new mongoose.Types.ObjectId(String(city_id));
-  const areaOid = new mongoose.Types.ObjectId(String(area_id));
+const validatePartnerLocationInDbPartial = async (body, res) => {
+  const { state_id, city_id, area_id, pincode } = body;
+  const hasState = state_id !== undefined && String(state_id).trim() !== '';
+  const hasCity = city_id !== undefined && String(city_id).trim() !== '';
+  const hasArea = area_id !== undefined && String(area_id).trim() !== '';
+  const hasPincode = pincode !== undefined && String(pincode).trim() !== '';
 
-  const state = await State.findOne({ _id: stateOid, deleted_at: null }).lean();
-  if (!state) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'State not found.',
-    });
-    return false;
-  }
-  if (state.is_active === false) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'State is not active.',
-    });
-    return false;
+  if (!hasState && !hasCity && !hasArea && !hasPincode) {
+    return true;
   }
 
-  const city = await City.findOne({ _id: cityOid, deleted_at: null }).lean();
-  if (!city) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'City not found.',
-    });
-    return false;
-  }
-  if (String(city.state_id) !== String(stateOid)) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'City does not belong to the selected state.',
-    });
-    return false;
-  }
-  if (city.is_active === false) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'City is not active.',
-    });
-    return false;
+  let stateOid = null;
+  let state = null;
+  if (hasState) {
+    if (!mongoose.Types.ObjectId.isValid(String(state_id))) {
+      res.status(400).json({ success: false, status: 400, message: 'Invalid state id.' });
+      return false;
+    }
+    stateOid = new mongoose.Types.ObjectId(String(state_id));
+    state = await State.findOne({ _id: stateOid, deleted_at: null }).lean();
+    if (!state) {
+      res.status(400).json({ success: false, status: 400, message: 'State not found.' });
+      return false;
+    }
+    if (state.is_active === false) {
+      res.status(400).json({ success: false, status: 400, message: 'State is not active.' });
+      return false;
+    }
   }
 
-  const area = await Area.findOne({ _id: areaOid, deleted_at: null }).lean();
-  if (!area) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'Area not found.',
-    });
-    return false;
-  }
-  if (String(area.city_id) !== String(cityOid)) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'Area does not belong to the selected city.',
-    });
-    return false;
-  }
-  if (String(area.state_id) !== String(stateOid)) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'Area does not belong to the selected state.',
-    });
-    return false;
-  }
-  if (area.is_active === false) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'Area is not active.',
-    });
-    return false;
+  let cityOid = null;
+  let city = null;
+  if (hasCity) {
+    if (!mongoose.Types.ObjectId.isValid(String(city_id))) {
+      res.status(400).json({ success: false, status: 400, message: 'Invalid city id.' });
+      return false;
+    }
+    cityOid = new mongoose.Types.ObjectId(String(city_id));
+    city = await City.findOne({ _id: cityOid, deleted_at: null }).lean();
+    if (!city) {
+      res.status(400).json({ success: false, status: 400, message: 'City not found.' });
+      return false;
+    }
+    if (hasState && String(city.state_id) !== String(stateOid)) {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'City does not belong to the selected state.',
+      });
+      return false;
+    }
+    if (city.is_active === false) {
+      res.status(400).json({ success: false, status: 400, message: 'City is not active.' });
+      return false;
+    }
+    if (!hasState) {
+      stateOid = city.state_id;
+    }
   }
 
-  const pincodeValue = String(pincode).trim();
-  const areaPincodes = Array.isArray(area.pincodes)
-    ? area.pincodes.map((p) => String(p).trim())
-    : [];
-  if (!areaPincodes.includes(pincodeValue)) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'Pincode is not valid for the selected area.',
-    });
-    return false;
+  let areaOid = null;
+  let area = null;
+  if (hasArea) {
+    if (!mongoose.Types.ObjectId.isValid(String(area_id))) {
+      res.status(400).json({ success: false, status: 400, message: 'Invalid area id.' });
+      return false;
+    }
+    areaOid = new mongoose.Types.ObjectId(String(area_id));
+    area = await Area.findOne({ _id: areaOid, deleted_at: null }).lean();
+    if (!area) {
+      res.status(400).json({ success: false, status: 400, message: 'Area not found.' });
+      return false;
+    }
+    if (hasCity && String(area.city_id) !== String(cityOid)) {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Area does not belong to the selected city.',
+      });
+      return false;
+    }
+    if (hasState && String(area.state_id) !== String(stateOid)) {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Area does not belong to the selected state.',
+      });
+      return false;
+    }
+    if (area.is_active === false) {
+      res.status(400).json({ success: false, status: 400, message: 'Area is not active.' });
+      return false;
+    }
+  }
+
+  if (hasPincode) {
+    if (!hasArea) {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Area is required when pincode is provided.',
+      });
+      return false;
+    }
+    const pincodeValue = String(pincode).trim();
+    const areaPincodes = Array.isArray(area.pincodes)
+      ? area.pincodes.map((p) => String(p).trim())
+      : [];
+    if (!areaPincodes.includes(pincodeValue)) {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Pincode is not valid for the selected area.',
+      });
+      return false;
+    }
   }
 
   return true;
 };
 
 const validatePartnerCatalogInDb = async (req, res) => {
+  if (!hasPartnerCatalogPayload(req.body)) {
+    return true;
+  }
   const rows = collectPartnerCatalogRows(req.body);
   const seen = new Set();
 
@@ -531,24 +565,14 @@ const validatePartnerCatalogInDb = async (req, res) => {
       deleted_at: null,
     }).lean();
     if (!category) {
-      res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'Category not found.',
-      });
-      return false;
+      return respondPartnerCatalogValidationErrors(res, ['Category not found.']);
     }
     if (
       !category.is_active ||
       category.is_request ||
       category.approval_status !== 'approve'
     ) {
-      res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'Category is not available.',
-      });
-      return false;
+      return respondPartnerCatalogValidationErrors(res, ['Category is not available.']);
     }
 
     const service = await Service.findOne({
@@ -556,60 +580,29 @@ const validatePartnerCatalogInDb = async (req, res) => {
       deleted_at: null,
     }).lean();
     if (!service) {
-      res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'Service not found.',
-      });
-      return false;
+      return respondPartnerCatalogValidationErrors(res, ['Service not found.']);
     }
     if (String(service.category_id) !== String(categoryId)) {
-      res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'Service does not belong to the selected category.',
-      });
-      return false;
+      return respondPartnerCatalogValidationErrors(res, [
+        'Service does not belong to the selected category.',
+      ]);
     }
     if (
       !service.is_active ||
       service.is_request ||
       service.approval_status !== 'approve'
     ) {
-      res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'Service is not available.',
-      });
-      return false;
+      return respondPartnerCatalogValidationErrors(res, ['Service is not available.']);
     }
   }
 
   return true;
 };
 
-const validatePartnerUpdateRequiredFields = async (req, res) => {
+const validatePartnerUpdatePartialFields = async (req, res) => {
   const { address, state_id, city_id, area_id, pincode, gender, experience } = req.body;
 
-  if (!req.files?.image?.[0]) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'Profile photo is required.',
-    });
-    return false;
-  }
-
-  if (!req.files?.aadhar_card?.[0]) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'Aadhar card is required.',
-    });
-    return false;
-  }
-
-  if (!address || String(address).trim() === '') {
+  if (address !== undefined && String(address).trim() === '') {
     res.status(400).json({
       success: false,
       status: 400,
@@ -618,7 +611,7 @@ const validatePartnerUpdateRequiredFields = async (req, res) => {
     return false;
   }
 
-  if (!state_id || String(state_id).trim() === '') {
+  if (state_id !== undefined && String(state_id).trim() === '') {
     res.status(400).json({
       success: false,
       status: 400,
@@ -626,7 +619,11 @@ const validatePartnerUpdateRequiredFields = async (req, res) => {
     });
     return false;
   }
-  if (!mongoose.Types.ObjectId.isValid(String(state_id))) {
+  if (
+    state_id !== undefined &&
+    String(state_id).trim() !== '' &&
+    !mongoose.Types.ObjectId.isValid(String(state_id))
+  ) {
     res.status(400).json({
       success: false,
       status: 400,
@@ -635,7 +632,7 @@ const validatePartnerUpdateRequiredFields = async (req, res) => {
     return false;
   }
 
-  if (!city_id || String(city_id).trim() === '') {
+  if (city_id !== undefined && String(city_id).trim() === '') {
     res.status(400).json({
       success: false,
       status: 400,
@@ -643,7 +640,11 @@ const validatePartnerUpdateRequiredFields = async (req, res) => {
     });
     return false;
   }
-  if (!mongoose.Types.ObjectId.isValid(String(city_id))) {
+  if (
+    city_id !== undefined &&
+    String(city_id).trim() !== '' &&
+    !mongoose.Types.ObjectId.isValid(String(city_id))
+  ) {
     res.status(400).json({
       success: false,
       status: 400,
@@ -652,7 +653,7 @@ const validatePartnerUpdateRequiredFields = async (req, res) => {
     return false;
   }
 
-  if (!area_id || String(area_id).trim() === '') {
+  if (area_id !== undefined && String(area_id).trim() === '') {
     res.status(400).json({
       success: false,
       status: 400,
@@ -660,7 +661,11 @@ const validatePartnerUpdateRequiredFields = async (req, res) => {
     });
     return false;
   }
-  if (!mongoose.Types.ObjectId.isValid(String(area_id))) {
+  if (
+    area_id !== undefined &&
+    String(area_id).trim() !== '' &&
+    !mongoose.Types.ObjectId.isValid(String(area_id))
+  ) {
     res.status(400).json({
       success: false,
       status: 400,
@@ -669,7 +674,7 @@ const validatePartnerUpdateRequiredFields = async (req, res) => {
     return false;
   }
 
-  if (!pincode || String(pincode).trim() === '') {
+  if (pincode !== undefined && String(pincode).trim() === '') {
     res.status(400).json({
       success: false,
       status: 400,
@@ -678,87 +683,96 @@ const validatePartnerUpdateRequiredFields = async (req, res) => {
     return false;
   }
 
-  if (gender === undefined || gender === null || String(gender).trim() === '') {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'Gender is required.',
-    });
-    return false;
-  }
-  if (!isValidGender(gender)) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'gender must be "male", "female", or "other".',
-    });
-    return false;
-  }
-  req.body.gender = normalizeGender(gender);
-
-  if (experience === undefined || experience === null || String(experience).trim() === '') {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'Experience is required.',
-    });
-    return false;
-  }
-  req.body.experience = String(experience).trim();
-
-  if (!validateRequiredPartnerCatalog(req, res)) return false;
-
-  const bankName = pickPartnerUpdateValue(req, ['bank_name']);
-  if (!bankName) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'Bank name is required.',
-    });
-    return false;
+  if (gender !== undefined) {
+    if (gender === null || String(gender).trim() === '') {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Gender is required.',
+      });
+      return false;
+    }
+    if (!isValidGender(gender)) {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'gender must be "male", "female", or "other".',
+      });
+      return false;
+    }
+    req.body.gender = normalizeGender(gender);
   }
 
-  const branchName = pickPartnerUpdateValue(req, ['branch_name']);
-  if (!branchName) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'Branch name is required.',
-    });
-    return false;
+  if (experience !== undefined) {
+    if (experience === null || String(experience).trim() === '') {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Experience is required.',
+      });
+      return false;
+    }
+    req.body.experience = String(experience).trim();
   }
 
-  const accountHolderName = pickPartnerUpdateValue(req, ['account_holder_name', 'account_name']);
-  if (!accountHolderName) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'Account holder name is required.',
-    });
-    return false;
+  if (!validatePartnerCatalogIfPresent(req, res)) return false;
+
+  if (hasBankPayload(req.body)) {
+    const bankName = pickPartnerUpdateValue(req, ['bank_name']);
+    if (!bankName) {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Bank name is required.',
+      });
+      return false;
+    }
+
+    const branchName = pickPartnerUpdateValue(req, ['branch_name']);
+    if (!branchName) {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Branch name is required.',
+      });
+      return false;
+    }
+
+    const accountHolderName = pickPartnerUpdateValue(req, [
+      'account_holder_name',
+      'account_name',
+    ]);
+    if (!accountHolderName) {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Account holder name is required.',
+      });
+      return false;
+    }
+
+    const accountNumber = pickPartnerUpdateValue(req, ['account_number']);
+    if (!accountNumber) {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Account number is required.',
+      });
+      return false;
+    }
+
+    const ifscCode = pickPartnerUpdateValue(req, ['ifsc_code']);
+    if (!ifscCode) {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'IFSC code is required.',
+      });
+      return false;
+    }
   }
 
-  const accountNumber = pickPartnerUpdateValue(req, ['account_number']);
-  if (!accountNumber) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'Account number is required.',
-    });
-    return false;
-  }
-
-  const ifscCode = pickPartnerUpdateValue(req, ['ifsc_code']);
-  if (!ifscCode) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'IFSC code is required.',
-    });
-    return false;
-  }
-
-  if (!(await validatePartnerLocationInDb(state_id, city_id, area_id, pincode, res))) {
+  if (!(await validatePartnerLocationInDbPartial(req.body, res))) {
     return false;
   }
   if (!(await validatePartnerCatalogInDb(req, res))) {
@@ -1041,7 +1055,7 @@ const partnerUpdateMiddleware = async (req, res, next) => {
   trimOptionalStringField(req, 'experience');
 
   try {
-    if (!(await validatePartnerUpdateRequiredFields(req, res))) {
+    if (!(await validatePartnerUpdatePartialFields(req, res))) {
       return;
     }
   } catch (err) {

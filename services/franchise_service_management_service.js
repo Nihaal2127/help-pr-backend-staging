@@ -34,6 +34,10 @@ const {
     coerceCatalogObjectId,
     paginateArray,
 } = require('../utils/franchise_catalog_from_franchise');
+const {
+    diffRemovedIds,
+    onFranchiseServicesRemoved,
+} = require('./catalog_cascade_service');
 
 const fail = (status, message, extra = {}) => ({ ok: false, status, message, ...extra });
 const ok = (status, data) => ({ ok: true, status, data });
@@ -589,7 +593,8 @@ const update = async (id, body, userId) => {
         const franchise = await loadFranchiseForCatalog(parsed.oid);
         if (!franchise) return fail(404, 'No record found');
 
-        let nextServiceIds = [...(franchise.services || [])];
+        const beforeServiceIds = [...(franchise.services || [])];
+        let nextServiceIds = [...beforeServiceIds];
 
         if (body.franchise_id !== undefined) {
             const parsedFranchise = parseObjectId(body.franchise_id, 'franchise_id');
@@ -711,8 +716,18 @@ const update = async (id, body, userId) => {
             nextServiceIds = applyServiceOrderToFranchiseIds(nextServiceIds, po.oids);
         }
 
+        const removedServiceIds = diffRemovedIds(beforeServiceIds, nextServiceIds);
+
         const saved = await saveFranchiseServices(franchise._id, nextServiceIds);
         if (!saved) return fail(404, 'Franchise not found.');
+
+        if (removedServiceIds.length > 0) {
+            try {
+                await onFranchiseServicesRemoved(franchise._id, removedServiceIds);
+            } catch (cascadeErr) {
+                console.error('franchiseService.update cascade failed:', cascadeErr.message);
+            }
+        }
 
         const record = await buildServiceMappingRecordFromFranchise(franchise._id);
         return ok(200, {

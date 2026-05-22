@@ -17,6 +17,10 @@ const {
   USER_TYPE_SUPER_ADMIN,
   USER_TYPE_STAFF,
 } = require('../middleware/role_middleware');
+const {
+  isGlobalCatalogRowActive,
+  onGlobalCategoryDeactivated,
+} = require('../services/catalog_cascade_service');
 
 const asBodyBool = (value, defaultValue) => {
   if (value === undefined) return defaultValue;
@@ -525,6 +529,8 @@ const update = async (req, res) => {
       });
     }
 
+    const wasGloballyActive = isGlobalCatalogRowActive(category);
+
     if (req.body.name) {
       const name = req.body.name
       const existingCategory = await Category.findOne({
@@ -648,6 +654,14 @@ const update = async (req, res) => {
     category.updated_at = Date.now();
     const updatedCategory = await category.save();
 
+    if (wasGloballyActive && updatedCategory.is_active === false) {
+      try {
+        await onGlobalCategoryDeactivated(updatedCategory._id);
+      } catch (cascadeErr) {
+        console.error('category update cascade failed:', cascadeErr.message);
+      }
+    }
+
     res.status(200).json({
       success: true,
       status: 200,
@@ -734,8 +748,16 @@ const deleteCategory = async (req, res) => {
     }
 
 
-    category.deleted_at = new Date();
+    if (isGlobalCatalogRowActive(category)) {
+      try {
+        await onGlobalCategoryDeactivated(category._id);
+      } catch (cascadeErr) {
+        console.error('category delete cascade failed:', cascadeErr.message);
+      }
+    }
 
+    category.deleted_at = new Date();
+    category.updated_at = Date.now();
 
     await category.save();
 

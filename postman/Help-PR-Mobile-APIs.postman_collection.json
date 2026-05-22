@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-mobile-apis-only",
     "name": "Help PR — Mobile APIs only",
-    "description": "Postman collection for **`routes/mobile`** only (`/api/mobile/*`).\n\n**Partner app:** `POST /api/mobile/partner/register`, `POST /api/mobile/partner/login`\n\n**User app:** no routes in `routes/mobile/user` yet — folder reserved.\n\n**Setup:** Set `baseUrl` (e.g. `http://localhost:5001`). Run **Partner → Register** or **Login** (no auth). Token is saved from `data.auth_token` to `{{token}}`.\n\n**Password:** min 8 chars, upper, lower, number, special `@$!%*?&`\n\n**Email:** local part letters, digits, `.` `_` `-` only; domain with TLD (e.g. `.com`).",
+    "description": "Postman collection for **`/api/mobile/*`** only.\n\n**Partner app**\n- `POST /api/mobile/partner/register` — JSON, no auth\n- `POST /api/mobile/partner/login` — JSON, no auth\n- `PUT /api/mobile/partner/update` — **multipart/form-data only**, Bearer required\n\n**Setup**\n1. Set `baseUrl` (e.g. `http://localhost:5001`)\n2. Replace **`stateId`**, **`cityId`**, **`areaId`**, **`categoryId`**, **`serviceId`**, **`subscriptionPlanId`** with real Mongo ObjectIds from your DB (or run State/City/Area + catalog + subscription-plan APIs from Help-PR-All-APIs).\n3. Run **Register** or **Login** — saves `{{token}}` and `{{email}}`\n4. **Update partner** — Body → form-data only (do not set Content-Type manually)\n\n**Nested JSON in form fields:** `bank_account`, `partner_documents`, `partner_services`, `partner_subscription` as text (JSON strings).\n\n**Response:** `{ success, status, message, data }`",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -27,6 +27,9 @@
                   "  if (j?.data?._id) {",
                   "    pm.collectionVariables.set('partnerId', String(j.data._id));",
                   "    pm.collectionVariables.set('userId', String(j.data._id));",
+                  "  }",
+                  "  if (j?.data?.email) {",
+                  "    pm.collectionVariables.set('email', String(j.data.email));",
                   "  }",
                   "} catch (e) {}"
                 ],
@@ -63,7 +66,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "mobile", "partner", "register"]
             },
-            "description": "**POST /api/mobile/partner/register**\n\n- No Authorization header\n- Response: `success`, `message`, `data` (user object; JWT in `data.auth_token`)\n- Pending partner: `data.is_active` false, `data.verification_status` 1"
+            "description": "**POST /api/mobile/partner/register**\n\n- No Authorization\n- Creates partner (`verification_status` 1, `is_active` false)\n- Auto-assigns **basic** subscription (`expires_at` null)\n- Response: `data` with `auth_token`"
           },
           "response": []
         },
@@ -84,6 +87,9 @@
                   "  if (j?.data?._id) {",
                   "    pm.collectionVariables.set('partnerId', String(j.data._id));",
                   "    pm.collectionVariables.set('userId', String(j.data._id));",
+                  "  }",
+                  "  if (j?.data?.email) {",
+                  "    pm.collectionVariables.set('email', String(j.data.email));",
                   "  }",
                   "} catch (e) {}"
                 ],
@@ -108,7 +114,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"device_token\": \"\"\n}",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"device_token\": \"{{deviceToken}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -120,7 +126,209 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "mobile", "partner", "login"]
             },
-            "description": "**POST /api/mobile/partner/login**\n\n- No Authorization header\n- Allows pending partners (`is_active: false`) for onboarding\n- Response: `success`, `status`, `message`, `data` only (JWT in `data.auth_token`; use `data.verification_status`, `data.is_active`, `data.is_blocked` for app state)\n\nDo not use `/api/auth/login` for partner app — that blocks unapproved partners."
+            "description": "**POST /api/mobile/partner/login**\n\n- No Authorization\n- Allows pending partners for onboarding\n- Use `data.verification_status` (1=pending, 2=approved, 3=rejected), `data.is_active`\n- Do not use `/api/auth/login` for partner app"
+          },
+          "response": []
+        },
+        {
+          "name": "Update partner",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const t = j?.data?.auth_token;",
+                  "  if (t) {",
+                  "    pm.collectionVariables.set('token', t);",
+                  "    pm.collectionVariables.set('accessToken', t);",
+                  "  }",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "Neha Sharma",
+                  "type": "text"
+                },
+                {
+                  "key": "date_of_birth",
+                  "value": "2003-05-23",
+                  "type": "text"
+                },
+                {
+                  "key": "gender",
+                  "value": "female",
+                  "type": "text"
+                },
+                {
+                  "key": "email",
+                  "value": "{{email}}",
+                  "type": "text"
+                },
+                {
+                  "key": "phone_number",
+                  "value": "+916512354792",
+                  "type": "text"
+                },
+                {
+                  "key": "experience",
+                  "value": "2 years",
+                  "type": "text"
+                },
+                {
+                  "key": "state_id",
+                  "value": "{{stateId}}",
+                  "type": "text",
+                  "description": "24-hex Mongo ObjectId — replace collection variable stateId"
+                },
+                {
+                  "key": "city_id",
+                  "value": "{{cityId}}",
+                  "type": "text",
+                  "description": "24-hex Mongo ObjectId — replace collection variable cityId"
+                },
+                {
+                  "key": "area_id",
+                  "value": "{{areaId}}",
+                  "type": "text",
+                  "description": "24-hex Mongo ObjectId — replace collection variable areaId"
+                },
+                {
+                  "key": "pincode",
+                  "value": "500032",
+                  "type": "text"
+                },
+                {
+                  "key": "address",
+                  "value": "12 MG Road, Hyderabad",
+                  "type": "text"
+                },
+                {
+                  "key": "device_token",
+                  "value": "{{deviceToken}}",
+                  "type": "text",
+                  "description": "FCM push token (not JWT)"
+                },
+                {
+                  "key": "password",
+                  "value": "",
+                  "type": "text",
+                  "description": "Optional; requires confirm_password if set"
+                },
+                {
+                  "key": "confirm_password",
+                  "value": "",
+                  "type": "text"
+                },
+                {
+                  "key": "bank_account",
+                  "value": "{\"bank_name\":\"HDFC Bank\",\"branch_name\":\"Madhapur\",\"account_holder_name\":\"Neha Sharma\",\"account_number\":\"123456789012\",\"ifsc_code\":\"HDFC0001234\",\"is_primary\":true}",
+                  "type": "text",
+                  "description": "JSON string — optional"
+                },
+                {
+                  "key": "partner_services",
+                  "value": "[{\"category_id\":\"{{categoryId}}\",\"is_active\":true,\"services\":[{\"service_id\":\"{{serviceId}}\",\"is_active\":true,\"description\":\"Home cleaning\",\"price\":499,\"payment_type\":\"fixed\",\"tax\":18,\"minimum_deposit\":100}]}]",
+                  "type": "text",
+                  "description": "JSON array string — full catalog replace when enabled (non-empty). Replace categoryId and serviceId with real ObjectIds.",
+                  "disabled": true
+                },
+                {
+                  "key": "partner_subscription",
+                  "value": "{\"subscription_plan_id\":\"{{subscriptionPlanId}}\",\"subscription_start_date\":\"2026-05-21\",\"expires_at\":null,\"status\":\"active\",\"notes\":\"Plan change from mobile update\"}",
+                  "type": "text",
+                  "description": "JSON string — cancels prior active subscription and assigns new plan when enabled. Use expires_at null for lifetime.",
+                  "disabled": true
+                },
+                {
+                  "key": "subscription_plan_id",
+                  "value": "{{subscriptionPlanId}}",
+                  "type": "text",
+                  "description": "Flat alternative to partner_subscription JSON — enable only if partner_subscription is disabled",
+                  "disabled": true
+                },
+                {
+                  "key": "partner_documents",
+                  "value": "{}",
+                  "type": "text",
+                  "description": "JSON object string — optional if using file fields (slug keys → URL/path)",
+                  "disabled": true
+                },
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": [],
+                  "description": "Profile photo max 512 KB — select a file in Postman"
+                },
+                {
+                  "key": "pan_card",
+                  "type": "file",
+                  "src": [],
+                  "disabled": true,
+                  "description": "Select file to upload"
+                },
+                {
+                  "key": "aadhar_card",
+                  "type": "file",
+                  "src": [],
+                  "disabled": true,
+                  "description": "Select file to upload"
+                },
+                {
+                  "key": "driving_license",
+                  "type": "file",
+                  "src": [],
+                  "disabled": true,
+                  "description": "Select file to upload"
+                },
+                {
+                  "key": "vehicle_registration",
+                  "type": "file",
+                  "src": [],
+                  "disabled": true,
+                  "description": "Select file to upload"
+                },
+                {
+                  "key": "police_verification_certificate",
+                  "type": "file",
+                  "src": [],
+                  "disabled": true,
+                  "description": "Select file to upload"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/partner/update",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "partner", "update"]
+            },
+            "description": "**PUT /api/mobile/partner/update**\n\n**Required:** `Content-Type: multipart/form-data` (Postman Body → form-data; do not add Content-Type header manually).\n\n**Bearer** `{{token}}` — updates logged-in partner only.\n\n**Text fields:** name, date_of_birth, gender, email, phone_number, experience, state_id, city_id, area_id, pincode, address, device_token, password, confirm_password\n\n**JSON as text:** bank_account, partner_services, partner_documents, partner_subscription (or flat subscription_plan_id)\n\n**Files:** image (512 KB max), vehicle_registration, police_verification_certificate, pan_card, driving_license, aadhar_card\n\n**Collection variables:** Set real ObjectIds for stateId, cityId, areaId, categoryId, serviceId, subscriptionPlanId before testing location/catalog/subscription rows."
           },
           "response": []
         }
@@ -128,7 +336,7 @@
     },
     {
       "name": "User",
-      "description": "Customer mobile app — `routes/mobile/user/index.js` (no endpoints yet). Add requests here when `/api/mobile/user/*` routes are implemented.",
+      "description": "Customer mobile app — `routes/mobile/user/index.js` (no endpoints yet).",
       "item": []
     }
   ],
@@ -141,32 +349,80 @@
     {
       "key": "token",
       "value": "",
-      "type": "string"
+      "type": "string",
+      "description": "Set by Register or Login test script"
     },
     {
       "key": "accessToken",
       "value": "",
-      "type": "string"
+      "type": "string",
+      "description": "Alias of token"
     },
     {
       "key": "partnerId",
       "value": "",
-      "type": "string"
+      "type": "string",
+      "description": "Set by Register or Login"
     },
     {
       "key": "userId",
       "value": "",
-      "type": "string"
+      "type": "string",
+      "description": "Same as partnerId for partner flows"
     },
     {
       "key": "email",
       "value": "priya@gmail.com",
-      "type": "string"
+      "type": "string",
+      "description": "Partner login email — update after Register or use your test account"
     },
     {
       "key": "password",
       "value": "Priya@123",
-      "type": "string"
+      "type": "string",
+      "description": "Partner login password"
+    },
+    {
+      "key": "deviceToken",
+      "value": "fcm_example_token_replace_with_real_device_token",
+      "type": "string",
+      "description": "FCM device token for push notifications"
+    },
+    {
+      "key": "stateId",
+      "value": "6677a1b2c3d4e5f600000001",
+      "type": "string",
+      "description": "Replace with real state _id from GET /api/state/getDropDown or create flow"
+    },
+    {
+      "key": "cityId",
+      "value": "6677a1b2c3d4e5f600000002",
+      "type": "string",
+      "description": "Replace with real city _id for stateId"
+    },
+    {
+      "key": "areaId",
+      "value": "6677a1b2c3d4e5f600000003",
+      "type": "string",
+      "description": "Replace with real area _id for cityId"
+    },
+    {
+      "key": "categoryId",
+      "value": "6677a1b2c3d4e5f600000004",
+      "type": "string",
+      "description": "Replace with real category _id for partner_services"
+    },
+    {
+      "key": "serviceId",
+      "value": "6677a1b2c3d4e5f600000005",
+      "type": "string",
+      "description": "Replace with real service _id under categoryId"
+    },
+    {
+      "key": "subscriptionPlanId",
+      "value": "6677a1b2c3d4e5f600000006",
+      "type": "string",
+      "description": "Replace with real subscription_plan _id (e.g. basic/silver/gold from GET /api/subscription-plan)"
     }
   ]
 }

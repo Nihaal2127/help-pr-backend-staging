@@ -77,8 +77,8 @@ var orderSchema = new schema(
     customer_due_amount: { type: Number, default: 0 },
     /**
      * Partner payout rollup from order_payment (payer_type partner):
-     * unpaid | partially_paid | paid vs min(customer_net_paid, partner entitlement).
-     * partner_due_amount is remaining partner share still to pay out.
+     * unpaid | partially_paid | paid vs partner entitlement (earning + eligible extras).
+     * partner_due_amount is entitlement minus partner_paid_amount (overview pending).
      */
     partner_payment_status: {
       type: String,

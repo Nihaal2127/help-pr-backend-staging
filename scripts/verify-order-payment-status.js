@@ -81,4 +81,19 @@ assert(
 );
 assert(partnerPartial.partner_due_amount === 500, "partner due is entitlement minus paid");
 
+// No customer payment yet: partner pending is full entitlement (overview)
+const partnerNoCustomer = computePartnerPaymentStatus(
+  0,
+  [],
+  1000
+);
+assert(
+  partnerNoCustomer.partner_payment_status === "unpaid",
+  "partner unpaid when nothing paid to partner"
+);
+assert(
+  partnerNoCustomer.partner_due_amount === 1000,
+  "partner due is full entitlement before any partner payout"
+);
+
 console.log("verify-order-payment-status: all checks passed");

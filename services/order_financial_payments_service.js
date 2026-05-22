@@ -304,30 +304,15 @@ const buildPartnerPendingLookupStages = (orderServicesCollection) => [
     {
         $addFields: {
             _partner_pending: {
-                $let: {
-                    vars: {
-                        netPaid: { $ifNull: ['$customer_net_paid', 0] },
-                        paid: { $ifNull: ['$partner_paid_amount', 0] },
-                        entitlement: '$_partner_entitlement',
-                    },
-                    in: {
-                        $cond: [
-                            { $lte: ['$$netPaid', 0.01] },
-                            0,
-                            {
-                                $max: [
-                                    0,
-                                    {
-                                        $subtract: [
-                                            { $min: ['$$netPaid', '$$entitlement'] },
-                                            '$$paid',
-                                        ],
-                                    },
-                                ],
-                            },
+                $max: [
+                    0,
+                    {
+                        $subtract: [
+                            '$_partner_entitlement',
+                            { $ifNull: ['$partner_paid_amount', 0] },
                         ],
                     },
-                },
+                ],
             },
         },
     },

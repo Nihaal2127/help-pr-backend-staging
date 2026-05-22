@@ -65,7 +65,6 @@ const parsePartnerCatalogFields = (req) => {
   parseJSONField(req, 'service_minimum_deposits');
   parseJSONField(req, 'partner_documents');
   parseJSONField(req, 'bank_account');
-  parseJSONField(req, 'partner_subscription');
   const partnerServicesAlias = req.body['partner-services'];
   if (
     partnerServicesAlias !== undefined &&
@@ -93,6 +92,446 @@ const validatePartnerCatalogPayload = (req, res) => {
     });
     return false;
   }
+  return true;
+};
+
+const parsePartnerNestedObject = (value) => {
+  if (value === undefined || value === null) return {};
+  if (typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return {};
+    try {
+      const parsed = JSON.parse(trimmed);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+};
+
+const pickPartnerUpdateValue = (req, keys) => {
+  const bank = parsePartnerNestedObject(req.body.bank_account);
+  for (const key of keys) {
+    for (const source of [req.body, bank]) {
+      const value = source[key];
+      if (value !== undefined && value !== null && String(value).trim() !== '') {
+        return value;
+      }
+    }
+  }
+  return null;
+};
+
+const isPresentFieldValue = (value) =>
+  value !== undefined && value !== null && String(value).trim() !== '';
+
+const coerceSingleOidToArray = (body, field) => {
+  const v = body[field];
+  if (v === undefined || v === null || Array.isArray(v)) return;
+  if (typeof v === 'string') {
+    const t = v.trim();
+    if (t && mongoose.Types.ObjectId.isValid(t)) body[field] = [t];
+  }
+};
+
+const validateRequiredPartnerCatalog = (req, res) => {
+  const body = req.body;
+  coerceSingleOidToArray(body, 'service_ids');
+  coerceSingleOidToArray(body, 'category_ids');
+
+  const partnerServices = body.partner_services;
+  const hasPartnerServices = Array.isArray(partnerServices) && partnerServices.length > 0;
+
+  if (hasPartnerServices) {
+    if (!validatePartnerCatalogPayload(req, res)) return false;
+
+    for (let i = 0; i < partnerServices.length; i++) {
+      const item = partnerServices[i];
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        res.status(400).json({
+          success: false,
+          status: 400,
+          message: `partner_services[${i}] must be an object.`,
+        });
+        return false;
+      }
+
+      if (Array.isArray(item.services)) {
+        if (!item.category_id || !mongoose.Types.ObjectId.isValid(String(item.category_id))) {
+          res.status(400).json({
+            success: false,
+            status: 400,
+            message: `Category is required in partner_services[${i}].`,
+          });
+          return false;
+        }
+        if (item.services.length === 0) {
+          res.status(400).json({
+            success: false,
+            status: 400,
+            message: `Services are required in partner_services[${i}].`,
+          });
+          return false;
+        }
+        for (let j = 0; j < item.services.length; j++) {
+          const svc = item.services[j];
+          if (typeof svc === 'string' || typeof svc === 'number') {
+            res.status(400).json({
+              success: false,
+              status: 400,
+              message: `partner_services[${i}].services[${j}] must include service, price, and description.`,
+            });
+            return false;
+          }
+          if (!svc || typeof svc !== 'object' || Array.isArray(svc)) {
+            res.status(400).json({
+              success: false,
+              status: 400,
+              message: `partner_services[${i}].services[${j}] must be an object.`,
+            });
+            return false;
+          }
+          const serviceId = svc.service_id ?? svc.serviceId;
+          if (!serviceId || !mongoose.Types.ObjectId.isValid(String(serviceId))) {
+            res.status(400).json({
+              success: false,
+              status: 400,
+              message: `Service is required in partner_services[${i}].services[${j}].`,
+            });
+            return false;
+          }
+          if (!isPresentFieldValue(svc.price)) {
+            res.status(400).json({
+              success: false,
+              status: 400,
+              message: `Price is required in partner_services[${i}].services[${j}].`,
+            });
+            return false;
+          }
+          if (!isPresentFieldValue(svc.description)) {
+            res.status(400).json({
+              success: false,
+              status: 400,
+              message: `Description is required in partner_services[${i}].services[${j}].`,
+            });
+            return false;
+          }
+        }
+        continue;
+      }
+
+      if (!item.category_id || !mongoose.Types.ObjectId.isValid(String(item.category_id))) {
+        res.status(400).json({
+          success: false,
+          status: 400,
+          message: `Category is required in partner_services[${i}].`,
+        });
+        return false;
+      }
+      const serviceId = item.service_id ?? item.serviceId;
+      if (!serviceId || !mongoose.Types.ObjectId.isValid(String(serviceId))) {
+        res.status(400).json({
+          success: false,
+          status: 400,
+          message: `Service is required in partner_services[${i}].`,
+        });
+        return false;
+      }
+      if (!isPresentFieldValue(item.price)) {
+        res.status(400).json({
+          success: false,
+          status: 400,
+          message: `Price is required in partner_services[${i}].`,
+        });
+        return false;
+      }
+      if (!isPresentFieldValue(item.description)) {
+        res.status(400).json({
+          success: false,
+          status: 400,
+          message: `Description is required in partner_services[${i}].`,
+        });
+        return false;
+      }
+    }
+    return true;
+  }
+
+  let serviceIds = body.service_ids;
+  if (
+    !Array.isArray(serviceIds) &&
+    typeof serviceIds === 'string' &&
+    mongoose.Types.ObjectId.isValid(String(serviceIds).trim())
+  ) {
+    serviceIds = [String(serviceIds).trim()];
+  }
+  if (!Array.isArray(serviceIds) || serviceIds.length === 0) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'partner_services (category, service, price, description) is required.',
+    });
+    return false;
+  }
+
+  let categoryIds = body.category_ids;
+  if (
+    !Array.isArray(categoryIds) &&
+    typeof categoryIds === 'string' &&
+    mongoose.Types.ObjectId.isValid(String(categoryIds).trim())
+  ) {
+    categoryIds = [String(categoryIds).trim()];
+  }
+  if (!Array.isArray(categoryIds) || categoryIds.length === 0) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'category_ids is required.',
+    });
+    return false;
+  }
+
+  const descriptions = body.service_descriptions;
+  const prices = body.service_prices;
+  if (!Array.isArray(descriptions)) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'service_descriptions is required for each service.',
+    });
+    return false;
+  }
+  if (!Array.isArray(prices)) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'service_prices is required for each service.',
+    });
+    return false;
+  }
+
+  for (let i = 0; i < serviceIds.length; i++) {
+    if (!serviceIds[i] || !mongoose.Types.ObjectId.isValid(String(serviceIds[i]))) {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: `service_ids[${i}] must be a valid ObjectId.`,
+      });
+      return false;
+    }
+    const categoryId =
+      i < categoryIds.length && categoryIds[i] != null && String(categoryIds[i]).trim() !== ''
+        ? categoryIds[i]
+        : categoryIds[categoryIds.length - 1];
+    if (!categoryId || !mongoose.Types.ObjectId.isValid(String(categoryId))) {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: `Category is required for service at index ${i}.`,
+      });
+      return false;
+    }
+    if (!isPresentFieldValue(descriptions[i])) {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: `Description is required for service at index ${i}.`,
+      });
+      return false;
+    }
+    if (!isPresentFieldValue(prices[i])) {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: `Price is required for service at index ${i}.`,
+      });
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const validatePartnerUpdateRequiredFields = (req, res) => {
+  const { address, state_id, city_id, area_id, pincode, gender, experience } = req.body;
+
+  if (!req.files?.image?.[0]) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Profile photo is required.',
+    });
+    return false;
+  }
+
+  if (!req.files?.aadhar_card?.[0]) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Aadhar card is required.',
+    });
+    return false;
+  }
+
+  if (!address || String(address).trim() === '') {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Address is required.',
+    });
+    return false;
+  }
+
+  if (!state_id || String(state_id).trim() === '') {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'State is required.',
+    });
+    return false;
+  }
+  if (!mongoose.Types.ObjectId.isValid(String(state_id))) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Invalid state id.',
+    });
+    return false;
+  }
+
+  if (!city_id || String(city_id).trim() === '') {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'City is required.',
+    });
+    return false;
+  }
+  if (!mongoose.Types.ObjectId.isValid(String(city_id))) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Invalid city id.',
+    });
+    return false;
+  }
+
+  if (!area_id || String(area_id).trim() === '') {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Area is required.',
+    });
+    return false;
+  }
+  if (!mongoose.Types.ObjectId.isValid(String(area_id))) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Invalid area id.',
+    });
+    return false;
+  }
+
+  if (!pincode || String(pincode).trim() === '') {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Pincode is required.',
+    });
+    return false;
+  }
+  if (!mongoose.Types.ObjectId.isValid(String(pincode))) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Invalid pincode id.',
+    });
+    return false;
+  }
+
+  if (gender === undefined || gender === null || String(gender).trim() === '') {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Gender is required.',
+    });
+    return false;
+  }
+  if (!isValidGender(gender)) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'gender must be "male", "female", or "other".',
+    });
+    return false;
+  }
+  req.body.gender = normalizeGender(gender);
+
+  if (experience === undefined || experience === null || String(experience).trim() === '') {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Experience is required.',
+    });
+    return false;
+  }
+  req.body.experience = String(experience).trim();
+
+  if (!validateRequiredPartnerCatalog(req, res)) return false;
+
+  const bankName = pickPartnerUpdateValue(req, ['bank_name']);
+  if (!bankName) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Bank name is required.',
+    });
+    return false;
+  }
+
+  const branchName = pickPartnerUpdateValue(req, ['branch_name']);
+  if (!branchName) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Branch name is required.',
+    });
+    return false;
+  }
+
+  const accountHolderName = pickPartnerUpdateValue(req, ['account_holder_name', 'account_name']);
+  if (!accountHolderName) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Account holder name is required.',
+    });
+    return false;
+  }
+
+  const accountNumber = pickPartnerUpdateValue(req, ['account_number']);
+  if (!accountNumber) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Account number is required.',
+    });
+    return false;
+  }
+
+  const ifscCode = pickPartnerUpdateValue(req, ['ifsc_code']);
+  if (!ifscCode) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'IFSC code is required.',
+    });
+    return false;
+  }
+
   return true;
 };
 
@@ -351,12 +790,14 @@ const partnerUpdateMiddleware = async (req, res, next) => {
   ADMIN_ONLY_BODY_FIELDS.forEach((key) => {
     delete req.body[key];
   });
+  delete req.body.partner_subscription;
+  delete req.body.subscription_plan_id;
 
   parsePartnerCatalogFields(req);
   parseOptionalDateField(req, 'date_of_birth');
   trimOptionalStringField(req, 'experience');
 
-  if (hasPartnerCatalogFields(req.body) && !validatePartnerCatalogPayload(req, res)) {
+  if (!validatePartnerUpdateRequiredFields(req, res)) {
     return;
   }
 

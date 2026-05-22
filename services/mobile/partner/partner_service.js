@@ -614,12 +614,25 @@ const assignFranchiseIdFromLocation = async (user) => {
 };
 
 const buildPartnerResponseData = async (partnerId) => {
-  const populated = await User.findById(partnerId).populate([{ path: 'city_id' }]).lean();
+  const populated = await User.findById(partnerId)
+    .populate([
+      { path: 'state_id', select: 'name' },
+      { path: 'city_id', select: 'name' },
+      { path: 'area_id', select: 'name' },
+      { path: 'franchise_id', select: 'name' },
+    ])
+    .lean();
   if (!populated) return null;
   const data = {
     ...populated,
-    city_id: populated?.city_id?._id || null,
-    city_name: populated?.city_id?.name || null,
+    state_id: populated?.state_id?._id ?? populated?.state_id ?? null,
+    state_name: populated?.state_id?.name ?? null,
+    city_id: populated?.city_id?._id ?? populated?.city_id ?? null,
+    city_name: populated?.city_id?.name ?? null,
+    area_id: populated?.area_id?._id ?? populated?.area_id ?? null,
+    area_name: populated?.area_id?.name ?? null,
+    franchise_id: populated?.franchise_id?._id ?? populated?.franchise_id ?? null,
+    franchise_name: populated?.franchise_id?.name ?? null,
   };
   delete data.password;
   return data;

@@ -36,18 +36,28 @@ const parseObjectIdList = (raw, fieldName) => {
   return { ok: true, oids };
 };
 
-const collectAreaIdsFromFranchises = (franchiseDocs) => {
+const collectObjectIdsFromField = (franchiseDocs, fieldName) => {
   const seen = new Set();
   const oids = [];
   for (const fr of franchiseDocs || []) {
-    const arr = Array.isArray(fr.area_id) ? fr.area_id : [];
-    for (const raw of arr) {
-      if (!raw) continue;
-      const s = raw instanceof mongoose.Types.ObjectId ? raw.toString() : String(raw).trim();
-      if (s && /^[a-fA-F0-9]{24}$/.test(s) && !seen.has(s)) {
-        seen.add(s);
-        oids.push(new mongoose.Types.ObjectId(s));
+    const value = fr[fieldName];
+    if (fieldName === 'area_id') {
+      const arr = Array.isArray(value) ? value : [];
+      for (const raw of arr) {
+        if (!raw) continue;
+        const s = raw instanceof mongoose.Types.ObjectId ? raw.toString() : String(raw).trim();
+        if (s && /^[a-fA-F0-9]{24}$/.test(s) && !seen.has(s)) {
+          seen.add(s);
+          oids.push(new mongoose.Types.ObjectId(s));
+        }
       }
+      continue;
+    }
+    if (!value) continue;
+    const s = value instanceof mongoose.Types.ObjectId ? value.toString() : String(value).trim();
+    if (s && /^[a-fA-F0-9]{24}$/.test(s) && !seen.has(s)) {
+      seen.add(s);
+      oids.push(new mongoose.Types.ObjectId(s));
     }
   }
   return oids;
@@ -93,6 +103,7 @@ const states = async (req, res) => {
   }
 };
 
+/** Only cities that have at least one active franchise (scoped by state_id when provided). */
 const cities = async (req, res) => {
   try {
     const filter = {
@@ -101,27 +112,37 @@ const cities = async (req, res) => {
     };
     const sort = { created_at: -1 };
 
+    const franchiseFilter = {
+      deleted_at: null,
+      is_active: true,
+    };
+
     if (req.query.state_id) {
-      let stateIds = req.query.state_id;
-
-      if (!Array.isArray(stateIds)) {
-        stateIds = stateIds.split(',');
-      }
-
-      const validStateIds = stateIds
-        .filter((id) => mongoose.Types.ObjectId.isValid(id))
-        .map((id) => new mongoose.Types.ObjectId(id));
-
-      if (validStateIds.length === 0) {
-        return res.status(400).json({
+      const parsedState = parseObjectIdList(req.query.state_id, 'state_id');
+      if (!parsedState.ok) {
+        return res.status(parsedState.status).json({
           success: false,
-          status: 400,
-          message: 'Invalid state id format.',
+          status: parsedState.status,
+          message: parsedState.message,
         });
       }
-
-      filter.state_id = { $in: validStateIds };
+      filter.state_id = { $in: parsedState.oids };
+      franchiseFilter.state_id = filter.state_id;
     }
+
+    const franchises = await Franchise.find(franchiseFilter).select('city_id').lean();
+    const coveredCityIds = collectObjectIdsFromField(franchises, 'city_id');
+
+    if (coveredCityIds.length === 0) {
+      return res.status(200).json({
+        success: true,
+        status: 200,
+        message: 'City list fetched successfully.',
+        records: [],
+      });
+    }
+
+    filter._id = { $in: coveredCityIds };
 
     const { data: cities } = await applyDropDownFilter(City, filter, sort);
 
@@ -185,7 +206,7 @@ const areas = async (req, res) => {
     }
 
     const franchises = await Franchise.find(franchiseFilter).select('area_id').lean();
-    const coveredAreaIds = collectAreaIdsFromFranchises(franchises);
+    const coveredAreaIds = collectObjectIdsFromField(franchises, 'area_id');
 
     if (coveredAreaIds.length === 0) {
       return res.status(200).json({

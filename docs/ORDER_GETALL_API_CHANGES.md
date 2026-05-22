@@ -120,6 +120,7 @@ Each record in `records` includes display helpers and hydrated refs (same patter
 
 - **Names:** `user_name`, `partner_name`, `employee_name`, `category_name`, `service_name`, `city_name`, `user_unique_id`, `partner_unique_id`
 - **Nested objects:** `user_id`, `partner_id`, `employee_id`, `created_by_id`, `category_id`, `service_id`, `franchise_id`, `city_id`, `address_id` (with city/state on address when present), `quote_id` (sequence id + description)
+- **`service_items`:** populated `order_service` line objects (not raw ObjectId buffers). Each item includes `_id`, `service_status`, `service_date`, pricing fields, etc. Use `GET /api/order/get/:id` for full line detail with partner/service embeds.
 
 ---
 

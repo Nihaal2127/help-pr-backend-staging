@@ -58,7 +58,11 @@ Query parameters — reference
   is_active            optional true|false — filters by franchise_enabled
                        (assigned on the franchise). Omit for full catalog.
 
-  is_request           optional — filters by Category.is_request
+  is_request           optional true|false — when true, lists pending category
+                       requests raised by users under franchise_id (same scope as
+                       GET /api/category/getAll?is_request=true for that franchise).
+                       When false or omitted with franchise_id, only approved global
+                       catalogue rows are included (pending requests are excluded).
 
   Search (categories)
   -------------------

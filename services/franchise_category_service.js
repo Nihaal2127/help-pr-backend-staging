@@ -32,6 +32,7 @@ const {
     GLOBAL_ACTIVE_CATEGORY_FILTER,
     paginateArray,
 } = require('../utils/franchise_catalog_from_franchise');
+const { getFranchiseUserIdsForScope } = require('../utils/franchise_catalog_dashboard_counts');
 const {
     diffRemovedIds,
     onFranchiseCategoriesRemoved,
@@ -264,6 +265,41 @@ const buildCategoryMappingRecordFromFranchise = async (franchiseOid) => {
 /**
  * Every global category (non-deleted), annotated with franchise local preference and effective availability.
  */
+const attachRequestedByUser = async (records) => {
+    if (!Array.isArray(records) || records.length === 0) return records;
+
+    const requestedByIds = [
+        ...new Set(
+            records
+                .map((record) => record?.requested_by)
+                .filter((id) => mongoose.Types.ObjectId.isValid(String(id)))
+                .map((id) => String(id))
+        ),
+    ];
+
+    if (requestedByIds.length === 0) return records;
+
+    const users = await User.find({
+        _id: { $in: requestedByIds },
+        deleted_at: null,
+    }).select('name');
+
+    const userMap = new Map(users.map((user) => [String(user._id), user]));
+
+    return records.map((record) => {
+        const plainRecord =
+            record && typeof record.toObject === 'function' ? record.toObject() : record;
+        const requestedById = plainRecord?.requested_by ? String(plainRecord.requested_by) : null;
+        const requestedByUser = requestedById ? userMap.get(requestedById) : null;
+        return {
+            ...plainRecord,
+            requested_by: requestedByUser
+                ? { id: requestedByUser._id, name: requestedByUser.name }
+                : plainRecord.requested_by,
+        };
+    });
+};
+
 const buildAllCategoriesWithFranchiseMappingStatus = async (franchiseOid) => {
     const local = await resolveFranchiseMappingPreferenceMaps(franchiseOid);
     const franchiseEnabledMap = local.ok ? local.categoryEnabled : new Map();
@@ -282,6 +318,38 @@ const buildAllCategoriesWithFranchiseMappingStatus = async (franchiseOid) => {
             { kind: 'category', globalActive, franchiseEnabled }
         );
     });
+};
+
+/**
+ * Pending category requests raised by users under this franchise (matches GET /api/category/getAll?is_request=true scope).
+ */
+const buildFranchiseRequestCategories = async (franchiseOid) => {
+    const franchiseUserIds = await getFranchiseUserIdsForScope([franchiseOid]);
+    if (franchiseUserIds.length === 0) return [];
+
+    const local = await resolveFranchiseMappingPreferenceMaps(franchiseOid);
+    const franchiseEnabledMap = local.ok ? local.categoryEnabled : new Map();
+
+    const requestCats = await Category.find({
+        deleted_at: null,
+        is_request: true,
+        requested_by: { $in: franchiseUserIds },
+    }).lean();
+
+    const svcMap = await loadServicesGroupedByCategoryId(requestCats.map((c) => c._id));
+    const rows = requestCats.map((cat) => {
+        const key = cat._id.toString();
+        const globalActive = isGlobalCatalogRowActive(cat);
+        const franchiseEnabled = franchiseEnabledMap.get(key) === true;
+        return annotateCatalogRowWithAvailability(
+            {
+                ...cat,
+                related_services: svcMap.get(key) || [],
+            },
+            { kind: 'category', globalActive, franchiseEnabled }
+        );
+    });
+    return attachRequestedByUser(rows);
 };
 
 const matchesSearchInCategoryName = (cat, qLower) => {
@@ -410,15 +478,18 @@ const list = async (query, userId) => {
         const sortOpts = parseFranchiseCategoryCatalogSort(query);
         if (!sortOpts.ok) return fail(400, sortOpts.message);
 
-        let categories = await buildAllCategoriesWithFranchiseMappingStatus(scope.franchiseOid);
+        let categories =
+            isRequestFilter === true
+                ? await buildFranchiseRequestCategories(scope.franchiseOid)
+                : await buildAllCategoriesWithFranchiseMappingStatus(scope.franchiseOid);
 
         if (listFlags.mappingActiveFilter !== undefined) {
             categories = categories.filter(
                 (cat) => Boolean(cat.franchise_enabled) === listFlags.mappingActiveFilter
             );
         }
-        if (isRequestFilter !== undefined) {
-            categories = categories.filter((cat) => Boolean(cat.is_request) === isRequestFilter);
+        if (isRequestFilter === false) {
+            categories = categories.filter((cat) => Boolean(cat.is_request) === false);
         }
 
         const searchTerm = query.search ?? query.q;

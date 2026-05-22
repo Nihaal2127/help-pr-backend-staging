@@ -66,9 +66,6 @@ const formatDateOnly = (date) => {
 
 const roundAmount = (n) => Math.round(Number(n) * 100) / 100;
 
-/** @deprecated Wallet credits come from partner order_payment rows via partner_wallet_order_service. */
-const syncCreditsFromFinancialOrders = async () => {};
-
 const getWalletAggregatesForPartners = async (partnerIds) => {
     if (!partnerIds.length) return new Map();
 
@@ -196,7 +193,6 @@ const listPartnerPayouts = async (query, scopeFilter = {}) => {
         }
 
         const partnerIds = partners.map((p) => p._id);
-        await syncCreditsFromFinancialOrders(partnerIds);
         const walletMap = await getWalletAggregatesForPartners(partnerIds);
 
         let rows = partners.map((p) => {
@@ -305,7 +301,6 @@ const listPartnersForDropdown = async (query, scopeFilter = {}) => {
         }
 
         const partnerIds = partners.map((p) => p._id);
-        await syncCreditsFromFinancialOrders(partnerIds);
         const walletMap = await getWalletAggregatesForPartners(partnerIds);
 
         const records = partners.map((p) => {
@@ -377,7 +372,6 @@ const createPartnerPayout = async (body) => {
             }
         }
 
-        await syncCreditsFromFinancialOrders([pPartner.oid]);
         const walletMap = await getWalletAggregatesForPartners([pPartner.oid]);
         const wallet = walletMap.get(pPartner.oid.toString());
         const payable = wallet ? wallet.payable_balance : 0;
@@ -449,7 +443,6 @@ const getPartnerWalletLedger = async (query) => {
             .lean();
         if (!partner) return fail(404, 'Partner not found.');
 
-        await syncCreditsFromFinancialOrders([pPartner.oid]);
         const walletMap = await getWalletAggregatesForPartners([pPartner.oid]);
         const wallet = walletMap.get(pPartner.oid.toString()) || { total_wallet_amount: 0 };
 
@@ -540,6 +533,5 @@ module.exports = {
     listPartnersForDropdown,
     createPartnerPayout,
     getPartnerWalletLedger,
-    syncCreditsFromFinancialOrders,
     getWalletAggregatesForPartners,
 };

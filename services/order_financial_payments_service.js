@@ -334,7 +334,7 @@ const listFinancialOrderPayments = async (req) => {
             baseFilter.partner_payment_status = String(query.partner_payment_status).trim().toLowerCase();
         }
 
-        const searchRegex = resolveListSearchRegex(query, { legacyKeyword: true });
+        const searchRegex = resolveListSearchRegex(query);
         const { sort: sortStage, collation } = buildListSort(query);
         const collections = getListCollectionNames({
             users: User,

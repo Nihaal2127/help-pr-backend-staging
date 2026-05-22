@@ -2,7 +2,7 @@
 
 **Date:** May 2026  
 **Source of truth:** `order` collection (+ `order_service` line for service date / partner earning).  
-Legacy `/api/financial-order/*` routes and the `financial_order` collection are **archived** under `archive/financial-order/` (not mounted in `server.js`).
+Financial overview is **order-derived** only (`/api/order/financial-payments/*`). The old `/api/financial-order` module and `financial_order` collection were removed.
 
 ---
 
@@ -13,7 +13,6 @@ Import **`postman/Help-PR-All-APIs.postman_collection.json`** → folder **`23A 
 Also: **`postman/Help-PR-Financial-Order-Payments.postman_collection.json`** (standalone).  
 Dashboard only: **`02 — getCount`** → **getCount — financials (order payments)**.
 
-Legacy **`/api/financial-order`** requests are **not** in the collection (archived).
 
 ---
 
@@ -39,7 +38,7 @@ Legacy **`/api/financial-order`** requests are **not** in the collection (archiv
 | `page` | Page number (default `1`) |
 | `limit` | Page size (default `10`) |
 | `franchise_id` | Filter by franchise (super admin / staff) |
-| `search` / `keyword` | Search `order_unique_id`, user name, partner name, service name |
+| `search` | Free-text filter: `order_unique_id`, customer name, partner name, service name (same param name as other list APIs) |
 | `order_status` | `in_progress` \| `completed` \| `in-progress` \| `cancelled` \| `refunded` |
 | `customer_payment_status` | Alias: `user_payment_status`, `payment_status` — `unpaid`, `paid`, `partially_paid`, `refund`, `partially_refund` |
 | `partner_payment_status` | `unpaid`, `partially_paid`, `paid` |

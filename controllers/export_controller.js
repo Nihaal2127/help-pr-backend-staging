@@ -16,8 +16,8 @@ const {
   getOrderStatusLabel,
   ORDER_STATUS_COMPLETED,
 } = require('../enum/order_status_enum');
-const { getPartnerPaymentStatus } = require('../enum/partner_payment_status_enum');
 const { getResolveStatus } = require('../enum/ticket_resolve_status_enum');
+const { getWalletAggregatesForPartners } = require('../services/partner_payout_service');
 
 
 const exportState = async (req, res) => {
@@ -438,63 +438,6 @@ const exportOrderPayments = async (req, res) => {
     }
 };
 
-const exportPartnerPayments = async (req, res) => {
-    try {
-        const partner_paid_status = req.body.partner_paid_status;
-        const orderServices = await OrderService.aggregate([
-            {
-                $match: {
-                    deleted_at: null,
-                    service_status: ORDER_STATUS_COMPLETED,
-                    partner_paid_status: partner_paid_status,
-                },
-            },
-            {
-                $lookup: {
-                    from: 'services',
-                    localField: 'service_id',
-                    foreignField: '_id',
-                    as: 'service',
-                },
-            },
-            {
-                $project: {
-                    order_id: '$order_unique_id',
-                    partner_id: '$partner_unique_id',
-                    service_name: { $arrayElemAt: ['$service.name', 0] },
-                    service_date: '$service_date',
-                    total_amount: '$total_price',
-                    partner_earning: '$partner_earning',
-                },
-            },
-        ]);
-
-        const headers = [
-            'Order ID',
-            'Partner ID',
-            'Service Name',
-            'Service Date',
-            'Total Amount',
-            'Partner Earning',
-        ];
-
-
-        const { fileBuffer, fileName } = await createExcel({
-            headers,
-            data: orderServices,
-            sheetName: `Partner Payments ${getPartnerPaymentStatus(partner_paid_status)} Report`,
-            fileName: `Partner_Payments_${getPartnerPaymentStatus(partner_paid_status)}.xlsx`,
-        });
-
-        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
-        res.send(process.env.NODE_ENV === 'production' ? fileBuffer.toString('base64') : fileBuffer);
-    } catch (error) {
-        console.error('Error generating report:', error);
-        res.status(500).json({ error: 'Failed to export report' });
-    }
-};
-
 const exportUserServices = async (req, res) => {
     try {
         const {
@@ -881,48 +824,6 @@ const exportPartner = async (req, res) => {
                 $addFields: {
                     service_provided: { $size: '$order_service' },
                     total_earnings: { $sum: '$order_service.partner_earning' },
-                    service_paid: {
-                        $size: {
-                            $filter: {
-                                input: '$order_service',
-                                as: 'os',
-                                cond: { $eq: ['$$os.partner_paid_status', 2] }
-                            }
-                        }
-                    },
-                    service_unpaid: {
-                        $size: {
-                            $filter: {
-                                input: '$order_service',
-                                as: 'os',
-                                cond: { $eq: ['$$os.partner_paid_status', 1] }
-                            }
-                        }
-                    },
-                    service_return: {
-                        $size: {
-                            $filter: {
-                                input: '$order_service',
-                                as: 'os',
-                                cond: { $eq: ['$$os.partner_paid_status', 3] }
-                            }
-                        }
-                    },
-                    bal_payment: {
-                        $sum: {
-                            $map: {
-                                input: {
-                                    $filter: {
-                                        input: '$order_service',
-                                        as: 'os',
-                                        cond: { $eq: ['$$os.partner_paid_status', 2] }
-                                    }
-                                },
-                                as: 'paid',
-                                in: '$$paid.partner_earning'
-                            }
-                        }
-                    },
                     rating: {
                         $cond: [
                             { $gt: [{ $size: '$order_service' }, 0] },
@@ -948,12 +849,12 @@ const exportPartner = async (req, res) => {
             },
             {
                 $project: {
+                    _id: 1,
                     partner_id: '$user_id',
                     partner_name: '$name',
                     no_of_services: 1,
                     service_provided: 1,
                     total_earnings: 1,
-                    bal_payment: 1,
                     rating: 1,
                     status: {
                         $cond: {
@@ -966,20 +867,32 @@ const exportPartner = async (req, res) => {
             }
         ]);
 
+        const walletMap = await getWalletAggregatesForPartners(
+            verifications.map((row) => row._id).filter(Boolean)
+        );
+        const rows = verifications.map((row) => {
+            const wallet = walletMap.get(String(row._id)) || {};
+            const { _id, ...rest } = row;
+            return {
+                ...rest,
+                wallet_balance: wallet.total_wallet_amount ?? 0,
+            };
+        });
+
         const headers = [
             'Partner ID',
             'Partner Name',
             'No Of Services',
             'Service Provided',
             'Total Earnings',
-            'Bal Payment',
+            'Wallet Balance',
             'Rating',
             'Status'
         ];
 
         const { fileBuffer, fileName } = await createExcel({
             headers,
-            data: verifications,
+            data: rows,
             sheetName: 'Partner Report',
             fileName: `Partner.xlsx`
         });
@@ -1014,7 +927,6 @@ module.exports = {
     exportUserList,
     exportOrders,
     exportOrderPayments,
-    exportPartnerPayments,
     exportUserServices,
     exportTicket,
     exportVerification,

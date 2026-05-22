@@ -10,7 +10,6 @@ const {
     exportUserList,
     exportOrders,
     exportOrderPayments,
-    exportPartnerPayments,
     exportUserServices,
     exportTicket,
     exportVerification,
@@ -29,7 +28,6 @@ router.post('/service', authMiddleware,  exportService);
 router.post('/user_role',authMiddleware,  exportUserList);
 router.post('/orders',authMiddleware,  exportOrders);
 router.post('/orders_payments',authMiddleware,  exportOrderPayments);
-router.post('/partner_payments',authMiddleware,  exportPartnerPayments);
 router.post('/user_service',authMiddleware,  exportUserServices);
 router.post('/tickets',authMiddleware,  exportTicket);
 router.post('/verification',authMiddleware,  exportVerification);

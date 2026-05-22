@@ -113,29 +113,25 @@ const computeCustomerPaymentStatus = (orderTotal, payments = []) => {
 };
 
 /**
- * Partner payout rollup: completed partner order_payment rows vs amount still owed
- * to the partner. Allowance is min(customer_net_paid, partner_entitlement) when
- * entitlement is provided; otherwise falls back to customer_net_paid only.
+ * Partner amount still owed on the order (overview / rollup).
+ * When partnerEntitlement is set: entitlement − completed partner payments
+ * (independent of whether the customer has paid). Recording partner payments
+ * is still capped by customer_net_paid in validatePartnerOrderPayment.
  *
- * @param {number} customerNetPaid
- * @param {Array} payments
+ * @param {number} customerNetPaid - used only when partnerEntitlement omitted (legacy)
  * @param {number|null|undefined} partnerEntitlement - partner_earning + eligible additional charges
  */
 const resolvePartnerRemittanceAllowance = (
   customerNetPaid,
   partnerEntitlement = null
 ) => {
-  const netPaid = roundMoney(customerNetPaid);
   if (
-    partnerEntitlement === null ||
-    partnerEntitlement === undefined
+    partnerEntitlement !== null &&
+    partnerEntitlement !== undefined
   ) {
-    return netPaid;
+    return roundMoney(partnerEntitlement);
   }
-  if (netPaid <= PAYMENT_STATUS_TOLERANCE) {
-    return 0;
-  }
-  return roundMoney(Math.min(netPaid, roundMoney(partnerEntitlement)));
+  return roundMoney(customerNetPaid);
 };
 
 const computePartnerPaymentStatus = (

@@ -2,22 +2,79 @@ const mongoose = require('mongoose');
 const State = require('../../../models/state');
 const City = require('../../../models/city');
 const Area = require('../../../models/area');
+const Franchise = require('../../../models/franchise');
 const { applyDropDownFilter } = require('../../../utils/pagination');
-const areaService = require('../../../services/area_service');
 
-const sendServiceResult = (res, result) => {
-  if (!result.ok) {
-    return res.status(result.status).json({
-      success: false,
-      status: result.status,
-      message: result.message,
-      ...(result.error !== undefined && { error: result.error }),
-    });
+const parseObjectIdList = (raw, fieldName) => {
+  if (raw === undefined || raw === null || String(raw).trim() === '') {
+    return { ok: true, oids: [] };
   }
-  return res.status(result.status).json({
-    success: true,
-    status: result.status,
-    ...result.data,
+  let ids = raw;
+  if (!Array.isArray(ids)) {
+    ids = String(ids).split(',');
+  }
+  const oids = [];
+  for (const item of ids) {
+    const id = String(item).trim();
+    if (!id) continue;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return {
+        ok: false,
+        status: 400,
+        message: `Invalid ${fieldName} format.`,
+      };
+    }
+    oids.push(new mongoose.Types.ObjectId(id));
+  }
+  if (oids.length === 0) {
+    return {
+      ok: false,
+      status: 400,
+      message: `Provide at least one valid ${fieldName}.`,
+    };
+  }
+  return { ok: true, oids };
+};
+
+const collectObjectIdsFromField = (franchiseDocs, fieldName) => {
+  const seen = new Set();
+  const oids = [];
+  for (const fr of franchiseDocs || []) {
+    const value = fr[fieldName];
+    if (fieldName === 'area_id') {
+      const arr = Array.isArray(value) ? value : [];
+      for (const raw of arr) {
+        if (!raw) continue;
+        const s = raw instanceof mongoose.Types.ObjectId ? raw.toString() : String(raw).trim();
+        if (s && /^[a-fA-F0-9]{24}$/.test(s) && !seen.has(s)) {
+          seen.add(s);
+          oids.push(new mongoose.Types.ObjectId(s));
+        }
+      }
+      continue;
+    }
+    if (!value) continue;
+    const s = value instanceof mongoose.Types.ObjectId ? value.toString() : String(value).trim();
+    if (s && /^[a-fA-F0-9]{24}$/.test(s) && !seen.has(s)) {
+      seen.add(s);
+      oids.push(new mongoose.Types.ObjectId(s));
+    }
+  }
+  return oids;
+};
+
+const attachCityNames = async (areaDocs) => {
+  const list = Array.isArray(areaDocs) ? areaDocs : [areaDocs];
+  if (list.length === 0) return list;
+  const ids = [...new Set(list.map((a) => a.city_id && a.city_id.toString()).filter(Boolean))].map(
+    (id) => new mongoose.Types.ObjectId(id)
+  );
+  const cities = await City.find({ _id: { $in: ids }, deleted_at: null }).select('name').lean();
+  const cityMap = new Map(cities.map((c) => [c._id.toString(), c.name]));
+  return list.map((a) => {
+    const o = a.toObject ? a.toObject() : { ...a };
+    o.city_name = cityMap.get(o.city_id.toString()) || null;
+    return o;
   });
 };
 
@@ -46,6 +103,7 @@ const states = async (req, res) => {
   }
 };
 
+/** Only cities that have at least one active franchise (scoped by state_id when provided). */
 const cities = async (req, res) => {
   try {
     const filter = {
@@ -54,27 +112,37 @@ const cities = async (req, res) => {
     };
     const sort = { created_at: -1 };
 
+    const franchiseFilter = {
+      deleted_at: null,
+      is_active: true,
+    };
+
     if (req.query.state_id) {
-      let stateIds = req.query.state_id;
-
-      if (!Array.isArray(stateIds)) {
-        stateIds = stateIds.split(',');
-      }
-
-      const validStateIds = stateIds
-        .filter((id) => mongoose.Types.ObjectId.isValid(id))
-        .map((id) => new mongoose.Types.ObjectId(id));
-
-      if (validStateIds.length === 0) {
-        return res.status(400).json({
+      const parsedState = parseObjectIdList(req.query.state_id, 'state_id');
+      if (!parsedState.ok) {
+        return res.status(parsedState.status).json({
           success: false,
-          status: 400,
-          message: 'Invalid state id format.',
+          status: parsedState.status,
+          message: parsedState.message,
         });
       }
-
-      filter.state_id = { $in: validStateIds };
+      filter.state_id = { $in: parsedState.oids };
+      franchiseFilter.state_id = filter.state_id;
     }
+
+    const franchises = await Franchise.find(franchiseFilter).select('city_id').lean();
+    const coveredCityIds = collectObjectIdsFromField(franchises, 'city_id');
+
+    if (coveredCityIds.length === 0) {
+      return res.status(200).json({
+        success: true,
+        status: 200,
+        message: 'City list fetched successfully.',
+        records: [],
+      });
+    }
+
+    filter._id = { $in: coveredCityIds };
 
     const { data: cities } = await applyDropDownFilter(City, filter, sort);
 
@@ -93,9 +161,80 @@ const cities = async (req, res) => {
   }
 };
 
+/** Only areas linked on an active franchise (scoped by city_id / state_id when provided). */
 const areas = async (req, res) => {
-  const result = await areaService.listAreasForDropdown(req.query);
-  return sendServiceResult(res, result);
+  try {
+    const filter = {
+      deleted_at: null,
+      is_active: true,
+    };
+    const sort = { created_at: -1 };
+
+    if (req.query.city_id) {
+      const parsedCity = parseObjectIdList(req.query.city_id, 'city_id');
+      if (!parsedCity.ok) {
+        return res.status(parsedCity.status).json({
+          success: false,
+          status: parsedCity.status,
+          message: parsedCity.message,
+        });
+      }
+      filter.city_id = { $in: parsedCity.oids };
+    }
+
+    if (req.query.state_id) {
+      const parsedState = parseObjectIdList(req.query.state_id, 'state_id');
+      if (!parsedState.ok) {
+        return res.status(parsedState.status).json({
+          success: false,
+          status: parsedState.status,
+          message: parsedState.message,
+        });
+      }
+      filter.state_id = { $in: parsedState.oids };
+    }
+
+    const franchiseFilter = {
+      deleted_at: null,
+      is_active: true,
+    };
+    if (filter.city_id) {
+      franchiseFilter.city_id = filter.city_id;
+    }
+    if (filter.state_id) {
+      franchiseFilter.state_id = filter.state_id;
+    }
+
+    const franchises = await Franchise.find(franchiseFilter).select('area_id').lean();
+    const coveredAreaIds = collectObjectIdsFromField(franchises, 'area_id');
+
+    if (coveredAreaIds.length === 0) {
+      return res.status(200).json({
+        success: true,
+        status: 200,
+        message: 'Area list fetched successfully.',
+        records: [],
+      });
+    }
+
+    filter._id = { $in: coveredAreaIds };
+
+    const { data: areas } = await applyDropDownFilter(Area, filter, sort);
+    const records = await attachCityNames(areas);
+
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: 'Area list fetched successfully.',
+      records,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Internal server error.',
+    });
+  }
 };
 
 const normalizePincodes = (pincodes) => {

@@ -6,6 +6,7 @@ const PartnerBankAccount = require('../../../models/partner_bank_account');
 const notificationSetting = require('../../../models/notification_settings');
 const SubscriptionPlan = require('../../../models/subscription_plan');
 const PartnerSubscription = require('../../../models/partner_subscription');
+const Franchise = require('../../../models/franchise');
 const { getNewId } = require('../../../helper/id_generator');
 const { getDocumentList } = require('../../../controllers/document_controller');
 const { createMultiple } = require('../../../controllers/partner_document_controller');
@@ -561,13 +562,77 @@ const loginPartner = async ({ email, password, device_token }) => {
   };
 };
 
+const assignFranchiseIdFromLocation = async (user) => {
+  const stateId = user.state_id;
+  const cityId = user.city_id;
+  const areaId = user.area_id;
+
+  if (
+    stateId == null ||
+    cityId == null ||
+    areaId == null ||
+    String(stateId).trim() === '' ||
+    String(cityId).trim() === '' ||
+    String(areaId).trim() === ''
+  ) {
+    return { ok: true };
+  }
+
+  if (
+    !mongoose.Types.ObjectId.isValid(String(stateId)) ||
+    !mongoose.Types.ObjectId.isValid(String(cityId)) ||
+    !mongoose.Types.ObjectId.isValid(String(areaId))
+  ) {
+    return { ok: true };
+  }
+
+  const stateOid = new mongoose.Types.ObjectId(String(stateId));
+  const cityOid = new mongoose.Types.ObjectId(String(cityId));
+  const areaOid = new mongoose.Types.ObjectId(String(areaId));
+
+  const franchise = await Franchise.findOne({
+    deleted_at: null,
+    is_active: true,
+    state_id: stateOid,
+    city_id: cityOid,
+    area_id: areaOid,
+  })
+    .sort({ updated_at: -1 })
+    .select('_id')
+    .lean();
+
+  if (!franchise) {
+    return {
+      ok: false,
+      status: 400,
+      message: 'No franchise available for this location.',
+    };
+  }
+
+  user.franchise_id = franchise._id;
+  return { ok: true };
+};
+
 const buildPartnerResponseData = async (partnerId) => {
-  const populated = await User.findById(partnerId).populate([{ path: 'city_id' }]).lean();
+  const populated = await User.findById(partnerId)
+    .populate([
+      { path: 'state_id', select: 'name' },
+      { path: 'city_id', select: 'name' },
+      { path: 'area_id', select: 'name' },
+      { path: 'franchise_id', select: 'name' },
+    ])
+    .lean();
   if (!populated) return null;
   const data = {
     ...populated,
-    city_id: populated?.city_id?._id || null,
-    city_name: populated?.city_id?.name || null,
+    state_id: populated?.state_id?._id ?? populated?.state_id ?? null,
+    state_name: populated?.state_id?.name ?? null,
+    city_id: populated?.city_id?._id ?? populated?.city_id ?? null,
+    city_name: populated?.city_id?.name ?? null,
+    area_id: populated?.area_id?._id ?? populated?.area_id ?? null,
+    area_name: populated?.area_id?.name ?? null,
+    franchise_id: populated?.franchise_id?._id ?? populated?.franchise_id ?? null,
+    franchise_name: populated?.franchise_id?.name ?? null,
   };
   delete data.password;
   return data;
@@ -650,6 +715,18 @@ const updatePartner = async ({ partnerId, body, files }) => {
     }
   });
 
+  const hasLocationUpdate =
+    updateData.state_id !== undefined ||
+    updateData.city_id !== undefined ||
+    updateData.area_id !== undefined;
+
+  if (hasLocationUpdate) {
+    const franchiseAssign = await assignFranchiseIdFromLocation(user);
+    if (!franchiseAssign.ok) {
+      return franchiseAssign;
+    }
+  }
+
   const updatedUser = await user.save();
 
   if (!shouldAddNewAddress && (hasAddressPayload || hasAddressStatusPayload)) {
@@ -691,6 +768,10 @@ const updatePartner = async ({ partnerId, body, files }) => {
           updatedUser.city_id = targetAddress.city_id ?? updatedUser.city_id;
           updatedUser.area_id = targetAddress.area_id ?? updatedUser.area_id;
           updatedUser.pincode = targetAddress.pincode ?? updatedUser.pincode;
+          const franchiseAssign = await assignFranchiseIdFromLocation(updatedUser);
+          if (!franchiseAssign.ok) {
+            return franchiseAssign;
+          }
           await updatedUser.save();
         }
       }

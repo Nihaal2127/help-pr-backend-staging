@@ -5,6 +5,8 @@ const Service = require('../models/service');
 const {
     ORDER_STATUS_IN_PROGRESS,
     ORDER_STATUS_COMPLETED,
+    ORDER_STATUS_CANCELLED,
+    ORDER_STATUS_REFUNDED,
     buildOrderStatusQueryFilter,
     normalizeOrderStatus,
 } = require('../enum/order_status_enum');
@@ -257,14 +259,92 @@ const buildFinancialOverviewPipeline = ({
     return stages;
 };
 
+const buildPartnerPendingLookupStages = (orderServicesCollection) => [
+    {
+        $lookup: {
+            from: orderServicesCollection,
+            let: { lineId: { $arrayElemAt: ['$service_items', 0] } },
+            pipeline: [
+                {
+                    $match: {
+                        $and: [
+                            { $expr: { $eq: ['$_id', '$$lineId'] } },
+                            { deleted_at: null },
+                        ],
+                    },
+                },
+                { $limit: 1 },
+                { $project: { partner_earning: 1 } },
+            ],
+            as: '_line',
+        },
+    },
+    { $unwind: { path: '$_line', preserveNullAndEmptyArrays: true } },
+    {
+        $addFields: {
+            _partner_entitlement: {
+                $cond: [
+                    {
+                        $in: [
+                            '$order_status',
+                            ['cancelled', 'refunded', ORDER_STATUS_CANCELLED, ORDER_STATUS_REFUNDED],
+                        ],
+                    },
+                    0,
+                    {
+                        $add: [
+                            { $ifNull: ['$_line.partner_earning', 0] },
+                            { $ifNull: ['$additional_charges_subtotal', 0] },
+                        ],
+                    },
+                ],
+            },
+        },
+    },
+    {
+        $addFields: {
+            _partner_pending: {
+                $let: {
+                    vars: {
+                        netPaid: { $ifNull: ['$customer_net_paid', 0] },
+                        paid: { $ifNull: ['$partner_paid_amount', 0] },
+                        entitlement: '$_partner_entitlement',
+                    },
+                    in: {
+                        $cond: [
+                            { $lte: ['$$netPaid', 0.01] },
+                            0,
+                            {
+                                $max: [
+                                    0,
+                                    {
+                                        $subtract: [
+                                            { $min: ['$$netPaid', '$$entitlement'] },
+                                            '$$paid',
+                                        ],
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                },
+            },
+        },
+    },
+];
+
 /**
  * Dashboard cards for Financial — Order Payments (derived from orders).
  */
 const buildFinancialOrderPaymentsCountFromOrders = async (scopeFilter = {}) => {
     const match = { deleted_at: null, ...scopeFilter };
+    const collections = getListCollectionNames({
+        orderServices: require('../models/order_services'),
+    });
 
     const result = await Order.aggregate([
         { $match: match },
+        ...buildPartnerPendingLookupStages(collections.orderServices),
         {
             $group: {
                 _id: null,
@@ -306,7 +386,7 @@ const buildFinancialOrderPaymentsCountFromOrders = async (scopeFilter = {}) => {
                         ],
                     },
                 },
-                total_partner_pending_amount: { $sum: '$partner_due_amount' },
+                total_partner_pending_amount: { $sum: '$_partner_pending' },
                 total_user_pending_amount: { $sum: '$customer_due_amount' },
             },
         },

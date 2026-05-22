@@ -157,7 +157,7 @@ Aliases: `financials`, `order-payment`, `financial_order_payments` → type **4*
 |-----|---------|
 | `total_completed_orders` | Orders with status completed |
 | `total_in_progress_orders` | Orders in progress |
-| `total_partner_pending_amount` | Sum of `order.partner_due_amount` |
+| `total_partner_pending_amount` | Sum per order of `min(customer_net_paid, partner entitlement) − partner_paid_amount` (same rule as list `pending_to_partner`) |
 | `total_user_pending_amount` | Sum of `order.customer_due_amount` |
 
 ---

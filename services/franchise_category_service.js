@@ -32,6 +32,10 @@ const {
     GLOBAL_ACTIVE_CATEGORY_FILTER,
     paginateArray,
 } = require('../utils/franchise_catalog_from_franchise');
+const {
+    diffRemovedIds,
+    onFranchiseCategoriesRemoved,
+} = require('./catalog_cascade_service');
 
 const fail = (status, message, extra = {}) => ({ ok: false, status, message, ...extra });
 const ok = (status, data) => ({ ok: true, status, data });
@@ -531,7 +535,8 @@ const update = async (id, body, userId) => {
         const franchise = await loadFranchiseForCatalog(parsed.oid);
         if (!franchise) return fail(404, 'No record found');
 
-        let nextCategoryIds = [...(franchise.categories || [])];
+        const beforeCategoryIds = [...(franchise.categories || [])];
+        let nextCategoryIds = [...beforeCategoryIds];
 
         if (body.franchise_id !== undefined) {
             const parsedFranchise = parseObjectId(body.franchise_id, 'franchise_id');
@@ -653,8 +658,18 @@ const update = async (id, body, userId) => {
             nextCategoryIds = applyCategoryOrderToFranchiseIds(nextCategoryIds, po.oids);
         }
 
+        const removedCategoryIds = diffRemovedIds(beforeCategoryIds, nextCategoryIds);
+
         const saved = await saveFranchiseCategories(franchise._id, nextCategoryIds);
         if (!saved) return fail(404, 'Franchise not found.');
+
+        if (removedCategoryIds.length > 0) {
+            try {
+                await onFranchiseCategoriesRemoved(franchise._id, removedCategoryIds);
+            } catch (cascadeErr) {
+                console.error('franchiseCategory.update cascade failed:', cascadeErr.message);
+            }
+        }
 
         const record = await buildCategoryMappingRecordFromFranchise(franchise._id);
         return ok(200, {

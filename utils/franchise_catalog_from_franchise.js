@@ -189,7 +189,7 @@ const pruneAndPersistFranchiseCatalogIds = async (franchiseOid) => {
 
     const [assignableCategorySet, assignableServiceSet] = await Promise.all([
         loadAssignableGlobalCategoryIdSet(),
-        loadGloballyActiveServiceIdSet(),
+        loadAssignableGlobalServiceIdSet(),
     ]);
 
     const { categories, services } = pruneFranchiseCatalogIdArrays(

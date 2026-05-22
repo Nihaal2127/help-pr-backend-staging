@@ -17,6 +17,10 @@ const {
   USER_TYPE_SUPER_ADMIN,
   USER_TYPE_STAFF,
 } = require('../middleware/role_middleware');
+const {
+  isGlobalCatalogRowActive,
+  onGlobalServiceDeactivated,
+} = require('../services/catalog_cascade_service');
 
 const asBodyBool = (value, defaultValue) => {
   if (value === undefined) return defaultValue;
@@ -670,6 +674,8 @@ const update = async (req, res) => {
       });
     }
 
+    const wasGloballyActive = isGlobalCatalogRowActive(service);
+
     if (req.body.name) {
       const name = req.body.name
       const existingService = await Service.findOne({
@@ -771,6 +777,14 @@ const update = async (req, res) => {
 
     service.updated_at = Date.now();
     const updatedService = await service.save();
+
+    if (wasGloballyActive && updatedService.is_active === false) {
+      try {
+        await onGlobalServiceDeactivated(updatedService._id);
+      } catch (cascadeErr) {
+        console.error('service update cascade failed:', cascadeErr.message);
+      }
+    }
 
     const prevCatStr = prevCategoryId ? prevCategoryId.toString() : "";
     const newCatStr = updatedService.category_id
@@ -976,8 +990,16 @@ const deleteService = async (req, res) => {
     }
 
 
-    service.deleted_at = new Date();
+    if (isGlobalCatalogRowActive(service)) {
+      try {
+        await onGlobalServiceDeactivated(service._id);
+      } catch (cascadeErr) {
+        console.error('service delete cascade failed:', cascadeErr.message);
+      }
+    }
 
+    service.deleted_at = new Date();
+    service.updated_at = Date.now();
 
     await service.save();
     const category = await Category.findById(service.category_id);

@@ -1,32 +1,29 @@
 const mongoose = require('mongoose');
 const Category = require('../models/category');
 const Service = require('../models/service');
+const {
+    onGlobalCategoryDeactivated,
+    onGlobalServiceDeactivated,
+    onFranchiseCategoriesRemoved,
+} = require('../services/catalog_cascade_service');
 
 const toIdStr = (id) => (id ? id.toString() : '');
 
 /**
- * Global catalogue deactivation no longer mutates franchise/partner mapping preferences.
- * Effective availability is computed dynamically by catalog_availability_resolver.
- *
- * @deprecated No-op kept for backward compatibility with older call sites.
+ * Global category deactivated or deleted — mutates franchise arrays and soft-deletes partner rows.
  */
-const cascadeGlobalCategoryInactive = async (_categoryId) => {
-    return { skipped: true, reason: 'resolver_based_availability' };
-};
+const cascadeGlobalCategoryInactive = async (categoryId) => onGlobalCategoryDeactivated(categoryId);
 
 /**
- * @deprecated No-op — see cascadeGlobalCategoryInactive.
+ * Global service deactivated or deleted — mutates franchise arrays and soft-deletes partner rows.
  */
-const cascadeGlobalServiceInactive = async (_serviceId) => {
-    return { skipped: true, reason: 'resolver_based_availability' };
-};
+const cascadeGlobalServiceInactive = async (serviceId) => onGlobalServiceDeactivated(serviceId);
 
 /**
- * @deprecated No-op — franchise service preferences are not mutated when franchise categories toggle off.
+ * Franchise removed categories — pulls related franchise services and soft-deletes partner rows.
  */
-const cascadeInactiveCategoriesToFranchiseServices = async (_franchiseOid, _inactiveCategoryIds) => {
-    return { skipped: true, reason: 'resolver_based_availability' };
-};
+const cascadeInactiveCategoriesToFranchiseServices = async (franchiseOid, inactiveCategoryIds) =>
+    onFranchiseCategoriesRemoved(franchiseOid, inactiveCategoryIds);
 
 /**
  * Catalogue ids that count for dashboards/lists (non-deleted, not a pending request row).

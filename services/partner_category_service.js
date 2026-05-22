@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const PartnerCategory = require('../models/partner_category');
 const PartnerService = require('../models/partner_service');
 const Service = require('../models/service');
+const { onPartnerCategoriesDeactivated } = require('./catalog_cascade_service');
 
 const toOid = (id) => {
   if (!id) return null;
@@ -257,6 +258,25 @@ async function replacePartnerCategoriesFromSignupRows(partnerId, normalizedRows)
   }
   if (psRows.length > 0) {
     await PartnerService.insertMany(psRows);
+  }
+
+  const inactiveCategoryIds = new Set();
+  for (const r of normalizedRows) {
+    if (r.category_id && r.category_is_active === false) {
+      inactiveCategoryIds.add(String(r.category_id));
+    }
+  }
+  for (const doc of pcDocs) {
+    if (doc.is_active === false && doc.category_id) {
+      inactiveCategoryIds.add(String(doc.category_id));
+    }
+  }
+  if (inactiveCategoryIds.size > 0) {
+    try {
+      await onPartnerCategoriesDeactivated(partnerOid, [...inactiveCategoryIds]);
+    } catch (cascadeErr) {
+      console.error('partner catalog inactive category cascade failed:', cascadeErr.message);
+    }
   }
 }
 

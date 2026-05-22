@@ -2,6 +2,12 @@ const express = require('express');
 const router = express.Router();
 const { register, login, update } = require('../../../controllers/mobile/partner/partner_controller');
 const {
+  states,
+  cities,
+  areas,
+  pincodes,
+} = require('../../../controllers/mobile/partner/location_controller');
+const {
   partnerRegisterMiddleware,
   partnerLoginMiddleware,
   partnerUpdateMiddleware,
@@ -21,6 +27,11 @@ const PARTNER_MULTIPART_FIELDS = [
 ];
 
 const partnerMultipartUpload = upload.fields(PARTNER_MULTIPART_FIELDS);
+
+router.get('/states', states);
+router.get('/cities', cities);
+router.get('/areas', areas);
+router.get('/pincodes', pincodes);
 
 router.post('/register', partnerRegisterMiddleware, register);
 router.post('/login', partnerLoginMiddleware, login);

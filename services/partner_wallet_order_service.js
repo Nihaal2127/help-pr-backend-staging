@@ -139,7 +139,7 @@ const syncAllPartnerOrderPaymentsForOrder = async (orderId) => {
             Math.min(computed?.amount ?? 0, customer.customer_net_paid ?? 0)
         );
         const partnerId = computed?.partnerId ?? order.partner_id;
-        const franchiseId = computed?.franchiseId ?? order.franchise_id || null;
+        const franchiseId = (computed?.franchiseId ?? order.franchise_id) || null;
 
         const payments = await OrderPayment.find({
             order_id: orderId,

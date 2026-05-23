@@ -143,13 +143,15 @@ ORDER-MANAGEMENT (TYPE 14) — "record" KEYS (four dashboard cards)
 
   Canonical order_status strings (see enum/order_status_enum.js):
 
-  in_progress   "in-progress"  (legacy DB: 1 or 2 also counted)
-  completed     "completed"    (legacy DB: 3 also counted)
-  cancelled     "cancelled"    (legacy DB: 4 also counted)
-  refunded      "refunded"
+  in_progress   "in-progress"  (legacy DB: 1 or 2; excludes refund payment rollups)
+  completed     "completed"    (legacy DB: 3; excludes refund payment rollups)
+  cancelled     "cancelled"    (legacy DB: 4; excludes refund payment rollups)
+  refunded      order_status "refunded" OR user_payment_status / payment_status
+                "refund" | "partially_refund" (includes refund API orders)
 
-  List filter (same buckets): GET /api/order/getAll?order_status=in-progress
-  Aliases accepted on getAll: pending → in-progress; numeric 1–4 mapped per migration doc.
+  List filter (same buckets): GET /api/order/getAll?order_status=refunded
+  Aliases: pending → in-progress; refund → refunded; numeric 1–4 per migration doc.
+  Buckets are mutually exclusive (refunded tab wins when payment rollup shows refund).
 
 --------------------------------------------------------------------------------
 MY-FRANCHISE (TYPE 10) — HOW "record" FIELDS ARE COMPUTED

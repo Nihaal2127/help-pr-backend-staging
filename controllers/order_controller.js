@@ -25,7 +25,7 @@ const {
   ORDER_STATUSES,
   isOrderStatusWithNoPendingAmounts,
   normalizeOrderStatus,
-  buildOrderStatusQueryFilter,
+  buildOrderManagementStatusQueryFilter,
   getOrderStatusLabel,
   touchOrderStatusInfo,
 } = require('../enum/order_status_enum');
@@ -284,7 +284,7 @@ const ORDER_SORT_WHITELIST = new Set([
 
 const resolveOrderListStatusFilter = (orderStatusParam) =>
   resolveListStatusFilter(orderStatusParam, {
-    buildFilter: (raw) => buildOrderStatusQueryFilter(raw),
+    buildFilter: (raw) => buildOrderManagementStatusQueryFilter(raw),
     invalidMessage: `Invalid order_status. Use one of: ${ORDER_STATUSES.join(', ')}.`,
   });
 

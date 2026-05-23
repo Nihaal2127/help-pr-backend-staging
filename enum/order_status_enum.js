@@ -76,6 +76,61 @@ const buildOrderStatusQueryFilter = (value) => {
   return { order_status: { $in: values } };
 };
 
+/** Customer rollup statuses that mean money was refunded (refund API does not always set order_status). */
+const CUSTOMER_REFUND_PAYMENT_STATUSES = ['refund', 'partially_refund'];
+
+const buildRefundedPaymentRollupFilter = () => ({
+  $or: [
+    { user_payment_status: { $in: CUSTOMER_REFUND_PAYMENT_STATUSES } },
+    { payment_status: { $in: CUSTOMER_REFUND_PAYMENT_STATUSES } },
+  ],
+});
+
+/** Orders in the Refunded tab: explicit order_status or customer payment rollup shows refund. */
+const buildRefundedOrderQueryFilter = () => {
+  const statusPart = buildOrderStatusQueryFilter(ORDER_STATUS_REFUNDED);
+  return {
+    $or: [statusPart, buildRefundedPaymentRollupFilter()],
+  };
+};
+
+/** Exclude refunded-tab orders from in-progress / completed / cancelled buckets. */
+const buildExcludeRefundedPaymentOrdersFilter = () => {
+  const refundedStatusValues =
+    buildOrderStatusMatchValues(ORDER_STATUS_REFUNDED) || [ORDER_STATUS_REFUNDED];
+  return {
+    order_status: { $nin: refundedStatusValues },
+    user_payment_status: { $nin: CUSTOMER_REFUND_PAYMENT_STATUSES },
+    payment_status: { $nin: CUSTOMER_REFUND_PAYMENT_STATUSES },
+  };
+};
+
+/**
+ * Order-management getCount + getAll?order_status= — mutually exclusive buckets.
+ * Refunded includes payment rollups; other buckets exclude refund rollups.
+ */
+const buildOrderManagementStatusQueryFilter = (value) => {
+  const normalized = normalizeOrderStatus(value);
+  if (!normalized) return null;
+
+  if (normalized === ORDER_STATUS_REFUNDED) {
+    return buildRefundedOrderQueryFilter();
+  }
+
+  const base = buildOrderStatusQueryFilter(normalized);
+  if (!base) return null;
+
+  if (
+    normalized === ORDER_STATUS_IN_PROGRESS ||
+    normalized === ORDER_STATUS_COMPLETED ||
+    normalized === ORDER_STATUS_CANCELLED
+  ) {
+    return { $and: [base, buildExcludeRefundedPaymentOrdersFilter()] };
+  }
+
+  return base;
+};
+
 const getOrderStatusLabel = (status) => {
   const normalized = normalizeOrderStatus(status);
   if (!normalized) return '';
@@ -146,6 +201,10 @@ module.exports = {
   isValidOrderStatus,
   buildOrderStatusMatchValues,
   buildOrderStatusQueryFilter,
+  CUSTOMER_REFUND_PAYMENT_STATUSES,
+  buildRefundedOrderQueryFilter,
+  buildExcludeRefundedPaymentOrdersFilter,
+  buildOrderManagementStatusQueryFilter,
   getOrderStatusLabel,
   buildOrderStatusInfo,
   touchOrderStatusInfo,

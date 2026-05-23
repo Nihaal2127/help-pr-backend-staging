@@ -656,9 +656,97 @@ const createRefund = async (body, createdById = null) => {
     }
 };
 
+const listRefundsForOrders = async (orderIds) => {
+    if (!orderIds.length) return new Map();
+
+    const rows = await OrderRefund.find({
+        order_id: { $in: orderIds },
+        deleted_at: null,
+    })
+        .sort({ refund_date: -1, created_at: -1 })
+        .lean();
+
+    const map = new Map();
+    for (const row of rows) {
+        const key = row.order_id.toString();
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(mapRefundRecord(row));
+    }
+    return map;
+};
+
+const buildRefundSummaryForOrder = async (order, refundRecords = [], ledgerNet = null) => {
+    const refundable = roundAmount(Number(order?.customer_net_paid) || 0);
+    const totalRefunded = roundAmount(
+        Number(order?.customer_refunded_amount) ||
+            (refundRecords || []).reduce((sum, row) => sum + (Number(row.refund_amount) || 0), 0)
+    );
+
+    const partnerShare = await resolvePartnerRefundShare(order, refundable, ledgerNet);
+    const settlement = computeRefundSettlementAmounts(refundable, partnerShare);
+
+    return {
+        refund_count: (refundRecords || []).length,
+        total_refunded_amount: totalRefunded,
+        refundable_amount: refundable,
+        customer_paid_amount: roundAmount(Number(order?.customer_paid_amount) || 0),
+        partner_payable_amount: settlement.partner_payable_amount,
+        admin_payable_amount: settlement.admin_payable_amount,
+        total_from_partner_wallet: roundAmount(
+            (refundRecords || []).reduce(
+                (sum, row) => sum + (Number(row.from_partner_wallet) || 0),
+                0
+            )
+        ),
+        total_from_admin_commission: roundAmount(
+            (refundRecords || []).reduce(
+                (sum, row) => sum + (Number(row.from_admin_commission) || 0),
+                0
+            )
+        ),
+    };
+};
+
+/**
+ * Attach `refunds` (history) and `refund_summary` (rollup + settlement preview) to order API records.
+ */
+const attachRefundsToOrderRecords = async (orders) => {
+    if (!Array.isArray(orders) || !orders.length) return orders;
+
+    const orderIds = orders
+        .map((order) => order._id)
+        .filter((id) => id != null);
+
+    if (!orderIds.length) return orders;
+
+    const [refundsByOrder, ledgerNetMap] = await Promise.all([
+        listRefundsForOrders(orderIds),
+        getPartnerWalletNetByOrderIds(orderIds),
+    ]);
+
+    return Promise.all(
+        orders.map(async (order) => {
+            const key = order._id?.toString?.() ?? String(order._id);
+            const refunds = refundsByOrder.get(key) || [];
+            const refund_summary = await buildRefundSummaryForOrder(
+                order,
+                refunds,
+                ledgerNetMap.get(key) ?? 0
+            );
+            return {
+                ...order,
+                refunds,
+                refund_summary,
+            };
+        })
+    );
+};
+
 module.exports = {
     listRefunds,
     listEligibleOrders,
     getRefundById,
     createRefund,
+    attachRefundsToOrderRecords,
+    buildRefundSummaryForOrder,
 };

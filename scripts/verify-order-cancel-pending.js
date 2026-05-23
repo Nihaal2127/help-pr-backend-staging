@@ -1,6 +1,7 @@
 const {
   isOrderStatusWithNoPendingAmounts,
   clearPendingAmountsForTerminalOrder,
+  buildTerminalOrderStatusMatchValues,
 } = require("../enum/order_status_enum");
 
 const assert = (cond, msg) => {
@@ -31,5 +32,10 @@ const active = {
 clearPendingAmountsForTerminalOrder(active);
 assert(active.customer_due_amount === 1500, "active customer due unchanged");
 assert(active.partner_due_amount === 800, "active partner due unchanged");
+
+const terminalMatch = buildTerminalOrderStatusMatchValues();
+assert(terminalMatch.includes("cancelled"), "terminal match includes cancelled");
+assert(terminalMatch.includes("refunded"), "terminal match includes refunded");
+assert(terminalMatch.includes(4), "terminal match includes legacy cancelled numeric 4");
 
 console.log("verify-order-cancel-pending: all checks passed");

@@ -5,11 +5,10 @@ const Service = require('../models/service');
 const {
     ORDER_STATUS_IN_PROGRESS,
     ORDER_STATUS_COMPLETED,
-    ORDER_STATUS_CANCELLED,
-    ORDER_STATUS_REFUNDED,
     buildOrderStatusQueryFilter,
     normalizeOrderStatus,
     isOrderStatusWithNoPendingAmounts,
+    buildTerminalOrderStatusMatchValues,
 } = require('../enum/order_status_enum');
 const {
     isValidOrderPaymentStatus,
@@ -38,6 +37,9 @@ const FINANCIAL_SORT_FIELDS = {
 };
 
 const LIST_COLLATION = { locale: 'en', strength: 2 };
+
+/** Canonical + legacy numeric values for cancelled/refunded (financial pending = 0). */
+const TERMINAL_ORDER_STATUS_MATCH_VALUES = buildTerminalOrderStatusMatchValues();
 
 const roundMoney = (n) => Math.round(Number(n || 0) * 100) / 100;
 
@@ -287,10 +289,7 @@ const buildPartnerPendingLookupStages = (orderServicesCollection) => [
             _partner_entitlement: {
                 $cond: [
                     {
-                        $in: [
-                            '$order_status',
-                            ['cancelled', 'refunded', ORDER_STATUS_CANCELLED, ORDER_STATUS_REFUNDED],
-                        ],
+                        $in: ['$order_status', TERMINAL_ORDER_STATUS_MATCH_VALUES],
                     },
                     0,
                     {
@@ -318,12 +317,7 @@ const buildPartnerPendingLookupStages = (orderServicesCollection) => [
             },
             _customer_pending: {
                 $cond: [
-                    {
-                        $in: [
-                            '$order_status',
-                            ['cancelled', 'refunded', ORDER_STATUS_CANCELLED, ORDER_STATUS_REFUNDED],
-                        ],
-                    },
+                    { $in: ['$order_status', TERMINAL_ORDER_STATUS_MATCH_VALUES] },
                     0,
                     { $ifNull: ['$customer_due_amount', 0] },
                 ],

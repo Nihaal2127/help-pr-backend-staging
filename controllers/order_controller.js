@@ -866,6 +866,7 @@ const update = async (req, res) => {
 
     if (isOrderStatusWithNoPendingAmounts(updatedOrder.order_status)) {
       await syncOrderPaymentStatus(updatedOrder._id);
+      await syncAllPartnerOrderPaymentsForOrder(updatedOrder._id);
       updatedOrder = await Order.findById(updatedOrder._id);
     }
 

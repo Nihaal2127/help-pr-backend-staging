@@ -247,17 +247,18 @@ const buildAllServicesWithFranchiseMappingStatus = async (franchiseOid) => {
             : '';
         const globalServiceActive = isGlobalCatalogRowActive(svc);
         const globalCategoryActive = catKey ? globalCatActive.get(catKey) === true : false;
-        const franchiseServiceEnabledFlag = franchiseServiceEnabled.get(svcKey) === true;
-        const franchiseCategoryEnabledFlag = catKey
+        const franchiseServiceOnFranchise = franchiseServiceEnabled.get(svcKey) === true;
+        const franchiseCategoryOnFranchise = catKey
             ? franchiseCategoryEnabled.get(catKey) === true
             : false;
+        const franchiseEnabledFlag = franchiseServiceOnFranchise && franchiseCategoryOnFranchise;
 
         return annotateCatalogRowWithAvailability(svc, {
             kind: 'service',
             globalActive: globalServiceActive,
             globalCategoryActive,
-            franchiseEnabled: franchiseServiceEnabledFlag,
-            franchiseCategoryEnabled: franchiseCategoryEnabledFlag,
+            franchiseEnabled: franchiseEnabledFlag,
+            franchiseCategoryEnabled: franchiseCategoryOnFranchise,
         });
     });
 };
@@ -345,17 +346,18 @@ const buildFranchiseRequestServices = async (franchiseOid) => {
         const catKey = catRef ? (catRef._id ? catRef._id.toString() : catRef.toString()) : '';
         const globalServiceActive = isGlobalCatalogRowActive(svc);
         const globalCategoryActive = catKey ? globalCatActive.get(catKey) === true : false;
-        const franchiseServiceEnabledFlag = franchiseServiceEnabled.get(svcKey) === true;
-        const franchiseCategoryEnabledFlag = catKey
+        const franchiseServiceOnFranchise = franchiseServiceEnabled.get(svcKey) === true;
+        const franchiseCategoryOnFranchise = catKey
             ? franchiseCategoryEnabled.get(catKey) === true
             : false;
+        const franchiseEnabledFlag = franchiseServiceOnFranchise && franchiseCategoryOnFranchise;
 
         return annotateCatalogRowWithAvailability(svc, {
             kind: 'service',
             globalActive: globalServiceActive,
             globalCategoryActive,
-            franchiseEnabled: franchiseServiceEnabledFlag,
-            franchiseCategoryEnabled: franchiseCategoryEnabledFlag,
+            franchiseEnabled: franchiseEnabledFlag,
+            franchiseCategoryEnabled: franchiseCategoryOnFranchise,
         });
     });
     return attachRequestedByUser(rows);

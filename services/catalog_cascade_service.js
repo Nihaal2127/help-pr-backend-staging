@@ -244,6 +244,20 @@ const onFranchiseCategoriesRemoved = async (franchiseId, removedCategoryIds) => 
 
     await removeServicesFromFranchiseArrays(serviceIds, { _id: fid, deleted_at: null });
 
+    const { filterServiceIdsToFranchiseEnabledCategories, catalogIdArraysEqual } = require('../utils/franchise_catalog_from_franchise');
+    const franchiseDoc = await Franchise.findOne({ _id: fid, deleted_at: null }).select('categories services');
+    if (franchiseDoc) {
+        const pruned = await filterServiceIdsToFranchiseEnabledCategories(
+            franchiseDoc.categories || [],
+            franchiseDoc.services || []
+        );
+        if (!catalogIdArraysEqual(franchiseDoc.services, pruned)) {
+            franchiseDoc.services = pruned;
+            franchiseDoc.updated_at = now();
+            await franchiseDoc.save();
+        }
+    }
+
     if (partnerIds.length === 0) {
         return { ok: true, franchiseId: fid.toString(), partnerRowsSkipped: true };
     }

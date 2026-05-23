@@ -638,18 +638,20 @@ const enrichFranchiseServiceMappingEntries = async (entries, franchiseOid) => {
         const catKey = svcDoc && svcDoc.category_id ? extractRefId(svcDoc.category_id) : '';
         const globalServiceActive = isGlobalCatalogRowActive(svcDoc);
         const globalCategoryActive = catKey ? globalCatActive.get(catKey) === true : false;
-        const franchiseServiceEnabledFlag = isLocallyEnabled(e.is_active);
+        const franchiseServiceOnList = isLocallyEnabled(e.is_active);
+        const franchiseCategoryOnFranchise = catKey
+            ? franchiseCategoryEnabled.get(catKey) === true
+            : false;
+        const franchiseEnabledFlag = franchiseServiceOnList && franchiseCategoryOnFranchise;
 
         return annotateCatalogRowWithAvailability(
-            { ...e, franchise_enabled: franchiseServiceEnabledFlag },
+            { ...e, franchise_enabled: franchiseEnabledFlag },
             {
                 kind: 'service',
                 globalActive: globalServiceActive,
                 globalCategoryActive,
-                franchiseEnabled: franchiseServiceEnabledFlag,
-                franchiseCategoryEnabled: catKey
-                    ? franchiseCategoryEnabled.get(catKey) === true
-                    : false,
+                franchiseEnabled: franchiseEnabledFlag,
+                franchiseCategoryEnabled: franchiseCategoryOnFranchise,
                 partnerEnabled: true,
             }
         );

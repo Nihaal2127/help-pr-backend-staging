@@ -283,7 +283,10 @@ const buildVirtualCategoryMappingRecord = async (franchiseLean) => {
 const buildVirtualServiceMappingRecord = async (franchiseLean) => {
     if (!franchiseLean) return null;
     const franchiseOid = franchiseLean._id;
-    const activeIds = dedupeIdsPreserveOrder(franchiseLean.services || []);
+    const activeIds = await filterServiceIdsToFranchiseEnabledCategories(
+        franchiseLean.categories || [],
+        franchiseLean.services || []
+    );
     const activeSet = new Set(activeIds.map(toIdStr));
 
     // Inactive = globally active services not enabled on this franchise (parent category may be inactive).
@@ -434,6 +437,7 @@ module.exports = {
     toIdStr,
     coerceCatalogObjectId,
     dedupeIdsPreserveOrder,
+    catalogIdArraysEqual,
     buildEnabledMapFromFranchiseIds,
     buildFranchiseEnabledMaps,
     buildVirtualCategoryMappingRecord,

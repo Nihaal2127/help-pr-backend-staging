@@ -1,5 +1,5 @@
 /**
- * Recompute partner_payment_status / partner_due_amount on all active orders.
+ * Recompute payment rollups (incl. zero pending for cancelled/refunded) and partner wallet on all active orders.
  * Run after fixing partner rollup logic (entitlement-based allowance).
  *
  *   node scripts/resync-partner-payment-rollups.js

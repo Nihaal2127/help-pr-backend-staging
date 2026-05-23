@@ -120,7 +120,7 @@ Authorization: Bearer <token>
 | Customer Pending Amount | `customer_pending_amount` | `order.customer_due_amount` (always **0** when `order_status` is `cancelled` or `refunded`) |
 | Total Partner Amount | `total_partner_amount` | `order_service.partner_earning` + `order.additional_charges_subtotal` |
 | Paid to Partner | `paid_to_partner` | `order.partner_paid_amount` |
-| Pending to Partner | `pending_to_partner` | `total_partner_amount − paid_to_partner` (partner share still to pay; shown even if customer has not paid) |
+| Pending to Partner | `pending_to_partner` | `total_partner_amount − paid_to_partner` (**0** when `order_status` is `cancelled` or `refunded`) |
 | Customer Payment Status | `customer_payment_status` | `order.user_payment_status` |
 | Partner Payment Status | `partner_payment_status` | `unpaid` / `partially_paid` / `paid` vs `total_partner_amount` |
 | Order status | `order_status` | `in-progress` → `in_progress`; see `order_status_canonical` |
@@ -157,8 +157,8 @@ Aliases: `financials`, `order-payment`, `financial_order_payments` → type **4*
 |-----|---------|
 | `total_completed_orders` | Orders with status completed |
 | `total_in_progress_orders` | Orders in progress |
-| `total_partner_pending_amount` | Sum per order of `total_partner_amount − partner_paid_amount` (same rule as list `pending_to_partner`) |
-| `total_user_pending_amount` | Sum of `order.customer_due_amount` |
+| `total_partner_pending_amount` | Sum of per-order partner pending (same rule as list `pending_to_partner`; **0** for cancelled/refunded) |
+| `total_user_pending_amount` | Sum of per-order customer pending (stored `customer_due_amount`; **0** for cancelled/refunded) |
 
 ---
 

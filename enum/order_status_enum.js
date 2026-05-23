@@ -113,6 +113,15 @@ const TERMINAL_ORDER_STATUSES_NO_PENDING = [
   ORDER_STATUS_REFUNDED,
 ];
 
+/** All DB `order_status` values (canonical + legacy) with no customer/partner pending. */
+const buildTerminalOrderStatusMatchValues = () => {
+  const values = [
+    ...(buildOrderStatusMatchValues(ORDER_STATUS_CANCELLED) || []),
+    ...(buildOrderStatusMatchValues(ORDER_STATUS_REFUNDED) || []),
+  ];
+  return [...new Set(values)];
+};
+
 /** Payment rows unchanged; only outstanding customer/partner due is cleared. */
 const clearPendingAmountsForTerminalOrder = (order) => {
   if (!isOrderStatusWithNoPendingAmounts(order?.order_status)) return;
@@ -142,6 +151,7 @@ module.exports = {
   touchOrderStatusInfo,
   isOrderStatusWithNoPendingAmounts,
   clearPendingAmountsForTerminalOrder,
+  buildTerminalOrderStatusMatchValues,
   TERMINAL_ORDER_STATUSES_NO_PENDING,
   getOrderStatus,
   getOrderStatusKey,

@@ -9,7 +9,10 @@ const {
     PAYMENT_STATUS_TOLERANCE,
 } = require('../enum/order_payment_status_enum');
 const { syncOrderPaymentStatus } = require('./order_payment_status_service');
-const { syncAllPartnerOrderPaymentsForOrder } = require('./partner_wallet_order_service');
+const {
+    syncAllPartnerOrderPaymentsForOrder,
+    computeOrderPartnerCreditAmount,
+} = require('./partner_wallet_order_service');
 const { getWalletAggregatesForPartners } = require('./partner_payout_service');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
 
@@ -151,6 +154,76 @@ const getPartnerWalletBalance = async (partnerId) => {
     const walletMap = await getWalletAggregatesForPartners([partnerId]);
     const wallet = walletMap.get(partnerId.toString());
     return wallet ? wallet.payable_balance : 0;
+};
+
+/** Net partner wallet credits for an order (credits − debits on ledger rows for that order). */
+const getPartnerWalletNetByOrderIds = async (orderIds) => {
+    if (!orderIds.length) return new Map();
+
+    const rows = await PartnerWalletLedger.aggregate([
+        {
+            $match: {
+                order_id: { $in: orderIds },
+                deleted_at: null,
+            },
+        },
+        {
+            $group: {
+                _id: '$order_id',
+                credits: {
+                    $sum: {
+                        $cond: [{ $eq: ['$transaction_type', 'credit'] }, '$amount', 0],
+                    },
+                },
+                debits: {
+                    $sum: {
+                        $cond: [{ $eq: ['$transaction_type', 'debit'] }, '$amount', 0],
+                    },
+                },
+            },
+        },
+    ]);
+
+    return new Map(
+        rows.map((row) => [
+            row._id.toString(),
+            roundAmount(Math.max(0, row.credits - row.debits)),
+        ])
+    );
+};
+
+/**
+ * Partner share of a refund for one order (capped by refundable customer balance).
+ * Uses ledger net for the order; falls back to computed entitlement when ledger is empty.
+ */
+const resolvePartnerRefundShare = async (orderDoc, refundableAmount, ledgerNetForOrder = null) => {
+    const refundable = roundAmount(refundableAmount);
+    if (!orderDoc?.partner_id || refundable <= PAYMENT_STATUS_TOLERANCE) {
+        return 0;
+    }
+
+    let partnerShare =
+        ledgerNetForOrder !== null && ledgerNetForOrder !== undefined
+            ? roundAmount(ledgerNetForOrder)
+            : 0;
+
+    if (partnerShare <= PAYMENT_STATUS_TOLERANCE) {
+        const computed = await computeOrderPartnerCreditAmount(orderDoc);
+        partnerShare = roundAmount(computed?.amount ?? 0);
+    }
+
+    return roundAmount(Math.min(partnerShare, refundable));
+};
+
+/** Settlement split for a refund: partner wallet clawback + admin remainder (incl. tax). */
+const computeRefundSettlementAmounts = (refundableAmount, partnerShare) => {
+    const refundable = roundAmount(refundableAmount);
+    const partner = roundAmount(Math.min(partnerShare, refundable));
+    const admin = roundAmount(Math.max(0, refundable - partner));
+    return {
+        partner_payable_amount: partner,
+        admin_payable_amount: admin,
+    };
 };
 
 const listRefunds = async (query, scopeFilter = {}) => {
@@ -348,11 +421,10 @@ const listEligibleOrders = async (query, scopeFilter = {}) => {
                     refundable_amount: 1,
                     completed_sum: 1,
                     refunded_sum: 1,
-                    admin_commission: '$order.admin_commission',
-                    additional_charges_commission: '$order.additional_charges_commission',
                     partner_id: '$order.partner_id',
                     franchise_id: '$order.franchise_id',
                     payment_status: '$order.payment_status',
+                    order_status: '$order.order_status',
                 },
             },
         ];
@@ -365,24 +437,45 @@ const listEligibleOrders = async (query, scopeFilter = {}) => {
         const totalItems = countResult[0]?.total || 0;
         const totalPages = Math.ceil(totalItems / limit) || 0;
 
+        const orderIds = rows.map((row) => row._id);
+        const partnerLedgerNetMap = await getPartnerWalletNetByOrderIds(orderIds);
+
+        const needsEntitlementFallback = rows.filter(
+            (row) =>
+                row.partner_id &&
+                (partnerLedgerNetMap.get(row._id.toString()) ?? 0) <= PAYMENT_STATUS_TOLERANCE
+        );
+        const orderDocsForFallback = needsEntitlementFallback.length
+            ? await Order.find({
+                  _id: { $in: needsEntitlementFallback.map((row) => row._id) },
+                  deleted_at: null,
+              }).lean()
+            : [];
+        const orderDocById = new Map(
+            orderDocsForFallback.map((order) => [order._id.toString(), order])
+        );
+
         const records = await Promise.all(
             rows.map(async (row) => {
-                let partner_wallet_balance = 0;
-                if (row.partner_id) {
-                    partner_wallet_balance = await getPartnerWalletBalance(row.partner_id);
-                }
+                const refundable = roundAmount(row.refundable_amount);
+                const ledgerNet = partnerLedgerNetMap.get(row._id.toString()) ?? 0;
+                const orderDoc = orderDocById.get(row._id.toString()) || null;
+                const partnerShare = await resolvePartnerRefundShare(
+                    orderDoc || (row.partner_id ? { _id: row._id, partner_id: row.partner_id } : null),
+                    refundable,
+                    ledgerNet
+                );
+                const settlement = computeRefundSettlementAmounts(refundable, partnerShare);
+
                 return {
                     _id: row._id,
                     order_id: row.order_id || null,
                     user_name: row.user_name || '',
                     total_amount: roundAmount(row.total_amount),
-                    user_paid: roundAmount(row.user_paid),
-                    refundable_amount: roundAmount(row.refundable_amount),
-                    admin_commission: getOrderAdminCommissionCap({
-                        admin_commission: row.admin_commission,
-                        additional_charges_commission: row.additional_charges_commission,
-                    }),
-                    partner_wallet_balance: roundAmount(partner_wallet_balance),
+                    user_paid: refundable,
+                    refundable_amount: refundable,
+                    partner_payable_amount: settlement.partner_payable_amount,
+                    admin_payable_amount: settlement.admin_payable_amount,
                     payment_status: row.payment_status,
                     franchise_id: row.franchise_id || null,
                 };

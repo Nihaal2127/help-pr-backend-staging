@@ -12,6 +12,7 @@ const { computeOrderPartnerCreditAmount } = require("./partner_wallet_order_serv
 const {
   ORDER_STATUS_CANCELLED,
   ORDER_STATUS_REFUNDED,
+  clearPendingAmountsForTerminalOrder,
 } = require("../enum/order_status_enum");
 
 /**
@@ -54,6 +55,8 @@ const syncOrderPaymentStatus = async (orderId) => {
   order.partner_payment_status = partnerBreakdown.partner_payment_status;
   order.partner_paid_amount = partnerBreakdown.partner_paid_amount;
   order.partner_due_amount = partnerBreakdown.partner_due_amount;
+
+  clearPendingAmountsForTerminalOrder(order);
 
   order.updated_at = new Date();
   await order.save();

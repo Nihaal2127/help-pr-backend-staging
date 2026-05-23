@@ -100,6 +100,26 @@ const touchOrderStatusInfo = (order, status) => {
   }
 };
 
+/** Cancelled/refunded orders keep payment history but owe no further customer/partner amounts. */
+const isOrderStatusWithNoPendingAmounts = (value) => {
+  const normalized = normalizeOrderStatus(value);
+  return (
+    normalized === ORDER_STATUS_CANCELLED || normalized === ORDER_STATUS_REFUNDED
+  );
+};
+
+const TERMINAL_ORDER_STATUSES_NO_PENDING = [
+  ORDER_STATUS_CANCELLED,
+  ORDER_STATUS_REFUNDED,
+];
+
+/** Payment rows unchanged; only outstanding customer/partner due is cleared. */
+const clearPendingAmountsForTerminalOrder = (order) => {
+  if (!isOrderStatusWithNoPendingAmounts(order?.order_status)) return;
+  order.customer_due_amount = 0;
+  order.partner_due_amount = 0;
+};
+
 /** @deprecated use normalizeOrderStatus / getOrderStatusLabel */
 const getOrderStatus = (key) => getOrderStatusLabel(key);
 
@@ -120,6 +140,9 @@ module.exports = {
   getOrderStatusLabel,
   buildOrderStatusInfo,
   touchOrderStatusInfo,
+  isOrderStatusWithNoPendingAmounts,
+  clearPendingAmountsForTerminalOrder,
+  TERMINAL_ORDER_STATUSES_NO_PENDING,
   getOrderStatus,
   getOrderStatusKey,
 };

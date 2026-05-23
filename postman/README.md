@@ -5,6 +5,8 @@ Use **one** collection for all APIs:
 | File | Purpose |
 |------|---------|
 | **`Help-PR-All-APIs.postman_collection.json`** | All modules, deduplicated |
+| **`Help-PR-Refunds.postman_collection.json`** | **Order refunds** — `/api/refund` (4 requests) |
+| **`Help-PR-Financial-Order-Payments.postman_collection.json`** | Financial order payments grid |
 | **`Help-PR-Mobile-APIs.postman_collection.json`** | **Mobile only** — `/api/mobile/partner` register & login |
 
 Legacy per-module collections live in **`archive/`** (not for import).
@@ -17,6 +19,8 @@ Legacy per-module collections live in **`archive/`** (not for import).
 4. Open any folder (Order, Partner payout, Expense, …)
 
 **Partner payout UI:** see `docs/PARTNER_PAYOUT_FRONTEND.md` and folder **37 — Partner payout**.
+
+**Order refunds:** see `docs/REFUND_API.md` and folder **38 — Refunds** (or import `Help-PR-Refunds.postman_collection.json`).
 
 **Partner mobile app (full collection):** **Mobile → Partner**. **Mobile-only collection:** import **`Help-PR-Mobile-APIs.postman_collection.json`** — **Partner → Register** then **Login**.
 
@@ -34,6 +38,8 @@ Merge reads `postman/archive/`. **Mobile** (Partner + User subfolders) is rebuil
 ```
 postman/
   Help-PR-All-APIs.postman_collection.json   ← all APIs
+  Help-PR-Refunds.postman_collection.json    ← /api/refund only
+  Help-PR-Financial-Order-Payments.postman_collection.json
   Help-PR-Mobile-APIs.postman_collection.json   ← mobile routes only
   merge-all-collections.mjs
   build-mobile-folder.mjs

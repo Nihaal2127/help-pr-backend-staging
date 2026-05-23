@@ -192,12 +192,14 @@ const pruneAndPersistFranchiseCatalogIds = async (franchiseOid) => {
         loadAssignableGlobalServiceIdSet(),
     ]);
 
-    const { categories, services } = pruneFranchiseCatalogIdArrays(
+    let { categories, services } = pruneFranchiseCatalogIdArrays(
         franchise.categories,
         franchise.services,
         assignableCategorySet,
         assignableServiceSet
     );
+
+    services = await filterServiceIdsToFranchiseEnabledCategories(categories, services);
 
     const categoriesChanged = !catalogIdArraysEqual(franchise.categories, categories);
     const servicesChanged = !catalogIdArraysEqual(franchise.services, services);
@@ -324,6 +326,32 @@ const activeServiceIdsFromListEntries = (entries) =>
         (entries || []).filter((e) => e && e.is_active).map((e) => e.service_id)
     );
 
+/**
+ * Keep only services whose parent category is in franchise.categories[].
+ */
+const filterServiceIdsToFranchiseEnabledCategories = async (enabledCategoryIds, serviceIds) => {
+    const enabledCatSet = new Set((enabledCategoryIds || []).map(toIdStr).filter(Boolean));
+    const candidateIds = dedupeIdsPreserveOrder(serviceIds || []);
+    if (candidateIds.length === 0) return [];
+    if (enabledCatSet.size === 0) return [];
+
+    const rows = await Service.find({
+        _id: { $in: candidateIds },
+        deleted_at: null,
+    })
+        .select('_id category_id')
+        .lean();
+
+    return dedupeIdsPreserveOrder(
+        rows
+            .filter((row) => {
+                const catKey = row.category_id ? toIdStr(row.category_id) : '';
+                return catKey && enabledCatSet.has(catKey);
+            })
+            .map((row) => row._id)
+    );
+};
+
 const saveFranchiseCategories = async (franchiseOid, categoryIds) => {
     const franchise = await Franchise.findOne({ _id: franchiseOid, deleted_at: null });
     if (!franchise) return null;
@@ -332,6 +360,12 @@ const saveFranchiseCategories = async (franchiseOid, categoryIds) => {
     franchise.categories = dedupeIdsPreserveOrder(
         (categoryIds || []).filter((id) => assignableCategorySet.has(toIdStr(id)))
     );
+
+    franchise.services = await filterServiceIdsToFranchiseEnabledCategories(
+        franchise.categories,
+        franchise.services || []
+    );
+
     franchise.updated_at = new Date();
     return franchise.save();
 };
@@ -341,8 +375,13 @@ const saveFranchiseServices = async (franchiseOid, serviceIds) => {
     if (!franchise) return null;
 
     const assignableServiceSet = await loadAssignableGlobalServiceIdSet();
-    franchise.services = dedupeIdsPreserveOrder(
+    const assignableIds = dedupeIdsPreserveOrder(
         (serviceIds || []).filter((id) => assignableServiceSet.has(toIdStr(id)))
+    );
+
+    franchise.services = await filterServiceIdsToFranchiseEnabledCategories(
+        franchise.categories || [],
+        assignableIds
     );
     franchise.updated_at = new Date();
     return franchise.save();
@@ -402,6 +441,7 @@ module.exports = {
     loadFranchiseForCatalog,
     activeCategoryIdsFromListEntries,
     activeServiceIdsFromListEntries,
+    filterServiceIdsToFranchiseEnabledCategories,
     saveFranchiseCategories,
     saveFranchiseServices,
     applyCategoryOrderToFranchiseIds,

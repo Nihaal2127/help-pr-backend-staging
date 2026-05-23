@@ -92,14 +92,16 @@ const onGlobalCategoryDeactivated = async (categoryId) => {
         { $set: { is_active: false, updated_at: ts } }
     );
 
-    const franchiseUpdate = {
-        $pull: { categories: catOid },
-        $set: { updated_at: ts },
-    };
+    await Franchise.updateMany(
+        { deleted_at: null },
+        { $pull: { categories: catOid }, $set: { updated_at: ts } }
+    );
     if (serviceIds.length > 0) {
-        franchiseUpdate.$pull.services = { $in: serviceIds };
+        await Franchise.updateMany(
+            { deleted_at: null },
+            { $pullAll: { services: serviceIds }, $set: { updated_at: ts } }
+        );
     }
-    await Franchise.updateMany({ deleted_at: null }, franchiseUpdate);
 
     await softDeletePartnerCategories({ category_id: catOid });
 
@@ -159,7 +161,7 @@ const onFranchiseCategoriesRemoved = async (franchiseId, removedCategoryIds) => 
     if (serviceIds.length > 0) {
         await Franchise.updateOne(
             { _id: fid, deleted_at: null },
-            { $pull: { services: { $in: serviceIds } }, $set: { updated_at: ts } }
+            { $pullAll: { services: serviceIds }, $set: { updated_at: ts } }
         );
     }
 
@@ -213,7 +215,7 @@ const onFranchiseServicesRemoved = async (franchiseId, removedServiceIds) => {
 
     await PartnerCategory.updateMany(
         { partner_id: { $in: partnerIds }, deleted_at: null, services: { $in: removed } },
-        { $pull: { services: { $in: removed } }, $set: { updated_at: ts } }
+        { $pullAll: { services: removed }, $set: { updated_at: ts } }
     );
 
     return {

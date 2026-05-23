@@ -41,7 +41,7 @@ Implemented in `utils/order_access.js` (`resolveOrderListScope`, `assertOrderRec
 | Parameter | Description |
 |-----------|-------------|
 | `page`, `limit` | Pagination (defaults `1`, `10`) |
-| `order_status` | `in-progress`, `completed`, `cancelled`, `refunded`. Invalid → **409** |
+| `order_status` | `in-progress`, `completed`, `cancelled`, `refunded`. Invalid → **409**. **`refunded`** also matches orders whose `user_payment_status` / `payment_status` is `refund` or `partially_refund` (same as getCount type 14). Other status filters exclude those refund rollups. |
 | `is_paid` | `true` / `false` (legacy; true only when `payment_status === paid`) |
 | `payment_status` | `unpaid`, `paid`, `partially_paid`, `refund`, `partially_refund`. Invalid → **409** |
 | `search` | Sanitized free-text (preferred) |

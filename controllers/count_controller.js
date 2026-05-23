@@ -29,7 +29,7 @@ const {
   ORDER_STATUS_COMPLETED,
   ORDER_STATUS_CANCELLED,
   ORDER_STATUS_REFUNDED,
-  buildOrderStatusQueryFilter,
+  buildOrderManagementStatusQueryFilter,
 } = require('../enum/order_status_enum');
 const moment = require("moment-timezone");
 const {
@@ -1004,19 +1004,19 @@ const getCountData = async (req, res) => {
             const [inProgress, completed, cancelled, refunded] = await Promise.all([
                 Order.countDocuments({
                     ...orderBase,
-                    ...buildOrderStatusQueryFilter(ORDER_STATUS_IN_PROGRESS),
+                    ...buildOrderManagementStatusQueryFilter(ORDER_STATUS_IN_PROGRESS),
                 }),
                 Order.countDocuments({
                     ...orderBase,
-                    ...buildOrderStatusQueryFilter(ORDER_STATUS_COMPLETED),
+                    ...buildOrderManagementStatusQueryFilter(ORDER_STATUS_COMPLETED),
                 }),
                 Order.countDocuments({
                     ...orderBase,
-                    ...buildOrderStatusQueryFilter(ORDER_STATUS_CANCELLED),
+                    ...buildOrderManagementStatusQueryFilter(ORDER_STATUS_CANCELLED),
                 }),
                 Order.countDocuments({
                     ...orderBase,
-                    ...buildOrderStatusQueryFilter(ORDER_STATUS_REFUNDED),
+                    ...buildOrderManagementStatusQueryFilter(ORDER_STATUS_REFUNDED),
                 }),
             ]);
 

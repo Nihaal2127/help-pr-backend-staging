@@ -15,6 +15,7 @@ const {
   normalizeOrderStatus,
   getOrderStatusLabel,
   ORDER_STATUS_COMPLETED,
+  buildOrderManagementStatusQueryFilter,
 } = require('../enum/order_status_enum');
 const { getResolveStatus } = require('../enum/ticket_resolve_status_enum');
 const { getWalletAggregatesForPartners } = require('../services/partner_payout_service');
@@ -314,11 +315,12 @@ const exportOrders = async (req, res) => {
                 message: 'Invalid order_status. Use: in-progress, completed, cancelled, refunded.',
             });
         }
+        const statusFilter = buildOrderManagementStatusQueryFilter(order_status);
         const orders = await Order.aggregate([
             {
                 $match: {
                     deleted_at: null,
-                    order_status: order_status
+                    ...statusFilter,
                 },
             },
             {

@@ -11705,7 +11705,7 @@
                 }
               ]
             },
-            "description": "**GET /api/refund/eligible-orders** — Orders with refundable balance (customer completed − refunded).\n\n**Doc:** `docs/REFUND_API.md` §2\n\n**`_id`** → `orderId` for create. **Max refund** = `refundable_amount` / `user_paid` (not `total_amount`).\n\n**Settlement preview:** `partner_payable_amount` + `admin_payable_amount` = `refundable_amount` (admin includes tax; not `admin_commission`).\n\nTest script sets `orderId` from first row."
+            "description": "**GET /api/refund/eligible-orders** — Orders with refundable balance (customer completed − refunded).\n\n**Doc:** `docs/REFUND_API.md` §2\n\n**`_id`** → `orderId` for create. **Max refund** = `refundable_amount` / `user_paid` (not `total_amount`).\n\n**Eligibility:** `order_status` must be `completed` or `cancelled`, then customer refundable balance &gt; 0.\n\n**Settlement preview:** `partner_payable_amount` + `admin_payable_amount` = `refundable_amount`.\n\nTest script sets `orderId` from first row."
           },
           "description": "\n\n_Source: builtin:refund → Order refunds_"
         },

@@ -109,6 +109,7 @@ const { syncOrderPaymentStatus } = require('../services/order_payment_status_ser
 const {
   applyOrderFieldsAndServicesUpdate,
 } = require('../services/order_field_update_service');
+const { attachRefundsToOrderRecords } = require('../services/refund_service');
 const {
   resolveOrderListScope,
   assertOrderRecordAccess,
@@ -255,7 +256,14 @@ async function loadOrderDetailLean(orderMongoId) {
     OrderPayment.find({ order_id: orderMongoId, deleted_at: null }).sort({ created_at: -1 }).lean(),
     OrderOffer.findOne({ order_id: orderMongoId }).lean(),
   ]);
-  return shapeOrderDetailResponse(populatedOrderData, additional_charges, order_payments, order_offer);
+  const shaped = shapeOrderDetailResponse(
+    populatedOrderData,
+    additional_charges,
+    order_payments,
+    order_offer
+  );
+  const [withRefunds] = await attachRefundsToOrderRecords([shaped]);
+  return withRefunds;
 }
 
 /** Same pattern as quote getAll: `sort_by` whitelist + `sort_order` or legacy `sort` (1 | -1). */
@@ -447,6 +455,8 @@ const getAll = async (req, res) => {
       limit
     );
 
+    const records = await attachRefundsToOrderRecords(formatOrderRecords(orders));
+
     res.status(200).json({
       success: true,
       status: 200,
@@ -454,7 +464,7 @@ const getAll = async (req, res) => {
       totalItems: totalCount,
       totalPages,
       currentPage: page,
-      records: formatOrderRecords(orders),
+      records,
     });
   } catch (err) {
     console.error('Error fetching orders:', err);

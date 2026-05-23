@@ -20,6 +20,7 @@ const {
 const {
   isGlobalCatalogRowActive,
   onGlobalServiceDeactivated,
+  validateGlobalServiceActivation,
 } = require('../services/catalog_cascade_service');
 
 const asBodyBool = (value, defaultValue) => {
@@ -571,6 +572,21 @@ const create = async (req, res) => {
       (typeof req.path === "string" && req.path.includes("/create-request")) ||
         asBodyBool(req.body.is_request, false)
     );
+    const nextIsActive = isRequest ? asBodyBool(is_active, false) : asBodyBool(is_active, true);
+
+    const activationCheck = await validateGlobalServiceActivation({
+      categoryId: category_id,
+      isActive: nextIsActive,
+      isRequest,
+    });
+    if (!activationCheck.ok) {
+      return res.status(activationCheck.status).json({
+        success: false,
+        status: activationCheck.status,
+        message: activationCheck.message,
+      });
+    }
+
     const newService = new Service({
       name,
       desc,
@@ -583,7 +599,7 @@ const create = async (req, res) => {
       city_ids,
       state_ids,
       image_url,
-      is_active: isRequest ? asBodyBool(is_active, false) : asBodyBool(is_active, true),
+      is_active: nextIsActive,
       is_request: isRequest,
       approval_status: isRequest ? "pending" : "approve",
       rejection_reason: null,
@@ -769,6 +785,42 @@ const update = async (req, res) => {
           ? null
           : String(updateData.rejection_reason))
         : null;
+    }
+
+    let nextIsRequest = service.is_request;
+    if (updateData.is_request !== undefined) {
+      nextIsRequest = asBodyBool(updateData.is_request, service.is_request);
+    }
+    if (updateData.approval_status === "approve") {
+      nextIsRequest = false;
+    } else if (
+      updateData.approval_status === "rejected" ||
+      updateData.approval_status === "pending"
+    ) {
+      nextIsRequest = true;
+    }
+    if (typeof req.path === "string" && req.path.includes("/update-request")) {
+      nextIsRequest = true;
+    }
+
+    const nextIsActive = Object.prototype.hasOwnProperty.call(updateData, "is_active")
+      ? asBodyBool(updateData.is_active, service.is_active)
+      : service.is_active;
+    const nextCategoryId = Object.prototype.hasOwnProperty.call(updateData, "category_id")
+      ? updateData.category_id
+      : service.category_id;
+
+    const activationCheck = await validateGlobalServiceActivation({
+      categoryId: nextCategoryId,
+      isActive: nextIsActive,
+      isRequest: nextIsRequest,
+    });
+    if (!activationCheck.ok) {
+      return res.status(activationCheck.status).json({
+        success: false,
+        status: activationCheck.status,
+        message: activationCheck.message,
+      });
     }
 
     Object.keys(updateData).forEach((key) => {

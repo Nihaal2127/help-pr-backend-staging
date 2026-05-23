@@ -23,6 +23,7 @@ const {
   ORDER_STATUS_IN_PROGRESS,
   ORDER_STATUS_REFUNDED,
   ORDER_STATUSES,
+  isOrderStatusWithNoPendingAmounts,
   normalizeOrderStatus,
   buildOrderStatusQueryFilter,
   getOrderStatusLabel,
@@ -104,6 +105,7 @@ const {
   applyNestedResourcesOnUpdate,
 } = require('../services/order_nested_resources_service');
 const { syncAllPartnerOrderPaymentsForOrder } = require('../services/partner_wallet_order_service');
+const { syncOrderPaymentStatus } = require('../services/order_payment_status_service');
 const {
   applyOrderFieldsAndServicesUpdate,
 } = require('../services/order_field_update_service');
@@ -852,6 +854,11 @@ const update = async (req, res) => {
       updatedOrder = await updatedOrder.save();
     }
 
+    if (isOrderStatusWithNoPendingAmounts(updatedOrder.order_status)) {
+      await syncOrderPaymentStatus(updatedOrder._id);
+      updatedOrder = await Order.findById(updatedOrder._id);
+    }
+
     const notificationSetting = await NotificationSettings.findOne({
       user_id: updatedOrder.user_id,
     });
@@ -1311,7 +1318,7 @@ const cancleOrder = async (req, res) => {
     order.order_status = ORDER_STATUS_CANCELLED;
     order.cancellation_reasone = cancellation_reasone || '';
     touchOrderStatusInfo(order, ORDER_STATUS_CANCELLED);
-    const updatedOrder = await order.save();
+    await order.save();
 
     await OrderService.updateMany(
       { _id: { $in: order.service_items } },
@@ -1323,7 +1330,9 @@ const cancleOrder = async (req, res) => {
       }
     );
 
+    await syncOrderPaymentStatus(order._id);
     await syncAllPartnerOrderPaymentsForOrder(order._id);
+    const updatedOrder = await Order.findById(order._id);
 
     const orderServices = await OrderService.find({
       _id: { $in: order.service_items }

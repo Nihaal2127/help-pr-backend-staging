@@ -117,7 +117,7 @@ Authorization: Bearer <token>
 | Tax (%) | `tax_percentage` | `order.tax_percent` |
 | Tax amount | `tax_amount` | `order.tax_amount` |
 | Customer Paid Amount | `customer_paid_amount` | `order.customer_paid_amount` |
-| Customer Pending Amount | `customer_pending_amount` | `order.customer_due_amount` |
+| Customer Pending Amount | `customer_pending_amount` | `order.customer_due_amount` (always **0** when `order_status` is `cancelled` or `refunded`) |
 | Total Partner Amount | `total_partner_amount` | `order_service.partner_earning` + `order.additional_charges_subtotal` |
 | Paid to Partner | `paid_to_partner` | `order.partner_paid_amount` |
 | Pending to Partner | `pending_to_partner` | `total_partner_amount − paid_to_partner` (partner share still to pay; shown even if customer has not paid) |

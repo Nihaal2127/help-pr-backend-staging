@@ -44,7 +44,7 @@ Order (1) ──has──▶ service_items[] ──▶ OrderService (1 per order
 |-----------------------------------|---------|
 | `in-progress` | Default when an order is created |
 | `completed` | Job finished |
-| `cancelled` | Order or line cancelled |
+| `cancelled` | Order or line cancelled; **`customer_due_amount`** and **`partner_due_amount`** become **0** (payment rows unchanged) |
 | `refunded` | Order refunded |
 
 **`order_status_info`** — timeline array with one entry per status (`status` string + `updated_at`). On create, only `in-progress` has a timestamp.
@@ -383,7 +383,7 @@ Standalone **`/api/order-additional-charges`** and **`/api/order-payments`** rou
 
 | Body field | Effect |
 |------------|--------|
-| `order_status` | Syncs to non-cancelled/refunded line items. **`completed`** requires customer paid in full (`payment_status` = `paid`) → **409** if not |
+| `order_status` | Syncs to non-cancelled/refunded line items. **`completed`** requires customer paid in full (`payment_status` = `paid`) → **409** if not. **`cancelled`** / **`refunded`** clear pending due amounts (`customer_due_amount`, `partner_due_amount` → 0); `order_payment` rows are not changed |
 | `total_service_charge` (or `service_price`) | Reprice using **saved** % on the order |
 | `offer_id` | Apply/change offer; **`order_offer`** replaced |
 | `offer_id: null` | Remove offer |

@@ -1,0 +1,145 @@
+{
+  "info": {
+    "name": "Help PR — Order refunds",
+    "description": "**/api/refund** — Order refund APIs (list, eligible orders, detail, create).\n\n**Doc:** `docs/REFUND_API.md` (API reference + create body mapping)\n**Frontend:** `docs/REFUND_FRONTEND.md`\n\n**Access:** Super admin (5) & staff (6); franchise admin (1) & employee (3). Partner (2) & customer (4) → 403.\n\n**Flow:** 1 Login (all-APIs Auth) → 2 Eligible orders → 4 Create → 1 Get all → 3 Get by id\n\n**Variables:** `orderId` from eligible-orders `_id`; `refundMongoId` from getAll/create `data._id`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5001" },
+    { "key": "accessToken", "value": "" },
+    { "key": "franchiseId", "value": "" },
+    { "key": "orderId", "value": "", "description": "Order Mongo _id from eligible-orders (for create)" },
+    { "key": "refundMongoId", "value": "", "description": "order_refund document _id (for getById)" }
+  ],
+  "item": [
+    {
+      "name": "1. Get all — refund list",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const json = pm.response.json();",
+              "if (json.success && json.data?.records?.length) {",
+              "  pm.collectionVariables.set('refundMongoId', json.data.records[0]._id);",
+              "  console.log('Set refundMongoId:', json.data.records[0]._id);",
+              "}",
+              "pm.test('Status 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/refund/getAll?page=1&limit=10&order_id=&user_name=&from_date=&to_date=&franchise_id={{franchiseId}}&sort_by=refund_date&sort_order=desc",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "refund", "getAll"],
+          "query": [
+            { "key": "page", "value": "1" },
+            { "key": "limit", "value": "10", "description": "Max 100" },
+            { "key": "order_id", "value": "", "description": "Search unique_id or Mongo ObjectId" },
+            { "key": "user_name", "value": "" },
+            { "key": "from_date", "value": "", "description": "Filter refund_date (optional)" },
+            { "key": "to_date", "value": "", "description": "Filter refund_date (optional)" },
+            { "key": "franchise_id", "value": "{{franchiseId}}" },
+            { "key": "sort_by", "value": "refund_date", "description": "order_id | user_name | refund_date | refund_amount" },
+            { "key": "sort_order", "value": "desc" }
+          ]
+        },
+        "description": "**GET /api/refund/getAll** — Refund history.\n\nSee `docs/REFUND_API.md` §1.\n\nTest script sets `refundMongoId` from first record."
+      }
+    },
+    {
+      "name": "2. Eligible orders — create picker",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const json = pm.response.json();",
+              "if (json.success && json.data?.records?.length) {",
+              "  const row = json.data.records[0];",
+              "  pm.collectionVariables.set('orderId', row._id);",
+              "  console.log('Set orderId:', row._id, 'refundable:', row.refundable_amount ?? row.user_paid);",
+              "}",
+              "pm.test('Status 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/refund/eligible-orders?page=1&limit=10&order_id=&user_name=&franchise_id={{franchiseId}}&sort_by=order_id&sort_order=asc",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "refund", "eligible-orders"],
+          "query": [
+            { "key": "page", "value": "1" },
+            { "key": "limit", "value": "10" },
+            { "key": "order_id", "value": "" },
+            { "key": "user_name", "value": "" },
+            { "key": "franchise_id", "value": "{{franchiseId}}" },
+            { "key": "sort_by", "value": "order_id" },
+            { "key": "sort_order", "value": "asc" }
+          ]
+        },
+        "description": "**GET /api/refund/eligible-orders** — Orders with refundable balance.\n\nSee `docs/REFUND_API.md` §2.\n\n`partner_payable_amount` + `admin_payable_amount` = `refundable_amount` (admin includes tax)."
+      }
+    },
+    {
+      "name": "3. Get by id — refund detail",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/refund/getById/{{refundMongoId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "refund", "getById", "{{refundMongoId}}"]
+        },
+        "description": "**GET /api/refund/getById/:id** — `:id` = refund Mongo `_id` (`refundMongoId`).\n\nSee `docs/REFUND_API.md` §3."
+      }
+    },
+    {
+      "name": "4. Create — record refund",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const json = pm.response.json();",
+              "if (json.success && json.data?._id) {",
+              "  pm.collectionVariables.set('refundMongoId', json.data._id);",
+              "  console.log('Created refund:', json.data._id);",
+              "}",
+              "pm.test('Status 201', () => pm.response.to.have.status(201));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"order_id\": \"{{orderId}}\",\n  \"refund_amount\": 1000,\n  \"from_admin_commission\": 200,\n  \"from_partner_wallet\": 800,\n  \"date\": \"2026-05-15T10:00:00.000Z\",\n  \"notes\": \"Refund via Postman\",\n  \"payment_method\": \"refund\",\n  \"transaction_reference\": \"\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/refund/create",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "refund", "create"]
+        },
+        "description": "**POST /api/refund/create** — See `docs/REFUND_API.md` §4.\n\n**Required:** `order_id` (Mongo), `refund_amount`, `date`.\n**Split:** `from_admin_commission + from_partner_wallet` = `refund_amount`.\n**Cap:** `refund_amount` ≤ customer net paid (not order total).\n\n**Creates:** `order_payment` (refunded), `order_refund`, optional partner ledger debit; syncs order payment status."
+      }
+    }
+  ]
+}

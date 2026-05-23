@@ -132,6 +132,7 @@ const prepareCategoryCreateBody = async (req, res, next) => {
 const prepareCategoryUpdateBody = async (req, res, next) => {
   try {
     mapDescriptionToDesc(req.body);
+    const hasServiceIdsField = resolveRawServiceInput(req.body) !== undefined;
     if (isMultipart(req)) {
       if (req.file) {
         req.body.image_url = await handleImageUpload(
@@ -141,12 +142,16 @@ const prepareCategoryUpdateBody = async (req, res, next) => {
           null
         );
       }
-      req.body.service_ids = parseServiceIdsField(req.body);
+      if (hasServiceIdsField) {
+        req.body.service_ids = parseServiceIdsField(req.body);
+      }
       req.body.city_ids = parseIdArrayField(req.body.city_ids);
       req.body.state_ids = parseIdArrayField(req.body.state_ids);
     } else {
-      if (req.body.service_ids == null || !Array.isArray(req.body.service_ids)) {
-        req.body.service_ids = parseServiceIdsField(req.body);
+      if (hasServiceIdsField) {
+        if (req.body.service_ids == null || !Array.isArray(req.body.service_ids)) {
+          req.body.service_ids = parseServiceIdsField(req.body);
+        }
       }
       if (req.body.city_ids != null && !Array.isArray(req.body.city_ids)) {
         req.body.city_ids = parseIdArrayField(req.body.city_ids);

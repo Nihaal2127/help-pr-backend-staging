@@ -35,16 +35,106 @@ const diffRemovedIds = (beforeIds, afterIds) => {
     });
 };
 
+const dedupeOids = (ids) => {
+    const seen = new Set();
+    const out = [];
+    for (const id of ids || []) {
+        const oid = coerceOid(id);
+        if (!oid) continue;
+        const key = oid.toString();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(oid);
+    }
+    return out;
+};
+
+/** Service ids linked via service.category_id and/or category.services[] membership. */
 const loadServiceIdsForCategories = async (categoryIds) => {
     const oids = (categoryIds || []).map(coerceOid).filter(Boolean);
     if (oids.length === 0) return [];
-    const rows = await Service.find({
-        category_id: { $in: oids },
-        deleted_at: null,
-    })
-        .select('_id')
-        .lean();
-    return rows.map((r) => r._id);
+
+    const [serviceRows, categoryRows] = await Promise.all([
+        Service.find({
+            category_id: { $in: oids },
+            deleted_at: null,
+        })
+            .select('_id')
+            .lean(),
+        Category.find({ _id: { $in: oids }, deleted_at: null }).select('services').lean(),
+    ]);
+
+    const fromCategoryArrays = categoryRows.flatMap((row) => row.services || []);
+    return dedupeOids([...serviceRows.map((row) => row._id), ...fromCategoryArrays]);
+};
+
+/**
+ * Remove service ids from franchise.services[] using app-side filtering (ObjectId/string-safe).
+ */
+const removeServicesFromFranchiseArrays = async (serviceIds, franchiseFilter = { deleted_at: null }) => {
+    const removeSet = new Set(
+        (serviceIds || []).map(coerceOid).filter(Boolean).map((oid) => oid.toString())
+    );
+    if (removeSet.size === 0) return { franchisesUpdated: 0 };
+
+    const oidList = [...removeSet].map((id) => new mongoose.Types.ObjectId(id));
+    const franchises = await Franchise.find({
+        ...franchiseFilter,
+        services: { $in: oidList },
+    }).select('_id services');
+
+    const ts = now();
+    const bulkOps = [];
+
+    for (const franchise of franchises) {
+        const before = franchise.services || [];
+        const next = before.filter((sid) => !removeSet.has(toIdStr(sid)));
+        if (next.length === before.length) continue;
+        bulkOps.push({
+            updateOne: {
+                filter: { _id: franchise._id },
+                update: { $set: { services: next, updated_at: ts } },
+            },
+        });
+    }
+
+    if (bulkOps.length > 0) {
+        await Franchise.bulkWrite(bulkOps);
+    }
+
+    return { franchisesUpdated: bulkOps.length };
+};
+
+/** After category membership changes, drop orphan services on every franchise document. */
+const syncAllFranchiseServicesToEnabledCategories = async () => {
+    const { filterServiceIdsToFranchiseEnabledCategories } = require('../utils/franchise_catalog_from_franchise');
+    const franchises = await Franchise.find({ deleted_at: null }).select('_id categories services');
+    const ts = now();
+    const bulkOps = [];
+
+    for (const franchise of franchises) {
+        const pruned = await filterServiceIdsToFranchiseEnabledCategories(
+            franchise.categories || [],
+            franchise.services || []
+        );
+        const before = (franchise.services || []).map(toIdStr);
+        const after = pruned.map(toIdStr);
+        if (before.length === after.length && before.every((id, i) => id === after[i])) {
+            continue;
+        }
+        bulkOps.push({
+            updateOne: {
+                filter: { _id: franchise._id },
+                update: { $set: { services: pruned, updated_at: ts } },
+            },
+        });
+    }
+
+    if (bulkOps.length > 0) {
+        await Franchise.bulkWrite(bulkOps);
+    }
+
+    return { franchisesUpdated: bulkOps.length };
 };
 
 const loadPartnerIdsForFranchise = async (franchiseId) => {
@@ -96,12 +186,9 @@ const onGlobalCategoryDeactivated = async (categoryId) => {
         { deleted_at: null },
         { $pull: { categories: catOid }, $set: { updated_at: ts } }
     );
-    if (serviceIds.length > 0) {
-        await Franchise.updateMany(
-            { deleted_at: null },
-            { $pullAll: { services: serviceIds }, $set: { updated_at: ts } }
-        );
-    }
+
+    const franchiseServicePrune = await removeServicesFromFranchiseArrays(serviceIds);
+    await syncAllFranchiseServicesToEnabledCategories();
 
     await softDeletePartnerCategories({ category_id: catOid });
 
@@ -117,6 +204,7 @@ const onGlobalCategoryDeactivated = async (categoryId) => {
         ok: true,
         categoryId: catOid.toString(),
         servicesDeactivated: serviceIds.length,
+        franchisesServicesPruned: franchiseServicePrune.franchisesUpdated,
     };
 };
 
@@ -128,10 +216,7 @@ const onGlobalServiceDeactivated = async (serviceId) => {
     if (!svcOid) return { ok: false, reason: 'invalid_service_id' };
 
     const ts = now();
-    await Franchise.updateMany(
-        { deleted_at: null },
-        { $pull: { services: svcOid }, $set: { updated_at: ts } }
-    );
+    await removeServicesFromFranchiseArrays([svcOid]);
 
     await softDeletePartnerServices({ service_id: svcOid });
 
@@ -154,16 +239,10 @@ const onFranchiseCategoriesRemoved = async (franchiseId, removedCategoryIds) => 
         return { ok: true, skipped: true, reason: 'nothing_to_cascade' };
     }
 
-    const ts = now();
     const serviceIds = await loadServiceIdsForCategories(removed);
     const partnerIds = await loadPartnerIdsForFranchise(fid);
 
-    if (serviceIds.length > 0) {
-        await Franchise.updateOne(
-            { _id: fid, deleted_at: null },
-            { $pullAll: { services: serviceIds }, $set: { updated_at: ts } }
-        );
-    }
+    await removeServicesFromFranchiseArrays(serviceIds, { _id: fid, deleted_at: null });
 
     if (partnerIds.length === 0) {
         return { ok: true, franchiseId: fid.toString(), partnerRowsSkipped: true };

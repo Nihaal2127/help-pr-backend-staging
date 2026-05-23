@@ -25,6 +25,40 @@ const isGlobalCatalogRowActive = (doc) =>
     Boolean(doc && doc.deleted_at == null && doc.is_active === true && doc.is_request !== true);
 
 /**
+ * A global service may be active only when its parent category is globally active (not inactive / pending / deleted).
+ */
+const validateGlobalServiceActivation = async ({ categoryId, isActive, isRequest }) => {
+    if (isActive !== true || isRequest === true) {
+        return { ok: true };
+    }
+
+    const catOid = coerceOid(categoryId);
+    if (!catOid) {
+        return {
+            ok: false,
+            status: 400,
+            message: 'category_id is required to activate a service.',
+        };
+    }
+
+    const category = await Category.findOne({ _id: catOid, deleted_at: null }).lean();
+    if (!category) {
+        return { ok: false, status: 404, message: 'Category not found.' };
+    }
+
+    if (!isGlobalCatalogRowActive(category)) {
+        return {
+            ok: false,
+            status: 400,
+            message:
+                'Cannot activate a service while its category is inactive, pending approval, or deleted. Activate the category first.',
+        };
+    }
+
+    return { ok: true };
+};
+
+/**
  * Category/service ids removed from a franchise enablement array (before → after).
  */
 const diffRemovedIds = (beforeIds, afterIds) => {
@@ -344,6 +378,7 @@ const cascadeInactiveCategoriesToFranchiseServices = async (franchiseOid, inacti
 
 module.exports = {
     isGlobalCatalogRowActive,
+    validateGlobalServiceActivation,
     diffRemovedIds,
     onGlobalCategoryDeactivated,
     onGlobalServiceDeactivated,

@@ -114,7 +114,12 @@ Refund history table.
 
 ## 2. `GET /api/refund/eligible-orders`
 
-Orders where customer **completed − refunded** &gt; 0 (net paid available to refund).
+Orders eligible for a refund. **All conditions must pass:**
+
+1. **`orders.order_status`** is **`completed`** or **`cancelled`** (includes legacy numeric status values).
+2. Order is not soft-deleted (`deleted_at` null).
+3. Customer **`order_payment`**: sum of `completed` − sum of `refunded` &gt; 0 (`refundable_amount`).
+4. Franchise scope (role-based), optional `order_id` / `user_name` search.
 
 ### Query parameters
 
@@ -145,6 +150,7 @@ Orders where customer **completed − refunded** &gt; 0 (net paid available to r
         "partner_payable_amount": 3200,
         "admin_payable_amount": 1300,
         "payment_status": "partially_paid",
+        "order_status": "completed",
         "franchise_id": "664f00000000000000000001"
       }
     ],
@@ -352,9 +358,6 @@ Order-level payment rollups (`customer_refunded_amount`, `customer_net_paid`, `p
 
 ## Planned product changes (not implemented yet)
 
-Discussed requirements for a future release:
-
-- Eligible orders: `order_status` ∈ `completed`, `cancelled` only
 - Auto-compute `refund_amount` = full customer net paid
 - Auto-compute split: partner = order wallet credits; admin = remainder (incl. tax)
 - Allow negative partner wallet on refund

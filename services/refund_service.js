@@ -15,6 +15,38 @@ const {
 } = require('./partner_wallet_order_service');
 const { getWalletAggregatesForPartners } = require('./partner_payout_service');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
+const {
+    ORDER_STATUS_COMPLETED,
+    ORDER_STATUS_CANCELLED,
+    buildOrderStatusMatchValues,
+    normalizeOrderStatus,
+} = require('../enum/order_status_enum');
+
+/** Canonical + legacy numeric values for completed and cancelled (refund-eligible lifecycle). */
+const ELIGIBLE_REFUND_ORDER_STATUS_VALUES = [
+    ...new Set([
+        ...(buildOrderStatusMatchValues(ORDER_STATUS_COMPLETED) || []),
+        ...(buildOrderStatusMatchValues(ORDER_STATUS_CANCELLED) || []),
+    ]),
+];
+
+const isOrderStatusEligibleForRefund = (orderStatus) => {
+    const normalized = normalizeOrderStatus(orderStatus);
+    return (
+        normalized === ORDER_STATUS_COMPLETED || normalized === ORDER_STATUS_CANCELLED
+    );
+};
+
+const buildEligibleOrderLookupMatch = (scopeFilter = {}) => {
+    const match = {
+        'order.deleted_at': null,
+        'order.order_status': { $in: ELIGIBLE_REFUND_ORDER_STATUS_VALUES },
+    };
+    if (scopeFilter.franchise_id !== undefined) {
+        match['order.franchise_id'] = scopeFilter.franchise_id;
+    }
+    return match;
+};
 
 const MAX_PAGE_SIZE = 100;
 const LIST_SORT_FIELDS = ['order_id', 'user_name', 'refund_date', 'refund_amount'];
@@ -294,11 +326,6 @@ const listEligibleOrders = async (query, scopeFilter = {}) => {
     try {
         const { page, limit, skip } = parsePagination(query);
 
-        const orderMatch = { deleted_at: null };
-        if (scopeFilter.franchise_id !== undefined) {
-            orderMatch.franchise_id = scopeFilter.franchise_id;
-        }
-
         const ordersColl = Order.collection.name;
         const usersColl = User.collection.name;
 
@@ -345,7 +372,7 @@ const listEligibleOrders = async (query, scopeFilter = {}) => {
                 },
             },
             { $unwind: '$order' },
-            { $match: { 'order.deleted_at': null, ...orderMatch } },
+            { $match: buildEligibleOrderLookupMatch(scopeFilter) },
             {
                 $lookup: {
                     from: usersColl,
@@ -429,6 +456,8 @@ const listEligibleOrders = async (query, scopeFilter = {}) => {
             },
         ];
 
+        // Eligible only when order lifecycle is completed or cancelled, then customer net paid > 0.
+
         const [countResult, rows] = await Promise.all([
             OrderPayment.aggregate(countPipeline),
             OrderPayment.aggregate(dataPipeline),
@@ -477,6 +506,7 @@ const listEligibleOrders = async (query, scopeFilter = {}) => {
                     partner_payable_amount: settlement.partner_payable_amount,
                     admin_payable_amount: settlement.admin_payable_amount,
                     payment_status: row.payment_status,
+                    order_status: row.order_status || null,
                     franchise_id: row.franchise_id || null,
                 };
             })
@@ -553,6 +583,13 @@ const createRefund = async (body, createdById = null) => {
 
         const order = await Order.findOne({ _id: pOrder.oid, deleted_at: null }).lean();
         if (!order) return fail(404, 'Order not found.');
+
+        if (!isOrderStatusEligibleForRefund(order.order_status)) {
+            return fail(
+                400,
+                'Refunds are only allowed when order_status is completed or cancelled.'
+            );
+        }
 
         const { breakdown, refundable_amount } = await getRefundableAmountForOrder(order);
         if (refundAmount > refundable_amount + PAYMENT_STATUS_TOLERANCE) {

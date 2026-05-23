@@ -177,7 +177,11 @@ Paginated refund history with search, date filter, and sort.
 
 ### 6.2 `GET /api/refund/eligible-orders` — create refund picker
 
-Orders where customer **completed** payments minus **refunded** payments &gt; 0 (data from `order_payment`, `payer_type: customer`).
+**Eligibility (all required):**
+
+1. `orders.order_status` is **`completed`** or **`cancelled`** (legacy numeric statuses supported).
+2. Customer **`order_payment`** net refundable &gt; 0 (`completed` − `refunded`, `payer_type: customer`).
+3. Order not deleted; franchise scope applies.
 
 **Query parameters**
 
@@ -208,6 +212,7 @@ Orders where customer **completed** payments minus **refunded** payments &gt; 0 
         "partner_payable_amount": 3200,
         "admin_payable_amount": 1300,
         "payment_status": "partially_paid",
+        "order_status": "completed",
         "franchise_id": "664f00000000000000000001"
       }
     ],
@@ -228,6 +233,7 @@ Orders where customer **completed** payments minus **refunded** payments &gt; 0 
 | `admin_payable_amount` | Suggested **`from_admin_commission`** on full refund — remainder (incl. tax); `admin_payable + partner_payable = refundable_amount` |
 | `total_amount` | Pre-fill `total_amount` on create form |
 | `payment_status` | Badge: `paid`, `partially_paid`, etc. |
+| `order_status` | Must be `completed` or `cancelled` to appear in this list |
 
 ---
 

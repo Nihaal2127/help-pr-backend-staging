@@ -171,6 +171,14 @@ const normalizePartnerServices = (payload) => {
   return rows;
 };
 
+const hasPartnerCatalogPayload = (body) =>
+  body.partner_services !== undefined ||
+  body.partner_categories !== undefined ||
+  body.service_ids !== undefined ||
+  body.category_ids !== undefined ||
+  body.service_descriptions !== undefined ||
+  body.service_prices !== undefined;
+
 const hasNonEmptyPartnerCatalogPayload = (body) => {
   if (body.partner_categories !== undefined) {
     const categories = Array.isArray(body.partner_categories)
@@ -351,9 +359,8 @@ const resolvePartnerBankInputFromBody = (body) => {
   return { accounts, isArrayPayload };
 };
 
-const mergePartnerDocumentPayloadFromMultipart = async (files, partner_documents) => {
-  const base = parseJsonIfString(partner_documents, {});
-  const merged = base && typeof base === 'object' && !Array.isArray(base) ? { ...base } : {};
+const mergePartnerDocumentPayloadFromMultipart = async (files) => {
+  const merged = {};
   const fileMap = files || {};
   for (const field of PARTNER_DOCUMENT_FILE_FIELDS) {
     const arr = fileMap[field];
@@ -762,30 +769,49 @@ const buildPartnerResponseData = async (partnerId) => {
   return data;
 };
 
-const updatePartner = async ({ partnerId, body, files }) => {
+const PARTNER_UPDATE_SECTION = {
+  ALL: 'all',
+  BASIC: 'basic-details',
+  DOCUMENTS: 'documents',
+  BANKS: 'bank-accounts',
+};
+
+const updatePartner = async ({ partnerId, body, files, section = PARTNER_UPDATE_SECTION.ALL }) => {
+  const runBasic =
+    section === PARTNER_UPDATE_SECTION.ALL || section === PARTNER_UPDATE_SECTION.BASIC;
+  const runDocuments =
+    section === PARTNER_UPDATE_SECTION.ALL || section === PARTNER_UPDATE_SECTION.DOCUMENTS;
+  const runBanks =
+    section === PARTNER_UPDATE_SECTION.ALL || section === PARTNER_UPDATE_SECTION.BANKS;
   const user = await User.findOne({ _id: partnerId, type: USER_TYPE_PARTNER, deleted_at: null });
   if (!user) {
     return { ok: false, status: 404, message: 'Partner not found.' };
   }
 
+  const isVerificationApproved = Number(user.verification_status) === 2;
+  const restrictedUntilApprovedMessage =
+    'Catalog, services, and bank details can only be updated after your account is verified and approved.';
+
   const updateData = { ...body };
 
-  if (files?.image?.[0]) {
+  if (runBasic && files?.image?.[0]) {
     updateData.profile_url = await handleImageUpload(files.image[0], getUploadType(4), true, null);
   }
 
   const shouldAddNewAddress =
-    parseBooleanInput(updateData.add_new_address) ||
-    parseBooleanInput(updateData.is_additional_address);
+    runBasic &&
+    (parseBooleanInput(updateData.add_new_address) ||
+      parseBooleanInput(updateData.is_additional_address));
   const hasAddressPayload =
-    updateData.address !== undefined ||
-    updateData.state_id !== undefined ||
-    updateData.city_id !== undefined ||
-    updateData.pincode !== undefined;
-  const hasAddressStatusPayload = updateData.address_status !== undefined;
+    runBasic &&
+    (updateData.address !== undefined ||
+      updateData.state_id !== undefined ||
+      updateData.city_id !== undefined ||
+      updateData.pincode !== undefined);
+  const hasAddressStatusPayload = runBasic && updateData.address_status !== undefined;
   const targetAddressId = updateData.address_id;
 
-  if (shouldAddNewAddress) {
+  if (runBasic && shouldAddNewAddress) {
     if (
       !hasAddressPayload ||
       !updateData.address ||
@@ -825,35 +851,37 @@ const updatePartner = async ({ partnerId, body, files }) => {
     delete updateData.is_additional_address;
   }
 
-  if (updateData.password !== undefined && String(updateData.password).trim() !== '') {
-    user.password = updateData.password;
-  }
-
-  if (updateData.password !== undefined && String(updateData.password).trim() === '') {
-    delete updateData.password;
-  }
-
-  Object.keys(updateData).forEach((key) => {
-    if (MOBILE_PARTNER_ALLOWED_UPDATE_FIELDS.has(key)) {
-      user[key] = updateData[key];
+  if (runBasic) {
+    if (updateData.password !== undefined && String(updateData.password).trim() !== '') {
+      user.password = updateData.password;
     }
-  });
 
-  const hasLocationUpdate =
-    updateData.state_id !== undefined ||
-    updateData.city_id !== undefined ||
-    updateData.area_id !== undefined;
+    if (updateData.password !== undefined && String(updateData.password).trim() === '') {
+      delete updateData.password;
+    }
 
-  if (hasLocationUpdate) {
-    const franchiseAssign = await assignFranchiseIdFromLocation(user);
-    if (!franchiseAssign.ok) {
-      return franchiseAssign;
+    Object.keys(updateData).forEach((key) => {
+      if (MOBILE_PARTNER_ALLOWED_UPDATE_FIELDS.has(key)) {
+        user[key] = updateData[key];
+      }
+    });
+
+    const hasLocationUpdate =
+      updateData.state_id !== undefined ||
+      updateData.city_id !== undefined ||
+      updateData.area_id !== undefined;
+
+    if (hasLocationUpdate) {
+      const franchiseAssign = await assignFranchiseIdFromLocation(user);
+      if (!franchiseAssign.ok) {
+        return franchiseAssign;
+      }
     }
   }
 
   const updatedUser = await user.save();
 
-  if (!shouldAddNewAddress && (hasAddressPayload || hasAddressStatusPayload)) {
+  if (runBasic && !shouldAddNewAddress && (hasAddressPayload || hasAddressStatusPayload)) {
     const targetAddress = await findPartnerAddressForUpdate(updatedUser._id, targetAddressId);
     if (targetAddress) {
       if (hasAddressPayload) {
@@ -922,37 +950,44 @@ const updatePartner = async ({ partnerId, body, files }) => {
   }
 
   const hasPartnerDocFiles = PARTNER_DOCUMENT_FILE_FIELDS.some((f) => files?.[f]?.[0]);
-  const shouldRunPartnerExtras =
-    hasNonEmptyPartnerCatalogPayload(updateData) ||
-    updateData.partner_documents !== undefined ||
+  const hasCatalogPayload = hasPartnerCatalogPayload(updateData);
+  const hasBankPayload =
     updateData.bank_account !== undefined ||
-    updateData.account_number !== undefined ||
+    updateData.bank_name !== undefined ||
+    updateData.branch_name !== undefined ||
     updateData.account_holder_name !== undefined ||
-    hasPartnerDocFiles;
+    updateData.account_name !== undefined ||
+    updateData.account_number !== undefined ||
+    updateData.ifsc_code !== undefined;
 
-  if (shouldRunPartnerExtras) {
-    await ensurePartnerDocumentCatalogRows(updatedUser._id, updatedUser);
+  if (!isVerificationApproved && (runBanks || hasBankPayload || hasCatalogPayload)) {
+    return { ok: false, status: 403, message: restrictedUntilApprovedMessage };
+  }
 
-    const mergedPartnerDocs = await mergePartnerDocumentPayloadFromMultipart(
-      files,
-      updateData.partner_documents
-    );
-    await applyPartnerDocumentImageUpdates(
-      updatedUser._id,
-      normalizePartnerDocuments(mergedPartnerDocs)
-    );
+  const shouldRunCatalog = runBasic && hasCatalogPayload;
+  const shouldRunDocuments = runDocuments && hasPartnerDocFiles;
+  const shouldRunBanks = runBanks && hasBankPayload;
 
-    if (hasNonEmptyPartnerCatalogPayload(updateData)) {
+  if (shouldRunCatalog || shouldRunDocuments || shouldRunBanks) {
+    if (shouldRunDocuments || shouldRunCatalog) {
+      await ensurePartnerDocumentCatalogRows(updatedUser._id, updatedUser);
+    }
+
+    if (shouldRunDocuments) {
+      const mergedPartnerDocs = await mergePartnerDocumentPayloadFromMultipart(files);
+      await applyPartnerDocumentImageUpdates(
+        updatedUser._id,
+        normalizePartnerDocuments(mergedPartnerDocs)
+      );
+    }
+
+    if (shouldRunCatalog) {
       const resolvedPartnerServicesInput = resolvePartnerServicesInputFromBody(updateData);
       const normalizedServiceRows = normalizePartnerServices(resolvedPartnerServicesInput ?? []);
       await replacePartnerCatalogFromNormalizedRows(updatedUser._id, normalizedServiceRows);
     }
 
-    const hasBankPayload =
-      updateData.bank_account !== undefined ||
-      updateData.account_number !== undefined ||
-      updateData.account_holder_name !== undefined;
-    if (hasBankPayload) {
+    if (shouldRunBanks) {
       const { accounts, isArrayPayload } = resolvePartnerBankInputFromBody(updateData);
       if (isArrayPayload && accounts.length === 0) {
         return { ok: false, status: 400, message: 'At least one bank account is required.' };

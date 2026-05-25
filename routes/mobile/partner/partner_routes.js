@@ -8,17 +8,14 @@ const {
   partnerUpdateMiddleware,
   partnerProfileImageSizeMiddleware,
   partnerRequireMultipartMiddleware,
+  PARTNER_DOCUMENT_FILE_FIELDS,
 } = require('../../../middleware/mobile/partner/partner_middleware');
 const mobileAuthMiddleware = require('../../../middleware/mobile/auth_middleware');
 const { upload } = require('../../../utils/fileUpload');
 
 const PARTNER_MULTIPART_FIELDS = [
   { name: 'image', maxCount: 1 },
-  { name: 'vehicle_registration', maxCount: 1 },
-  { name: 'police_verification_certificate', maxCount: 1 },
-  { name: 'pan_card', maxCount: 1 },
-  { name: 'driving_license', maxCount: 1 },
-  { name: 'aadhar_card', maxCount: 1 },
+  ...PARTNER_DOCUMENT_FILE_FIELDS.map((name) => ({ name, maxCount: 1 })),
 ];
 
 const partnerMultipartUpload = upload.fields(PARTNER_MULTIPART_FIELDS);

@@ -21,6 +21,69 @@ const PASSWORD_REGEX =
 const EMAIL_REGEX = /^[a-z0-9._-]+@[a-z0-9.-]+\.[a-z]{2,}$/;
 const PARTNER_PROFILE_IMAGE_MAX_BYTES = 512 * 1024;
 const USER_TYPE_PARTNER = 2;
+const PARTNER_VERIFICATION_STATUS_APPROVED = 2;
+
+const PARTNER_DOCUMENT_FILE_FIELDS = [
+  'vehicle_registration',
+  'police_verification_certificate',
+  'pan_card',
+  'driving_license',
+  'aadhar_card',
+];
+
+const PARTNER_UPDATE_SECTION = {
+  ALL: 'all',
+  BASIC: 'basic-details',
+  DOCUMENTS: 'documents',
+  BANKS: 'bank-accounts',
+};
+
+const PARTNER_BASIC_BODY_KEYS = new Set([
+  'name',
+  'email',
+  'phone_number',
+  'password',
+  'confirm_password',
+  'date_of_birth',
+  'gender',
+  'experience',
+  'address',
+  'state_id',
+  'city_id',
+  'area_id',
+  'pincode',
+  'profile_url',
+  'device_token',
+  'address_id',
+  'address_status',
+  'add_new_address',
+  'is_additional_address',
+  'contact_name',
+  'contact_number',
+  'partner_services',
+  'partner-services',
+  'partner_categories',
+  'category_ids',
+  'service_ids',
+  'service_names',
+  'service_descriptions',
+  'service_prices',
+  'service_taxes',
+  'service_payment_types',
+  'service_minimum_deposits',
+]);
+
+const PARTNER_BANK_BODY_KEYS = new Set([
+  'bank_account',
+  'bank_name',
+  'branch_name',
+  'account_holder_name',
+  'account_name',
+  'account_number',
+  'ifsc_code',
+  'primary_bank_account',
+  'is_primary',
+]);
 
 const ADMIN_ONLY_BODY_FIELDS = [
   'is_verified',
@@ -69,8 +132,6 @@ const parsePartnerCatalogFields = (req) => {
   parseJSONField(req, 'service_taxes');
   parseJSONField(req, 'service_payment_types');
   parseJSONField(req, 'service_minimum_deposits');
-  parseJSONField(req, 'partner_documents');
-  parseJSONField(req, 'bank_account');
   const partnerServicesAlias = req.body['partner-services'];
   if (
     partnerServicesAlias !== undefined &&
@@ -79,6 +140,59 @@ const parsePartnerCatalogFields = (req) => {
   ) {
     req.body.partner_services = partnerServicesAlias;
   }
+};
+
+const parsePartnerBasicFields = (req) => {
+  parsePartnerCatalogFields(req);
+  parseJSONField(req, 'bank_account');
+  parseOptionalDateField(req, 'date_of_birth');
+  trimOptionalStringField(req, 'experience');
+};
+
+const parsePartnerDocumentFields = (_req) => {};
+
+const parsePartnerBankFields = (req) => {
+  parseJSONField(req, 'bank_account');
+};
+
+const rejectForeignPartnerUpdateFields = (req, res, section) => {
+  if (section === PARTNER_UPDATE_SECTION.ALL) return true;
+
+  let allowedBody = PARTNER_BASIC_BODY_KEYS;
+  const allowedFiles = new Set();
+  if (section === PARTNER_UPDATE_SECTION.BASIC) {
+    allowedFiles.add('image');
+  } else if (section === PARTNER_UPDATE_SECTION.DOCUMENTS) {
+    allowedBody = new Set();
+    for (const f of PARTNER_DOCUMENT_FILE_FIELDS) allowedFiles.add(f);
+  } else if (section === PARTNER_UPDATE_SECTION.BANKS) {
+    allowedBody = PARTNER_BANK_BODY_KEYS;
+  }
+
+  for (const key of Object.keys(req.body || {})) {
+    if (!allowedBody.has(key)) {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: `Field "${key}" is not allowed on this update endpoint.`,
+      });
+      return false;
+    }
+  }
+
+  const files = req.files || {};
+  for (const key of Object.keys(files)) {
+    if (!allowedFiles.has(key)) {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: `File "${key}" is not allowed on this update endpoint.`,
+      });
+      return false;
+    }
+  }
+
+  return true;
 };
 
 const validatePartnerCatalogPayload = (req, res) => {
@@ -172,6 +286,18 @@ const hasPartnerCatalogPayload = (body) =>
   body.service_descriptions !== undefined ||
   body.service_prices !== undefined;
 
+const parseJsonIfString = (value, fallback) => {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return fallback;
+    }
+  }
+  return value;
+};
+
 const hasBankPayload = (body) =>
   body.bank_account !== undefined ||
   body.bank_name !== undefined ||
@@ -180,6 +306,57 @@ const hasBankPayload = (body) =>
   body.account_name !== undefined ||
   body.account_number !== undefined ||
   body.ifsc_code !== undefined;
+
+const hasNonEmptyPartnerCatalogPayload = (body) => {
+  if (body.partner_categories !== undefined) {
+    const categories = Array.isArray(body.partner_categories)
+      ? body.partner_categories
+      : parseJsonIfString(body.partner_categories, []);
+    if (Array.isArray(categories) && categories.length > 0) return true;
+  }
+  if (body.partner_services !== undefined) {
+    const services = Array.isArray(body.partner_services)
+      ? body.partner_services
+      : parseJsonIfString(body.partner_services, []);
+    if (Array.isArray(services) && services.length > 0) return true;
+  }
+  if (body.service_ids !== undefined) {
+    const ids = Array.isArray(body.service_ids)
+      ? body.service_ids
+      : parseJsonIfString(body.service_ids, []);
+    if (Array.isArray(ids) && ids.length > 0) return true;
+  }
+  return false;
+};
+
+const RESTRICTED_UNTIL_APPROVED_MESSAGE =
+  'Catalog, services, and bank details can only be updated after your account is verified and approved.';
+
+const assertPartnerApprovedForRestrictedUpdates = (req, res, section, verificationStatus) => {
+  if (Number(verificationStatus) === PARTNER_VERIFICATION_STATUS_APPROVED) {
+    return true;
+  }
+
+  if (section === PARTNER_UPDATE_SECTION.BANKS) {
+    res.status(403).json({
+      success: false,
+      status: 403,
+      message: RESTRICTED_UNTIL_APPROVED_MESSAGE,
+    });
+    return false;
+  }
+
+  if (hasBankPayload(req.body) || hasPartnerCatalogPayload(req.body)) {
+    res.status(403).json({
+      success: false,
+      status: 403,
+      message: RESTRICTED_UNTIL_APPROVED_MESSAGE,
+    });
+    return false;
+  }
+
+  return true;
+};
 
 const getMissingBankAccountFields = (item) => {
   const missing = [];
@@ -703,7 +880,7 @@ const validatePartnerCatalogInDb = async (req, res) => {
   return true;
 };
 
-const validatePartnerUpdatePartialFields = async (req, res) => {
+const validatePartnerBasicPartialFields = async (req, res) => {
   const { address, state_id, city_id, area_id, pincode, gender, experience } = req.body;
 
   if (address !== undefined && String(address).trim() === '') {
@@ -821,8 +998,6 @@ const validatePartnerUpdatePartialFields = async (req, res) => {
 
   if (!validatePartnerCatalogIfPresent(req, res)) return false;
 
-  if (!validateBankPayloadIfPresent(req, res)) return false;
-
   if (!(await validatePartnerLocationInDbPartial(req.body, res))) {
     return false;
   }
@@ -830,6 +1005,37 @@ const validatePartnerUpdatePartialFields = async (req, res) => {
     return false;
   }
 
+  return true;
+};
+
+const validatePartnerDocumentsPayload = (req, res) => {
+  const hasDocFile = PARTNER_DOCUMENT_FILE_FIELDS.some((field) => req.files?.[field]?.[0]);
+  if (!hasDocFile) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'At least one verification document file is required.',
+    });
+    return false;
+  }
+  return true;
+};
+
+const validatePartnerBankAccountsPayload = (req, res) => {
+  if (!hasBankPayload(req.body)) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'bank_account is required.',
+    });
+    return false;
+  }
+  return validateBankPayloadIfPresent(req, res);
+};
+
+const validatePartnerUpdatePartialFields = async (req, res) => {
+  if (!(await validatePartnerBasicPartialFields(req, res))) return false;
+  if (!validateBankPayloadIfPresent(req, res)) return false;
   return true;
 };
 
@@ -1068,56 +1274,7 @@ const partnerProfileImageSizeMiddleware = (req, res, next) => {
   return next();
 };
 
-const partnerUpdateMiddleware = async (req, res, next) => {
-  if (!req.user?.id) {
-    return res.status(401).json({
-      success: false,
-      status: 401,
-      message: 'Access denied. No token provided.',
-    });
-  }
-
-  try {
-    const partner = await User.findOne({ _id: req.user.id, deleted_at: null }).select('type').lean();
-    if (!partner || Number(partner.type) !== USER_TYPE_PARTNER) {
-      return res.status(403).json({
-        success: false,
-        status: 403,
-        message: 'Only partner accounts can use this endpoint.',
-      });
-    }
-  } catch (err) {
-    console.error('partnerUpdateMiddleware auth', err.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.',
-    });
-  }
-
-  ADMIN_ONLY_BODY_FIELDS.forEach((key) => {
-    delete req.body[key];
-  });
-  delete req.body.partner_subscription;
-  delete req.body.subscription_plan_id;
-
-  parsePartnerCatalogFields(req);
-  parseOptionalDateField(req, 'date_of_birth');
-  trimOptionalStringField(req, 'experience');
-
-  try {
-    if (!(await validatePartnerUpdatePartialFields(req, res))) {
-      return;
-    }
-  } catch (err) {
-    console.error('partnerUpdateMiddleware required fields', err.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.',
-    });
-  }
-
+const runPartnerUpdateIdentityChecks = async (req, res) => {
   const { name, email, phone_number, password, state_id, city_id, area_id, date_of_birth, gender } =
     req.body;
 
@@ -1297,13 +1454,122 @@ const partnerUpdateMiddleware = async (req, res, next) => {
     }
   }
 
-  next();
+  return true;
 };
+
+const createPartnerUpdateMiddleware = (section) => {
+  const runSectionValidation = async (req, res) => {
+    if (section === PARTNER_UPDATE_SECTION.BASIC) {
+      return validatePartnerBasicPartialFields(req, res);
+    }
+    if (section === PARTNER_UPDATE_SECTION.DOCUMENTS) {
+      return validatePartnerDocumentsPayload(req, res);
+    }
+    if (section === PARTNER_UPDATE_SECTION.BANKS) {
+      return validatePartnerBankAccountsPayload(req, res);
+    }
+    return validatePartnerUpdatePartialFields(req, res);
+  };
+
+  return async (req, res, next) => {
+    if (!req.user?.id) {
+      return res.status(401).json({
+        success: false,
+        status: 401,
+        message: 'Access denied. No token provided.',
+      });
+    }
+
+    let partner;
+    try {
+      partner = await User.findOne({ _id: req.user.id, deleted_at: null })
+        .select('type verification_status')
+        .lean();
+      if (!partner || Number(partner.type) !== USER_TYPE_PARTNER) {
+        return res.status(403).json({
+          success: false,
+          status: 403,
+          message: 'Only partner accounts can use this endpoint.',
+        });
+      }
+    } catch (err) {
+      console.error('partnerUpdateMiddleware auth', err.message);
+      return res.status(500).json({
+        success: false,
+        status: 500,
+        message: 'Internal server error.',
+      });
+    }
+
+    ADMIN_ONLY_BODY_FIELDS.forEach((key) => {
+      delete req.body[key];
+    });
+    delete req.body.partner_subscription;
+    delete req.body.subscription_plan_id;
+
+    if (section === PARTNER_UPDATE_SECTION.DOCUMENTS) {
+      parsePartnerDocumentFields(req);
+    } else if (section === PARTNER_UPDATE_SECTION.BANKS) {
+      parsePartnerBankFields(req);
+    } else {
+      parsePartnerBasicFields(req);
+    }
+
+    if (req.body.partner_documents !== undefined) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'partner_documents is not supported. Upload verification document files instead.',
+      });
+    }
+
+    if (!rejectForeignPartnerUpdateFields(req, res, section)) {
+      return;
+    }
+
+    if (!assertPartnerApprovedForRestrictedUpdates(req, res, section, partner.verification_status)) {
+      return;
+    }
+
+    try {
+      if (!(await runSectionValidation(req, res))) {
+        return;
+      }
+    } catch (err) {
+      console.error('partnerUpdateMiddleware validation', err.message);
+      return res.status(500).json({
+        success: false,
+        status: 500,
+        message: 'Internal server error.',
+      });
+    }
+
+    if (section === PARTNER_UPDATE_SECTION.BASIC || section === PARTNER_UPDATE_SECTION.ALL) {
+      const identityOk = await runPartnerUpdateIdentityChecks(req, res);
+      if (identityOk !== true) {
+        return;
+      }
+    }
+
+    req.partnerUpdateSection = section;
+    return next();
+  };
+};
+
+const partnerUpdateMiddleware = createPartnerUpdateMiddleware(PARTNER_UPDATE_SECTION.ALL);
+const partnerUpdateBasicDetailsMiddleware = createPartnerUpdateMiddleware(PARTNER_UPDATE_SECTION.BASIC);
+const partnerUpdateDocumentsMiddleware = createPartnerUpdateMiddleware(PARTNER_UPDATE_SECTION.DOCUMENTS);
+const partnerUpdateBankAccountsMiddleware = createPartnerUpdateMiddleware(PARTNER_UPDATE_SECTION.BANKS);
 
 module.exports = {
   partnerRegisterMiddleware,
   partnerLoginMiddleware,
   partnerUpdateMiddleware,
+  partnerUpdateBasicDetailsMiddleware,
+  partnerUpdateDocumentsMiddleware,
+  partnerUpdateBankAccountsMiddleware,
   partnerProfileImageSizeMiddleware,
   partnerRequireMultipartMiddleware,
+  PARTNER_UPDATE_SECTION,
+  PARTNER_DOCUMENT_FILE_FIELDS,
 };

@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-mobile-apis-only",
     "name": "Help PR — Mobile APIs only",
-    "description": "Postman collection for **`/api/mobile/*`** (partner app).\n\n**Middleware (all mobile routes)**\n- `mobileRateLimiter` — 1000 req / 15 min per IP → **429** JSON\n- `mobileAuthMiddleware` — Bearer JWT on protected routes → **401**\n\n**Suggested test order**\n1. **Location** (no auth): States → Cities → Areas → Pincodes\n2. **Register** or **Login** → saves `{{token}}`, `{{email}}`\n3. **Catalog** (Bearer): Categories → Services → saves `{{categoryId}}`, `{{serviceId}}`\n4. **Update partner** (Bearer + form-data): select `image` + `aadhar_card` files\n\n**Response shapes**\n- Location & catalog success: `{ success, status, message, records }`\n- Register / login / update success: `{ success, status, message, data }`\n- Errors: `{ success: false, status, message }`\n\n**Files**\n- `middleware/mobile/partner/location_middleware.js` — location query validation\n- `services/mobile/partner/location_service.js` — location data\n- `controllers/mobile/partner/catalog_controller.js` + `catalog_service.js` — franchise-scoped catalog",
+    "description": "Postman collection for **`/api/mobile/*`** (partner app).\n\n## Suggested test order\n1. **Location** (no auth): States → Cities → Areas → Pincodes\n2. **Register** or **Login** → saves `{{token}}`, `{{email}}`\n3. **Update partner (full)** → location + files + bank + services → sets `franchise_id`\n4. **Catalog** (Bearer): Categories → Services → saves `{{categoryId}}`, `{{serviceId}}`, `{{serviceId2}}`\n5. **Update partner (multiple banks & services)** — optional retest with catalog IDs\n\n## Response shapes\n- Location & catalog: `{ success, status, message, records }`\n- Register / login / update: `{ success, status, message, data }`\n- Errors: `{ success: false, status, message }` (no `errors` object)\n\n## Login errors (401)\n- Wrong email: `Invalid email.`\n- Wrong password: `Invalid password.`\n\n## bank_account (update)\n- **Single object** → upsert one account (others kept)\n- **JSON array** → replace all partner bank accounts\n\n## partner_services (update)\n- Nested: `[{ category_id, services: [{ service_id, description, price }] }]`\n- Multiple services under same category: add more objects in `services[]`",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -54,7 +54,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "mobile", "partner", "register"]
             },
-            "description": "**POST /api/mobile/partner/register**\n\n- No Authorization\n- **Required:** name, email, phone_number, password, date_of_birth (18+)\n- Response: `data.auth_token`, `data._id`"
+            "description": "**POST /api/mobile/partner/register**\n\n- No Authorization\n- **Required:** name, email, phone_number, password, date_of_birth (18+)\n- Response: `data.auth_token`, `data._id`, `data.email`"
           },
           "response": []
         },
@@ -102,13 +102,59 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "mobile", "partner", "login"]
             },
-            "description": "**POST /api/mobile/partner/login**\n\n- No Authorization\n- **Required:** email, password\n- Optional: device_token"
+            "description": "**POST /api/mobile/partner/login**\n\n- No Authorization\n- **Required:** email, password\n- **Optional:** device_token (FCM push token; saved on user when provided)\n\n**401 messages:**\n- Unknown email → `Invalid email.`\n- Wrong password → `Invalid password.`"
+          },
+          "response": []
+        },
+        {
+          "name": "Login — invalid email",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"notregistered@example.com\",\n  \"password\": \"{{password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/partner/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "partner", "login"]
+            },
+            "description": "Expect **401** `Invalid email.`"
+          },
+          "response": []
+        },
+        {
+          "name": "Login — invalid password",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"WrongPassword@999\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/partner/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "partner", "login"]
+            },
+            "description": "Expect **401** `Invalid password.` (use a registered `{{email}}`)"
           },
           "response": []
         },
         {
           "name": "Location",
-          "description": "Public address dropdowns — `location_middleware` + `location_service`. No Bearer. Run: States → Cities → Areas → Pincodes.",
+          "description": "Public address dropdowns. No Bearer. Run in order: States → Cities → Areas → Pincodes.",
           "item": [
             {
               "name": "States",
@@ -137,7 +183,7 @@
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "mobile", "partner", "states"]
                 },
-                "description": "**GET /api/mobile/partner/states**\n\n- No auth\n- **200** `{ success, status, message, records }`\n- Empty list is **200** + `records: []`"
+                "description": "**GET /api/mobile/partner/states** — sets `{{stateId}}`"
               },
               "response": []
             },
@@ -166,15 +212,9 @@
                   "raw": "{{baseUrl}}/api/mobile/partner/cities?state_id={{stateId}}",
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "mobile", "partner", "cities"],
-                  "query": [
-                    {
-                      "key": "state_id",
-                      "value": "{{stateId}}",
-                      "description": "Optional — 24-hex ObjectId; comma-separated OK. **400** if present but invalid."
-                    }
-                  ]
+                  "query": [{ "key": "state_id", "value": "{{stateId}}" }]
                 },
-                "description": "**GET /api/mobile/partner/cities**\n\n- Cities with active franchise in state(s)\n- **400** `Invalid state_id format.` / `Provide at least one valid state_id.`"
+                "description": "**GET /api/mobile/partner/cities** — sets `{{cityId}}`"
               },
               "response": []
             },
@@ -204,20 +244,11 @@
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "mobile", "partner", "areas"],
                   "query": [
-                    {
-                      "key": "city_id",
-                      "value": "{{cityId}}",
-                      "description": "Optional — **400** if present but invalid"
-                    },
-                    {
-                      "key": "state_id",
-                      "value": "{{stateId}}",
-                      "disabled": true,
-                      "description": "Optional extra filter"
-                    }
+                    { "key": "city_id", "value": "{{cityId}}" },
+                    { "key": "state_id", "value": "{{stateId}}", "disabled": true }
                   ]
                 },
-                "description": "**GET /api/mobile/partner/areas**\n\n- Franchise-linked areas; includes `city_name` when available"
+                "description": "**GET /api/mobile/partner/areas** — sets `{{areaId}}`"
               },
               "response": []
             },
@@ -246,101 +277,16 @@
                   "raw": "{{baseUrl}}/api/mobile/partner/pincodes?area_id={{areaId}}",
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "mobile", "partner", "pincodes"],
-                  "query": [
-                    {
-                      "key": "area_id",
-                      "value": "{{areaId}}",
-                      "description": "Required — **400** if missing/invalid"
-                    }
-                  ]
+                  "query": [{ "key": "area_id", "value": "{{areaId}}" }]
                 },
-                "description": "**GET /api/mobile/partner/pincodes**\n\n- **400** `area_id is required.` | `Invalid area id format.` | `Provide at least one valid area_id.`\n- Use `records[].pincode` **string** in Update `pincode` field"
+                "description": "**GET /api/mobile/partner/pincodes** — sets `{{pincode}}` (string)"
               },
               "response": []
             }
           ]
         },
         {
-          "name": "Catalog",
-          "description": "Franchise-scoped category/service pickers — Bearer required. Run **after Login**. Partner must have `franchise_id` (often set on first successful Update with location).",
-          "item": [
-            {
-              "name": "Categories",
-              "event": [
-                {
-                  "listen": "test",
-                  "script": {
-                    "exec": [
-                      "try {",
-                      "  const j = pm.response.json();",
-                      "  const rec = j?.records?.[0];",
-                      "  if (rec?._id) pm.collectionVariables.set('categoryId', String(rec._id));",
-                      "} catch (e) {}"
-                    ],
-                    "type": "text/javascript"
-                  }
-                }
-              ],
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
-                },
-                "method": "GET",
-                "header": [{ "key": "Accept", "value": "application/json" }],
-                "url": {
-                  "raw": "{{baseUrl}}/api/mobile/partner/categories",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "mobile", "partner", "categories"]
-                },
-                "description": "**GET /api/mobile/partner/categories**\n\n- **401** without Bearer\n- **400** if partner has no `franchise_id`\n- **200** `records`: `_id`, `name`, `desc`, `image_url`"
-              },
-              "response": []
-            },
-            {
-              "name": "Services",
-              "event": [
-                {
-                  "listen": "test",
-                  "script": {
-                    "exec": [
-                      "try {",
-                      "  const j = pm.response.json();",
-                      "  const rec = j?.records?.[0];",
-                      "  if (rec?._id) pm.collectionVariables.set('serviceId', String(rec._id));",
-                      "} catch (e) {}"
-                    ],
-                    "type": "text/javascript"
-                  }
-                }
-              ],
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
-                },
-                "method": "GET",
-                "header": [{ "key": "Accept", "value": "application/json" }],
-                "url": {
-                  "raw": "{{baseUrl}}/api/mobile/partner/services?category_id={{categoryId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "mobile", "partner", "services"],
-                  "query": [
-                    {
-                      "key": "category_id",
-                      "value": "{{categoryId}}",
-                      "description": "Required — **400** if missing/invalid ObjectId"
-                    }
-                  ]
-                },
-                "description": "**GET /api/mobile/partner/services?category_id=**\n\n- **400** `category_id is required.`\n- **404** category not found\n- **403** category not in partner franchise\n- **200** `records`: `_id`, `name`, `desc`, `tax`, `image_url`, `category_id`"
-              },
-              "response": []
-            }
-          ]
-        },
-        {
-          "name": "Update partner",
+          "name": "Update partner (full onboarding)",
           "event": [
             {
               "listen": "test",
@@ -373,91 +319,63 @@
                   "key": "gender",
                   "value": "female",
                   "type": "text",
-                  "description": "Required — male | female | other"
+                  "description": "male | female | other"
                 },
                 {
                   "key": "experience",
                   "value": "2 years",
-                  "type": "text",
-                  "description": "Required"
+                  "type": "text"
                 },
                 {
                   "key": "state_id",
                   "value": "{{stateId}}",
                   "type": "text",
-                  "description": "Required — Mongo ObjectId"
+                  "description": "24-hex ObjectId from States"
                 },
                 {
                   "key": "city_id",
                   "value": "{{cityId}}",
-                  "type": "text",
-                  "description": "Required"
+                  "type": "text"
                 },
                 {
                   "key": "area_id",
                   "value": "{{areaId}}",
-                  "type": "text",
-                  "description": "Required"
+                  "type": "text"
                 },
                 {
                   "key": "pincode",
                   "value": "{{pincode}}",
                   "type": "text",
-                  "description": "Required — string from Pincodes API"
+                  "description": "String from Pincodes API"
                 },
                 {
                   "key": "address",
                   "value": "12 MG Road, Hyderabad",
-                  "type": "text",
-                  "description": "Required"
+                  "type": "text"
                 },
                 {
                   "key": "bank_account",
-                  "value": "{\"bank_name\":\"HDFC Bank\",\"branch_name\":\"Madhapur\",\"account_holder_name\":\"Neha Sharma\",\"account_number\":\"123456789012\",\"ifsc_code\":\"HDFC0001234\",\"is_primary\":true}",
+                  "value": "[{\"bank_name\":\"HDFC Bank\",\"branch_name\":\"Madhapur\",\"account_holder_name\":\"Neha Sharma\",\"account_number\":\"123456789012\",\"ifsc_code\":\"HDFC0001234\",\"is_primary\":true},{\"bank_name\":\"SBI\",\"branch_name\":\"Gachibowli\",\"account_holder_name\":\"Neha Sharma\",\"account_number\":\"987654321098\",\"ifsc_code\":\"SBIN0001234\",\"is_primary\":false}]",
                   "type": "text",
-                  "description": "Required — JSON string"
+                  "description": "JSON array = replace all banks. Single object = upsert one."
                 },
                 {
                   "key": "partner_services",
                   "value": "[{\"category_id\":\"{{categoryId}}\",\"services\":[{\"service_id\":\"{{serviceId}}\",\"description\":\"Home cleaning\",\"price\":499}]}]",
                   "type": "text",
-                  "description": "Required — nested or flat array; see partner_middleware"
+                  "description": "Use catalog IDs after Categories/Services, or valid 24-hex test IDs"
                 },
                 {
                   "key": "image",
                   "type": "file",
                   "src": [],
-                  "description": "Required — max 512 KB"
+                  "description": "Required on first full update — max 512 KB"
                 },
                 {
                   "key": "aadhar_card",
                   "type": "file",
                   "src": [],
-                  "description": "Required — JPEG/PNG/PDF, max 10 MB"
-                },
-                {
-                  "key": "name",
-                  "value": "Neha Sharma",
-                  "type": "text",
-                  "disabled": true
-                },
-                {
-                  "key": "email",
-                  "value": "{{email}}",
-                  "type": "text",
-                  "disabled": true
-                },
-                {
-                  "key": "device_token",
-                  "value": "{{deviceToken}}",
-                  "type": "text",
-                  "disabled": true
-                },
-                {
-                  "key": "pan_card",
-                  "type": "file",
-                  "src": [],
-                  "disabled": true
+                  "description": "Required on first full update — JPEG/PNG/PDF, max 10 MB"
                 }
               ]
             },
@@ -466,7 +384,170 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "mobile", "partner", "update"]
             },
-            "description": "**PUT /api/mobile/partner/update**\n\n- **multipart/form-data** only (Body → form-data; do not set Content-Type manually)\n- **Bearer** `{{token}}`\n\n**Required:** image, aadhar_card, gender, experience, state_id, city_id, area_id, pincode (string), address, partner_services, bank_account\n\n**Note:** If Catalog returns **400** (no franchise), run Update once with location fields — then retry Categories."
+            "description": "**PUT /api/mobile/partner/update** — first-time onboarding\n\n- **multipart/form-data** (do not set Content-Type manually)\n- **Bearer** `{{token}}`\n\nSets `users.franchise_id` from state/city/area.\n\n**bank_account:** JSON **array** in this example (2 accounts). Use a **single object** to upsert one account only.\n\n**partner_services:** If `{{categoryId}}` / `{{serviceId}}` are empty, run Catalog after this update, then use **Update partner (multiple banks & services)**.\n\nSelect **image** and **aadhar_card** files before Send."
+          },
+          "response": []
+        },
+        {
+          "name": "Catalog",
+          "description": "Bearer required. Run **after** full Update (partner needs `franchise_id`). Order: Categories → Services.",
+          "item": [
+            {
+              "name": "Categories",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  const rec = j?.records?.[0];",
+                      "  if (rec?._id) pm.collectionVariables.set('categoryId', String(rec._id));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/categories",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "categories"]
+                },
+                "description": "**GET /api/mobile/partner/categories**\n\n- **400** if no `franchise_id` — complete location on Update first\n- **200** `records`: `_id`, `name`, `desc`, `image_url`\n- Tables: users → franchises → categories"
+              },
+              "response": []
+            },
+            {
+              "name": "Services",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  const rec0 = j?.records?.[0];",
+                      "  const rec1 = j?.records?.[1];",
+                      "  if (rec0?._id) pm.collectionVariables.set('serviceId', String(rec0._id));",
+                      "  if (rec1?._id) pm.collectionVariables.set('serviceId2', String(rec1._id));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/services?category_id={{categoryId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "services"],
+                  "query": [
+                    {
+                      "key": "category_id",
+                      "value": "{{categoryId}}",
+                      "description": "Required — 24-hex ObjectId"
+                    }
+                  ]
+                },
+                "description": "**GET /api/mobile/partner/services?category_id=**\n\n- **400** `category_id is required.` / invalid format\n- **404** `Category not found.`\n- **403** not available for franchise\n- Sets `{{serviceId}}`, `{{serviceId2}}` (if 2+ records)"
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Update partner (multiple banks & services)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const t = j?.data?.auth_token;",
+                  "  if (t) {",
+                  "    pm.collectionVariables.set('token', t);",
+                  "    pm.collectionVariables.set('accessToken', t);",
+                  "  }",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "PUT",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "bank_account",
+                  "value": "[{\"bank_name\":\"HDFC Bank\",\"branch_name\":\"Madhapur\",\"account_holder_name\":\"Neha Sharma\",\"account_number\":\"123456789012\",\"ifsc_code\":\"HDFC0001234\",\"is_primary\":true},{\"bank_name\":\"SBI\",\"branch_name\":\"Gachibowli\",\"account_holder_name\":\"Neha Sharma\",\"account_number\":\"987654321098\",\"ifsc_code\":\"SBIN0001234\",\"is_primary\":false}]",
+                  "type": "text",
+                  "description": "JSON array replaces all bank accounts"
+                },
+                {
+                  "key": "partner_services",
+                  "value": "[{\"category_id\":\"{{categoryId}}\",\"services\":[{\"service_id\":\"{{serviceId}}\",\"description\":\"Home cleaning\",\"price\":499},{\"service_id\":\"{{serviceId2}}\",\"description\":\"Deep cleaning\",\"price\":799}]}]",
+                  "type": "text",
+                  "description": "Multiple services under one category — run Services first for serviceId2"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/partner/update",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "partner", "update"]
+            },
+            "description": "**PUT /api/mobile/partner/update** — partial (catalog + banks)\n\nRun **after** Categories + Services so `{{categoryId}}`, `{{serviceId}}`, `{{serviceId2}}` are set.\n\n- **bank_account** array → replaces all accounts in `bank_account` collection\n- **partner_services** → multiple services in one category\n\nNo files required for this partial update."
+          },
+          "response": []
+        },
+        {
+          "name": "Update partner (single bank upsert)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "PUT",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "bank_account",
+                  "value": "{\"bank_name\":\"HDFC Bank\",\"branch_name\":\"Madhapur\",\"account_holder_name\":\"Neha Sharma\",\"account_number\":\"123456789012\",\"ifsc_code\":\"HDFC0001234\",\"is_primary\":true}",
+                  "type": "text",
+                  "description": "Single object upserts by account_number; does not delete other banks"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/partner/update",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "partner", "update"]
+            },
+            "description": "**PUT /api/mobile/partner/update** — single bank object (upsert one account, keep others)"
           },
           "response": []
         }
@@ -509,7 +590,8 @@
     {
       "key": "email",
       "value": "priya@gmail.com",
-      "type": "string"
+      "type": "string",
+      "description": "Partner login email"
     },
     {
       "key": "password",
@@ -519,43 +601,50 @@
     {
       "key": "deviceToken",
       "value": "fcm_example_token_replace_with_real_device_token",
-      "type": "string"
+      "type": "string",
+      "description": "Optional FCM token on login"
     },
     {
       "key": "stateId",
       "value": "",
       "type": "string",
-      "description": "Set by States request"
+      "description": "From States"
     },
     {
       "key": "cityId",
       "value": "",
       "type": "string",
-      "description": "Set by Cities request"
+      "description": "From Cities"
     },
     {
       "key": "areaId",
       "value": "",
       "type": "string",
-      "description": "Set by Areas request"
+      "description": "From Areas"
     },
     {
       "key": "pincode",
       "value": "",
       "type": "string",
-      "description": "Set by Pincodes request"
+      "description": "From Pincodes (string)"
     },
     {
       "key": "categoryId",
       "value": "",
       "type": "string",
-      "description": "Set by Catalog → Categories"
+      "description": "From Categories — 24-hex ObjectId"
     },
     {
       "key": "serviceId",
       "value": "",
       "type": "string",
-      "description": "Set by Catalog → Services"
+      "description": "From Services — first record"
+    },
+    {
+      "key": "serviceId2",
+      "value": "",
+      "type": "string",
+      "description": "From Services — second record (multi-service tests)"
     }
   ]
 }

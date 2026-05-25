@@ -206,7 +206,7 @@ Records a refund. **Append-only.**
 | `order_id` | **Yes** | Order **Mongo ObjectId** (from eligible-orders `_id`) |
 | `refund_amount` | **Yes** | Positive number; ≤ **customer net paid** (completed − prior refunds) |
 | `date` | **Yes** | Refund date (ISO 8601). Alias: `refund_date` |
-| `from_admin_commission` | No | Default `0`. Admin portion of settlement split |
+| `from_admin_commission` | No | Default `0`. Admin portion of refund (commission + tax + fees). Max = `refund_amount −` partner credits for this order — **not** capped at `order.admin_commission` alone |
 | `from_partner_wallet` | No | Default `0`. Partner wallet debit portion |
 | `notes` | No | Stored on refund + payment |
 | `payment_method` | No | Default `"refund"` on payment row |
@@ -260,7 +260,7 @@ from_admin_commission + from_partner_wallet = refund_amount   (± ₹0.01)
 |---------|--------|
 | `refund_amount exceeds refundable balance (X)` | `refund_amount` &gt; customer net paid |
 | `from_admin_commission + from_partner_wallet must equal refund_amount` | Split mismatch |
-| `from_admin_commission exceeds order admin commission (X)` | Admin slice &gt; commission cap |
+| `from_admin_commission exceeds admin payable for this refund (X)` | Admin slice &gt; `refund_amount −` max partner clawback for this order |
 | `from_partner_wallet exceeds partner credits for this order (X)` | Partner slice &gt; ledger net for **this order** |
 | `Order has no partner; from_partner_wallet must be 0` | Partner debit without partner |
 

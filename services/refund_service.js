@@ -57,13 +57,6 @@ const ok = (status, data) => ({ ok: true, status, data });
 
 const roundAmount = (n) => Math.round(Number(n) * 100) / 100;
 
-/** Main service admin commission + commission on additional charges. */
-const getOrderAdminCommissionCap = (order) =>
-    roundAmount(
-        (Number(order?.admin_commission ?? order?.commission_amount) || 0) +
-            (Number(order?.additional_charges_commission) || 0)
-    );
-
 const parseObjectId = (raw, fieldName = 'id') => {
     if (raw instanceof mongoose.Types.ObjectId) {
         return { ok: true, oid: raw };
@@ -592,15 +585,20 @@ const createRefund = async (body, createdById = null) => {
             );
         }
 
-        const adminCommission = getOrderAdminCommissionCap(order);
-        if (fromAdminCommission > adminCommission + PAYMENT_STATUS_TOLERANCE) {
+        const partnerCreditedForOrder = await getPartnerWalletNetForOrder(order._id);
+        const maxPartnerForRefund = roundAmount(
+            Math.min(partnerCreditedForOrder, refundAmount)
+        );
+        const maxAdminForRefund = roundAmount(
+            Math.max(0, refundAmount - maxPartnerForRefund)
+        );
+
+        if (fromAdminCommission > maxAdminForRefund + PAYMENT_STATUS_TOLERANCE) {
             return fail(
                 400,
-                `from_admin_commission exceeds order admin commission (${adminCommission}).`
+                `from_admin_commission exceeds admin payable for this refund (${maxAdminForRefund}). Admin portion includes tax and fees beyond commission.`
             );
         }
-
-        const partnerCreditedForOrder = await getPartnerWalletNetForOrder(order._id);
         if (fromPartnerWallet > 0) {
             if (!order.partner_id) {
                 return fail(400, 'Order has no partner; from_partner_wallet must be 0.');

@@ -67,7 +67,7 @@ const listStatesForPartner = async () => {
 
     return ok(200, {
       message: 'State list fetched successfully.',
-      records: states,
+      data: states,
     });
   } catch (err) {
     console.error('listStatesForPartner', err.message);
@@ -100,7 +100,7 @@ const listCitiesForPartner = async ({ stateOids = [] } = {}) => {
     if (coveredCityIds.length === 0) {
       return ok(200, {
         message: 'City list fetched successfully.',
-        records: [],
+        data: [],
       });
     }
 
@@ -110,7 +110,7 @@ const listCitiesForPartner = async ({ stateOids = [] } = {}) => {
 
     return ok(200, {
       message: 'City list fetched successfully.',
-      records: cities,
+      data: cities,
     });
   } catch (err) {
     console.error('listCitiesForPartner', err.message);
@@ -152,18 +152,18 @@ const listAreasForPartner = async ({ cityOids = [], stateOids = [] } = {}) => {
     if (coveredAreaIds.length === 0) {
       return ok(200, {
         message: 'Area list fetched successfully.',
-        records: [],
+        data: [],
       });
     }
 
     filter._id = { $in: coveredAreaIds };
 
     const { data: areas } = await applyDropDownFilter(Area, filter, sort);
-    const records = await attachCityNames(areas);
+    const areasWithCity = await attachCityNames(areas);
 
     return ok(200, {
       message: 'Area list fetched successfully.',
-      records,
+      data: areasWithCity,
     });
   } catch (err) {
     console.error('listAreasForPartner', err.message);
@@ -188,11 +188,11 @@ const listPincodesForPartner = async ({ areaOids = [] } = {}) => {
       }
     }
 
-    const records = [...pincodeSet].sort().map((pincode) => ({ pincode }));
+    const pincodes = [...pincodeSet].sort().map((pincode) => ({ pincode }));
 
     return ok(200, {
       message: 'Pincode list fetched successfully.',
-      records,
+      data: pincodes,
     });
   } catch (err) {
     console.error('listPincodesForPartner', err.message);

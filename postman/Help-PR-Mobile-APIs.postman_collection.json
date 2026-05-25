@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-mobile-apis-only",
     "name": "Help PR — Mobile APIs only",
-    "description": "Postman collection for **`/api/mobile/*`** (partner app).\n\n## Suggested test order\n1. **Location** → States → Cities → Areas → Pincodes\n2. **Register** or **Login**\n3. **Update → Basic details** → profile, location, `partner_services` (sets `franchise_id`)\n4. **Catalog** → Categories → Services\n5. **Update → Documents verification** → upload verification files\n6. **Update → Bank accounts** → one or more bank accounts\n\nOr use **Update → Full update (PUT /update)** for complete onboarding payload in one call.\n\n## Update endpoints\n| Endpoint | Purpose |\n|----------|--------|\n| `PUT /update/basic-details` | Profile, location, `partner_services`, optional `image` |\n| `PUT /update/documents` | Verification files only (`aadhar_card`, `pan_card`, etc.) |\n| `PUT /update/bank-accounts` | `bank_account` JSON (array replaces all; object upserts one) |\n| `PUT /update` | All of the above in one request |\n\nErrors: `{ success: false, status, message }` only.",
+    "description": "Postman collection for **`/api/mobile/*`** (partner app).\n\n## Suggested test order\n1. **Location** → States → Cities → Areas → Pincodes\n2. **Register** or **Login**\n3. **Update** — profile, location, documents (allowed while pending)\n4. Admin approves → `verification_status` = `2`\n5. **Catalog** → Categories (includes nested `services` per category)\n6. **Update** again — enable `partner_services` + `bank_account` in the same request\n\n**Login:** `POST /login` — change `email` / `password` to test `Invalid email.` or `Invalid password.`\n\n**Update:** `PUT /update` — one request with all fields; disable or clear catalog/bank fields until approved.\n\n**403** (catalog/bank while pending): `Catalog, services, and bank details can only be updated after your account is verified and approved.`",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -38,21 +38,40 @@
             }
           ],
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Accept", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Priya\",\n  \"date_of_birth\": \"2003-05-23\",\n  \"phone_number\": \"+916309654123\",\n  \"email\": \"partner.mobile+{{$timestamp}}@example.com\",\n  \"password\": \"Priya@123\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/mobile/partner/register",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "mobile", "partner", "register"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "partner",
+                "register"
+              ]
             },
             "description": "**POST /api/mobile/partner/register**\n\n- No Authorization\n- **Required:** name, email, phone_number, password, date_of_birth (18+)\n- Response: `data.auth_token`, `data._id`, `data.email`"
           },
@@ -86,69 +105,42 @@
             }
           ],
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Accept", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"device_token\": \"{{deviceToken}}\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/mobile/partner/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "mobile", "partner", "login"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "partner",
+                "login"
+              ]
             },
-            "description": "**POST /api/mobile/partner/login**\n\n- No Authorization\n- **Required:** email, password\n- **Optional:** device_token (FCM push token; saved on user when provided)\n\n**401 messages:**\n- Unknown email → `Invalid email.`\n- Wrong password → `Invalid password.`"
-          },
-          "response": []
-        },
-        {
-          "name": "Login — invalid email",
-          "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Accept", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"notregistered@example.com\",\n  \"password\": \"{{password}}\"\n}",
-              "options": { "raw": { "language": "json" } }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/mobile/partner/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "mobile", "partner", "login"]
-            },
-            "description": "Expect **401** `Invalid email.`"
-          },
-          "response": []
-        },
-        {
-          "name": "Login — invalid password",
-          "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Accept", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"WrongPassword@999\"\n}",
-              "options": { "raw": { "language": "json" } }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/mobile/partner/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "mobile", "partner", "login"]
-            },
-            "description": "Expect **401** `Invalid password.` (use a registered `{{email}}`)"
+            "description": "**POST /api/mobile/partner/login**\n\n- No Authorization\n- **Required:** `email`, `password`\n- **Optional:** `device_token` (FCM push token)\n\n**401:** unknown email → `Invalid email.` | wrong password → `Invalid password.`\n\nTo test errors, edit body: use unregistered email or wrong password."
           },
           "response": []
         },
@@ -166,7 +158,7 @@
                       "try {",
                       "  const j = pm.response.json();",
                       "  pm.test('success', () => pm.expect(j.success).to.eql(true));",
-                      "  const rec = j?.records?.[0];",
+                      "  const rec = j?.data?.[0];",
                       "  if (rec?._id) pm.collectionVariables.set('stateId', String(rec._id));",
                       "} catch (e) {}"
                     ],
@@ -175,13 +167,27 @@
                 }
               ],
               "request": {
-                "auth": { "type": "noauth" },
+                "auth": {
+                  "type": "noauth"
+                },
                 "method": "GET",
-                "header": [{ "key": "Accept", "value": "application/json" }],
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
                 "url": {
                   "raw": "{{baseUrl}}/api/mobile/partner/states",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "mobile", "partner", "states"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "partner",
+                    "states"
+                  ]
                 },
                 "description": "**GET /api/mobile/partner/states** — sets `{{stateId}}`"
               },
@@ -196,7 +202,7 @@
                     "exec": [
                       "try {",
                       "  const j = pm.response.json();",
-                      "  const rec = j?.records?.[0];",
+                      "  const rec = j?.data?.[0];",
                       "  if (rec?._id) pm.collectionVariables.set('cityId', String(rec._id));",
                       "} catch (e) {}"
                     ],
@@ -205,14 +211,33 @@
                 }
               ],
               "request": {
-                "auth": { "type": "noauth" },
+                "auth": {
+                  "type": "noauth"
+                },
                 "method": "GET",
-                "header": [{ "key": "Accept", "value": "application/json" }],
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
                 "url": {
                   "raw": "{{baseUrl}}/api/mobile/partner/cities?state_id={{stateId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "mobile", "partner", "cities"],
-                  "query": [{ "key": "state_id", "value": "{{stateId}}" }]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "partner",
+                    "cities"
+                  ],
+                  "query": [
+                    {
+                      "key": "state_id",
+                      "value": "{{stateId}}"
+                    }
+                  ]
                 },
                 "description": "**GET /api/mobile/partner/cities** — sets `{{cityId}}`"
               },
@@ -227,7 +252,7 @@
                     "exec": [
                       "try {",
                       "  const j = pm.response.json();",
-                      "  const rec = j?.records?.[0];",
+                      "  const rec = j?.data?.[0];",
                       "  if (rec?._id) pm.collectionVariables.set('areaId', String(rec._id));",
                       "} catch (e) {}"
                     ],
@@ -236,16 +261,37 @@
                 }
               ],
               "request": {
-                "auth": { "type": "noauth" },
+                "auth": {
+                  "type": "noauth"
+                },
                 "method": "GET",
-                "header": [{ "key": "Accept", "value": "application/json" }],
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
                 "url": {
                   "raw": "{{baseUrl}}/api/mobile/partner/areas?city_id={{cityId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "mobile", "partner", "areas"],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "partner",
+                    "areas"
+                  ],
                   "query": [
-                    { "key": "city_id", "value": "{{cityId}}" },
-                    { "key": "state_id", "value": "{{stateId}}", "disabled": true }
+                    {
+                      "key": "city_id",
+                      "value": "{{cityId}}"
+                    },
+                    {
+                      "key": "state_id",
+                      "value": "{{stateId}}",
+                      "disabled": true
+                    }
                   ]
                 },
                 "description": "**GET /api/mobile/partner/areas** — sets `{{areaId}}`"
@@ -261,7 +307,7 @@
                     "exec": [
                       "try {",
                       "  const j = pm.response.json();",
-                      "  const pc = j?.records?.[0]?.pincode;",
+                      "  const pc = j?.data?.[0]?.pincode;",
                       "  if (pc) pm.collectionVariables.set('pincode', String(pc));",
                       "} catch (e) {}"
                     ],
@@ -270,14 +316,33 @@
                 }
               ],
               "request": {
-                "auth": { "type": "noauth" },
+                "auth": {
+                  "type": "noauth"
+                },
                 "method": "GET",
-                "header": [{ "key": "Accept", "value": "application/json" }],
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
                 "url": {
                   "raw": "{{baseUrl}}/api/mobile/partner/pincodes?area_id={{areaId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "mobile", "partner", "pincodes"],
-                  "query": [{ "key": "area_id", "value": "{{areaId}}" }]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "partner",
+                    "pincodes"
+                  ],
+                  "query": [
+                    {
+                      "key": "area_id",
+                      "value": "{{areaId}}"
+                    }
+                  ]
                 },
                 "description": "**GET /api/mobile/partner/pincodes** — sets `{{pincode}}` (string)"
               },
@@ -287,7 +352,7 @@
         },
         {
           "name": "Catalog",
-          "description": "Bearer required. Run **after** full Update (partner needs `franchise_id`). Order: Categories → Services.",
+          "description": "Bearer required. Run **after** Update sets location (`franchise_id`). **GET /categories** returns each category with nested `services`.",
           "item": [
             {
               "name": "Categories",
@@ -298,8 +363,12 @@
                     "exec": [
                       "try {",
                       "  const j = pm.response.json();",
-                      "  const rec = j?.records?.[0];",
+                      "  const rec = j?.data?.[0];",
                       "  if (rec?._id) pm.collectionVariables.set('categoryId', String(rec._id));",
+                      "  const svc0 = rec?.services?.[0];",
+                      "  const svc1 = rec?.services?.[1];",
+                      "  if (svc0?._id) pm.collectionVariables.set('serviceId', String(svc0._id));",
+                      "  if (svc1?._id) pm.collectionVariables.set('serviceId2', String(svc1._id));",
                       "} catch (e) {}"
                     ],
                     "type": "text/javascript"
@@ -309,58 +378,34 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
-                },
-                "method": "GET",
-                "header": [{ "key": "Accept", "value": "application/json" }],
-                "url": {
-                  "raw": "{{baseUrl}}/api/mobile/partner/categories",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "mobile", "partner", "categories"]
-                },
-                "description": "**GET /api/mobile/partner/categories**\n\n- **400** if no `franchise_id` — complete location on Update first\n- **200** `records`: `_id`, `name`, `desc`, `image_url`\n- Tables: users → franchises → categories"
-              },
-              "response": []
-            },
-            {
-              "name": "Services",
-              "event": [
-                {
-                  "listen": "test",
-                  "script": {
-                    "exec": [
-                      "try {",
-                      "  const j = pm.response.json();",
-                      "  const rec0 = j?.records?.[0];",
-                      "  const rec1 = j?.records?.[1];",
-                      "  if (rec0?._id) pm.collectionVariables.set('serviceId', String(rec0._id));",
-                      "  if (rec1?._id) pm.collectionVariables.set('serviceId2', String(rec1._id));",
-                      "} catch (e) {}"
-                    ],
-                    "type": "text/javascript"
-                  }
-                }
-              ],
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
-                },
-                "method": "GET",
-                "header": [{ "key": "Accept", "value": "application/json" }],
-                "url": {
-                  "raw": "{{baseUrl}}/api/mobile/partner/services?category_id={{categoryId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "mobile", "partner", "services"],
-                  "query": [
+                  "bearer": [
                     {
-                      "key": "category_id",
-                      "value": "{{categoryId}}",
-                      "description": "Required — 24-hex ObjectId"
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
                     }
                   ]
                 },
-                "description": "**GET /api/mobile/partner/services?category_id=**\n\n- **400** `category_id is required.` / invalid format\n- **404** `Category not found.`\n- **403** not available for franchise\n- Sets `{{serviceId}}`, `{{serviceId2}}` (if 2+ records)"
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/categories",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "partner",
+                    "categories"
+                  ]
+                },
+                "description": "**GET /api/mobile/partner/categories**\n\n- **400** if no `franchise_id` — complete location on Update first\n- **200** `data[]`: `_id`, `name`, `desc`, `image_url`, `services[]` (`_id`, `name`, `desc`, `tax`, `image_url`, `category_id`)\n- Sets `{{categoryId}}`, `{{serviceId}}`, `{{serviceId2}}` from first category's services"
               },
               "response": []
             }
@@ -368,368 +413,186 @@
         },
         {
           "name": "Update",
-          "description": "Partner profile update split by use case. All use **multipart/form-data** + **Bearer** `{{token}}`. Wrong fields for an endpoint return **400** `Field \"x\" is not allowed on this update endpoint.`",
-          "item": [
+          "event": [
             {
-              "name": "Basic details",
-              "event": [
-                {
-                  "listen": "test",
-                  "script": {
-                    "exec": [
-                      "try {",
-                      "  const j = pm.response.json();",
-                      "  const t = j?.data?.auth_token;",
-                      "  if (t) {",
-                      "    pm.collectionVariables.set('token', t);",
-                      "    pm.collectionVariables.set('accessToken', t);",
-                      "  }",
-                      "} catch (e) {}"
-                    ],
-                    "type": "text/javascript"
-                  }
-                }
-              ],
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
-                },
-                "method": "PUT",
-                "header": [{ "key": "Accept", "value": "application/json" }],
-                "body": {
-                  "mode": "formdata",
-                  "formdata": [
-                    { "key": "gender", "value": "female", "type": "text" },
-                    { "key": "experience", "value": "2 years", "type": "text" },
-                    { "key": "state_id", "value": "{{stateId}}", "type": "text" },
-                    { "key": "city_id", "value": "{{cityId}}", "type": "text" },
-                    { "key": "area_id", "value": "{{areaId}}", "type": "text" },
-                    { "key": "pincode", "value": "{{pincode}}", "type": "text" },
-                    { "key": "address", "value": "12 MG Road, Hyderabad", "type": "text" },
-                    {
-                      "key": "partner_services",
-                      "value": "[{\"category_id\":\"{{categoryId}}\",\"services\":[{\"service_id\":\"{{serviceId}}\",\"description\":\"Home cleaning\",\"price\":499},{\"service_id\":\"{{serviceId2}}\",\"description\":\"Deep cleaning\",\"price\":799}]}]",
-                      "type": "text",
-                      "description": "Run Catalog first for IDs. Multiple services: add more in services[]"
-                    },
-                    { "key": "image", "type": "file", "src": [], "description": "Profile photo — max 512 KB" },
-                    { "key": "name", "value": "Neha Sharma", "type": "text", "disabled": true },
-                    { "key": "email", "value": "{{email}}", "type": "text", "disabled": true },
-                    { "key": "phone_number", "value": "+916309654123", "type": "text", "disabled": true },
-                    { "key": "date_of_birth", "value": "2003-05-23", "type": "text", "disabled": true }
-                  ]
-                },
-                "url": {
-                  "raw": "{{baseUrl}}/api/mobile/partner/update/basic-details",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "mobile", "partner", "update", "basic-details"]
-                },
-                "description": "**PUT /api/mobile/partner/update/basic-details**\n\nProfile, location (sets `franchise_id`), `partner_services`, optional `image`.\n\nDoes **not** accept bank or document file fields."
-              },
-              "response": []
-            },
-            {
-              "name": "Documents verification",
-              "event": [
-                {
-                  "listen": "test",
-                  "script": {
-                    "exec": [
-                      "try {",
-                      "  const j = pm.response.json();",
-                      "  const t = j?.data?.auth_token;",
-                      "  if (t) {",
-                      "    pm.collectionVariables.set('token', t);",
-                      "    pm.collectionVariables.set('accessToken', t);",
-                      "  }",
-                      "} catch (e) {}"
-                    ],
-                    "type": "text/javascript"
-                  }
-                }
-              ],
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
-                },
-                "method": "PUT",
-                "header": [{ "key": "Accept", "value": "application/json" }],
-                "body": {
-                  "mode": "formdata",
-                  "formdata": [
-                    {
-                      "key": "aadhar_card",
-                      "type": "file",
-                      "src": [],
-                      "description": "Required — JPEG/PNG/PDF, max 10 MB"
-                    },
-                    { "key": "pan_card", "type": "file", "src": [], "disabled": true },
-                    { "key": "driving_license", "type": "file", "src": [], "disabled": true },
-                    { "key": "vehicle_registration", "type": "file", "src": [], "disabled": true },
-                    { "key": "police_verification_certificate", "type": "file", "src": [], "disabled": true }
-                  ]
-                },
-                "url": {
-                  "raw": "{{baseUrl}}/api/mobile/partner/update/documents",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "mobile", "partner", "update", "documents"]
-                },
-                "description": "**PUT /api/mobile/partner/update/documents**\n\nUpload at least one file: `aadhar_card`, `pan_card`, `driving_license`, `vehicle_registration`, `police_verification_certificate`.\n\nDoes **not** accept `partner_documents` JSON or profile/location/bank fields."
-              },
-              "response": []
-            },
-            {
-              "name": "Bank accounts",
-              "event": [
-                {
-                  "listen": "test",
-                  "script": {
-                    "exec": [
-                      "try {",
-                      "  const j = pm.response.json();",
-                      "  const t = j?.data?.auth_token;",
-                      "  if (t) {",
-                      "    pm.collectionVariables.set('token', t);",
-                      "    pm.collectionVariables.set('accessToken', t);",
-                      "  }",
-                      "} catch (e) {}"
-                    ],
-                    "type": "text/javascript"
-                  }
-                }
-              ],
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
-                },
-                "method": "PUT",
-                "header": [{ "key": "Accept", "value": "application/json" }],
-                "body": {
-                  "mode": "formdata",
-                  "formdata": [
-                    {
-                      "key": "bank_account",
-                      "value": "[{\"bank_name\":\"HDFC Bank\",\"branch_name\":\"Madhapur\",\"account_holder_name\":\"Neha Sharma\",\"account_number\":\"123456789012\",\"ifsc_code\":\"HDFC0001234\",\"is_primary\":true},{\"bank_name\":\"SBI\",\"branch_name\":\"Gachibowli\",\"account_holder_name\":\"Neha Sharma\",\"account_number\":\"987654321098\",\"ifsc_code\":\"SBIN0001234\",\"is_primary\":false}]",
-                      "type": "text",
-                      "description": "JSON array = replace all. Single object = upsert one (use separate request below)."
-                    }
-                  ]
-                },
-                "url": {
-                  "raw": "{{baseUrl}}/api/mobile/partner/update/bank-accounts",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "mobile", "partner", "update", "bank-accounts"]
-                },
-                "description": "**PUT /api/mobile/partner/update/bank-accounts**\n\n**Required:** `bank_account` (JSON array or single object).\n\nArray replaces all partner bank rows. Object upserts by `account_number`."
-              },
-              "response": []
-            },
-            {
-              "name": "Bank accounts (single upsert)",
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
-                },
-                "method": "PUT",
-                "header": [{ "key": "Accept", "value": "application/json" }],
-                "body": {
-                  "mode": "formdata",
-                  "formdata": [
-                    {
-                      "key": "bank_account",
-                      "value": "{\"bank_name\":\"HDFC Bank\",\"branch_name\":\"Madhapur\",\"account_holder_name\":\"Neha Sharma\",\"account_number\":\"123456789012\",\"ifsc_code\":\"HDFC0001234\",\"is_primary\":true}",
-                      "type": "text"
-                    }
-                  ]
-                },
-                "url": {
-                  "raw": "{{baseUrl}}/api/mobile/partner/update/bank-accounts",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "mobile", "partner", "update", "bank-accounts"]
-                },
-                "description": "Single **object** on `bank-accounts` endpoint — upserts one account; keeps other accounts."
-              },
-              "response": []
-            },
-            {
-              "name": "Full update (PUT /update)",
-              "event": [
-                {
-                  "listen": "test",
-                  "script": {
-                    "exec": [
-                      "try {",
-                      "  const j = pm.response.json();",
-                      "  const t = j?.data?.auth_token;",
-                      "  if (t) {",
-                      "    pm.collectionVariables.set('token', t);",
-                      "    pm.collectionVariables.set('accessToken', t);",
-                      "  }",
-                      "} catch (e) {}"
-                    ],
-                    "type": "text/javascript"
-                  }
-                }
-              ],
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
-                },
-                "method": "PUT",
-                "header": [{ "key": "Accept", "value": "application/json" }],
-                "body": {
-                  "mode": "formdata",
-                  "formdata": [
-                    {
-                      "key": "gender",
-                      "value": "female",
-                      "type": "text",
-                      "description": "Required for onboarding — male | female | other"
-                    },
-                    {
-                      "key": "experience",
-                      "value": "2 years",
-                      "type": "text",
-                      "description": "Required for onboarding"
-                    },
-                    {
-                      "key": "state_id",
-                      "value": "{{stateId}}",
-                      "type": "text",
-                      "description": "Required — 24-hex ObjectId (Location → States)"
-                    },
-                    {
-                      "key": "city_id",
-                      "value": "{{cityId}}",
-                      "type": "text",
-                      "description": "Required — 24-hex ObjectId (Location → Cities)"
-                    },
-                    {
-                      "key": "area_id",
-                      "value": "{{areaId}}",
-                      "type": "text",
-                      "description": "Required — 24-hex ObjectId (Location → Areas)"
-                    },
-                    {
-                      "key": "pincode",
-                      "value": "{{pincode}}",
-                      "type": "text",
-                      "description": "Required — string from Pincodes API"
-                    },
-                    {
-                      "key": "address",
-                      "value": "12 MG Road, Hyderabad",
-                      "type": "text",
-                      "description": "Required for onboarding"
-                    },
-                    {
-                      "key": "partner_services",
-                      "value": "[{\"category_id\":\"{{categoryId}}\",\"services\":[{\"service_id\":\"{{serviceId}}\",\"description\":\"Home cleaning\",\"price\":499},{\"service_id\":\"{{serviceId2}}\",\"description\":\"Deep cleaning\",\"price\":799}]}]",
-                      "type": "text",
-                      "description": "Required — nested JSON. Run Catalog for {{categoryId}}, {{serviceId}}, {{serviceId2}}"
-                    },
-                    {
-                      "key": "bank_account",
-                      "value": "[{\"bank_name\":\"HDFC Bank\",\"branch_name\":\"Madhapur\",\"account_holder_name\":\"Neha Sharma\",\"account_number\":\"123456789012\",\"ifsc_code\":\"HDFC0001234\",\"is_primary\":true},{\"bank_name\":\"SBI\",\"branch_name\":\"Gachibowli\",\"account_holder_name\":\"Neha Sharma\",\"account_number\":\"987654321098\",\"ifsc_code\":\"SBIN0001234\",\"is_primary\":false}]",
-                      "type": "text",
-                      "description": "Required — JSON array (replaces all banks) or single object (upserts one)"
-                    },
-                    {
-                      "key": "image",
-                      "type": "file",
-                      "src": [],
-                      "description": "Required for first onboarding — profile photo, max 512 KB"
-                    },
-                    {
-                      "key": "aadhar_card",
-                      "type": "file",
-                      "src": [],
-                      "description": "Required for first onboarding — JPEG/PNG/PDF, max 10 MB"
-                    },
-                    {
-                      "key": "pan_card",
-                      "type": "file",
-                      "src": [],
-                      "description": "Optional verification document"
-                    },
-                    {
-                      "key": "driving_license",
-                      "type": "file",
-                      "src": [],
-                      "description": "Optional verification document"
-                    },
-                    {
-                      "key": "vehicle_registration",
-                      "type": "file",
-                      "src": [],
-                      "description": "Optional verification document"
-                    },
-                    {
-                      "key": "police_verification_certificate",
-                      "type": "file",
-                      "src": [],
-                      "description": "Optional verification document"
-                    },
-                    {
-                      "key": "name",
-                      "value": "Neha Sharma",
-                      "type": "text",
-                      "description": "Optional profile update"
-                    },
-                    {
-                      "key": "email",
-                      "value": "{{email}}",
-                      "type": "text",
-                      "description": "Optional — must be unique if changed"
-                    },
-                    {
-                      "key": "phone_number",
-                      "value": "+916309654123",
-                      "type": "text",
-                      "description": "Optional — E.164 format"
-                    },
-                    {
-                      "key": "date_of_birth",
-                      "value": "2003-05-23",
-                      "type": "text",
-                      "description": "Optional — ISO date, 18+"
-                    },
-                    {
-                      "key": "device_token",
-                      "value": "{{deviceToken}}",
-                      "type": "text",
-                      "description": "Optional FCM push token"
-                    },
-                    {
-                      "key": "password",
-                      "value": "",
-                      "type": "text",
-                      "disabled": true,
-                      "description": "Optional — requires confirm_password if set"
-                    },
-                    {
-                      "key": "confirm_password",
-                      "value": "",
-                      "type": "text",
-                      "disabled": true
-                    }
-                  ]
-                },
-                "url": {
-                  "raw": "{{baseUrl}}/api/mobile/partner/update",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "mobile", "partner", "update"]
-                },
-                "description": "**PUT /api/mobile/partner/update** — complete onboarding in one request\n\n**Auth:** Bearer `{{token}}`  \n**Body:** `multipart/form-data` only (do not set Content-Type manually)\n\n### Before sending\n1. Run **Location** → States → Cities → Areas → Pincodes (`{{stateId}}`, `{{cityId}}`, `{{areaId}}`, `{{pincode}}`)\n2. Run **Catalog** → Categories → Services (`{{categoryId}}`, `{{serviceId}}`, optional `{{serviceId2}}`)\n3. Select files: **image**, **aadhar_card** (minimum). Optional: pan_card, driving_license, etc.\n\n### Payload sections (all in this request)\n| Section | Fields |\n|---------|--------|\n| Basic | gender, experience, state_id, city_id, area_id, pincode, address, image, name, email, phone_number, date_of_birth, device_token |\n| Services | partner_services (nested JSON array) |\n| Banks | bank_account (JSON array or object) |\n| Documents | aadhar_card, pan_card, driving_license, vehicle_registration, police_verification_certificate (files only) |\n\nSets `users.franchise_id` from location. Same validation as split endpoints `/update/basic-details`, `/update/documents`, `/update/bank-accounts`."
-              },
-              "response": []
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const t = j?.data?.auth_token;",
+                  "  if (t) {",
+                  "    pm.collectionVariables.set(\"token\", t);",
+                  "    pm.collectionVariables.set(\"accessToken\", t);",
+                  "  }",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
             }
-          ]
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "gender",
+                  "value": "female",
+                  "type": "text",
+                  "description": "male | female | other"
+                },
+                {
+                  "key": "experience",
+                  "value": "2 years",
+                  "type": "text"
+                },
+                {
+                  "key": "state_id",
+                  "value": "{{stateId}}",
+                  "type": "text",
+                  "description": "Location → States"
+                },
+                {
+                  "key": "city_id",
+                  "value": "{{cityId}}",
+                  "type": "text",
+                  "description": "Location → Cities"
+                },
+                {
+                  "key": "area_id",
+                  "value": "{{areaId}}",
+                  "type": "text",
+                  "description": "Location → Areas"
+                },
+                {
+                  "key": "pincode",
+                  "value": "{{pincode}}",
+                  "type": "text",
+                  "description": "Location → Pincodes"
+                },
+                {
+                  "key": "address",
+                  "value": "12 MG Road, Hyderabad",
+                  "type": "text"
+                },
+                {
+                  "key": "partner_services",
+                  "value": "[{\"category_id\":\"{{categoryId}}\",\"services\":[{\"service_id\":\"{{serviceId}}\",\"description\":\"Home cleaning\",\"price\":499},{\"service_id\":\"{{serviceId2}}\",\"description\":\"Deep cleaning\",\"price\":799}]}]",
+                  "type": "text",
+                  "description": "Catalog + approved (status 2). Disable while pending to avoid 403."
+                },
+                {
+                  "key": "bank_account",
+                  "value": "[{\"bank_name\":\"HDFC Bank\",\"branch_name\":\"Madhapur\",\"account_holder_name\":\"Neha Sharma\",\"account_number\":\"123456789012\",\"ifsc_code\":\"HDFC0001234\",\"is_primary\":true},{\"bank_name\":\"SBI\",\"branch_name\":\"Gachibowli\",\"account_holder_name\":\"Neha Sharma\",\"account_number\":\"987654321098\",\"ifsc_code\":\"SBIN0001234\",\"is_primary\":false}]",
+                  "type": "text",
+                  "description": "JSON array = replace all. Object = upsert one. Approved only."
+                },
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": [],
+                  "description": "Profile photo — max 512 KB"
+                },
+                {
+                  "key": "aadhar_card",
+                  "type": "file",
+                  "src": [],
+                  "description": "JPEG/PNG/PDF, max 10 MB"
+                },
+                {
+                  "key": "pan_card",
+                  "type": "file",
+                  "src": [],
+                  "description": "Optional verification file"
+                },
+                {
+                  "key": "driving_license",
+                  "type": "file",
+                  "src": [],
+                  "description": "Optional verification file"
+                },
+                {
+                  "key": "vehicle_registration",
+                  "type": "file",
+                  "src": [],
+                  "description": "Optional verification file"
+                },
+                {
+                  "key": "police_verification_certificate",
+                  "type": "file",
+                  "src": [],
+                  "description": "Optional verification file"
+                },
+                {
+                  "key": "name",
+                  "value": "Neha Sharma",
+                  "type": "text"
+                },
+                {
+                  "key": "email",
+                  "value": "{{email}}",
+                  "type": "text"
+                },
+                {
+                  "key": "phone_number",
+                  "value": "+916309654123",
+                  "type": "text"
+                },
+                {
+                  "key": "date_of_birth",
+                  "value": "2003-05-23",
+                  "type": "text"
+                },
+                {
+                  "key": "device_token",
+                  "value": "{{deviceToken}}",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "",
+                  "type": "text",
+                  "description": "Requires confirm_password if set"
+                },
+                {
+                  "key": "confirm_password",
+                  "value": "",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/partner/update",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "partner",
+                "update"
+              ]
+            },
+            "description": "**PUT /api/mobile/partner/update**\n\n**Auth:** Bearer `{{token}}`\n**Body:** `multipart/form-data` (do not set Content-Type manually)\n\n### Before sending\n1. **Location** → States → Cities → Areas → Pincodes\n2. **Login** (or Register)\n3. While pending: disable `partner_services` and `bank_account` (or clear values)\n4. After approval (`verification_status` = 2): run **Catalog**, then enable catalog + bank fields\n5. Select files: `image`, `aadhar_card` (and optional other verification files)\n\n| Section | Fields |\n|---------|--------|\n| Profile / location | gender, experience, state_id, city_id, area_id, pincode, address, image, name, email, phone_number, date_of_birth, device_token, password, confirm_password |\n| Services (approved) | partner_services |\n| Banks (approved) | bank_account |\n| Documents | aadhar_card, pan_card, driving_license, vehicle_registration, police_verification_certificate |\n\n`partner_documents` JSON is not supported."
+          },
+          "response": []
         }
       ]
     },

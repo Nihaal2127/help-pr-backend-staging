@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { fieldLabel } = require('../utils/field_labels');
 const Franchise = require('../models/franchise');
 const Category = require('../models/category');
 const Service = require('../models/service');
@@ -42,7 +43,7 @@ const parseObjectId = (raw, fieldName = 'id') => {
     if (!s || !/^[a-fA-F0-9]{24}$/.test(s)) {
         return {
             ok: false,
-            message: `${fieldName} must be a valid MongoDB ObjectId (24 hex characters).`,
+            message: `${fieldLabel(fieldName)} must be a valid MongoDB ObjectId (24 hex characters).`,
         };
     }
     return { ok: true, oid: new mongoose.Types.ObjectId(s) };
@@ -89,7 +90,7 @@ const parseObjectIdArray = (raw, fieldName) => {
         return { ok: true, oids: undefined };
     }
     if (!Array.isArray(raw)) {
-        return { ok: false, message: `${fieldName} must be an array.` };
+        return { ok: false, message: `${fieldLabel(fieldName)} must be an array.` };
     }
     const oids = [];
     for (const item of raw) {
@@ -525,7 +526,7 @@ const importFranchises = async (records) => {
         const toInsert = [];
         for (const rec of records) {
             if (!rec.name || !rec.state_id || !rec.city_id || !rec.admin_id) {
-                return fail(400, 'Each record must include name, state_id, city_id, and admin_id.');
+                return fail(400, 'Each record must include name, state, city, and admin.');
             }
             const trimmedName = String(rec.name).trim();
             if (!trimmedName) {

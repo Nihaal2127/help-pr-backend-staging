@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { fieldLabel } = require('../utils/field_labels');
 const User = require('../models/user');
 const Franchise = require('../models/franchise');
 const PartnerPayout = require('../models/partner_payout');
@@ -24,7 +25,7 @@ const parseObjectId = (raw, fieldName = 'id') => {
     if (!s || !/^[a-fA-F0-9]{24}$/.test(s)) {
         return {
             ok: false,
-            message: `${fieldName} must be a valid MongoDB ObjectId (24 hex characters).`,
+            message: `${fieldLabel(fieldName)} must be a valid MongoDB ObjectId (24 hex characters).`,
         };
     }
     return { ok: true, oid: new mongoose.Types.ObjectId(s) };
@@ -52,7 +53,7 @@ const parseDate = (value, fieldName) => {
     }
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) {
-        return { ok: false, message: `${fieldName} must be a valid date.` };
+        return { ok: false, message: `${fieldLabel(fieldName)} must be a valid date.` };
     }
     return { ok: true, value: d };
 };
@@ -216,7 +217,7 @@ const listPartnerPayouts = async (query, scopeFilter = {}) => {
         if (query.wallet_status) {
             const status = String(query.wallet_status).trim().toLowerCase();
             if (!['pending', 'paid'].includes(status)) {
-                return fail(400, 'wallet_status must be one of: pending, paid.');
+                return fail(400, `${fieldLabel('wallet_status')} must be one of: pending, paid.`);
             }
             rows = rows.filter((r) => r.wallet_status === status);
         }
@@ -338,12 +339,12 @@ const createPartnerPayout = async (body) => {
 
         const amount = Number(body.pay_now_amount);
         if (!Number.isFinite(amount) || amount <= 0) {
-            return fail(400, 'pay_now_amount must be a positive number.');
+            return fail(400, `${fieldLabel('pay_now_amount')} must be a positive number.`);
         }
 
         const paymentMethod = String(body.payment_method || '').trim().toLowerCase();
         if (!PAYMENT_METHODS.includes(paymentMethod)) {
-            return fail(400, `payment_method must be one of: ${PAYMENT_METHODS.join(', ')}.`);
+            return fail(400, `${fieldLabel('payment_method')} must be one of: ${PAYMENT_METHODS.join(', ')}.`);
         }
 
         const description = String(body.description || '').trim();
@@ -377,7 +378,7 @@ const createPartnerPayout = async (body) => {
         const payable = wallet ? wallet.payable_balance : 0;
 
         if (amount > payable) {
-            return fail(400, `pay_now_amount exceeds payable balance (${payable}).`);
+            return fail(400, `${fieldLabel('pay_now_amount')} exceeds payable balance (${payable}).`);
         }
 
         const now = new Date();
@@ -454,7 +455,7 @@ const getPartnerWalletLedger = async (query) => {
         if (query.transaction_type) {
             const tt = String(query.transaction_type).trim().toLowerCase();
             if (!TRANSACTION_TYPES.includes(tt)) {
-                return fail(400, `transaction_type must be one of: ${TRANSACTION_TYPES.join(', ')}.`);
+                return fail(400, `${fieldLabel('transaction_type')} must be one of: ${TRANSACTION_TYPES.join(', ')}.`);
             }
             ledgerFilter.transaction_type = tt;
         }

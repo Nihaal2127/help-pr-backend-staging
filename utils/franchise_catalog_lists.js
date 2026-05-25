@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { fieldLabel } = require('./field_labels');
 
 /** @param {mongoose.Types.ObjectId[]} oids */
 const dedupeObjectIdsPreserveOrder = (oids) => {
@@ -20,7 +21,7 @@ const parseObjectId = (raw, fieldName) => {
     }
     const value = raw !== undefined && raw !== null ? String(raw).trim() : '';
     if (!value || !/^[a-fA-F0-9]{24}$/.test(value)) {
-        return { ok: false, message: `${fieldName} must be a valid MongoDB ObjectId.` };
+        return { ok: false, message: `${fieldLabel(fieldName)} must be a valid MongoDB ObjectId.` };
     }
     return { ok: true, oid: new mongoose.Types.ObjectId(value) };
 };
@@ -32,7 +33,7 @@ const parseObjectId = (raw, fieldName) => {
  */
 const parseObjectIdArray = (raw, fieldName) => {
     if (!Array.isArray(raw)) {
-        return { ok: false, message: `${fieldName} must be an array.` };
+        return { ok: false, message: `${fieldLabel(fieldName)} must be an array.` };
     }
     const oids = [];
     for (let i = 0; i < raw.length; i += 1) {
@@ -49,7 +50,7 @@ const parseObjectIdArray = (raw, fieldName) => {
  */
 const parseObjectIdArrayOrdered = (raw, fieldName) => {
     if (!Array.isArray(raw)) {
-        return { ok: false, message: `${fieldName} must be an array.` };
+        return { ok: false, message: `${fieldLabel(fieldName)} must be an array.` };
     }
     const oids = [];
     for (let i = 0; i < raw.length; i += 1) {
@@ -246,7 +247,7 @@ const validateCategoryActiveInactivePartition = (catalogStr, activeIds, inactive
     const inactiveStr = new Set((inactiveIds || []).map((id) => id.toString()));
     for (const s of activeStr) {
         if (inactiveStr.has(s)) {
-            return { ok: false, message: 'active_categories and inactive_categories must not overlap.' };
+            return { ok: false, message: 'Active categories and inactive categories must not overlap.' };
         }
     }
     if (activeStr.size + inactiveStr.size !== catalogStr.size) {
@@ -258,12 +259,12 @@ const validateCategoryActiveInactivePartition = (catalogStr, activeIds, inactive
     }
     for (const s of activeStr) {
         if (!catalogStr.has(s)) {
-            return { ok: false, message: 'active_categories contains a category_id not in categories_list.' };
+            return { ok: false, message: 'Active categories contains a category not in the categories list.' };
         }
     }
     for (const s of inactiveStr) {
         if (!catalogStr.has(s)) {
-            return { ok: false, message: 'inactive_categories contains a category_id not in categories_list.' };
+            return { ok: false, message: 'Inactive categories contains a category not in the categories list.' };
         }
     }
     for (const s of catalogStr) {
@@ -283,7 +284,7 @@ const validateServiceActiveInactivePartition = (catalogStr, activeIds, inactiveI
     const inactiveStr = new Set((inactiveIds || []).map((id) => id.toString()));
     for (const s of activeStr) {
         if (inactiveStr.has(s)) {
-            return { ok: false, message: 'active_services and inactive_services must not overlap.' };
+            return { ok: false, message: 'Active services and inactive services must not overlap.' };
         }
     }
     if (activeStr.size + inactiveStr.size !== catalogStr.size) {
@@ -295,19 +296,19 @@ const validateServiceActiveInactivePartition = (catalogStr, activeIds, inactiveI
     }
     for (const s of activeStr) {
         if (!catalogStr.has(s)) {
-            return { ok: false, message: 'active_services contains a service_id not in services_list.' };
+            return { ok: false, message: 'Active services contains a service not in the services list.' };
         }
     }
     for (const s of inactiveStr) {
         if (!catalogStr.has(s)) {
-            return { ok: false, message: 'inactive_services contains a service_id not in services_list.' };
+            return { ok: false, message: 'Inactive services contains a service not in the services list.' };
         }
     }
     for (const s of catalogStr) {
         if (!activeStr.has(s) && !inactiveStr.has(s)) {
             return {
                 ok: false,
-                message: 'Each service in services_list must appear in active_services or inactive_services.',
+                message: 'Each service in the services list must appear in active or inactive services.',
             };
         }
     }
@@ -323,7 +324,7 @@ const validateCategoriesOrderPermutation = (orderOids, catalogStr) => {
         if (!orderOids || orderOids.length === 0) return { ok: true };
         return {
             ok: false,
-            message: 'categories_order must be empty when categories_list has no categories.',
+            message: 'Categories order must be empty when the categories list has no categories.',
         };
     }
     if (!orderOids || orderOids.length !== catalogStr.size) {
@@ -337,13 +338,13 @@ const validateCategoriesOrderPermutation = (orderOids, catalogStr) => {
     for (const oid of orderOids) {
         const s = oid.toString();
         if (seen.has(s)) {
-            return { ok: false, message: 'categories_order contains duplicate category ids.' };
+            return { ok: false, message: 'Categories order contains duplicate category ids.' };
         }
         seen.add(s);
         if (!catalogStr.has(s)) {
             return {
                 ok: false,
-                message: 'categories_order contains a category_id that is not in categories_list.',
+                message: 'Categories order contains a category that is not in the categories list.',
             };
         }
     }
@@ -351,7 +352,7 @@ const validateCategoriesOrderPermutation = (orderOids, catalogStr) => {
         if (!seen.has(c)) {
             return {
                 ok: false,
-                message: 'categories_order must include every category_id from categories_list.',
+                message: 'Categories order must include every category from the categories list.',
             };
         }
     }
@@ -367,7 +368,7 @@ const validateServicesOrderPermutation = (orderOids, catalogStr) => {
         if (!orderOids || orderOids.length === 0) return { ok: true };
         return {
             ok: false,
-            message: 'services_order must be empty when services_list has no services.',
+            message: 'Services order must be empty when the services list has no services.',
         };
     }
     if (!orderOids || orderOids.length !== catalogStr.size) {
@@ -381,13 +382,13 @@ const validateServicesOrderPermutation = (orderOids, catalogStr) => {
     for (const oid of orderOids) {
         const s = oid.toString();
         if (seen.has(s)) {
-            return { ok: false, message: 'services_order contains duplicate service ids.' };
+            return { ok: false, message: 'Services order contains duplicate service ids.' };
         }
         seen.add(s);
         if (!catalogStr.has(s)) {
             return {
                 ok: false,
-                message: 'services_order contains a service_id that is not in services_list.',
+                message: 'Services order contains a service that is not in the services list.',
             };
         }
     }
@@ -395,7 +396,7 @@ const validateServicesOrderPermutation = (orderOids, catalogStr) => {
         if (!seen.has(c)) {
             return {
                 ok: false,
-                message: 'services_order must include every service_id from services_list.',
+                message: 'Services order must include every service from the services list.',
             };
         }
     }

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { fieldLabel } = require('../utils/field_labels');
 const Franchise = require('../models/franchise');
 const FranchiseService = require('../models/franchise_service');
 const Service = require('../models/service');
@@ -54,13 +55,13 @@ const parseObjectId = (raw, fieldName) => {
     if (raw instanceof mongoose.Types.ObjectId) return { ok: true, oid: raw };
     const value = raw !== undefined && raw !== null ? String(raw).trim() : '';
     if (!value || !/^[a-fA-F0-9]{24}$/.test(value)) {
-        return { ok: false, message: `${fieldName} must be a valid MongoDB ObjectId.` };
+        return { ok: false, message: `${fieldLabel(fieldName)} must be a valid MongoDB ObjectId.` };
     }
     return { ok: true, oid: new mongoose.Types.ObjectId(value) };
 };
 
 const parseServicesListInput = (raw, fieldName) => {
-    if (!Array.isArray(raw)) return { ok: false, message: `${fieldName} must be an array.` };
+    if (!Array.isArray(raw)) return { ok: false, message: `${fieldLabel(fieldName)} must be an array.` };
     const entries = [];
     const seen = new Set();
     for (let i = 0; i < raw.length; i += 1) {
@@ -109,7 +110,7 @@ const parseOptionalQueryBool = (raw, fieldName) => {
     if (s === '') return { ok: true, present: false };
     if (s === 'true' || s === '1') return { ok: true, present: true, value: true };
     if (s === 'false' || s === '0') return { ok: true, present: true, value: false };
-    return { ok: false, message: `${fieldName} must be true or false.` };
+    return { ok: false, message: `${fieldLabel(fieldName)} must be true or false.` };
 };
 
 const serviceEntryMatchesCatalogFilters = (entry, isActiveFilter, isRequestFilter) => {
@@ -419,7 +420,7 @@ const parseFranchiseServiceCatalogSort = (query) => {
             s !== 'category' &&
             s !== 'category_name'
         ) {
-            return { ok: false, message: 'sort_by must be name, id, or category_name.' };
+            return { ok: false, message: 'Sort field must be name, id, or category name.' };
         }
         if (s === '_id' || s === 'id') sortBy = 'id';
         else if (s === 'category' || s === 'category_name') sortBy = 'category_name';
@@ -430,7 +431,7 @@ const parseFranchiseServiceCatalogSort = (query) => {
     if (sortOrderRaw !== undefined && sortOrderRaw !== null && String(sortOrderRaw).trim() !== '') {
         const o = String(sortOrderRaw).trim().toLowerCase();
         if (o !== 'asc' && o !== 'desc') {
-            return { ok: false, message: 'sort_order must be asc or desc.' };
+            return { ok: false, message: 'Sort order must be asc or desc.' };
         }
         sortOrder = o === 'desc' ? -1 : 1;
     }
@@ -709,7 +710,7 @@ const update = async (id, body, userId) => {
             const targetFranchise = await ensureFranchise(parsedFranchise.oid);
             if (!targetFranchise) return fail(404, 'Franchise not found.');
             if (String(parsedFranchise.oid) !== String(parsed.oid)) {
-                return fail(400, 'franchise_id must match the record id.');
+                return fail(400, 'Franchise must match the record id.');
             }
         }
 

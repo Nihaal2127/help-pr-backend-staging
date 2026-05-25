@@ -4,6 +4,7 @@ const OrderAdditionalCharge = require("../models/order_additional_charge");
 const { recalculateOrderTotals } = require("../utils/order_financials");
 const { computeAdditionalChargeLine } = require("../utils/order_pricing");
 const { assertOrderModifyAccess } = require("../utils/order_access");
+const { fieldLabel } = require("../utils/field_labels");
 
 const ALLOWED_METHODS = new Set([
   "cash",
@@ -29,7 +30,7 @@ const create = async (req, res) => {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: "Valid order_id is required.",
+        message: `Valid ${fieldLabel("order_id")} is required.`,
       });
     }
     if (amount === undefined || Number(amount) < 0) {

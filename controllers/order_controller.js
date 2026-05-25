@@ -17,6 +17,7 @@ const { sendTemplateEmail } = require('../helper/mail');
 const { buildOrderInvoiceHtml } = require('../utils/order_invoice_html');
 const { getOrderId } = require('../helper/id_generator');
 const { checkObjectIdExists } = require('../validator/id_validator');
+const { fieldLabel } = require('../utils/field_labels');
 const {
   ORDER_STATUS_CANCELLED,
   ORDER_STATUS_COMPLETED,
@@ -285,7 +286,7 @@ const ORDER_SORT_WHITELIST = new Set([
 const resolveOrderListStatusFilter = (orderStatusParam) =>
   resolveListStatusFilter(orderStatusParam, {
     buildFilter: (raw) => buildOrderStatusQueryFilter(raw),
-    invalidMessage: `Invalid order_status. Use one of: ${ORDER_STATUSES.join(', ')}.`,
+    invalidMessage: `Invalid ${fieldLabel('order_status')}. Use one of: ${ORDER_STATUSES.join(', ')}.`,
   });
 
 const getAll = async (req, res) => {
@@ -339,7 +340,7 @@ const getAll = async (req, res) => {
         success: false,
         status: 409,
         message:
-          'Invalid user_payment_status / payment_status. Use: unpaid, paid, partially_paid, refund, partially_refund.',
+          `Invalid ${fieldLabel('user_payment_status')} / ${fieldLabel('payment_status')}. Use: unpaid, paid, partially_paid, refund, partially_refund.`,
       });
     }
 
@@ -358,7 +359,7 @@ const getAll = async (req, res) => {
         success: false,
         status: 409,
         message:
-          'Invalid partner_payment_status. Use: unpaid, partially_paid, paid.',
+          `Invalid ${fieldLabel('partner_payment_status')}. Use: unpaid, partially_paid, paid.`,
       });
     }
 
@@ -682,7 +683,7 @@ const create = async (req, res) => {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: "Invalid user_id on service_items.",
+        message: `Invalid ${fieldLabel('user_id')} on ${fieldLabel('service_items')}.`,
       });
     }
     console.error("Error creating Order:", error.message);
@@ -789,7 +790,7 @@ const update = async (req, res) => {
         return res.status(409).json({
           success: false,
           status: 409,
-          message: `Invalid order_status. Use one of: ${ORDER_STATUSES.join(', ')}.`,
+          message: `Invalid ${fieldLabel('order_status')}. Use one of: ${ORDER_STATUSES.join(', ')}.`,
         });
       }
       requestedOrderStatus = nextStatus;
@@ -948,7 +949,7 @@ const serviceUpdate = async (req, res) => {
       return res.status(409).json({
         success: false,
         status: 409,
-        message: `Invalid service_status. Use one of: ${ORDER_STATUSES.join(', ')}.`,
+        message: `Invalid ${fieldLabel('service_status')}. Use one of: ${ORDER_STATUSES.join(', ')}.`,
       });
     }
     updateData.service_status = normalized;
@@ -1623,7 +1624,7 @@ const sendInvoiceEmail = async (req, res) => {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: 'email is required (or provide order_id with a customer email on the order).',
+        message: `Email is required (or provide ${fieldLabel('order_id')} with a customer email on the order).`,
       });
     }
 
@@ -1631,7 +1632,7 @@ const sendInvoiceEmail = async (req, res) => {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: 'html_content, order_id, or a PDF file upload is required.',
+        message: `${fieldLabel('html_content')}, ${fieldLabel('order_id')}, or a PDF file upload is required.`,
       });
     }
 

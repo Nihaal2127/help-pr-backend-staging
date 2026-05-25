@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { fieldLabel } = require('../utils/field_labels');
 const Area = require('../models/area');
 const City = require('../models/city');
 const User = require('../models/user');
@@ -32,7 +33,7 @@ const parseObjectId = (raw, fieldName = 'id') => {
     if (!s || !/^[a-fA-F0-9]{24}$/.test(s)) {
         return {
             ok: false,
-            message: `${fieldName} must be a valid MongoDB ObjectId (24 hex characters). Use the city document _id from GET /api/city/getAll — not a row number or arbitrary number.`,
+            message: `${fieldLabel(fieldName)} must be a valid MongoDB ObjectId (24 hex characters). Use the city document _id from GET /api/city/getAll — not a row number or arbitrary number.`,
         };
     }
     return { ok: true, oid: new mongoose.Types.ObjectId(s) };
@@ -206,7 +207,7 @@ const listAreas = async (query, authUser) => {
                 oids.push(p.oid);
             }
             if (oids.length === 0) {
-                return fail(400, 'Provide at least one valid city_id.');
+                return fail(400, 'Provide at least one valid city.');
             }
             filter.city_id = { $in: oids };
         }
@@ -435,7 +436,7 @@ const importAreas = async (records) => {
         const toInsert = [];
         for (const rec of records) {
             if (!rec.name || !rec.city_id) {
-                return fail(400, 'Each record must include name and city_id.');
+                return fail(400, 'Each record must include name and city.');
             }
             const parsedCity = parseObjectId(rec.city_id, 'city_id');
             if (!parsedCity.ok) {
@@ -535,7 +536,7 @@ const listAreasForDropdown = async (query) => {
                 oids.push(p.oid);
             }
             if (oids.length === 0) {
-                return fail(400, 'Provide at least one valid city_id.');
+                return fail(400, 'Provide at least one valid city.');
             }
             filter.city_id = { $in: oids };
         }
@@ -554,7 +555,7 @@ const listAreasForDropdown = async (query) => {
                 oids.push(p.oid);
             }
             if (oids.length === 0) {
-                return fail(400, 'Provide at least one valid state_id.');
+                return fail(400, 'Provide at least one valid state.');
             }
             filter.state_id = { $in: oids };
         }

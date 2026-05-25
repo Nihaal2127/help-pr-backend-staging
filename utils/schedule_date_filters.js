@@ -20,10 +20,10 @@ const buildScheduleDateRangeCore = (query) => {
   const parsedTo = hasTo ? parseFilterDate(query.to_date) : null;
 
   if (hasFrom && !parsedFrom) {
-    return { ok: false, message: "Invalid from_date filter." };
+    return { ok: false, message: "Invalid from date filter." };
   }
   if (hasTo && !parsedTo) {
-    return { ok: false, message: "Invalid to_date filter." };
+    return { ok: false, message: "Invalid to date filter." };
   }
 
   let rangeFrom = parsedFrom ? startOfUtcDay(parsedFrom) : null;
@@ -45,7 +45,7 @@ const buildQuoteDateRangeFilter = (query) => {
   if (rangeFrom && rangeTo && rangeTo < rangeFrom) {
     return {
       ok: false,
-      message: "to_date filter must be on or after from_date filter.",
+      message: "To date filter must be on or after from date filter.",
     };
   }
 
@@ -83,7 +83,7 @@ const buildOrderDateRangeFilter = (query) => {
   if (rangeFrom && rangeTo && rangeTo < rangeFrom) {
     return {
       ok: false,
-      message: "to_date filter must be on or after from_date filter.",
+      message: "To date filter must be on or after from date filter.",
     };
   }
 

@@ -19,6 +19,7 @@ const {
 } = require('../enum/order_status_enum');
 const { getResolveStatus } = require('../enum/ticket_resolve_status_enum');
 const { getWalletAggregatesForPartners } = require('../services/partner_payout_service');
+const { fieldLabel } = require('../utils/field_labels');
 
 
 const exportState = async (req, res) => {
@@ -312,7 +313,7 @@ const exportOrders = async (req, res) => {
             return res.status(409).json({
                 success: false,
                 status: 409,
-                message: 'Invalid order_status. Use: in-progress, completed, cancelled, refunded.',
+                message: `Invalid ${fieldLabel('order_status')}. Use: in-progress, completed, cancelled, refunded.`,
             });
         }
         const statusFilter = buildOrderManagementStatusQueryFilter(order_status);
@@ -464,7 +465,7 @@ const exportUserServices = async (req, res) => {
             return res.status(409).json({
                 success: false,
                 status: 409,
-                message: 'Invalid service_status. Use: in-progress, completed, cancelled, refunded.',
+                message: `Invalid ${fieldLabel('service_status')}. Use: in-progress, completed, cancelled, refunded.`,
             });
         }
         if (normalizedServiceStatus) {

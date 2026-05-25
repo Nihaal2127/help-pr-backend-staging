@@ -5,14 +5,14 @@ const createPartnerSubscriptionMiddleware = (req, res, next) => {
         return res.status(400).json({
             success: false,
             status: 400,
-            message: 'partner_id is required.',
+            message: 'Partner is required.',
         });
     }
     if (!subscription_plan_id || subscription_plan_id === '') {
         return res.status(400).json({
             success: false,
             status: 400,
-            message: 'subscription_plan_id is required.',
+            message: 'Subscription plan is required.',
         });
     }
     next();
@@ -25,14 +25,14 @@ const updatePartnerSubscriptionMiddleware = (req, res, next) => {
         return res.status(400).json({
             success: false,
             status: 400,
-            message: 'partner_id cannot be empty.',
+            message: 'Partner cannot be empty.',
         });
     }
     if (subscription_plan_id !== undefined && subscription_plan_id === '') {
         return res.status(400).json({
             success: false,
             status: 400,
-            message: 'subscription_plan_id cannot be empty.',
+            message: 'Subscription plan cannot be empty.',
         });
     }
     if (status !== undefined && !['active', 'expired', 'cancelled'].includes(status)) {

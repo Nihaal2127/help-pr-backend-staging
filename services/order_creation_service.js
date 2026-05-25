@@ -37,7 +37,7 @@ const resolveQuoteForOrderLink = async (quoteIdRaw) => {
     return { ok: true, quoteObjectId: null, quoteDescription: "" };
   }
   if (!mongoose.Types.ObjectId.isValid(qid)) {
-    return { ok: false, status: 400, message: "Invalid quote_id." };
+    return { ok: false, status: 400, message: "Invalid quote." };
   }
 
   const qDoc = await Quote.findOne({ _id: qid, deleted_at: null })

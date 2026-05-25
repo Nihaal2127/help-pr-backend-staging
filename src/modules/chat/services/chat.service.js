@@ -1,10 +1,11 @@
 const mongoose = require("mongoose");
 const Chat = require("../models/chat.model");
 const ChatError = require("../utils/chatError");
+const { fieldLabel } = require("../../../../utils/field_labels");
 
 const ensureObjectId = (value, fieldName) => {
   if (!mongoose.Types.ObjectId.isValid(value)) {
-    throw new ChatError(`${fieldName} must be a valid ObjectId.`, 400, "INVALID_ID");
+    throw new ChatError(`${fieldLabel(fieldName)} must be a valid ObjectId.`, 400, "INVALID_ID");
   }
 };
 

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { fieldLabel } = require('../utils/field_labels');
 const Offer = require('../models/offer');
 const User = require('../models/user');
 const OFFER_TYPES = Offer.OFFER_TYPES;
@@ -39,7 +40,7 @@ const getPercentageAmountValidationErrors = (doc) => {
         return amount !== undefined && amount !== null && Number(amount) >= 100;
     }).map((field) => ({
         field,
-        message: `${field} must be below 100 when type is percentage.`,
+        message: `${fieldLabel(field)} must be below 100 when type is percentage.`,
     }));
 };
 

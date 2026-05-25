@@ -314,10 +314,10 @@ from_admin_commission + from_partner_wallet === refund_amount
 
 | Rule | Error example |
 |------|----------------|
-| `refund_amount` ≤ refundable balance | `refund_amount exceeds refundable balance (4500).` |
-| `from_admin_commission` ≤ `refund_amount −` partner clawback for this order | `from_admin_commission exceeds admin payable for this refund (750).` |
-| `from_partner_wallet` ≤ partner wallet balance | `from_partner_wallet exceeds partner wallet balance (1200).` |
-| Order has no partner and `from_partner_wallet` > 0 | `Order has no partner; from_partner_wallet must be 0.` |
+| `refund_amount` ≤ refundable balance | `Refund amount exceeds refundable balance (4500).` |
+| `from_admin_commission` ≤ `refund_amount −` partner clawback for this order | `Admin portion exceeds the maximum allowed for this refund (750). It includes tax and fees, not commission alone.` |
+| `from_partner_wallet` ≤ partner wallet balance | `Partner wallet portion exceeds partner credits for this order (1200).` |
+| Order has no partner and `from_partner_wallet` > 0 | `Order has no partner; partner wallet portion must be 0.` |
 
 **Example request**
 
@@ -448,14 +448,14 @@ Examples:
 ```json
 {
   "success": false,
-  "message": "from_admin_commission + from_partner_wallet must equal refund_amount."
+  "message": "Admin portion and partner wallet portion must add up to the refund amount."
 }
 ```
 
 ```json
 {
   "success": false,
-  "message": "refund_amount exceeds refundable balance (4500)."
+  "message": "Refund amount exceeds refundable balance (4500)."
 }
 ```
 

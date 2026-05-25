@@ -1,6 +1,7 @@
 const SubscriptionPlan = require('../models/subscription_plan');
 const PLAN_NAMES = SubscriptionPlan.PLAN_NAMES;
 const DURATION_TYPES = SubscriptionPlan.DURATION_TYPES;
+const { fieldLabel } = require('../utils/field_labels');
 
 const createSubscriptionPlanMiddleware = (req, res, next) => {
     const body = req.body;
@@ -24,7 +25,7 @@ const createSubscriptionPlanMiddleware = (req, res, next) => {
         return res.status(400).json({
             success: false,
             status: 400,
-            message: `plan_name must be one of: ${PLAN_NAMES.join(', ')}.`,
+            message: `${fieldLabel('plan_name')} must be one of: ${PLAN_NAMES.join(', ')}.`,
         });
     }
     if (plan_description === undefined || plan_description === null || String(plan_description).trim() === '') {
@@ -59,7 +60,7 @@ const createSubscriptionPlanMiddleware = (req, res, next) => {
         return res.status(400).json({
             success: false,
             status: 400,
-            message: `duration_type must be one of: ${DURATION_TYPES.join(', ')}.`,
+            message: `${fieldLabel('duration_type')} must be one of: ${DURATION_TYPES.join(', ')}.`,
         });
     }
     if (is_active === undefined) {
@@ -93,7 +94,7 @@ const updateSubscriptionPlanMiddleware = (req, res, next) => {
         return res.status(400).json({
             success: false,
             status: 400,
-            message: `plan_name must be one of: ${PLAN_NAMES.join(', ')}.`,
+            message: `${fieldLabel('plan_name')} must be one of: ${PLAN_NAMES.join(', ')}.`,
         });
     }
     if (plan_description !== undefined && String(plan_description).trim() === '') {
@@ -121,7 +122,7 @@ const updateSubscriptionPlanMiddleware = (req, res, next) => {
         return res.status(400).json({
             success: false,
             status: 400,
-            message: `duration_type must be one of: ${DURATION_TYPES.join(', ')}.`,
+            message: `${fieldLabel('duration_type')} must be one of: ${DURATION_TYPES.join(', ')}.`,
         });
     }
     next();

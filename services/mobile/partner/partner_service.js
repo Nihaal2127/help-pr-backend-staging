@@ -761,6 +761,17 @@ const assignFranchiseIdFromLocation = async (user) => {
   return { ok: true };
 };
 
+const VERIFICATION_STATUS_NAMES = {
+  1: 'Pending',
+  2: 'Approved',
+  3: 'Rejected',
+};
+
+const verificationStatusToName = (status) => {
+  const n = Number(status);
+  return VERIFICATION_STATUS_NAMES[n] ?? null;
+};
+
 const buildPartnerResponseData = async (partnerId) => {
   const populated = await User.findById(partnerId)
     .populate([
@@ -781,6 +792,7 @@ const buildPartnerResponseData = async (partnerId) => {
     area_name: populated?.area_id?.name ?? null,
     franchise_id: populated?.franchise_id?._id ?? populated?.franchise_id ?? null,
     franchise_name: populated?.franchise_id?.name ?? null,
+    verification_status_name: verificationStatusToName(populated?.verification_status),
   };
   delete data.password;
   return data;

@@ -37,7 +37,7 @@ const validateGlobalServiceActivation = async ({ categoryId, isActive, isRequest
         return {
             ok: false,
             status: 400,
-            message: 'category_id is required to activate a service.',
+            message: 'Category is required to activate a service.',
         };
     }
 

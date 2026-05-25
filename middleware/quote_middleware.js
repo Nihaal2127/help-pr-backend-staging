@@ -8,6 +8,7 @@ const Address = require("../models/address");
 const { checkObjectIdExists } = require("../validator/id_validator");
 const { QUOTE_STATUSES, normalizeQuoteStatus } = require("../enum/quote_status_enum");
 const { resolveTotalServiceCharge } = require("../utils/order_pricing");
+const { FIELD_LABELS, fieldLabel } = require("../utils/field_labels");
 
 const USER_TYPE_ADMIN = 1;
 const USER_TYPE_PARTNER = 2;
@@ -43,36 +44,10 @@ const rejectClientComputedPricing = (body, res) => {
   res.status(409).json({
     success: false,
     status: 409,
-    message: `Do not send server-computed pricing fields: ${sent.map(fieldLabel).join(", ")}. Send only total_service_charge (or service_price).`,
+    message: `Do not send server-computed pricing fields: ${sent.map(fieldLabel).join(", ")}. Send only ${fieldLabel("total_service_charge")} (or ${fieldLabel("service_price")}).`,
   });
   return false;
 };
-
-const FIELD_LABELS = {
-  user_id: "Customer",
-  partner_id: "Partner",
-  employee_id: "Employee",
-  created_by_id: "Created by",
-  category_id: "Category",
-  service_id: "Service",
-  franchise_id: "Franchise",
-  address_id: "Address",
-  total_service_charge: "Total service charge",
-  service_price: "Service price (alias of total service charge)",
-  from_date: "From date",
-  to_date: "To date",
-  work_hours_per_day: "Work hours per day",
-  total_work_hours: "Total work hours",
-  work_start_time: "Work start time",
-  work_end_time: "Work end time",
-  quote_description: "Quote description",
-  status: "Status",
-  rejection_reason: "Rejection reason",
-  cancellation_reason: "Cancellation reason",
-};
-
-const fieldLabel = (key) =>
-  FIELD_LABELS[key] || String(key).replace(/_/g, " ");
 
 const getCallerId = (req) =>
   (req && req.user && (req.user.id || req.user._id)) || null;

@@ -105,7 +105,7 @@ const resolveFinancialListOrderStatusFilter = (orderStatusParam) => {
     if (!normalized) {
         return {
             ok: false,
-            message: 'Invalid order_status. Use: in_progress, completed, in-progress, cancelled, refunded.',
+            message: 'Invalid order status. Use: in_progress, completed, in-progress, cancelled, refunded.',
         };
     }
     return { ok: true, filter: buildOrderStatusQueryFilter(normalized) };
@@ -428,7 +428,7 @@ const listFinancialOrderPayments = async (req) => {
             query.partner_payment_status &&
             !isValidPartnerPaymentStatus(String(query.partner_payment_status).trim().toLowerCase())
         ) {
-            return fail(400, 'Invalid partner_payment_status. Use: unpaid, partially_paid, paid.');
+            return fail(400, 'Invalid partner payment status. Use: unpaid, partially_paid, paid.');
         }
 
         const dateRangeResult = buildOrderDateRangeFilter(query);

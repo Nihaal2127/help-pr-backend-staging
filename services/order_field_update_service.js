@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { fieldLabel } = require("../utils/field_labels");
 const Order = require("../models/order");
 const OrderService = require("../models/order_services");
 const User = require("../models/user");
@@ -41,10 +42,10 @@ const assertObjectId = async (model, id, label, { allowNull = false } = {}) => {
   if (id === undefined) return;
   if (id === null || id === "") {
     if (allowNull) return;
-    throw new OrderCreationError(`${label} cannot be empty.`, 400);
+    throw new OrderCreationError(`${fieldLabel(label)} cannot be empty.`, 400);
   }
   if (!mongoose.Types.ObjectId.isValid(String(id))) {
-    throw new OrderCreationError(`Invalid ${label}.`, 400);
+    throw new OrderCreationError(`Invalid ${fieldLabel(label)}.`, 400);
   }
   const result = await checkObjectIdExists(model, id, label);
   if (!result.exists) {

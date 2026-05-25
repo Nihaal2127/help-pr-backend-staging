@@ -14,6 +14,7 @@ const {
   annotateCatalogRowWithAvailability,
   isGlobalCatalogRowActive,
 } = require('../utils/catalog_availability_resolver');
+const { fieldLabel } = require('../utils/field_labels');
 
 const ensurePartnerCategoryRowsExist = async (partnerOid) => {
   const partnerId =
@@ -148,7 +149,7 @@ const getAll = async (req, res) => {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: 'partner_id query parameter is required.',
+        message: `${fieldLabel('partner_id')} query parameter is required.`,
       });
     }
     const pr = validateObjectId(req.query.partner_id, 'partner');
@@ -244,7 +245,7 @@ const getFranchiseActiveCategories = async (req, res) => {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: 'franchise_id is required.',
+        message: `${fieldLabel('franchise_id')} is required.`,
       });
     }
     const fr = validateObjectId(franchiseIdRaw, 'franchise');

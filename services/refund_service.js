@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { fieldLabel } = require('../utils/field_labels');
 const Order = require('../models/order');
 const OrderService = require('../models/order_services');
 const OrderPayment = require('../models/order_payment');
@@ -65,7 +66,7 @@ const parseObjectId = (raw, fieldName = 'id') => {
     if (!s || !/^[a-fA-F0-9]{24}$/.test(s)) {
         return {
             ok: false,
-            message: `${fieldName} must be a valid MongoDB ObjectId (24 hex characters).`,
+            message: `${fieldLabel(fieldName)} must be a valid MongoDB ObjectId (24 hex characters).`,
         };
     }
     return { ok: true, oid: new mongoose.Types.ObjectId(s) };
@@ -86,7 +87,7 @@ const parseDate = (value, fieldName) => {
     }
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) {
-        return { ok: false, message: `${fieldName} must be a valid date.` };
+        return { ok: false, message: `${fieldLabel(fieldName)} must be a valid date.` };
     }
     return { ok: true, value: d };
 };
@@ -138,7 +139,7 @@ const mapRefundRecord = (row) => ({
 
 const resolveCustomerFromOrder = async (order) => {
     if (!order.user_id) {
-        return { ok: false, message: 'Order has no customer (user_id).' };
+        return { ok: false, message: 'Order has no customer.' };
     }
     const customer = await User.findOne({
         _id: order.user_id,
@@ -538,33 +539,33 @@ const applyOrderRefundedStatus = async (orderId) => {
 
 const createRefund = async (body, createdById = null) => {
     try {
-        const pOrder = parseObjectId(body.order_id, 'order_id');
+        const pOrder = parseObjectId(body.order_id, 'Order ID');
         if (!pOrder.ok) return fail(400, pOrder.message);
 
         const refundAmount = roundAmount(body.refund_amount);
         if (!Number.isFinite(refundAmount) || refundAmount <= 0) {
-            return fail(400, 'refund_amount must be a positive number.');
+            return fail(400, 'Refund amount must be a positive number.');
         }
 
         const fromAdminCommission = roundAmount(body.from_admin_commission ?? 0);
         const fromPartnerWallet = roundAmount(body.from_partner_wallet ?? 0);
 
         if (fromAdminCommission < 0 || fromPartnerWallet < 0) {
-            return fail(400, 'from_admin_commission and from_partner_wallet must be non-negative.');
+            return fail(400, 'Admin portion and partner wallet portion must be non-negative.');
         }
 
         const splitTotal = roundAmount(fromAdminCommission + fromPartnerWallet);
         if (Math.abs(splitTotal - refundAmount) > PAYMENT_STATUS_TOLERANCE) {
             return fail(
                 400,
-                'from_admin_commission + from_partner_wallet must equal refund_amount.'
+                'Admin portion and partner wallet portion must add up to the refund amount.'
             );
         }
 
-        const dateParsed = parseDate(body.date ?? body.refund_date, 'date');
+        const dateParsed = parseDate(body.date ?? body.refund_date, 'Refund date');
         if (!dateParsed.ok) return fail(400, dateParsed.message);
         if (!dateParsed.value) {
-            return fail(400, 'date is required.');
+            return fail(400, 'Refund date is required.');
         }
 
         const order = await Order.findOne({ _id: pOrder.oid, deleted_at: null }).lean();
@@ -581,7 +582,7 @@ const createRefund = async (body, createdById = null) => {
         if (refundAmount > refundable_amount + PAYMENT_STATUS_TOLERANCE) {
             return fail(
                 400,
-                `refund_amount exceeds refundable balance (${roundAmount(refundable_amount)}).`
+                `Refund amount exceeds refundable balance (${roundAmount(refundable_amount)}).`
             );
         }
 
@@ -596,17 +597,17 @@ const createRefund = async (body, createdById = null) => {
         if (fromAdminCommission > maxAdminForRefund + PAYMENT_STATUS_TOLERANCE) {
             return fail(
                 400,
-                `from_admin_commission exceeds admin payable for this refund (${maxAdminForRefund}). Admin portion includes tax and fees beyond commission.`
+                `Admin portion exceeds the maximum allowed for this refund (${maxAdminForRefund}). It includes tax and fees, not commission alone.`
             );
         }
         if (fromPartnerWallet > 0) {
             if (!order.partner_id) {
-                return fail(400, 'Order has no partner; from_partner_wallet must be 0.');
+                return fail(400, 'Order has no partner; partner wallet portion must be 0.');
             }
             if (fromPartnerWallet > partnerCreditedForOrder + PAYMENT_STATUS_TOLERANCE) {
                 return fail(
                     400,
-                    `from_partner_wallet exceeds partner credits for this order (${roundAmount(partnerCreditedForOrder)}).`
+                    `Partner wallet portion exceeds partner credits for this order (${roundAmount(partnerCreditedForOrder)}).`
                 );
             }
         }

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { fieldLabel } = require('../utils/field_labels');
 const SubscriptionPlan = require('../models/subscription_plan');
 const PLAN_NAMES = SubscriptionPlan.PLAN_NAMES;
 const DURATION_TYPES = SubscriptionPlan.DURATION_TYPES;
@@ -13,7 +14,7 @@ const parseObjectId = (raw, fieldName = 'id') => {
     if (!s || !/^[a-fA-F0-9]{24}$/.test(s)) {
         return {
             ok: false,
-            message: `${fieldName} must be a valid MongoDB ObjectId (24 hex characters).`,
+            message: `${fieldLabel(fieldName)} must be a valid MongoDB ObjectId (24 hex characters).`,
         };
     }
     return { ok: true, oid: new mongoose.Types.ObjectId(s) };
@@ -24,14 +25,14 @@ const ok = (status, data) => ({ ok: true, status, data });
 
 const parseNumberField = (value, fieldName, { allowZero = true } = {}) => {
     if (value === undefined || value === null || value === '') {
-        return { ok: false, message: `${fieldName} is required.` };
+        return { ok: false, message: `${fieldLabel(fieldName)} is required.` };
     }
     const n = typeof value === 'number' ? value : Number(String(value).trim());
     if (Number.isNaN(n)) {
-        return { ok: false, message: `${fieldName} must be a valid number.` };
+        return { ok: false, message: `${fieldLabel(fieldName)} must be a valid number.` };
     }
     if (!allowZero && n === 0) {
-        return { ok: false, message: `${fieldName} must be greater than zero.` };
+        return { ok: false, message: `${fieldLabel(fieldName)} must be greater than zero.` };
     }
     return { ok: true, n };
 };
@@ -253,10 +254,10 @@ const importSubscriptionPlans = async (records) => {
             const planNameNorm = String(rec.plan_name).trim().toLowerCase();
             const durationTypeNorm = String(rec.duration_type).trim().toLowerCase();
             if (!PLAN_NAMES.includes(planNameNorm)) {
-                return fail(400, `Invalid plan_name for row: ${rec.plan_name}`);
+                return fail(400, `Invalid plan name for row: ${rec.plan_name}`);
             }
             if (!DURATION_TYPES.includes(durationTypeNorm)) {
-                return fail(400, `Invalid duration_type for plan: ${rec.plan_name}`);
+                return fail(400, `Invalid duration type for plan: ${rec.plan_name}`);
             }
 
             const pPrice = parseNumberField(rec.price, 'price');
@@ -288,7 +289,7 @@ const importSubscriptionPlans = async (records) => {
         const seen = new Set();
         for (const r of toInsert) {
             if (seen.has(r.plan_name)) {
-                return fail(409, 'Duplicate plan_name entries in import file.');
+                return fail(409, 'Duplicate plan name entries in import file.');
             }
             seen.add(r.plan_name);
         }

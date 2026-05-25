@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { PAYMENT_METHODS } = require('../models/partner_payout');
+const { fieldLabel } = require('../utils/field_labels');
 
 const isValidObjectIdString = (id) => {
     if (id === undefined || id === null) return false;
@@ -14,13 +15,13 @@ const createPartnerPayoutMiddleware = (req, res, next) => {
     if (!partner_id || String(partner_id).trim() === '') {
         return res.status(400).json({
             success: false,
-            message: 'partner_id is required.',
+            message: `${fieldLabel('partner_id')} is required.`,
         });
     }
     if (!isValidObjectIdString(partner_id)) {
         return res.status(400).json({
             success: false,
-            message: 'partner_id must be a valid MongoDB ObjectId.',
+            message: `${fieldLabel('partner_id')} must be a valid MongoDB ObjectId.`,
         });
     }
 
@@ -33,21 +34,21 @@ const createPartnerPayoutMiddleware = (req, res, next) => {
     ) {
         return res.status(400).json({
             success: false,
-            message: 'Valid pay_now_amount is required.',
+            message: `Valid ${fieldLabel('pay_now_amount')} is required.`,
         });
     }
 
     if (!payment_method || String(payment_method).trim() === '') {
         return res.status(400).json({
             success: false,
-            message: 'payment_method is required.',
+            message: `${fieldLabel('payment_method')} is required.`,
         });
     }
     const method = String(payment_method).trim().toLowerCase();
     if (!PAYMENT_METHODS.includes(method)) {
         return res.status(400).json({
             success: false,
-            message: `payment_method must be one of: ${PAYMENT_METHODS.join(', ')}.`,
+            message: `${fieldLabel('payment_method')} must be one of: ${PAYMENT_METHODS.join(', ')}.`,
         });
     }
 
@@ -62,7 +63,7 @@ const createPartnerPayoutMiddleware = (req, res, next) => {
         if (!isValidObjectIdString(franchise_id)) {
             return res.status(400).json({
                 success: false,
-                message: 'franchise_id must be a valid MongoDB ObjectId.',
+                message: `${fieldLabel('franchise_id')} must be a valid MongoDB ObjectId.`,
             });
         }
     }

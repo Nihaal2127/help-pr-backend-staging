@@ -16,6 +16,7 @@ const {
   resolvePartnerFranchiseCatalog,
   resolveFranchiseEffectiveCatalog,
 } = require('../utils/partner_franchise_catalog');
+const { fieldLabel } = require('../utils/field_labels');
 const {
   loadPartnerAvailabilityContext,
   enrichPartnerServiceApiRecord,
@@ -745,7 +746,7 @@ const getAvailableFranchiseServices = async (req, res) => {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: 'category_id query parameter is required.',
+        message: `${fieldLabel('category_id')} query parameter is required.`,
       });
     }
 
@@ -1187,14 +1188,14 @@ const getFranchiseCategoryServicesIntersection = async (req, res) => {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: 'franchise_id is required.',
+        message: `${fieldLabel('franchise_id')} is required.`,
       });
     }
     if (!categoryIdRaw) {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: 'category_id is required.',
+        message: `${fieldLabel('category_id')} is required.`,
       });
     }
 

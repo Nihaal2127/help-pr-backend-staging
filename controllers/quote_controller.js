@@ -29,6 +29,7 @@ const {
   parseFacetListResult,
   getListCollectionNames,
 } = require("../utils/list_aggregation");
+const { fieldLabel } = require("../utils/field_labels");
 
 const QUOTE_LIST_SEARCH_FIELDS = [
   "quote_sequence_id",
@@ -932,7 +933,7 @@ const update = async (req, res) => {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: "Invalid user_id on service_items.",
+        message: `Invalid ${fieldLabel("user_id")} on ${fieldLabel("service_items")}.`,
       });
     }
     console.error("Error updating quote:", error);

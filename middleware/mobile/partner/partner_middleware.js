@@ -133,35 +133,11 @@ const pickPartnerUpdateValue = (req, keys) => {
 const isPresentFieldValue = (value) =>
   value !== undefined && value !== null && String(value).trim() !== '';
 
-const CATALOG_MESSAGE_TO_KEY = {
-  'Category is required.': 'category',
-  'Service is required.': 'service',
-  'Description is required.': 'description',
-  'Price is required.': 'price',
-  'Category not found.': 'category',
-  'Category is not available.': 'category',
-  'Service not found.': 'service',
-  'Service is not available.': 'service',
-  'Service does not belong to the selected category.': 'service',
-};
-
-const catalogMessagesToKeyedErrors = (messages) => {
-  const errors = {};
-  for (const msg of messages) {
-    const key = CATALOG_MESSAGE_TO_KEY[msg];
-    if (key && !errors[key]) errors[key] = msg;
-  }
-  return errors;
-};
-
 const respondPartnerCatalogValidationErrors = (res, messages) => {
-  const errors = catalogMessagesToKeyedErrors(messages);
-  const messageList = Object.values(errors);
   res.status(400).json({
     success: false,
     status: 400,
-    message: messageList[0] || 'Validation failed.',
-    errors,
+    message: (Array.isArray(messages) && messages[0]) || 'Validation failed.',
   });
   return false;
 };

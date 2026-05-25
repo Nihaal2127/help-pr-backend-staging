@@ -5,10 +5,10 @@ const Service = require('../models/service');
 const {
     ORDER_STATUS_IN_PROGRESS,
     ORDER_STATUS_COMPLETED,
-    ORDER_STATUS_CANCELLED,
-    ORDER_STATUS_REFUNDED,
     buildOrderStatusQueryFilter,
     normalizeOrderStatus,
+    isOrderStatusWithNoPendingAmounts,
+    buildTerminalOrderStatusMatchValues,
 } = require('../enum/order_status_enum');
 const {
     isValidOrderPaymentStatus,
@@ -37,6 +37,9 @@ const FINANCIAL_SORT_FIELDS = {
 };
 
 const LIST_COLLATION = { locale: 'en', strength: 2 };
+
+/** Canonical + legacy numeric values for cancelled/refunded (financial pending = 0). */
+const TERMINAL_ORDER_STATUS_MATCH_VALUES = buildTerminalOrderStatusMatchValues();
 
 const roundMoney = (n) => Math.round(Number(n || 0) * 100) / 100;
 
@@ -140,6 +143,7 @@ const shapeFinancialOverviewRecord = (row, srNo) => {
     const additionalBase = roundMoney(row.additional_charges_subtotal);
     const totalPartnerAmount = roundMoney(partnerEarning + additionalBase);
     const partnerFinancial = resolvePartnerFinancialFields(row, totalPartnerAmount);
+    const noPending = isOrderStatusWithNoPendingAmounts(row.order_status);
 
     return {
         sr_no: srNo,
@@ -160,11 +164,11 @@ const shapeFinancialOverviewRecord = (row, srNo) => {
         tax_percentage: roundMoney(row.tax_percent),
         tax_amount: roundMoney(row.tax_amount),
         customer_paid_amount: roundMoney(row.customer_paid_amount),
-        customer_pending_amount: roundMoney(row.customer_due_amount),
+        customer_pending_amount: noPending ? 0 : roundMoney(row.customer_due_amount),
         total_service_amount: roundMoney(row.sub_total ?? row.total_service_charge),
         total_partner_amount: totalPartnerAmount,
         paid_to_partner: partnerFinancial.paid_to_partner,
-        pending_to_partner: partnerFinancial.pending_to_partner,
+        pending_to_partner: noPending ? 0 : partnerFinancial.pending_to_partner,
         customer_payment_status: row.user_payment_status || row.payment_status || 'unpaid',
         partner_payment_status: partnerFinancial.partner_payment_status,
         order_status: toFinancialOrderStatus(row.order_status),
@@ -285,10 +289,7 @@ const buildPartnerPendingLookupStages = (orderServicesCollection) => [
             _partner_entitlement: {
                 $cond: [
                     {
-                        $in: [
-                            '$order_status',
-                            ['cancelled', 'refunded', ORDER_STATUS_CANCELLED, ORDER_STATUS_REFUNDED],
-                        ],
+                        $in: ['$order_status', TERMINAL_ORDER_STATUS_MATCH_VALUES],
                     },
                     0,
                     {
@@ -312,6 +313,13 @@ const buildPartnerPendingLookupStages = (orderServicesCollection) => [
                             { $ifNull: ['$partner_paid_amount', 0] },
                         ],
                     },
+                ],
+            },
+            _customer_pending: {
+                $cond: [
+                    { $in: ['$order_status', TERMINAL_ORDER_STATUS_MATCH_VALUES] },
+                    0,
+                    { $ifNull: ['$customer_due_amount', 0] },
                 ],
             },
         },
@@ -372,7 +380,7 @@ const buildFinancialOrderPaymentsCountFromOrders = async (scopeFilter = {}) => {
                     },
                 },
                 total_partner_pending_amount: { $sum: '$_partner_pending' },
-                total_user_pending_amount: { $sum: '$customer_due_amount' },
+                total_user_pending_amount: { $sum: '$_customer_pending' },
             },
         },
     ]);

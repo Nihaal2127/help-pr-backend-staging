@@ -28,7 +28,9 @@ const {
     loadFranchiseForCatalog,
     activeServiceIdsFromListEntries,
     saveFranchiseServices,
+    filterServiceIdsToFranchiseEnabledCategories,
     applyServiceOrderToFranchiseIds,
+    toIdStr,
     GLOBAL_ACTIVE_CATEGORY_FILTER,
     loadGloballyActiveServicesPopulated,
     coerceCatalogObjectId,
@@ -245,17 +247,18 @@ const buildAllServicesWithFranchiseMappingStatus = async (franchiseOid) => {
             : '';
         const globalServiceActive = isGlobalCatalogRowActive(svc);
         const globalCategoryActive = catKey ? globalCatActive.get(catKey) === true : false;
-        const franchiseServiceEnabledFlag = franchiseServiceEnabled.get(svcKey) === true;
-        const franchiseCategoryEnabledFlag = catKey
+        const franchiseServiceOnFranchise = franchiseServiceEnabled.get(svcKey) === true;
+        const franchiseCategoryOnFranchise = catKey
             ? franchiseCategoryEnabled.get(catKey) === true
             : false;
+        const franchiseEnabledFlag = franchiseServiceOnFranchise && franchiseCategoryOnFranchise;
 
         return annotateCatalogRowWithAvailability(svc, {
             kind: 'service',
             globalActive: globalServiceActive,
             globalCategoryActive,
-            franchiseEnabled: franchiseServiceEnabledFlag,
-            franchiseCategoryEnabled: franchiseCategoryEnabledFlag,
+            franchiseEnabled: franchiseEnabledFlag,
+            franchiseCategoryEnabled: franchiseCategoryOnFranchise,
         });
     });
 };
@@ -343,17 +346,18 @@ const buildFranchiseRequestServices = async (franchiseOid) => {
         const catKey = catRef ? (catRef._id ? catRef._id.toString() : catRef.toString()) : '';
         const globalServiceActive = isGlobalCatalogRowActive(svc);
         const globalCategoryActive = catKey ? globalCatActive.get(catKey) === true : false;
-        const franchiseServiceEnabledFlag = franchiseServiceEnabled.get(svcKey) === true;
-        const franchiseCategoryEnabledFlag = catKey
+        const franchiseServiceOnFranchise = franchiseServiceEnabled.get(svcKey) === true;
+        const franchiseCategoryOnFranchise = catKey
             ? franchiseCategoryEnabled.get(catKey) === true
             : false;
+        const franchiseEnabledFlag = franchiseServiceOnFranchise && franchiseCategoryOnFranchise;
 
         return annotateCatalogRowWithAvailability(svc, {
             kind: 'service',
             globalActive: globalServiceActive,
             globalCategoryActive,
-            franchiseEnabled: franchiseServiceEnabledFlag,
-            franchiseCategoryEnabled: franchiseCategoryEnabledFlag,
+            franchiseEnabled: franchiseEnabledFlag,
+            franchiseCategoryEnabled: franchiseCategoryOnFranchise,
         });
     });
     return attachRequestedByUser(rows);
@@ -820,6 +824,29 @@ const update = async (id, body, userId) => {
         }
 
         const removedServiceIds = diffRemovedIds(beforeServiceIds, nextServiceIds);
+
+        const freshFranchise = await Franchise.findOne({ _id: franchise._id, deleted_at: null })
+            .select('categories')
+            .lean();
+        const enabledCategoryIds = freshFranchise?.categories || [];
+
+        const allowedServiceIds = await filterServiceIdsToFranchiseEnabledCategories(
+            enabledCategoryIds,
+            nextServiceIds
+        );
+        const allowedSet = new Set(allowedServiceIds.map((id) => toIdStr(id)));
+        const beforeSet = new Set(beforeServiceIds.map((id) => toIdStr(id)));
+        const blockedEnable = nextServiceIds.filter((id) => {
+            const key = toIdStr(id);
+            return key && !beforeSet.has(key) && !allowedSet.has(key);
+        });
+        if (blockedEnable.length > 0) {
+            return fail(
+                400,
+                'Cannot enable services whose category is not enabled on this franchise. Enable the parent category first.'
+            );
+        }
+        nextServiceIds = allowedServiceIds;
 
         const saved = await saveFranchiseServices(franchise._id, nextServiceIds);
         if (!saved) return fail(404, 'Franchise not found.');

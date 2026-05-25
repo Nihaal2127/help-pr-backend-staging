@@ -12,6 +12,8 @@ const { computeOrderPartnerCreditAmount } = require("./partner_wallet_order_serv
 const {
   ORDER_STATUS_CANCELLED,
   ORDER_STATUS_REFUNDED,
+  clearPendingAmountsForTerminalOrder,
+  isOrderStatusWithNoPendingAmounts,
 } = require("../enum/order_status_enum");
 
 /**
@@ -54,6 +56,13 @@ const syncOrderPaymentStatus = async (orderId) => {
   order.partner_payment_status = partnerBreakdown.partner_payment_status;
   order.partner_paid_amount = partnerBreakdown.partner_paid_amount;
   order.partner_due_amount = partnerBreakdown.partner_due_amount;
+
+  clearPendingAmountsForTerminalOrder(order);
+
+  if (isOrderStatusWithNoPendingAmounts(order.order_status)) {
+    customerBreakdown.customer_due_amount = 0;
+    partnerBreakdown.partner_due_amount = 0;
+  }
 
   order.updated_at = new Date();
   await order.save();

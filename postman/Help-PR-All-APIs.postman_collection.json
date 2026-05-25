@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-all-apis-merged",
     "name": "Help PR — All APIs (single collection)",
-    "description": "**Single Postman collection** for `help-pr-backend-staging`. Import only this file.\n\n**Generated:** 2026-05-20 via `node postman/merge-all-collections.mjs`\n\n**Sources merged (8) from `postman/archive/`:**\n- `archive/Help-PR-Orders-Module.postman_collection.json`\n- `archive/Help-PR-Order-Charges-Payments.postman_collection.json`\n- `archive/Help-PR-Partner-Franchise-Dropdowns.postman_collection.json`\n- `archive/content-expense-expense-category-management.postman_collection (1).json`\n- `archive/Area-Management.postman_collection.json`\n- `archive/Help-PR-Area-Franchise-Subscription-UserTypes.postman_collection.json`\n- `archive/Help-PR-Area-Franchise-Subscription.postman_collection.json`\n- `archive/Help-PR-Admin-Dashboard.postman_collection.json`\n- Built-in: Partner payout (4 requests)\n- Built-in: Order refunds (4 requests)\n\n**Dedup:** Same HTTP method + path template (+ getCount `type` in body) → one request; higher-priority source wins.\n\n**Setup:** Set `baseUrl`. Run **00 — Auth → Login** to set `accessToken` / `token`.\n\n**Docs:** `docs/ORDER_MODULE_FRONTEND.md`, `docs/ORDER_GETALL_API_CHANGES.md`, `docs/PARTNER_PAYOUT_FRONTEND.md`, `docs/REFUND_FRONTEND.md`\n\n**Mobile:** folder **Mobile → Partner** / **Mobile → User** — run `node postman/build-mobile-folder.mjs` to refresh.",
+    "description": "**Single Postman collection** for `help-pr-backend-staging`. Import only this file.\n\n**Generated:** 2026-05-20 via `node postman/merge-all-collections.mjs`\n\n**Sources merged (8) from `postman/archive/`:**\n- `archive/Help-PR-Orders-Module.postman_collection.json`\n- `archive/Help-PR-Order-Charges-Payments.postman_collection.json`\n- `archive/Help-PR-Partner-Franchise-Dropdowns.postman_collection.json`\n- `archive/content-expense-expense-category-management.postman_collection (1).json`\n- `archive/Area-Management.postman_collection.json`\n- `archive/Help-PR-Area-Franchise-Subscription-UserTypes.postman_collection.json`\n- `archive/Help-PR-Area-Franchise-Subscription.postman_collection.json`\n- `archive/Help-PR-Admin-Dashboard.postman_collection.json`\n- Built-in: Partner payout (4 requests)\n- Built-in: Order refunds (4 requests)\n\n**Dedup:** Same HTTP method + path template (+ getCount `type` in body) → one request; higher-priority source wins.\n\n**Setup:** Set `baseUrl`. Run **00 — Auth → Login** to set `accessToken` / `token`.\n\n**Docs:** `docs/ORDER_MODULE_FRONTEND.md`, `docs/ORDER_GETALL_API_CHANGES.md`, `docs/PARTNER_PAYOUT_FRONTEND.md`, `docs/REFUND_API.md`, `docs/REFUND_FRONTEND.md`, `postman/Help-PR-Refunds.postman_collection.json`\n\n**Mobile:** folder **Mobile → Partner** / **Mobile → User** — run `node postman/build-mobile-folder.mjs` to refresh.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -11541,10 +11541,25 @@
     },
     {
       "name": "38 — Refunds",
-      "description": "**/api/refund** — Order refunds (creates `order_refund` + customer `order_payment` with status `refunded`; syncs order `payment_status`; optional partner wallet debit).\n\n**Frontend doc:** `docs/REFUND_FRONTEND.md`\n\n**Access:** Super admin (5) & staff (6) — all franchises; optional `franchise_id`. Franchise admin (1) & employee (3) — own franchise only. Partner (2) & customer (4) → **403**.\n\n**Flow:** 1 eligible-orders (pick order) → 2 create → 3 getAll (list) → 4 getById (detail).\n\n**Variables:** Set `orderId` from eligible-orders row `_id` for create. Set `refundMongoId` from getAll row `_id` for getById.",
+      "description": "**/api/refund** — Order refunds (4 endpoints).\n\n**Docs:** `docs/REFUND_API.md` (API + create body mapping) · `docs/REFUND_FRONTEND.md` (UI)\n**Standalone Postman:** `postman/Help-PR-Refunds.postman_collection.json`\n\n**Access:** Super admin (5) & staff (6) — optional `franchise_id`. Franchise admin (1) & employee (3) — own franchise. Partner (2) & customer (4) → **403**.\n\n**Flow:** 2 eligible-orders → 4 create → 1 getAll → 3 getById\n\n**Variables:** `orderId` = eligible-orders `_id` · `refundMongoId` = getAll/create `data._id`",
       "item": [
         {
           "name": "1. Get all — refund list",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.success && json.data?.records?.length) {",
+                  "  pm.collectionVariables.set('refundMongoId', json.data.records[0]._id);",
+                  "}",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [
@@ -11612,12 +11627,27 @@
                 }
               ]
             },
-            "description": "**GET /api/refund/getAll** — Refund list table.\n\nSee **docs/REFUND_FRONTEND.md** §5.1.\n\n**Response `data.records[]`:** `_id`, `order_id` (business unique_id), `order_mongo_id`, `user_name`, `total_amount`, `user_paid`, `refund_amount`, `from_admin_commission`, `from_partner_wallet`, `date` (YYYY-MM-DD).\n\nCopy row `_id` → `refundMongoId` for getById."
+            "description": "**GET /api/refund/getAll** — Refund history.\n\n**Doc:** `docs/REFUND_API.md` §1\n\n**Response `data.records[]`:** `_id`, `order_id`, `order_mongo_id`, `user_name`, `total_amount`, `user_paid`, `refund_amount`, `from_admin_commission`, `from_partner_wallet`, `date`.\n\nTest script sets `refundMongoId` from first row."
           },
           "description": "\n\n_Source: builtin:refund → Order refunds_"
         },
         {
           "name": "2. Eligible orders — create refund picker",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.success && json.data?.records?.length) {",
+                  "  pm.collectionVariables.set('orderId', json.data.records[0]._id);",
+                  "}",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [
@@ -11675,7 +11705,7 @@
                 }
               ]
             },
-            "description": "**GET /api/refund/eligible-orders** — Orders with refundable customer payments (completed − refunded &gt; 0).\n\nSee **docs/REFUND_FRONTEND.md** §5.2.\n\n**Response `data.records[]`:** `_id` (order Mongo id — use as `order_id` on create), `order_id` (unique_id display), `user_name`, `total_amount`, `user_paid` / `refundable_amount`, `admin_commission`, `partner_wallet_balance`, `payment_status`.\n\nCopy row `_id` → collection variable `orderId` for create."
+            "description": "**GET /api/refund/eligible-orders** — Orders with refundable balance (customer completed − refunded).\n\n**Doc:** `docs/REFUND_API.md` §2\n\n**`_id`** → `orderId` for create. **Max refund** = `refundable_amount` / `user_paid` (not `total_amount`).\n\n**Eligibility:** `order_status` must be `completed` or `cancelled`, then customer refundable balance &gt; 0.\n\n**Settlement preview:** `partner_payable_amount` + `admin_payable_amount` = `refundable_amount`.\n\nTest script sets `orderId` from first row."
           },
           "description": "\n\n_Source: builtin:refund → Order refunds_"
         },
@@ -11702,12 +11732,27 @@
                 "{{refundMongoId}}"
               ]
             },
-            "description": "**GET /api/refund/getById/:id** — Single refund view.\n\nSee **docs/REFUND_FRONTEND.md** §5.3.\n\n**Path:** `id` = refund Mongo `_id` from getAll (`refundMongoId`)."
+            "description": "**GET /api/refund/getById/:id** — Refund detail.\n\n**Doc:** `docs/REFUND_API.md` §3 · Path `id` = `refundMongoId`"
           },
           "description": "\n\n_Source: builtin:refund → Order refunds_"
         },
         {
           "name": "4. Create — record refund",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.success && json.data?._id) {",
+                  "  pm.collectionVariables.set('refundMongoId', json.data._id);",
+                  "}",
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -11724,7 +11769,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"order_id\": \"{{orderId}}\",\n  \"refund_amount\": 1000,\n  \"from_admin_commission\": 200,\n  \"from_partner_wallet\": 800,\n  \"date\": \"2026-05-15T10:00:00.000Z\",\n  \"notes\": \"Partial refund — service cancelled\"\n}",
+              "raw": "{\n  \"order_id\": \"{{orderId}}\",\n  \"refund_amount\": 1000,\n  \"from_admin_commission\": 200,\n  \"from_partner_wallet\": 800,\n  \"date\": \"2026-05-15T10:00:00.000Z\",\n  \"notes\": \"Refund via Postman\",\n  \"payment_method\": \"refund\",\n  \"transaction_reference\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -11742,7 +11787,7 @@
                 "create"
               ]
             },
-            "description": "**POST /api/refund/create** — Create refund (no update endpoint).\n\nSee **docs/REFUND_FRONTEND.md** §6.4.\n\n**Required body only:** `order_id` (order Mongo `_id` from eligible-orders), `refund_amount`, `date`.\n\n**Server derives from order (do not send):** `user_id`, `partner_id`, `user_name`, `total_amount`, `user_paid`, `franchise_id`.\n\n**Optional:** `from_admin_commission`, `from_partner_wallet` (default 0), `notes`, `payment_method`.\n\n**Split:** `from_admin_commission + from_partner_wallet` must equal `refund_amount`.\n\n**201** on success."
+            "description": "**POST /api/refund/create** — Record refund (append-only).\n\n**Doc:** `docs/REFUND_API.md` §4 (request body → DB updates)\n\n**Required:** `order_id` (Mongo from eligible-orders), `refund_amount`, `date`\n**Optional:** `from_admin_commission`, `from_partner_wallet`, `notes`, `payment_method`, `transaction_reference`\n**Split:** `from_admin_commission + from_partner_wallet` = `refund_amount`\n**Cap:** `refund_amount` ≤ customer net paid (not order total)\n\n**Writes:** `order_payment` (refunded), `order_refund`, optional partner ledger debit; syncs order `payment_status`.\n\nTest script sets `refundMongoId` on 201."
           },
           "description": "\n\n_Source: builtin:refund → Order refunds_"
         }
@@ -17523,7 +17568,8 @@
     {
       "key": "orderId",
       "value": "",
-      "type": "string"
+      "type": "string",
+      "description": "Order Mongo _id from refund eligible-orders (for POST /api/refund/create)"
     },
     {
       "key": "orderServiceId",

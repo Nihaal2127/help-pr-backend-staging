@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Order = require('../models/order');
+const OrderService = require('../models/order_services');
 const OrderPayment = require('../models/order_payment');
 const OrderRefund = require('../models/order_refund');
 const User = require('../models/user');
@@ -10,8 +11,42 @@ const {
 } = require('../enum/order_payment_status_enum');
 const { syncOrderPaymentStatus } = require('./order_payment_status_service');
 const { syncAllPartnerOrderPaymentsForOrder } = require('./partner_wallet_order_service');
-const { getWalletAggregatesForPartners } = require('./partner_payout_service');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
+const {
+    ORDER_STATUS_COMPLETED,
+    ORDER_STATUS_CANCELLED,
+    ORDER_STATUS_REFUNDED,
+    buildOrderStatusMatchValues,
+    normalizeOrderStatus,
+    touchOrderStatusInfo,
+    clearPendingAmountsForTerminalOrder,
+} = require('../enum/order_status_enum');
+
+/** Canonical + legacy numeric values for completed and cancelled (refund-eligible lifecycle). */
+const ELIGIBLE_REFUND_ORDER_STATUS_VALUES = [
+    ...new Set([
+        ...(buildOrderStatusMatchValues(ORDER_STATUS_COMPLETED) || []),
+        ...(buildOrderStatusMatchValues(ORDER_STATUS_CANCELLED) || []),
+    ]),
+];
+
+const isOrderStatusEligibleForRefund = (orderStatus) => {
+    const normalized = normalizeOrderStatus(orderStatus);
+    return (
+        normalized === ORDER_STATUS_COMPLETED || normalized === ORDER_STATUS_CANCELLED
+    );
+};
+
+const buildEligibleOrderLookupMatch = (scopeFilter = {}) => {
+    const match = {
+        'order.deleted_at': null,
+        'order.order_status': { $in: ELIGIBLE_REFUND_ORDER_STATUS_VALUES },
+    };
+    if (scopeFilter.franchise_id !== undefined) {
+        match['order.franchise_id'] = scopeFilter.franchise_id;
+    }
+    return match;
+};
 
 const MAX_PAGE_SIZE = 100;
 const LIST_SORT_FIELDS = ['order_id', 'user_name', 'refund_date', 'refund_amount'];
@@ -146,11 +181,69 @@ const getRefundableAmountForOrder = async (order) => {
     };
 };
 
-const getPartnerWalletBalance = async (partnerId) => {
-    if (!partnerId) return 0;
-    const walletMap = await getWalletAggregatesForPartners([partnerId]);
-    const wallet = walletMap.get(partnerId.toString());
-    return wallet ? wallet.payable_balance : 0;
+/** Net partner wallet credits for an order (credits − debits on ledger rows for that order). */
+const getPartnerWalletNetByOrderIds = async (orderIds) => {
+    if (!orderIds.length) return new Map();
+
+    const rows = await PartnerWalletLedger.aggregate([
+        {
+            $match: {
+                order_id: { $in: orderIds },
+                deleted_at: null,
+            },
+        },
+        {
+            $group: {
+                _id: '$order_id',
+                credits: {
+                    $sum: {
+                        $cond: [{ $eq: ['$transaction_type', 'credit'] }, '$amount', 0],
+                    },
+                },
+                debits: {
+                    $sum: {
+                        $cond: [{ $eq: ['$transaction_type', 'debit'] }, '$amount', 0],
+                    },
+                },
+            },
+        },
+    ]);
+
+    return new Map(
+        rows.map((row) => [
+            row._id.toString(),
+            roundAmount(Math.max(0, row.credits - row.debits)),
+        ])
+    );
+};
+
+const getPartnerWalletNetForOrder = async (orderId) => {
+    const map = await getPartnerWalletNetByOrderIds([orderId]);
+    return map.get(orderId.toString()) ?? 0;
+};
+
+/**
+ * Partner clawback on refund for one order — only wallet ledger net credited for this order_id.
+ * Does not use global partner balance or theoretical order entitlement.
+ */
+const resolvePartnerRefundShare = (refundableAmount, ledgerNetForOrder = 0) => {
+    const refundable = roundAmount(refundableAmount);
+    if (refundable <= PAYMENT_STATUS_TOLERANCE) {
+        return 0;
+    }
+    const partnerShare = roundAmount(Math.max(0, ledgerNetForOrder));
+    return roundAmount(Math.min(partnerShare, refundable));
+};
+
+/** Settlement split for a refund: partner wallet clawback + admin remainder (incl. tax). */
+const computeRefundSettlementAmounts = (refundableAmount, partnerShare) => {
+    const refundable = roundAmount(refundableAmount);
+    const partner = roundAmount(Math.min(partnerShare, refundable));
+    const admin = roundAmount(Math.max(0, refundable - partner));
+    return {
+        partner_payable_amount: partner,
+        admin_payable_amount: admin,
+    };
 };
 
 const listRefunds = async (query, scopeFilter = {}) => {
@@ -221,11 +314,6 @@ const listEligibleOrders = async (query, scopeFilter = {}) => {
     try {
         const { page, limit, skip } = parsePagination(query);
 
-        const orderMatch = { deleted_at: null };
-        if (scopeFilter.franchise_id !== undefined) {
-            orderMatch.franchise_id = scopeFilter.franchise_id;
-        }
-
         const ordersColl = Order.collection.name;
         const usersColl = User.collection.name;
 
@@ -272,7 +360,7 @@ const listEligibleOrders = async (query, scopeFilter = {}) => {
                 },
             },
             { $unwind: '$order' },
-            { $match: { 'order.deleted_at': null, ...orderMatch } },
+            { $match: buildEligibleOrderLookupMatch(scopeFilter) },
             {
                 $lookup: {
                     from: usersColl,
@@ -348,14 +436,15 @@ const listEligibleOrders = async (query, scopeFilter = {}) => {
                     refundable_amount: 1,
                     completed_sum: 1,
                     refunded_sum: 1,
-                    admin_commission: '$order.admin_commission',
-                    additional_charges_commission: '$order.additional_charges_commission',
                     partner_id: '$order.partner_id',
                     franchise_id: '$order.franchise_id',
                     payment_status: '$order.payment_status',
+                    order_status: '$order.order_status',
                 },
             },
         ];
+
+        // Eligible only when order lifecycle is completed or cancelled, then customer net paid > 0.
 
         const [countResult, rows] = await Promise.all([
             OrderPayment.aggregate(countPipeline),
@@ -365,29 +454,29 @@ const listEligibleOrders = async (query, scopeFilter = {}) => {
         const totalItems = countResult[0]?.total || 0;
         const totalPages = Math.ceil(totalItems / limit) || 0;
 
-        const records = await Promise.all(
-            rows.map(async (row) => {
-                let partner_wallet_balance = 0;
-                if (row.partner_id) {
-                    partner_wallet_balance = await getPartnerWalletBalance(row.partner_id);
-                }
+        const orderIds = rows.map((row) => row._id);
+        const partnerLedgerNetMap = await getPartnerWalletNetByOrderIds(orderIds);
+
+        const records = rows.map((row) => {
+                const refundable = roundAmount(row.refundable_amount);
+                const ledgerNet = partnerLedgerNetMap.get(row._id.toString()) ?? 0;
+                const partnerShare = resolvePartnerRefundShare(refundable, ledgerNet);
+                const settlement = computeRefundSettlementAmounts(refundable, partnerShare);
+
                 return {
                     _id: row._id,
                     order_id: row.order_id || null,
                     user_name: row.user_name || '',
                     total_amount: roundAmount(row.total_amount),
-                    user_paid: roundAmount(row.user_paid),
-                    refundable_amount: roundAmount(row.refundable_amount),
-                    admin_commission: getOrderAdminCommissionCap({
-                        admin_commission: row.admin_commission,
-                        additional_charges_commission: row.additional_charges_commission,
-                    }),
-                    partner_wallet_balance: roundAmount(partner_wallet_balance),
+                    user_paid: refundable,
+                    refundable_amount: refundable,
+                    partner_payable_amount: settlement.partner_payable_amount,
+                    admin_payable_amount: settlement.admin_payable_amount,
                     payment_status: row.payment_status,
+                    order_status: row.order_status || null,
                     franchise_id: row.franchise_id || null,
                 };
-            })
-        );
+            });
 
         return ok(200, {
             message: 'Eligible orders fetched successfully',
@@ -427,6 +516,33 @@ const getRefundById = async (refundId) => {
     }
 };
 
+/**
+ * After a refund is recorded: set order lifecycle to refunded and align service lines.
+ * Applies for partial or full customer refunds.
+ */
+const applyOrderRefundedStatus = async (orderId) => {
+    const order = await Order.findOne({ _id: orderId, deleted_at: null });
+    if (!order) return null;
+
+    order.order_status = ORDER_STATUS_REFUNDED;
+    touchOrderStatusInfo(order, ORDER_STATUS_REFUNDED);
+    clearPendingAmountsForTerminalOrder(order);
+    order.updated_at = new Date();
+    await order.save();
+
+    if (order.service_items?.length) {
+        await OrderService.updateMany(
+            {
+                _id: { $in: order.service_items },
+                service_status: { $nin: [ORDER_STATUS_CANCELLED, ORDER_STATUS_REFUNDED] },
+            },
+            { $set: { service_status: ORDER_STATUS_REFUNDED, updated_at: new Date() } }
+        );
+    }
+
+    return order;
+};
+
 const createRefund = async (body, createdById = null) => {
     try {
         const pOrder = parseObjectId(body.order_id, 'order_id');
@@ -461,6 +577,13 @@ const createRefund = async (body, createdById = null) => {
         const order = await Order.findOne({ _id: pOrder.oid, deleted_at: null }).lean();
         if (!order) return fail(404, 'Order not found.');
 
+        if (!isOrderStatusEligibleForRefund(order.order_status)) {
+            return fail(
+                400,
+                'Refunds are only allowed when order_status is completed or cancelled.'
+            );
+        }
+
         const { breakdown, refundable_amount } = await getRefundableAmountForOrder(order);
         if (refundAmount > refundable_amount + PAYMENT_STATUS_TOLERANCE) {
             return fail(
@@ -477,15 +600,15 @@ const createRefund = async (body, createdById = null) => {
             );
         }
 
+        const partnerCreditedForOrder = await getPartnerWalletNetForOrder(order._id);
         if (fromPartnerWallet > 0) {
             if (!order.partner_id) {
                 return fail(400, 'Order has no partner; from_partner_wallet must be 0.');
             }
-            const walletBalance = await getPartnerWalletBalance(order.partner_id);
-            if (fromPartnerWallet > walletBalance + PAYMENT_STATUS_TOLERANCE) {
+            if (fromPartnerWallet > partnerCreditedForOrder + PAYMENT_STATUS_TOLERANCE) {
                 return fail(
                     400,
-                    `from_partner_wallet exceeds partner wallet balance (${roundAmount(walletBalance)}).`
+                    `from_partner_wallet exceeds partner credits for this order (${roundAmount(partnerCreditedForOrder)}).`
                 );
             }
         }
@@ -551,6 +674,8 @@ const createRefund = async (body, createdById = null) => {
         });
 
         await syncOrderPaymentStatus(order._id);
+        await applyOrderRefundedStatus(order._id);
+        await syncOrderPaymentStatus(order._id);
         await syncAllPartnerOrderPaymentsForOrder(order._id);
 
         return ok(201, {
@@ -563,9 +688,97 @@ const createRefund = async (body, createdById = null) => {
     }
 };
 
+const listRefundsForOrders = async (orderIds) => {
+    if (!orderIds.length) return new Map();
+
+    const rows = await OrderRefund.find({
+        order_id: { $in: orderIds },
+        deleted_at: null,
+    })
+        .sort({ refund_date: -1, created_at: -1 })
+        .lean();
+
+    const map = new Map();
+    for (const row of rows) {
+        const key = row.order_id.toString();
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(mapRefundRecord(row));
+    }
+    return map;
+};
+
+const buildRefundSummaryForOrder = async (order, refundRecords = [], ledgerNet = null) => {
+    const refundable = roundAmount(Number(order?.customer_net_paid) || 0);
+    const totalRefunded = roundAmount(
+        Number(order?.customer_refunded_amount) ||
+            (refundRecords || []).reduce((sum, row) => sum + (Number(row.refund_amount) || 0), 0)
+    );
+
+    const partnerShare = resolvePartnerRefundShare(refundable, ledgerNet);
+    const settlement = computeRefundSettlementAmounts(refundable, partnerShare);
+
+    return {
+        refund_count: (refundRecords || []).length,
+        total_refunded_amount: totalRefunded,
+        refundable_amount: refundable,
+        customer_paid_amount: roundAmount(Number(order?.customer_paid_amount) || 0),
+        partner_payable_amount: settlement.partner_payable_amount,
+        admin_payable_amount: settlement.admin_payable_amount,
+        total_from_partner_wallet: roundAmount(
+            (refundRecords || []).reduce(
+                (sum, row) => sum + (Number(row.from_partner_wallet) || 0),
+                0
+            )
+        ),
+        total_from_admin_commission: roundAmount(
+            (refundRecords || []).reduce(
+                (sum, row) => sum + (Number(row.from_admin_commission) || 0),
+                0
+            )
+        ),
+    };
+};
+
+/**
+ * Attach `refunds` (history) and `refund_summary` (rollup + settlement preview) to order API records.
+ */
+const attachRefundsToOrderRecords = async (orders) => {
+    if (!Array.isArray(orders) || !orders.length) return orders;
+
+    const orderIds = orders
+        .map((order) => order._id)
+        .filter((id) => id != null);
+
+    if (!orderIds.length) return orders;
+
+    const [refundsByOrder, ledgerNetMap] = await Promise.all([
+        listRefundsForOrders(orderIds),
+        getPartnerWalletNetByOrderIds(orderIds),
+    ]);
+
+    return Promise.all(
+        orders.map(async (order) => {
+            const key = order._id?.toString?.() ?? String(order._id);
+            const refunds = refundsByOrder.get(key) || [];
+            const refund_summary = await buildRefundSummaryForOrder(
+                order,
+                refunds,
+                ledgerNetMap.get(key) ?? 0
+            );
+            return {
+                ...order,
+                refunds,
+                refund_summary,
+            };
+        })
+    );
+};
+
 module.exports = {
     listRefunds,
     listEligibleOrders,
     getRefundById,
     createRefund,
+    attachRefundsToOrderRecords,
+    buildRefundSummaryForOrder,
 };

@@ -36,7 +36,23 @@ var quoteSchema = new schema(
     service_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "service" },
     franchise_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "franchise" },
     address_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "address" },
+    /** Partner base amount (same meaning as order.total_service_charge). */
+    total_service_charge: { type: Number, default: 0 },
+    /** Legacy alias; kept in sync with total_service_charge. */
     service_price: { type: Number, default: 0 },
+    /** Snapshotted from service.commission at quote time (%). */
+    commission_percent: { type: Number, default: 0 },
+    /** total_service_charge × commission_percent / 100 */
+    commission_amount: { type: Number, default: 0 },
+    /** Snapshotted from service.tax at quote time (%). */
+    tax_percent: { type: Number, default: 0 },
+    /** Tax on sub_total after discount (quotes: no discount). */
+    tax_amount: { type: Number, default: 0 },
+    sub_total: { type: Number, default: 0 },
+    /** Customer payable total (no additional charges / offers on quotes). */
+    total_price: { type: Number, default: 0 },
+    minimum_deposit_percent: { type: Number, default: 0 },
+    minimum_deposit_amount: { type: Number, default: 0 },
     status: { type: String, default: "new", trim: true, lowercase: true },
     from_date: { type: Date, default: null },
     to_date: { type: Date, default: null },

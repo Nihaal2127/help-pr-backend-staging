@@ -23,6 +23,7 @@ const {
   ORDER_STATUS_IN_PROGRESS,
   ORDER_STATUS_REFUNDED,
   ORDER_STATUSES,
+  isOrderStatusWithNoPendingAmounts,
   normalizeOrderStatus,
   buildOrderStatusQueryFilter,
   getOrderStatusLabel,
@@ -104,9 +105,11 @@ const {
   applyNestedResourcesOnUpdate,
 } = require('../services/order_nested_resources_service');
 const { syncAllPartnerOrderPaymentsForOrder } = require('../services/partner_wallet_order_service');
+const { syncOrderPaymentStatus } = require('../services/order_payment_status_service');
 const {
   applyOrderFieldsAndServicesUpdate,
 } = require('../services/order_field_update_service');
+const { attachRefundsToOrderRecords } = require('../services/refund_service');
 const {
   resolveOrderListScope,
   assertOrderRecordAccess,
@@ -253,7 +256,14 @@ async function loadOrderDetailLean(orderMongoId) {
     OrderPayment.find({ order_id: orderMongoId, deleted_at: null }).sort({ created_at: -1 }).lean(),
     OrderOffer.findOne({ order_id: orderMongoId }).lean(),
   ]);
-  return shapeOrderDetailResponse(populatedOrderData, additional_charges, order_payments, order_offer);
+  const shaped = shapeOrderDetailResponse(
+    populatedOrderData,
+    additional_charges,
+    order_payments,
+    order_offer
+  );
+  const [withRefunds] = await attachRefundsToOrderRecords([shaped]);
+  return withRefunds;
 }
 
 /** Same pattern as quote getAll: `sort_by` whitelist + `sort_order` or legacy `sort` (1 | -1). */
@@ -445,6 +455,8 @@ const getAll = async (req, res) => {
       limit
     );
 
+    const records = await attachRefundsToOrderRecords(formatOrderRecords(orders));
+
     res.status(200).json({
       success: true,
       status: 200,
@@ -452,7 +464,7 @@ const getAll = async (req, res) => {
       totalItems: totalCount,
       totalPages,
       currentPage: page,
-      records: formatOrderRecords(orders),
+      records,
     });
   } catch (err) {
     console.error('Error fetching orders:', err);
@@ -850,6 +862,11 @@ const update = async (req, res) => {
       );
       updatedOrder.updated_at = new Date();
       updatedOrder = await updatedOrder.save();
+    }
+
+    if (isOrderStatusWithNoPendingAmounts(updatedOrder.order_status)) {
+      await syncOrderPaymentStatus(updatedOrder._id);
+      updatedOrder = await Order.findById(updatedOrder._id);
     }
 
     const notificationSetting = await NotificationSettings.findOne({
@@ -1311,7 +1328,7 @@ const cancleOrder = async (req, res) => {
     order.order_status = ORDER_STATUS_CANCELLED;
     order.cancellation_reasone = cancellation_reasone || '';
     touchOrderStatusInfo(order, ORDER_STATUS_CANCELLED);
-    const updatedOrder = await order.save();
+    await order.save();
 
     await OrderService.updateMany(
       { _id: { $in: order.service_items } },
@@ -1323,7 +1340,9 @@ const cancleOrder = async (req, res) => {
       }
     );
 
+    await syncOrderPaymentStatus(order._id);
     await syncAllPartnerOrderPaymentsForOrder(order._id);
+    const updatedOrder = await Order.findById(order._id);
 
     const orderServices = await OrderService.find({
       _id: { $in: order.service_items }

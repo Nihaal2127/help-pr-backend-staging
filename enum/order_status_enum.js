@@ -76,6 +76,61 @@ const buildOrderStatusQueryFilter = (value) => {
   return { order_status: { $in: values } };
 };
 
+/** Customer rollup statuses that mean money was refunded (refund API does not always set order_status). */
+const CUSTOMER_REFUND_PAYMENT_STATUSES = ['refund', 'partially_refund'];
+
+const buildRefundedPaymentRollupFilter = () => ({
+  $or: [
+    { user_payment_status: { $in: CUSTOMER_REFUND_PAYMENT_STATUSES } },
+    { payment_status: { $in: CUSTOMER_REFUND_PAYMENT_STATUSES } },
+  ],
+});
+
+/** Orders in the Refunded tab: explicit order_status or customer payment rollup shows refund. */
+const buildRefundedOrderQueryFilter = () => {
+  const statusPart = buildOrderStatusQueryFilter(ORDER_STATUS_REFUNDED);
+  return {
+    $or: [statusPart, buildRefundedPaymentRollupFilter()],
+  };
+};
+
+/** Exclude refunded-tab orders from in-progress / completed / cancelled buckets. */
+const buildExcludeRefundedPaymentOrdersFilter = () => {
+  const refundedStatusValues =
+    buildOrderStatusMatchValues(ORDER_STATUS_REFUNDED) || [ORDER_STATUS_REFUNDED];
+  return {
+    order_status: { $nin: refundedStatusValues },
+    user_payment_status: { $nin: CUSTOMER_REFUND_PAYMENT_STATUSES },
+    payment_status: { $nin: CUSTOMER_REFUND_PAYMENT_STATUSES },
+  };
+};
+
+/**
+ * Order-management getCount + getAll?order_status= — mutually exclusive buckets.
+ * Refunded includes payment rollups; other buckets exclude refund rollups.
+ */
+const buildOrderManagementStatusQueryFilter = (value) => {
+  const normalized = normalizeOrderStatus(value);
+  if (!normalized) return null;
+
+  if (normalized === ORDER_STATUS_REFUNDED) {
+    return buildRefundedOrderQueryFilter();
+  }
+
+  const base = buildOrderStatusQueryFilter(normalized);
+  if (!base) return null;
+
+  if (
+    normalized === ORDER_STATUS_IN_PROGRESS ||
+    normalized === ORDER_STATUS_COMPLETED ||
+    normalized === ORDER_STATUS_CANCELLED
+  ) {
+    return { $and: [base, buildExcludeRefundedPaymentOrdersFilter()] };
+  }
+
+  return base;
+};
+
 const getOrderStatusLabel = (status) => {
   const normalized = normalizeOrderStatus(status);
   if (!normalized) return '';
@@ -100,6 +155,35 @@ const touchOrderStatusInfo = (order, status) => {
   }
 };
 
+/** Cancelled/refunded orders keep payment history but owe no further customer/partner amounts. */
+const isOrderStatusWithNoPendingAmounts = (value) => {
+  const normalized = normalizeOrderStatus(value);
+  return (
+    normalized === ORDER_STATUS_CANCELLED || normalized === ORDER_STATUS_REFUNDED
+  );
+};
+
+const TERMINAL_ORDER_STATUSES_NO_PENDING = [
+  ORDER_STATUS_CANCELLED,
+  ORDER_STATUS_REFUNDED,
+];
+
+/** All DB `order_status` values (canonical + legacy) with no customer/partner pending. */
+const buildTerminalOrderStatusMatchValues = () => {
+  const values = [
+    ...(buildOrderStatusMatchValues(ORDER_STATUS_CANCELLED) || []),
+    ...(buildOrderStatusMatchValues(ORDER_STATUS_REFUNDED) || []),
+  ];
+  return [...new Set(values)];
+};
+
+/** Payment rows unchanged; only outstanding customer/partner due is cleared. */
+const clearPendingAmountsForTerminalOrder = (order) => {
+  if (!isOrderStatusWithNoPendingAmounts(order?.order_status)) return;
+  order.customer_due_amount = 0;
+  order.partner_due_amount = 0;
+};
+
 /** @deprecated use normalizeOrderStatus / getOrderStatusLabel */
 const getOrderStatus = (key) => getOrderStatusLabel(key);
 
@@ -117,9 +201,17 @@ module.exports = {
   isValidOrderStatus,
   buildOrderStatusMatchValues,
   buildOrderStatusQueryFilter,
+  CUSTOMER_REFUND_PAYMENT_STATUSES,
+  buildRefundedOrderQueryFilter,
+  buildExcludeRefundedPaymentOrdersFilter,
+  buildOrderManagementStatusQueryFilter,
   getOrderStatusLabel,
   buildOrderStatusInfo,
   touchOrderStatusInfo,
+  isOrderStatusWithNoPendingAmounts,
+  clearPendingAmountsForTerminalOrder,
+  buildTerminalOrderStatusMatchValues,
+  TERMINAL_ORDER_STATUSES_NO_PENDING,
   getOrderStatus,
   getOrderStatusKey,
 };

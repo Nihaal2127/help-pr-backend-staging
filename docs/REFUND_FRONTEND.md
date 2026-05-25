@@ -2,7 +2,8 @@
 
 **Date:** May 2026  
 **Base path:** `/api/refund`  
-**Postman:** `postman/Help-PR-All-APIs.postman_collection.json` → **38 — Refunds**  
+**API reference:** [REFUND_API.md](./REFUND_API.md) (endpoints, create body, DB side effects)  
+**Postman:** `postman/Help-PR-Refunds.postman_collection.json` or **38 — Refunds** in `postman/Help-PR-All-APIs.postman_collection.json`  
 **Backend:** `services/refund_service.js`, `controllers/refund_controller.js`, `utils/refund_access.js`
 
 ---
@@ -21,7 +22,7 @@ The refunds module records customer refunds against orders that have **completed
 
 **Access control:** `utils/refund_access.js` — same franchise rules as orders, quotes, and partner payout.
 
-**Not in scope:** This module does **not** change `order_status` to `refunded`. Use the order update API separately if the product requires that lifecycle change.
+**On create:** `order_status` is set to **`refunded`** automatically (partial or full customer refund). Non-cancelled **service lines** are updated to **`refunded`** as well. `payment_status` becomes `partially_refund` or `refund` via payment sync.
 
 ---
 
@@ -176,7 +177,11 @@ Paginated refund history with search, date filter, and sort.
 
 ### 6.2 `GET /api/refund/eligible-orders` — create refund picker
 
-Orders where customer **completed** payments minus **refunded** payments &gt; 0 (data from `order_payment`, `payer_type: customer`).
+**Eligibility (all required):**
+
+1. `orders.order_status` is **`completed`** or **`cancelled`** (legacy numeric statuses supported).
+2. Customer **`order_payment`** net refundable &gt; 0 (`completed` − `refunded`, `payer_type: customer`).
+3. Order not deleted; franchise scope applies.
 
 **Query parameters**
 
@@ -204,9 +209,10 @@ Orders where customer **completed** payments minus **refunded** payments &gt; 0 
         "total_amount": 5000,
         "user_paid": 4500,
         "refundable_amount": 4500,
-        "admin_commission": 500,
-        "partner_wallet_balance": 1200,
+        "partner_payable_amount": 3200,
+        "admin_payable_amount": 1300,
         "payment_status": "partially_paid",
+        "order_status": "completed",
         "franchise_id": "664f00000000000000000001"
       }
     ],
@@ -223,10 +229,11 @@ Orders where customer **completed** payments minus **refunded** payments &gt; 0 
 | `_id` | Store as selected order; send as `order_id` on create |
 | `order_id` | Display in picker/table |
 | `user_paid` / `refundable_amount` | **Max refund amount** (same value; net paid available to refund) |
-| `admin_commission` | **Max** for `from_admin_commission` — main service commission **+** `additional_charges_commission` on the order |
-| `partner_wallet_balance` | **Max** for `from_partner_wallet` (0 if no partner) |
+| `partner_payable_amount` | Suggested **`from_partner_wallet`** — ledger credits for **this order only** (0 if partner was never credited on this order) |
+| `admin_payable_amount` | Suggested **`from_admin_commission`** on full refund — remainder (incl. tax); `admin_payable + partner_payable = refundable_amount` |
 | `total_amount` | Pre-fill `total_amount` on create form |
 | `payment_status` | Badge: `paid`, `partially_paid`, etc. |
+| `order_status` | Must be `completed` or `cancelled` to appear in this list |
 
 ---
 
@@ -369,8 +376,8 @@ interface SelectedEligibleOrder {
   userName: string;
   totalAmount: number;
   maxRefund: number;         // row.refundable_amount ?? row.user_paid
-  maxAdminCommission: number; // row.admin_commission
-  maxPartnerWallet: number;   // row.partner_wallet_balance
+  maxAdminPayable: number;    // row.admin_payable_amount
+  maxPartnerPayable: number;  // row.partner_payable_amount
 }
 ```
 
@@ -534,8 +541,8 @@ export interface EligibleOrderRecord {
   total_amount: number;
   user_paid: number;
   refundable_amount: number;
-  admin_commission: number;
-  partner_wallet_balance: number;
+  partner_payable_amount: number;
+  admin_payable_amount: number;
   payment_status: string;
   franchise_id?: string | null;
 }
@@ -571,7 +578,7 @@ export interface PaginatedResponse<T> {
 - [ ] Super admin / staff: optional franchise filter (`franchise_id`)
 - [ ] Create: picker uses **eligible-orders**; submit uses order `_id` not display id
 - [ ] Create: split validation client-side; show server `message` on 400
-- [ ] Create: cap amounts using eligible row (`refundable_amount`, `admin_commission`, `partner_wallet_balance`)
+- [ ] Create: cap amounts using eligible row (`refundable_amount`, `admin_payable_amount`, `partner_payable_amount`)
 - [ ] Detail: read-only **getById**; link to order via `order_mongo_id`
 - [ ] Hide module for partner (2) and customer (4) — expect 403
 - [ ] No edit/delete UI for refunds

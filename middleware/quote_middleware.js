@@ -7,6 +7,7 @@ const Franchise = require("../models/franchise");
 const Address = require("../models/address");
 const { checkObjectIdExists } = require("../validator/id_validator");
 const { QUOTE_STATUSES, normalizeQuoteStatus } = require("../enum/quote_status_enum");
+const { resolveTotalServiceCharge } = require("../utils/order_pricing");
 
 const USER_TYPE_ADMIN = 1;
 const USER_TYPE_PARTNER = 2;
@@ -19,6 +20,34 @@ const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 const MAX_QUOTE_DESCRIPTION_LEN = 1000;
 
+/** Client must not send server-computed pricing; only total_service_charge / service_price. */
+const DISALLOWED_CLIENT_PRICING_KEYS = [
+  "commission_amount",
+  "commission_percent",
+  "tax_amount",
+  "tax_percent",
+  "sub_total",
+  "total_price",
+  "minimum_deposit_amount",
+  "minimum_deposit_percent",
+  "admin_commission",
+  "discount_amount",
+  "offer_id",
+];
+
+const rejectClientComputedPricing = (body, res) => {
+  const sent = DISALLOWED_CLIENT_PRICING_KEYS.filter(
+    (key) => body[key] !== undefined
+  );
+  if (sent.length === 0) return true;
+  res.status(409).json({
+    success: false,
+    status: 409,
+    message: `Do not send server-computed pricing fields: ${sent.map(fieldLabel).join(", ")}. Send only total_service_charge (or service_price).`,
+  });
+  return false;
+};
+
 const FIELD_LABELS = {
   user_id: "Customer",
   partner_id: "Partner",
@@ -28,7 +57,8 @@ const FIELD_LABELS = {
   service_id: "Service",
   franchise_id: "Franchise",
   address_id: "Address",
-  service_price: "Service price",
+  total_service_charge: "Total service charge",
+  service_price: "Service price (alias of total service charge)",
   from_date: "From date",
   to_date: "To date",
   work_hours_per_day: "Work hours per day",
@@ -165,10 +195,24 @@ const validateCommonFields = async (body, { partial } = { partial: false }) => {
     if (!ar.exists) return { ok: false, message: ar.message };
   }
 
-  if (!partial || service_price !== undefined) {
-    const sp = parseFloat(service_price);
-    if (service_price === undefined || Number.isNaN(sp) || sp < 0) {
-      return { ok: false, message: "Service price must be a number greater than or equal to 0." };
+  const hasChargeInput =
+    body.total_service_charge !== undefined || body.service_price !== undefined;
+  if (!partial || hasChargeInput) {
+    const charge = resolveTotalServiceCharge(body, {});
+    if (!partial) {
+      if (charge === null || charge <= 0) {
+        return {
+          ok: false,
+          message:
+            "total_service_charge (or service_price) is required and must be greater than 0.",
+        };
+      }
+    } else if (hasChargeInput && (charge === null || charge <= 0)) {
+      return {
+        ok: false,
+        message:
+          "total_service_charge (or service_price) must be greater than 0.",
+      };
     }
   }
 
@@ -239,6 +283,7 @@ const validateCommonFields = async (body, { partial } = { partial: false }) => {
 };
 
 const createQuoteMiddleware = async (req, res, next) => {
+  if (!rejectClientComputedPricing(req.body, res)) return;
   const result = await validateCommonFields(req.body, { partial: false });
   if (!result.ok) {
     return res.status(409).json({
@@ -252,6 +297,7 @@ const createQuoteMiddleware = async (req, res, next) => {
 
 const updateQuoteMiddleware = async (req, res, next) => {
   const body = req.body;
+  if (!rejectClientComputedPricing(body, res)) return;
   const allowedKeys = new Set([
     "partner_id",
     "employee_id",
@@ -259,6 +305,7 @@ const updateQuoteMiddleware = async (req, res, next) => {
     "service_id",
     "franchise_id",
     "address_id",
+    "total_service_charge",
     "service_price",
     "from_date",
     "to_date",

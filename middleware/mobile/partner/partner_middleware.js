@@ -11,6 +11,11 @@ const {
   trimOptionalStringField,
 } = require('../../../utils/multipart_parser');
 const { fieldLabel } = require('../../../utils/field_labels');
+const {
+  normalizeUserEmail,
+  normalizeUserPhone,
+  checkUserContactUniqueness,
+} = require('../../../utils/user_contact_uniqueness');
 
 const MIN_NAME_LENGTH = 2;
 const MAX_NAME_LENGTH = 50;
@@ -923,7 +928,7 @@ const partnerRegisterMiddleware = async (req, res, next) => {
       message: 'Email is required.',
     });
   }
-  const normalizedEmail = String(email).trim().toLowerCase();
+  const normalizedEmail = normalizeUserEmail(email);
   if (!EMAIL_REGEX.test(normalizedEmail)) {
     return res.status(400).json({
       success: false,
@@ -934,7 +939,7 @@ const partnerRegisterMiddleware = async (req, res, next) => {
   req.body.email = normalizedEmail;
 
   const phoneRegex = /^\+?[1-9]\d{1,14}$/;
-  const normalizedPhone = String(phone_number || '').trim();
+  const normalizedPhone = normalizeUserPhone(phone_number);
   if (!normalizedPhone) {
     return res.status(400).json({
       success: false,
@@ -972,24 +977,15 @@ const partnerRegisterMiddleware = async (req, res, next) => {
   }
 
   try {
-    const existingUser = await User.findOne({
-      $or: [{ phone_number: normalizedPhone }, { email: normalizedEmail }],
-      deleted_at: null,
-    })
-      .select('email phone_number')
-      .lean();
-
-    if (existingUser) {
-      let message = 'Email or phone number already exists.';
-      if (existingUser.phone_number === normalizedPhone) {
-        message = 'Phone number already exists.';
-      } else if (existingUser.email === normalizedEmail) {
-        message = 'Email already exists.';
-      }
+    const uniqueness = await checkUserContactUniqueness({
+      email: normalizedEmail,
+      phone_number: normalizedPhone,
+    });
+    if (!uniqueness.ok) {
       return res.status(409).json({
         success: false,
         status: 409,
-        message,
+        message: uniqueness.message,
       });
     }
   } catch (err) {
@@ -1142,7 +1138,7 @@ const partnerUpdateMiddleware = async (req, res, next) => {
         message: 'Email is required.',
       });
     }
-    const normalizedEmail = String(email).trim().toLowerCase();
+    const normalizedEmail = normalizeUserEmail(email);
     if (!EMAIL_REGEX.test(normalizedEmail)) {
       return res.status(400).json({
         success: false,
@@ -1155,7 +1151,7 @@ const partnerUpdateMiddleware = async (req, res, next) => {
 
   const phoneRegex = /^\+?[1-9]\d{1,14}$/;
   if (phone_number !== undefined) {
-    const normalizedPhone = String(phone_number).trim();
+    const normalizedPhone = normalizeUserPhone(phone_number);
     if (!normalizedPhone) {
       return res.status(400).json({
         success: false,
@@ -1258,42 +1254,31 @@ const partnerUpdateMiddleware = async (req, res, next) => {
   }
 
   const partnerId = String(req.user.id);
-  const orConditions = [];
-  if (email !== undefined && EMAIL_REGEX.test(req.body.email)) {
-    orConditions.push({ email: req.body.email });
-  }
-  if (phone_number !== undefined && phoneRegex.test(req.body.phone_number)) {
-    orConditions.push({ phone_number: req.body.phone_number });
-  }
-  if (orConditions.length > 0 && mongoose.Types.ObjectId.isValid(partnerId)) {
-    try {
-      const existingUser = await User.findOne({
-        $or: orConditions,
-        deleted_at: null,
-        _id: { $ne: new mongoose.Types.ObjectId(partnerId) },
-      })
-        .select('email phone_number')
-        .lean();
-      if (existingUser) {
-        let message = 'Email or phone number already exists.';
-        if (phone_number !== undefined && existingUser.phone_number === req.body.phone_number) {
-          message = 'Phone number already exists.';
-        } else if (email !== undefined && existingUser.email === req.body.email) {
-          message = 'Email already exists.';
+  if (mongoose.Types.ObjectId.isValid(partnerId)) {
+    const contactEmail = email !== undefined ? req.body.email : undefined;
+    const contactPhone = phone_number !== undefined ? req.body.phone_number : undefined;
+    if (contactEmail !== undefined || contactPhone !== undefined) {
+      try {
+        const uniqueness = await checkUserContactUniqueness({
+          email: contactEmail,
+          phone_number: contactPhone,
+          excludeUserId: partnerId,
+        });
+        if (!uniqueness.ok) {
+          return res.status(409).json({
+            success: false,
+            status: 409,
+            message: uniqueness.message,
+          });
         }
-        return res.status(409).json({
+      } catch (err) {
+        console.error('partnerUpdateMiddleware duplicate check', err.message);
+        return res.status(500).json({
           success: false,
-          status: 409,
-          message,
+          status: 500,
+          message: 'Internal server error.',
         });
       }
-    } catch (err) {
-      console.error('partnerUpdateMiddleware duplicate check', err.message);
-      return res.status(500).json({
-        success: false,
-        status: 500,
-        message: 'Internal server error.',
-      });
     }
   }
 

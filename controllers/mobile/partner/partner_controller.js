@@ -23,10 +23,11 @@ const register = async (req, res) => {
     });
   } catch (error) {
     console.error('mobile partner register', error.message);
-    return res.status(500).json({
+    const status = Number(error.status) || 500;
+    return res.status(status).json({
       success: false,
-      status: 500,
-      message: 'Internal server error.',
+      status,
+      message: status === 409 ? error.message : 'Internal server error.',
     });
   }
 };

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getAll, create,update,cancleOrder,serviceUpdate,  getById,  deleteOrder,cancleService,getCustomerOrder, downloadOrderInvoice, sendInvoiceEmail} = require('../controllers/order_controller');
+const { getAll, create,update,cancleOrder,serviceUpdate,  getById, /* deleteOrder, */ cancleService,getCustomerOrder, downloadOrderInvoice, sendInvoiceEmail} = require('../controllers/order_controller');
 const {
     getFinancialPaymentsAll,
     getFinancialPaymentById,
@@ -25,7 +25,8 @@ router.put('/update/:id',authMiddleware,updateOrderMiddleware,update);
 router.put('/serviceUpdate/:id',authMiddleware,updateOrderServiceMiddleware,serviceUpdate);
 router.put('/cancleService/:id',authMiddleware,cancleService);
 router.put('/cancle/:id',authMiddleware,cancleOrder);
-router.delete('/delete/:id',authMiddleware, deleteOrder);
+// Disabled until needed — uncomment deleteOrder import above when re-enabling.
+// router.delete('/delete/:id', authMiddleware, deleteOrder);
 router.get('/invoice/:id', authMiddleware, downloadOrderInvoice);
 router.post('/send-invoice-email', authMiddleware, uploadPdf.single('file'), sendInvoiceEmail);
 module.exports = router;

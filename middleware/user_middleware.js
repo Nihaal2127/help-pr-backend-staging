@@ -12,6 +12,11 @@ const {
 } = require("../utils/multipart_parser");
 const { fieldLabel } = require("../utils/field_labels");
 const { isValidGender, normalizeGender } = require("../enum/gender_enum");
+const {
+  normalizeUserEmail,
+  normalizeUserPhone,
+  checkUserContactUniqueness,
+} = require("../utils/user_contact_uniqueness");
 
 const MIN_USER_AGE_YEARS = 18;
 const MIN_NAME_LENGTH = 2;
@@ -145,6 +150,7 @@ const validateAccessibleScreens = (items, res) => {
   return true;
 };
 
+/** Web user creation for all types (admin, partner, employee, customer, super admin, staff). */
 const isUserCreateRoute = (req) =>
   String(req.baseUrl || '') === '/api/user' &&
   (String(req.path || '') === '/create' || String(req.path || '') === '/register-partner');
@@ -754,27 +760,19 @@ const createUserMiddleware = async (req, res, next) => {
       message: 'Invalid phone number format.'
     });
   }
+  req.body.email = normalizeUserEmail(email);
+  req.body.phone_number = normalizeUserPhone(phone_number);
   if (isUserCreateRoute(req)) {
     try {
-      const existingUser = await User.findOne({
-        $or: [{ phone_number }, { email }],
-        deleted_at: null,
-      })
-        .select('email phone_number')
-        .lean();
-      if (existingUser) {
-        let message = '';
-        if (existingUser.phone_number === phone_number) {
-          message = 'Phone number already exists.';
-        } else if (existingUser.email === email) {
-          message = 'Email already exists.';
-        } else {
-          message = 'Email or phone number already exists.';
-        }
+      const uniqueness = await checkUserContactUniqueness({
+        email: req.body.email,
+        phone_number: req.body.phone_number,
+      });
+      if (!uniqueness.ok) {
         return res.status(409).json({
           success: false,
           status: 409,
-          message,
+          message: uniqueness.message,
         });
       }
     } catch (err) {
@@ -1173,42 +1171,32 @@ const updateUserMiddleware = async (req, res, next) => {
       message: 'Invalid phone number format.'
     });
   }
+  if (email !== undefined) {
+    req.body.email = normalizeUserEmail(email);
+  }
+  if (phone_number !== undefined) {
+    req.body.phone_number = normalizeUserPhone(phone_number);
+  }
 
   if (isUserUpdateRoute(req)) {
     const userId = req.params?.id != null ? String(req.params.id).trim() : '';
-    const orConditions = [];
-    if (email !== undefined && String(email).trim() !== '' && emailRegex.test(email)) {
-      orConditions.push({ email });
-    }
+    const contactEmail = email !== undefined ? req.body.email : undefined;
+    const contactPhone = phone_number !== undefined ? req.body.phone_number : undefined;
     if (
-      phone_number !== undefined &&
-      String(phone_number).trim() !== '' &&
-      phoneRegex.test(phone_number)
+      mongoose.Types.ObjectId.isValid(userId) &&
+      (contactEmail !== undefined || contactPhone !== undefined)
     ) {
-      orConditions.push({ phone_number });
-    }
-    if (orConditions.length > 0 && mongoose.Types.ObjectId.isValid(userId)) {
       try {
-        const existingUser = await User.findOne({
-          $or: orConditions,
-          deleted_at: null,
-          _id: { $ne: new mongoose.Types.ObjectId(userId) },
-        })
-          .select('email phone_number')
-          .lean();
-        if (existingUser) {
-          let message = '';
-          if (phone_number !== undefined && existingUser.phone_number === phone_number) {
-            message = 'Phone number already exists.';
-          } else if (email !== undefined && existingUser.email === email) {
-            message = 'Email already exists.';
-          } else {
-            message = 'Email or phone number already exists.';
-          }
+        const uniqueness = await checkUserContactUniqueness({
+          email: contactEmail,
+          phone_number: contactPhone,
+          excludeUserId: userId,
+        });
+        if (!uniqueness.ok) {
           return res.status(409).json({
             success: false,
             status: 409,
-            message,
+            message: uniqueness.message,
           });
         }
       } catch (err) {

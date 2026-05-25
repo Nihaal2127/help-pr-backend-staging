@@ -13,6 +13,11 @@ const { createMultiple } = require('../../../controllers/partner_document_contro
 const { handleImageUpload } = require('../../../helper/image_uploader');
 const { getUploadType } = require('../../../enum/upload_type_enum');
 const { replacePartnerCatalogFromNormalizedRows } = require('../../../services/partner_category_service');
+const {
+  normalizeUserEmail,
+  normalizeUserPhone,
+  checkUserContactUniqueness,
+} = require('../../../utils/user_contact_uniqueness');
 const DEFAULT_PARTNER_PLAN_NAME = 'basic';
 
 const USER_TYPE_PARTNER = 2;
@@ -578,6 +583,18 @@ async function replacePartnerBankAccountsForPartner(partnerId, normalizedAccount
 }
 
 const registerPartner = async ({ name, email, phone_number, password, date_of_birth }) => {
+  const normalizedEmail = normalizeUserEmail(email);
+  const normalizedPhone = normalizeUserPhone(phone_number);
+  const uniqueness = await checkUserContactUniqueness({
+    email: normalizedEmail,
+    phone_number: normalizedPhone,
+  });
+  if (!uniqueness.ok) {
+    const err = new Error(uniqueness.message);
+    err.status = 409;
+    throw err;
+  }
+
   const registration_id = await getNewId(0);
   const user_id = await getNewId(USER_TYPE_PARTNER);
   const _id = new mongoose.Types.ObjectId();
@@ -587,8 +604,8 @@ const registerPartner = async ({ name, email, phone_number, password, date_of_bi
     registration_id,
     user_id,
     name,
-    email,
-    phone_number,
+    email: normalizedEmail,
+    phone_number: normalizedPhone,
     date_of_birth,
     type: USER_TYPE_PARTNER,
     registration_type: REGISTRATION_TYPE_NORMAL,

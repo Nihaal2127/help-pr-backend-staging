@@ -508,7 +508,7 @@ const registerPartner = async ({ name, email, phone_number, password, date_of_bi
 const loginPartner = async ({ email, password, device_token }) => {
   const user = await User.findOne({ email, deleted_at: null }).select('+password');
   if (!user) {
-    return { ok: false, status: 401, message: 'Invalid credentials.' };
+    return { ok: false, status: 401, message: 'Invalid email.' };
   }
 
   if (Number(user.type) !== USER_TYPE_PARTNER) {
@@ -539,7 +539,7 @@ const loginPartner = async ({ email, password, device_token }) => {
 
   const isPasswordMatch = await user.comparePassword(password);
   if (!isPasswordMatch) {
-    return { ok: false, status: 401, message: 'Invalid credentials.' };
+    return { ok: false, status: 401, message: 'Invalid password.' };
   }
 
   const token = user.generateAuthToken();

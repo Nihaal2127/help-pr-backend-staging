@@ -339,12 +339,9 @@ POST /api/refund/create
 
 ## Order detail & list
 
-`GET /api/order/getAll` and `GET /api/order/get/:id` include refund data on each order:
+`GET /api/order/get/:id` and `GET /api/order/getAll` include **`refunds`** on each order (array of `order_refund` records, newest first, same shape as refund getAll rows).
 
-| Field | Description |
-|-------|-------------|
-| `refunds` | Array of `order_refund` records for the order (newest first), same shape as refund getAll rows |
-| `refund_summary` | `refund_count`, `total_refunded_amount`, `refundable_amount`, `customer_paid_amount`, `partner_payable_amount`, `admin_payable_amount`, `total_from_partner_wallet`, `total_from_admin_commission` |
+**`GET /api/order/getAll`** also includes **`refund_summary`** per row: `refund_count`, `total_refunded_amount`, `refundable_amount`, `customer_paid_amount`, `partner_payable_amount`, `admin_payable_amount`, `total_from_partner_wallet`, `total_from_admin_commission`.
 
 Order-level payment rollups (`customer_refunded_amount`, `customer_net_paid`, `payment_status`) remain on the order root.
 

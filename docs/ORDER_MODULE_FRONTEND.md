@@ -459,9 +459,8 @@ Processing order: **delete → update → create** for each resource. Charges tr
 - **`order_payments`**: array from `order_payment`
 - **`order_offer`**: offer snapshot (`total_discount`, contribution breakdown) when an offer was applied
 - **`refunds`**: array of `order_refund` rows for this order (newest first) — see **`docs/REFUND_API.md`**
-- **`refund_summary`**: rollup (`total_refunded_amount`, `refundable_amount`, `partner_payable_amount`, `admin_payable_amount`, etc.)
 
-**`GET /api/order/getAll`** includes the same **`refunds`** and **`refund_summary`** on each list row.
+**`GET /api/order/getAll`** includes **`refunds`** and **`refund_summary`** (rollup: `total_refunded_amount`, `refundable_amount`, `partner_payable_amount`, `admin_payable_amount`, etc.) on each list row.
 
 ---
 

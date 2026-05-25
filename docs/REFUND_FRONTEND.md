@@ -22,7 +22,7 @@ The refunds module records customer refunds against orders that have **completed
 
 **Access control:** `utils/refund_access.js` — same franchise rules as orders, quotes, and partner payout.
 
-**Not in scope:** This module does **not** change `order_status` to `refunded`. Use the order update API separately if the product requires that lifecycle change.
+**On create:** `order_status` is set to **`refunded`** automatically (partial or full customer refund). Non-cancelled **service lines** are updated to **`refunded`** as well. `payment_status` becomes `partially_refund` or `refund` via payment sync.
 
 ---
 

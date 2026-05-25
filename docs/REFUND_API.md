@@ -315,7 +315,9 @@ POST /api/refund/create
 | `is_paid` | `true` only when status is `paid` |
 | `partner_payment_status`, `partner_paid_amount`, `partner_due_amount` | Recalculated |
 
-**Not updated today:** `order_status`, `admin_earning`.
+**`order_status`:** Set to **`refunded`** automatically on create (partial or full refund). Service lines (non-cancelled) also move to **`refunded`**.
+
+**Not updated:** `admin_earning`.
 
 ---
 

@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Order = require('../models/order');
+const OrderService = require('../models/order_services');
 const OrderPayment = require('../models/order_payment');
 const OrderRefund = require('../models/order_refund');
 const User = require('../models/user');
@@ -14,8 +15,11 @@ const { sanitizeInput } = require('../validator/search_keyword_validator');
 const {
     ORDER_STATUS_COMPLETED,
     ORDER_STATUS_CANCELLED,
+    ORDER_STATUS_REFUNDED,
     buildOrderStatusMatchValues,
     normalizeOrderStatus,
+    touchOrderStatusInfo,
+    clearPendingAmountsForTerminalOrder,
 } = require('../enum/order_status_enum');
 
 /** Canonical + legacy numeric values for completed and cancelled (refund-eligible lifecycle). */
@@ -512,6 +516,33 @@ const getRefundById = async (refundId) => {
     }
 };
 
+/**
+ * After a refund is recorded: set order lifecycle to refunded and align service lines.
+ * Applies for partial or full customer refunds.
+ */
+const applyOrderRefundedStatus = async (orderId) => {
+    const order = await Order.findOne({ _id: orderId, deleted_at: null });
+    if (!order) return null;
+
+    order.order_status = ORDER_STATUS_REFUNDED;
+    touchOrderStatusInfo(order, ORDER_STATUS_REFUNDED);
+    clearPendingAmountsForTerminalOrder(order);
+    order.updated_at = new Date();
+    await order.save();
+
+    if (order.service_items?.length) {
+        await OrderService.updateMany(
+            {
+                _id: { $in: order.service_items },
+                service_status: { $nin: [ORDER_STATUS_CANCELLED, ORDER_STATUS_REFUNDED] },
+            },
+            { $set: { service_status: ORDER_STATUS_REFUNDED, updated_at: new Date() } }
+        );
+    }
+
+    return order;
+};
+
 const createRefund = async (body, createdById = null) => {
     try {
         const pOrder = parseObjectId(body.order_id, 'order_id');
@@ -642,6 +673,8 @@ const createRefund = async (body, createdById = null) => {
             updated_at: now,
         });
 
+        await syncOrderPaymentStatus(order._id);
+        await applyOrderRefundedStatus(order._id);
         await syncOrderPaymentStatus(order._id);
         await syncAllPartnerOrderPaymentsForOrder(order._id);
 

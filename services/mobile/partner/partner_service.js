@@ -977,7 +977,7 @@ const updatePartner = async ({ partnerId, body, files, section = PARTNER_UPDATE_
     updateData.account_number !== undefined ||
     updateData.ifsc_code !== undefined;
 
-  if (!isVerificationApproved && (runBanks || hasBankPayload || hasCatalogPayload)) {
+  if (!isVerificationApproved && (hasBankPayload || hasCatalogPayload)) {
     return { ok: false, status: 403, message: restrictedUntilApprovedMessage };
   }
 

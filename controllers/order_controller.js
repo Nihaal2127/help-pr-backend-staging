@@ -25,7 +25,7 @@ const {
   ORDER_STATUSES,
   isOrderStatusWithNoPendingAmounts,
   normalizeOrderStatus,
-  buildOrderManagementStatusQueryFilter,
+  buildOrderStatusQueryFilter,
   getOrderStatusLabel,
   touchOrderStatusInfo,
 } = require('../enum/order_status_enum');
@@ -284,7 +284,7 @@ const ORDER_SORT_WHITELIST = new Set([
 
 const resolveOrderListStatusFilter = (orderStatusParam) =>
   resolveListStatusFilter(orderStatusParam, {
-    buildFilter: (raw) => buildOrderManagementStatusQueryFilter(raw),
+    buildFilter: (raw) => buildOrderStatusQueryFilter(raw),
     invalidMessage: `Invalid order_status. Use one of: ${ORDER_STATUSES.join(', ')}.`,
   });
 
@@ -866,7 +866,6 @@ const update = async (req, res) => {
 
     if (isOrderStatusWithNoPendingAmounts(updatedOrder.order_status)) {
       await syncOrderPaymentStatus(updatedOrder._id);
-      await syncAllPartnerOrderPaymentsForOrder(updatedOrder._id);
       updatedOrder = await Order.findById(updatedOrder._id);
     }
 

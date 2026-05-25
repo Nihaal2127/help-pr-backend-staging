@@ -247,7 +247,7 @@ async function resolveOrderByIdParam(id) {
   });
 }
 
-async function loadOrderDetailLean(orderMongoId) {
+async function loadOrderDetailLean(orderMongoId, options = {}) {
   const populatedOrderData = await Order.findById(orderMongoId).populate(ORDER_DETAIL_POPULATE).lean();
   if (!populatedOrderData) return null;
   const [additional_charges, order_payments, order_offer] = await Promise.all([
@@ -263,7 +263,7 @@ async function loadOrderDetailLean(orderMongoId) {
     order_payments,
     order_offer
   );
-  const [withRefunds] = await attachRefundsToOrderRecords([shaped]);
+  const [withRefunds] = await attachRefundsToOrderRecords([shaped], options);
   return withRefunds;
 }
 
@@ -1449,7 +1449,7 @@ const getById = async (req, res) => {
       });
     }
 
-    const record = await loadOrderDetailLean(order._id);
+    const record = await loadOrderDetailLean(order._id, { includeRefundSummary: false });
     if (!record) {
       return res.status(404).json({
         success: false,

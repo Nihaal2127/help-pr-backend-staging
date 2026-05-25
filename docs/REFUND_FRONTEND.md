@@ -105,7 +105,7 @@ Bind columns from **`GET /getAll`** → `data.records[]`:
 | Total Amount | `total_amount` | Order total at refund time |
 | User Paid | `user_paid` | Completed customer payments sum at refund time |
 | Refund Amount | `refund_amount` | Amount refunded in this record |
-| From Admin Commission | `from_admin_commission` | Portion taken from admin commission |
+| From Admin Commission | `from_admin_commission` | Admin portion of refund (commission + tax + remainder; not capped at `admin_commission` only) |
 | From Partner Wallet | `from_partner_wallet` | Portion debited from partner wallet |
 | Date | `date` | `YYYY-MM-DD` (from `refund_date`) |
 
@@ -315,7 +315,7 @@ from_admin_commission + from_partner_wallet === refund_amount
 | Rule | Error example |
 |------|----------------|
 | `refund_amount` ≤ refundable balance | `refund_amount exceeds refundable balance (4500).` |
-| `from_admin_commission` ≤ order `admin_commission` | `from_admin_commission exceeds order admin commission (500).` |
+| `from_admin_commission` ≤ `refund_amount −` partner clawback for this order | `from_admin_commission exceeds admin payable for this refund (750).` |
 | `from_partner_wallet` ≤ partner wallet balance | `from_partner_wallet exceeds partner wallet balance (1200).` |
 | Order has no partner and `from_partner_wallet` > 0 | `Order has no partner; from_partner_wallet must be 0.` |
 

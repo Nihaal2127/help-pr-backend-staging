@@ -11787,7 +11787,7 @@
                 "create"
               ]
             },
-            "description": "**POST /api/refund/create** — Record refund (append-only).\n\n**Doc:** `docs/REFUND_API.md` §4 (request body → DB updates)\n\n**Required:** `order_id` (Mongo from eligible-orders), `refund_amount`, `date`\n**Optional:** `from_admin_commission`, `from_partner_wallet`, `notes`, `payment_method`, `transaction_reference`\n**Split:** `from_admin_commission + from_partner_wallet` = `refund_amount`\n**Cap:** `refund_amount` ≤ customer net paid (not order total)\n\n**Writes:** `order_payment` (refunded), `order_refund`, optional partner ledger debit; syncs order `payment_status`.\n\nTest script sets `refundMongoId` on 201."
+            "description": "**POST /api/refund/create** — Record refund (append-only).\n\n**Doc:** `docs/REFUND_API.md` §4 (request body → DB updates)\n\n**Required:** `order_id` (Mongo from eligible-orders), `refund_amount`, `date`\n**Optional:** `from_admin_commission`, `from_partner_wallet`, `notes`, `payment_method`, `transaction_reference`\n**Split:** `from_admin_commission + from_partner_wallet` = `refund_amount`\n**Caps:** `refund_amount` ≤ net paid; `from_partner_wallet` ≤ ledger credits for this order; `from_admin_commission` ≤ remainder (incl. tax, not commission-only)\n\n**Writes:** `order_payment` (refunded), `order_refund`, optional partner ledger debit; syncs order `payment_status`.\n\nTest script sets `refundMongoId` on 201."
           },
           "description": "\n\n_Source: builtin:refund → Order refunds_"
         }

@@ -335,7 +335,7 @@ const hasNonEmptyPartnerCatalogPayload = (body) => {
 };
 
 const RESTRICTED_UNTIL_APPROVED_MESSAGE =
-  'Catalog, services, and bank details can only be updated after your account is verified and approved.';
+  'Category and services can only be updated after your account is verified and approved.';
 
 const assertPartnerApprovedForRestrictedUpdates = (req, res, section, verificationStatus) => {
   if (Number(verificationStatus) === PARTNER_VERIFICATION_STATUS_APPROVED) {

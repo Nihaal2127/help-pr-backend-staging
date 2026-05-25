@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-mobile-apis-only",
     "name": "Help PR — Mobile APIs only",
-    "description": "Postman collection for **`/api/mobile/*`** (partner app).\n\n## Suggested test order\n1. **Location** (no auth): States → Cities → Areas → Pincodes\n2. **Register** or **Login** → saves `{{token}}`, `{{email}}`\n3. **Update partner (full)** → location + files + bank + services → sets `franchise_id`\n4. **Catalog** (Bearer): Categories → Services → saves `{{categoryId}}`, `{{serviceId}}`, `{{serviceId2}}`\n5. **Update partner (multiple banks & services)** — optional retest with catalog IDs\n\n## Response shapes\n- Location & catalog: `{ success, status, message, records }`\n- Register / login / update: `{ success, status, message, data }`\n- Errors: `{ success: false, status, message }` (no `errors` object)\n\n## Login errors (401)\n- Wrong email: `Invalid email.`\n- Wrong password: `Invalid password.`\n\n## bank_account (update)\n- **Single object** → upsert one account (others kept)\n- **JSON array** → replace all partner bank accounts\n\n## partner_services (update)\n- Nested: `[{ category_id, services: [{ service_id, description, price }] }]`\n- Multiple services under same category: add more objects in `services[]`",
+    "description": "Postman collection for **`/api/mobile/*`** (partner app).\n\n## Suggested test order\n1. **Location** → States → Cities → Areas → Pincodes\n2. **Register** or **Login**\n3. **Update → Basic details** → profile, location, `partner_services` (sets `franchise_id`)\n4. **Catalog** → Categories → Services\n5. **Update → Documents verification** → upload verification files\n6. **Update → Bank accounts** → one or more bank accounts\n\nOr use **Update → Full update (PUT /update)** for complete onboarding payload in one call.\n\n## Update endpoints\n| Endpoint | Purpose |\n|----------|--------|\n| `PUT /update/basic-details` | Profile, location, `partner_services`, optional `image` |\n| `PUT /update/documents` | Verification files only (`aadhar_card`, `pan_card`, etc.) |\n| `PUT /update/bank-accounts` | `bank_account` JSON (array replaces all; object upserts one) |\n| `PUT /update` | All of the above in one request |\n\nErrors: `{ success: false, status, message }` only.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -286,109 +286,6 @@
           ]
         },
         {
-          "name": "Update partner (full onboarding)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "try {",
-                  "  const j = pm.response.json();",
-                  "  const t = j?.data?.auth_token;",
-                  "  if (t) {",
-                  "    pm.collectionVariables.set('token', t);",
-                  "    pm.collectionVariables.set('accessToken', t);",
-                  "  }",
-                  "} catch (e) {}"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "auth": {
-              "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
-            },
-            "method": "PUT",
-            "header": [{ "key": "Accept", "value": "application/json" }],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "gender",
-                  "value": "female",
-                  "type": "text",
-                  "description": "male | female | other"
-                },
-                {
-                  "key": "experience",
-                  "value": "2 years",
-                  "type": "text"
-                },
-                {
-                  "key": "state_id",
-                  "value": "{{stateId}}",
-                  "type": "text",
-                  "description": "24-hex ObjectId from States"
-                },
-                {
-                  "key": "city_id",
-                  "value": "{{cityId}}",
-                  "type": "text"
-                },
-                {
-                  "key": "area_id",
-                  "value": "{{areaId}}",
-                  "type": "text"
-                },
-                {
-                  "key": "pincode",
-                  "value": "{{pincode}}",
-                  "type": "text",
-                  "description": "String from Pincodes API"
-                },
-                {
-                  "key": "address",
-                  "value": "12 MG Road, Hyderabad",
-                  "type": "text"
-                },
-                {
-                  "key": "bank_account",
-                  "value": "[{\"bank_name\":\"HDFC Bank\",\"branch_name\":\"Madhapur\",\"account_holder_name\":\"Neha Sharma\",\"account_number\":\"123456789012\",\"ifsc_code\":\"HDFC0001234\",\"is_primary\":true},{\"bank_name\":\"SBI\",\"branch_name\":\"Gachibowli\",\"account_holder_name\":\"Neha Sharma\",\"account_number\":\"987654321098\",\"ifsc_code\":\"SBIN0001234\",\"is_primary\":false}]",
-                  "type": "text",
-                  "description": "JSON array = replace all banks. Single object = upsert one."
-                },
-                {
-                  "key": "partner_services",
-                  "value": "[{\"category_id\":\"{{categoryId}}\",\"services\":[{\"service_id\":\"{{serviceId}}\",\"description\":\"Home cleaning\",\"price\":499}]}]",
-                  "type": "text",
-                  "description": "Use catalog IDs after Categories/Services, or valid 24-hex test IDs"
-                },
-                {
-                  "key": "image",
-                  "type": "file",
-                  "src": [],
-                  "description": "Required on first full update — max 512 KB"
-                },
-                {
-                  "key": "aadhar_card",
-                  "type": "file",
-                  "src": [],
-                  "description": "Required on first full update — JPEG/PNG/PDF, max 10 MB"
-                }
-              ]
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/mobile/partner/update",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "mobile", "partner", "update"]
-            },
-            "description": "**PUT /api/mobile/partner/update** — first-time onboarding\n\n- **multipart/form-data** (do not set Content-Type manually)\n- **Bearer** `{{token}}`\n\nSets `users.franchise_id` from state/city/area.\n\n**bank_account:** JSON **array** in this example (2 accounts). Use a **single object** to upsert one account only.\n\n**partner_services:** If `{{categoryId}}` / `{{serviceId}}` are empty, run Catalog after this update, then use **Update partner (multiple banks & services)**.\n\nSelect **image** and **aadhar_card** files before Send."
-          },
-          "response": []
-        },
-        {
           "name": "Catalog",
           "description": "Bearer required. Run **after** full Update (partner needs `franchise_id`). Order: Categories → Services.",
           "item": [
@@ -470,86 +367,369 @@
           ]
         },
         {
-          "name": "Update partner (multiple banks & services)",
-          "event": [
+          "name": "Update",
+          "description": "Partner profile update split by use case. All use **multipart/form-data** + **Bearer** `{{token}}`. Wrong fields for an endpoint return **400** `Field \"x\" is not allowed on this update endpoint.`",
+          "item": [
             {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "try {",
-                  "  const j = pm.response.json();",
-                  "  const t = j?.data?.auth_token;",
-                  "  if (t) {",
-                  "    pm.collectionVariables.set('token', t);",
-                  "    pm.collectionVariables.set('accessToken', t);",
-                  "  }",
-                  "} catch (e) {}"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "auth": {
-              "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
-            },
-            "method": "PUT",
-            "header": [{ "key": "Accept", "value": "application/json" }],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
+              "name": "Basic details",
+              "event": [
                 {
-                  "key": "bank_account",
-                  "value": "[{\"bank_name\":\"HDFC Bank\",\"branch_name\":\"Madhapur\",\"account_holder_name\":\"Neha Sharma\",\"account_number\":\"123456789012\",\"ifsc_code\":\"HDFC0001234\",\"is_primary\":true},{\"bank_name\":\"SBI\",\"branch_name\":\"Gachibowli\",\"account_holder_name\":\"Neha Sharma\",\"account_number\":\"987654321098\",\"ifsc_code\":\"SBIN0001234\",\"is_primary\":false}]",
-                  "type": "text",
-                  "description": "JSON array replaces all bank accounts"
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  const t = j?.data?.auth_token;",
+                      "  if (t) {",
+                      "    pm.collectionVariables.set('token', t);",
+                      "    pm.collectionVariables.set('accessToken', t);",
+                      "  }",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
                 },
+                "method": "PUT",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    { "key": "gender", "value": "female", "type": "text" },
+                    { "key": "experience", "value": "2 years", "type": "text" },
+                    { "key": "state_id", "value": "{{stateId}}", "type": "text" },
+                    { "key": "city_id", "value": "{{cityId}}", "type": "text" },
+                    { "key": "area_id", "value": "{{areaId}}", "type": "text" },
+                    { "key": "pincode", "value": "{{pincode}}", "type": "text" },
+                    { "key": "address", "value": "12 MG Road, Hyderabad", "type": "text" },
+                    {
+                      "key": "partner_services",
+                      "value": "[{\"category_id\":\"{{categoryId}}\",\"services\":[{\"service_id\":\"{{serviceId}}\",\"description\":\"Home cleaning\",\"price\":499},{\"service_id\":\"{{serviceId2}}\",\"description\":\"Deep cleaning\",\"price\":799}]}]",
+                      "type": "text",
+                      "description": "Run Catalog first for IDs. Multiple services: add more in services[]"
+                    },
+                    { "key": "image", "type": "file", "src": [], "description": "Profile photo — max 512 KB" },
+                    { "key": "name", "value": "Neha Sharma", "type": "text", "disabled": true },
+                    { "key": "email", "value": "{{email}}", "type": "text", "disabled": true },
+                    { "key": "phone_number", "value": "+916309654123", "type": "text", "disabled": true },
+                    { "key": "date_of_birth", "value": "2003-05-23", "type": "text", "disabled": true }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/update/basic-details",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "update", "basic-details"]
+                },
+                "description": "**PUT /api/mobile/partner/update/basic-details**\n\nProfile, location (sets `franchise_id`), `partner_services`, optional `image`.\n\nDoes **not** accept bank or document file fields."
+              },
+              "response": []
+            },
+            {
+              "name": "Documents verification",
+              "event": [
                 {
-                  "key": "partner_services",
-                  "value": "[{\"category_id\":\"{{categoryId}}\",\"services\":[{\"service_id\":\"{{serviceId}}\",\"description\":\"Home cleaning\",\"price\":499},{\"service_id\":\"{{serviceId2}}\",\"description\":\"Deep cleaning\",\"price\":799}]}]",
-                  "type": "text",
-                  "description": "Multiple services under one category — run Services first for serviceId2"
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  const t = j?.data?.auth_token;",
+                      "  if (t) {",
+                      "    pm.collectionVariables.set('token', t);",
+                      "    pm.collectionVariables.set('accessToken', t);",
+                      "  }",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
                 }
-              ]
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "PUT",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "aadhar_card",
+                      "type": "file",
+                      "src": [],
+                      "description": "Required — JPEG/PNG/PDF, max 10 MB"
+                    },
+                    { "key": "pan_card", "type": "file", "src": [], "disabled": true },
+                    { "key": "driving_license", "type": "file", "src": [], "disabled": true },
+                    { "key": "vehicle_registration", "type": "file", "src": [], "disabled": true },
+                    { "key": "police_verification_certificate", "type": "file", "src": [], "disabled": true }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/update/documents",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "update", "documents"]
+                },
+                "description": "**PUT /api/mobile/partner/update/documents**\n\nUpload at least one file: `aadhar_card`, `pan_card`, `driving_license`, `vehicle_registration`, `police_verification_certificate`.\n\nDoes **not** accept `partner_documents` JSON or profile/location/bank fields."
+              },
+              "response": []
             },
-            "url": {
-              "raw": "{{baseUrl}}/api/mobile/partner/update",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "mobile", "partner", "update"]
-            },
-            "description": "**PUT /api/mobile/partner/update** — partial (catalog + banks)\n\nRun **after** Categories + Services so `{{categoryId}}`, `{{serviceId}}`, `{{serviceId2}}` are set.\n\n- **bank_account** array → replaces all accounts in `bank_account` collection\n- **partner_services** → multiple services in one category\n\nNo files required for this partial update."
-          },
-          "response": []
-        },
-        {
-          "name": "Update partner (single bank upsert)",
-          "request": {
-            "auth": {
-              "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
-            },
-            "method": "PUT",
-            "header": [{ "key": "Accept", "value": "application/json" }],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
+            {
+              "name": "Bank accounts",
+              "event": [
                 {
-                  "key": "bank_account",
-                  "value": "{\"bank_name\":\"HDFC Bank\",\"branch_name\":\"Madhapur\",\"account_holder_name\":\"Neha Sharma\",\"account_number\":\"123456789012\",\"ifsc_code\":\"HDFC0001234\",\"is_primary\":true}",
-                  "type": "text",
-                  "description": "Single object upserts by account_number; does not delete other banks"
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  const t = j?.data?.auth_token;",
+                      "  if (t) {",
+                      "    pm.collectionVariables.set('token', t);",
+                      "    pm.collectionVariables.set('accessToken', t);",
+                      "  }",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
                 }
-              ]
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "PUT",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "bank_account",
+                      "value": "[{\"bank_name\":\"HDFC Bank\",\"branch_name\":\"Madhapur\",\"account_holder_name\":\"Neha Sharma\",\"account_number\":\"123456789012\",\"ifsc_code\":\"HDFC0001234\",\"is_primary\":true},{\"bank_name\":\"SBI\",\"branch_name\":\"Gachibowli\",\"account_holder_name\":\"Neha Sharma\",\"account_number\":\"987654321098\",\"ifsc_code\":\"SBIN0001234\",\"is_primary\":false}]",
+                      "type": "text",
+                      "description": "JSON array = replace all. Single object = upsert one (use separate request below)."
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/update/bank-accounts",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "update", "bank-accounts"]
+                },
+                "description": "**PUT /api/mobile/partner/update/bank-accounts**\n\n**Required:** `bank_account` (JSON array or single object).\n\nArray replaces all partner bank rows. Object upserts by `account_number`."
+              },
+              "response": []
             },
-            "url": {
-              "raw": "{{baseUrl}}/api/mobile/partner/update",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "mobile", "partner", "update"]
+            {
+              "name": "Bank accounts (single upsert)",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "PUT",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "bank_account",
+                      "value": "{\"bank_name\":\"HDFC Bank\",\"branch_name\":\"Madhapur\",\"account_holder_name\":\"Neha Sharma\",\"account_number\":\"123456789012\",\"ifsc_code\":\"HDFC0001234\",\"is_primary\":true}",
+                      "type": "text"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/update/bank-accounts",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "update", "bank-accounts"]
+                },
+                "description": "Single **object** on `bank-accounts` endpoint — upserts one account; keeps other accounts."
+              },
+              "response": []
             },
-            "description": "**PUT /api/mobile/partner/update** — single bank object (upsert one account, keep others)"
-          },
-          "response": []
+            {
+              "name": "Full update (PUT /update)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  const t = j?.data?.auth_token;",
+                      "  if (t) {",
+                      "    pm.collectionVariables.set('token', t);",
+                      "    pm.collectionVariables.set('accessToken', t);",
+                      "  }",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "PUT",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "gender",
+                      "value": "female",
+                      "type": "text",
+                      "description": "Required for onboarding — male | female | other"
+                    },
+                    {
+                      "key": "experience",
+                      "value": "2 years",
+                      "type": "text",
+                      "description": "Required for onboarding"
+                    },
+                    {
+                      "key": "state_id",
+                      "value": "{{stateId}}",
+                      "type": "text",
+                      "description": "Required — 24-hex ObjectId (Location → States)"
+                    },
+                    {
+                      "key": "city_id",
+                      "value": "{{cityId}}",
+                      "type": "text",
+                      "description": "Required — 24-hex ObjectId (Location → Cities)"
+                    },
+                    {
+                      "key": "area_id",
+                      "value": "{{areaId}}",
+                      "type": "text",
+                      "description": "Required — 24-hex ObjectId (Location → Areas)"
+                    },
+                    {
+                      "key": "pincode",
+                      "value": "{{pincode}}",
+                      "type": "text",
+                      "description": "Required — string from Pincodes API"
+                    },
+                    {
+                      "key": "address",
+                      "value": "12 MG Road, Hyderabad",
+                      "type": "text",
+                      "description": "Required for onboarding"
+                    },
+                    {
+                      "key": "partner_services",
+                      "value": "[{\"category_id\":\"{{categoryId}}\",\"services\":[{\"service_id\":\"{{serviceId}}\",\"description\":\"Home cleaning\",\"price\":499},{\"service_id\":\"{{serviceId2}}\",\"description\":\"Deep cleaning\",\"price\":799}]}]",
+                      "type": "text",
+                      "description": "Required — nested JSON. Run Catalog for {{categoryId}}, {{serviceId}}, {{serviceId2}}"
+                    },
+                    {
+                      "key": "bank_account",
+                      "value": "[{\"bank_name\":\"HDFC Bank\",\"branch_name\":\"Madhapur\",\"account_holder_name\":\"Neha Sharma\",\"account_number\":\"123456789012\",\"ifsc_code\":\"HDFC0001234\",\"is_primary\":true},{\"bank_name\":\"SBI\",\"branch_name\":\"Gachibowli\",\"account_holder_name\":\"Neha Sharma\",\"account_number\":\"987654321098\",\"ifsc_code\":\"SBIN0001234\",\"is_primary\":false}]",
+                      "type": "text",
+                      "description": "Required — JSON array (replaces all banks) or single object (upserts one)"
+                    },
+                    {
+                      "key": "image",
+                      "type": "file",
+                      "src": [],
+                      "description": "Required for first onboarding — profile photo, max 512 KB"
+                    },
+                    {
+                      "key": "aadhar_card",
+                      "type": "file",
+                      "src": [],
+                      "description": "Required for first onboarding — JPEG/PNG/PDF, max 10 MB"
+                    },
+                    {
+                      "key": "pan_card",
+                      "type": "file",
+                      "src": [],
+                      "description": "Optional verification document"
+                    },
+                    {
+                      "key": "driving_license",
+                      "type": "file",
+                      "src": [],
+                      "description": "Optional verification document"
+                    },
+                    {
+                      "key": "vehicle_registration",
+                      "type": "file",
+                      "src": [],
+                      "description": "Optional verification document"
+                    },
+                    {
+                      "key": "police_verification_certificate",
+                      "type": "file",
+                      "src": [],
+                      "description": "Optional verification document"
+                    },
+                    {
+                      "key": "name",
+                      "value": "Neha Sharma",
+                      "type": "text",
+                      "description": "Optional profile update"
+                    },
+                    {
+                      "key": "email",
+                      "value": "{{email}}",
+                      "type": "text",
+                      "description": "Optional — must be unique if changed"
+                    },
+                    {
+                      "key": "phone_number",
+                      "value": "+916309654123",
+                      "type": "text",
+                      "description": "Optional — E.164 format"
+                    },
+                    {
+                      "key": "date_of_birth",
+                      "value": "2003-05-23",
+                      "type": "text",
+                      "description": "Optional — ISO date, 18+"
+                    },
+                    {
+                      "key": "device_token",
+                      "value": "{{deviceToken}}",
+                      "type": "text",
+                      "description": "Optional FCM push token"
+                    },
+                    {
+                      "key": "password",
+                      "value": "",
+                      "type": "text",
+                      "disabled": true,
+                      "description": "Optional — requires confirm_password if set"
+                    },
+                    {
+                      "key": "confirm_password",
+                      "value": "",
+                      "type": "text",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/update",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "update"]
+                },
+                "description": "**PUT /api/mobile/partner/update** — complete onboarding in one request\n\n**Auth:** Bearer `{{token}}`  \n**Body:** `multipart/form-data` only (do not set Content-Type manually)\n\n### Before sending\n1. Run **Location** → States → Cities → Areas → Pincodes (`{{stateId}}`, `{{cityId}}`, `{{areaId}}`, `{{pincode}}`)\n2. Run **Catalog** → Categories → Services (`{{categoryId}}`, `{{serviceId}}`, optional `{{serviceId2}}`)\n3. Select files: **image**, **aadhar_card** (minimum). Optional: pan_card, driving_license, etc.\n\n### Payload sections (all in this request)\n| Section | Fields |\n|---------|--------|\n| Basic | gender, experience, state_id, city_id, area_id, pincode, address, image, name, email, phone_number, date_of_birth, device_token |\n| Services | partner_services (nested JSON array) |\n| Banks | bank_account (JSON array or object) |\n| Documents | aadhar_card, pan_card, driving_license, vehicle_registration, police_verification_certificate (files only) |\n\nSets `users.franchise_id` from location. Same validation as split endpoints `/update/basic-details`, `/update/documents`, `/update/bank-accounts`."
+              },
+              "response": []
+            }
+          ]
         }
       ]
     },

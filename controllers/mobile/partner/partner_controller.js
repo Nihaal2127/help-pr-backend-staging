@@ -69,6 +69,7 @@ const update = async (req, res) => {
       partnerId: req.user.id,
       body: req.body,
       files: req.files,
+      section: 'all',
     });
 
     if (!result.ok) {

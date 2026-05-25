@@ -133,6 +133,28 @@ const pickPartnerUpdateValue = (req, keys) => {
 const isPresentFieldValue = (value) =>
   value !== undefined && value !== null && String(value).trim() !== '';
 
+/** Step 1: exactly 24 hex chars (empty / wrong length / non-hex fail here). */
+const OBJECT_ID_HEX_24 = /^[a-fA-F0-9]{24}$/;
+
+const isEmptyCatalogId = (value) =>
+  value === undefined || value === null || String(value).trim() === '';
+
+const isValidCatalogObjectId = (value) => OBJECT_ID_HEX_24.test(String(value).trim());
+
+const getCategoryStep1Error = (categoryId) => {
+  if (isEmptyCatalogId(categoryId) || !isValidCatalogObjectId(categoryId)) {
+    return 'Category is required.';
+  }
+  return null;
+};
+
+const getServiceStep1Error = (serviceId) => {
+  if (isEmptyCatalogId(serviceId) || !isValidCatalogObjectId(serviceId)) {
+    return 'Service is required.';
+  }
+  return null;
+};
+
 const respondPartnerCatalogValidationErrors = (res, messages) => {
   res.status(400).json({
     success: false,
@@ -159,16 +181,126 @@ const hasBankPayload = (body) =>
   body.account_number !== undefined ||
   body.ifsc_code !== undefined;
 
+const getMissingBankAccountFields = (item) => {
+  const missing = [];
+  if (!isPresentFieldValue(item?.bank_name)) missing.push('Bank name is required.');
+  if (!isPresentFieldValue(item?.branch_name)) missing.push('Branch name is required.');
+  if (!isPresentFieldValue(item?.account_holder_name) && !isPresentFieldValue(item?.account_name)) {
+    missing.push('Account holder name is required.');
+  }
+  if (!isPresentFieldValue(item?.account_number)) missing.push('Account number is required.');
+  if (!isPresentFieldValue(item?.ifsc_code)) missing.push('IFSC code is required.');
+  return missing;
+};
+
+const validateBankPayloadIfPresent = (req, res) => {
+  const body = req.body;
+  if (!hasBankPayload(body)) return true;
+
+  if (Array.isArray(body.bank_account)) {
+    if (body.bank_account.length === 0) {
+      res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'At least one bank account is required.',
+      });
+      return false;
+    }
+    const seenAccountNumbers = new Set();
+    for (let i = 0; i < body.bank_account.length; i++) {
+      const item = body.bank_account[i];
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        res.status(400).json({
+          success: false,
+          status: 400,
+          message: `bank_account[${i}] must be an object.`,
+        });
+        return false;
+      }
+      const missing = getMissingBankAccountFields(item);
+      if (missing.length > 0) {
+        res.status(400).json({
+          success: false,
+          status: 400,
+          message: missing[0],
+        });
+        return false;
+      }
+      const accountNumber = String(item.account_number).trim();
+      if (seenAccountNumbers.has(accountNumber)) {
+        res.status(400).json({
+          success: false,
+          status: 400,
+          message: 'Duplicate account number in bank accounts.',
+        });
+        return false;
+      }
+      seenAccountNumbers.add(accountNumber);
+    }
+    return true;
+  }
+
+  const bankName = pickPartnerUpdateValue(req, ['bank_name']);
+  if (!bankName) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Bank name is required.',
+    });
+    return false;
+  }
+
+  const branchName = pickPartnerUpdateValue(req, ['branch_name']);
+  if (!branchName) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Branch name is required.',
+    });
+    return false;
+  }
+
+  const accountHolderName = pickPartnerUpdateValue(req, ['account_holder_name', 'account_name']);
+  if (!accountHolderName) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Account holder name is required.',
+    });
+    return false;
+  }
+
+  const accountNumber = pickPartnerUpdateValue(req, ['account_number']);
+  if (!accountNumber) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Account number is required.',
+    });
+    return false;
+  }
+
+  const ifscCode = pickPartnerUpdateValue(req, ['ifsc_code']);
+  if (!ifscCode) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'IFSC code is required.',
+    });
+    return false;
+  }
+
+  return true;
+};
+
 const getMissingFlatCatalogFields = (item) => {
   const missing = [];
   const categoryId = item?.category_id;
   const serviceId = item?.service_id ?? item?.serviceId;
-  if (!categoryId || !mongoose.Types.ObjectId.isValid(String(categoryId))) {
-    missing.push('Category is required.');
-  }
-  if (!serviceId || !mongoose.Types.ObjectId.isValid(String(serviceId))) {
-    missing.push('Service is required.');
-  }
+  const categoryErr = getCategoryStep1Error(categoryId);
+  if (categoryErr) missing.push(categoryErr);
+  const serviceErr = getServiceStep1Error(serviceId);
+  if (serviceErr) missing.push(serviceErr);
   if (!isPresentFieldValue(item?.description)) {
     missing.push('Description is required.');
   }
@@ -187,9 +319,8 @@ const getMissingNestedServiceFields = (svc) => {
     return ['Service is required.', 'Description is required.', 'Price is required.'];
   }
   const serviceId = svc.service_id ?? svc.serviceId;
-  if (!serviceId || !mongoose.Types.ObjectId.isValid(String(serviceId))) {
-    missing.push('Service is required.');
-  }
+  const serviceErr = getServiceStep1Error(serviceId);
+  if (serviceErr) missing.push(serviceErr);
   if (!isPresentFieldValue(svc.description)) {
     missing.push('Description is required.');
   }
@@ -204,7 +335,7 @@ const coerceSingleOidToArray = (body, field) => {
   if (v === undefined || v === null || Array.isArray(v)) return;
   if (typeof v === 'string') {
     const t = v.trim();
-    if (t && mongoose.Types.ObjectId.isValid(t)) body[field] = [t];
+    if (t && isValidCatalogObjectId(t)) body[field] = [t];
   }
 };
 
@@ -236,9 +367,8 @@ const validatePartnerCatalogIfPresent = (req, res) => {
 
       if (Array.isArray(item.services)) {
         const missing = [];
-        if (!item.category_id || !mongoose.Types.ObjectId.isValid(String(item.category_id))) {
-          missing.push('Category is required.');
-        }
+        const categoryErr = getCategoryStep1Error(item.category_id);
+        if (categoryErr) missing.push(categoryErr);
         if (!Array.isArray(item.services) || item.services.length === 0) {
           missing.push('Service is required.');
         } else {
@@ -268,21 +398,15 @@ const validatePartnerCatalogIfPresent = (req, res) => {
   }
 
   let serviceIds = body.service_ids;
-  if (
-    !Array.isArray(serviceIds) &&
-    typeof serviceIds === 'string' &&
-    mongoose.Types.ObjectId.isValid(String(serviceIds).trim())
-  ) {
-    serviceIds = [String(serviceIds).trim()];
+  if (!Array.isArray(serviceIds) && typeof serviceIds === 'string') {
+    const t = String(serviceIds).trim();
+    if (t) serviceIds = [t];
   }
 
   let categoryIds = body.category_ids;
-  if (
-    !Array.isArray(categoryIds) &&
-    typeof categoryIds === 'string' &&
-    mongoose.Types.ObjectId.isValid(String(categoryIds).trim())
-  ) {
-    categoryIds = [String(categoryIds).trim()];
+  if (!Array.isArray(categoryIds) && typeof categoryIds === 'string') {
+    const t = String(categoryIds).trim();
+    if (t) categoryIds = [t];
   }
 
   const descriptions = body.service_descriptions;
@@ -308,18 +432,16 @@ const validatePartnerCatalogIfPresent = (req, res) => {
 
   if (Array.isArray(serviceIds)) {
     for (let i = 0; i < serviceIds.length; i++) {
-      if (!serviceIds[i] || !mongoose.Types.ObjectId.isValid(String(serviceIds[i]))) {
-        parallelMissing.add('Service is required.');
-      }
+      const serviceErr = getServiceStep1Error(serviceIds[i]);
+      if (serviceErr) parallelMissing.add(serviceErr);
       if (body.category_ids !== undefined) {
         const categoryId =
           Array.isArray(categoryIds) &&
           (i < categoryIds.length && categoryIds[i] != null && String(categoryIds[i]).trim() !== ''
             ? categoryIds[i]
             : categoryIds?.[categoryIds.length - 1]);
-        if (!categoryId || !mongoose.Types.ObjectId.isValid(String(categoryId))) {
-          parallelMissing.add('Category is required.');
-        }
+        const categoryErr = getCategoryStep1Error(categoryId);
+        if (categoryErr) parallelMissing.add(categoryErr);
       }
       if (
         body.service_descriptions !== undefined &&
@@ -355,15 +477,21 @@ const collectPartnerCatalogRows = (body) => {
         const parentCategoryId = item.category_id;
         for (const svc of item.services) {
           if (!svc || typeof svc !== 'object' || Array.isArray(svc)) continue;
+          const categoryId = svc.category_id ?? parentCategoryId;
+          const serviceId = svc.service_id ?? svc.serviceId;
+          if (getCategoryStep1Error(categoryId) || getServiceStep1Error(serviceId)) continue;
           rows.push({
-            category_id: svc.category_id ?? parentCategoryId,
-            service_id: svc.service_id ?? svc.serviceId,
+            category_id: String(categoryId).trim(),
+            service_id: String(serviceId).trim(),
           });
         }
       } else {
+        const categoryId = item.category_id;
+        const serviceId = item.service_id ?? item.serviceId;
+        if (getCategoryStep1Error(categoryId) || getServiceStep1Error(serviceId)) continue;
         rows.push({
-          category_id: item.category_id,
-          service_id: item.service_id ?? item.serviceId,
+          category_id: String(categoryId).trim(),
+          service_id: String(serviceId).trim(),
         });
       }
     }
@@ -371,22 +499,16 @@ const collectPartnerCatalogRows = (body) => {
   }
 
   let serviceIds = body.service_ids;
-  if (
-    !Array.isArray(serviceIds) &&
-    typeof serviceIds === 'string' &&
-    mongoose.Types.ObjectId.isValid(String(serviceIds).trim())
-  ) {
-    serviceIds = [String(serviceIds).trim()];
+  if (!Array.isArray(serviceIds) && typeof serviceIds === 'string') {
+    const t = String(serviceIds).trim();
+    if (t) serviceIds = [t];
   }
   if (!Array.isArray(serviceIds)) return rows;
 
   let categoryIds = body.category_ids;
-  if (
-    !Array.isArray(categoryIds) &&
-    typeof categoryIds === 'string' &&
-    mongoose.Types.ObjectId.isValid(String(categoryIds).trim())
-  ) {
-    categoryIds = [String(categoryIds).trim()];
+  if (!Array.isArray(categoryIds) && typeof categoryIds === 'string') {
+    const t = String(categoryIds).trim();
+    if (t) categoryIds = [t];
   }
   if (!Array.isArray(categoryIds)) return rows;
 
@@ -395,7 +517,12 @@ const collectPartnerCatalogRows = (body) => {
       i < categoryIds.length && categoryIds[i] != null && String(categoryIds[i]).trim() !== ''
         ? categoryIds[i]
         : categoryIds[categoryIds.length - 1];
-    rows.push({ category_id: categoryId, service_id: serviceIds[i] });
+    const serviceId = serviceIds[i];
+    if (getCategoryStep1Error(categoryId) || getServiceStep1Error(serviceId)) continue;
+    rows.push({
+      category_id: String(categoryId).trim(),
+      service_id: String(serviceId).trim(),
+    });
   }
   return rows;
 };
@@ -531,9 +658,9 @@ const validatePartnerCatalogInDb = async (req, res) => {
   for (const row of rows) {
     const categoryId = row.category_id;
     const serviceId = row.service_id;
-    if (!categoryId || !serviceId) continue;
+    if (getCategoryStep1Error(categoryId) || getServiceStep1Error(serviceId)) continue;
 
-    const dedupeKey = `${String(categoryId)}:${String(serviceId)}`;
+    const dedupeKey = `${String(categoryId).trim()}:${String(serviceId).trim()}`;
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
 
@@ -694,60 +821,7 @@ const validatePartnerUpdatePartialFields = async (req, res) => {
 
   if (!validatePartnerCatalogIfPresent(req, res)) return false;
 
-  if (hasBankPayload(req.body)) {
-    const bankName = pickPartnerUpdateValue(req, ['bank_name']);
-    if (!bankName) {
-      res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'Bank name is required.',
-      });
-      return false;
-    }
-
-    const branchName = pickPartnerUpdateValue(req, ['branch_name']);
-    if (!branchName) {
-      res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'Branch name is required.',
-      });
-      return false;
-    }
-
-    const accountHolderName = pickPartnerUpdateValue(req, [
-      'account_holder_name',
-      'account_name',
-    ]);
-    if (!accountHolderName) {
-      res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'Account holder name is required.',
-      });
-      return false;
-    }
-
-    const accountNumber = pickPartnerUpdateValue(req, ['account_number']);
-    if (!accountNumber) {
-      res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'Account number is required.',
-      });
-      return false;
-    }
-
-    const ifscCode = pickPartnerUpdateValue(req, ['ifsc_code']);
-    if (!ifscCode) {
-      res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'IFSC code is required.',
-      });
-      return false;
-    }
-  }
+  if (!validateBankPayloadIfPresent(req, res)) return false;
 
   if (!(await validatePartnerLocationInDbPartial(req.body, res))) {
     return false;

@@ -21,6 +21,12 @@ const {
   isGlobalCatalogRowActive,
   onGlobalCategoryDeactivated,
 } = require('../services/catalog_cascade_service');
+const {
+  normalizeCatalogName,
+  categoryNameExistsQuery,
+  findExistingCatalogNames,
+  importFileDuplicateNamesMessage,
+} = require('../utils/catalog_name_uniqueness');
 
 const asBodyBool = (value, defaultValue) => {
   if (value === undefined) return defaultValue;
@@ -418,12 +424,8 @@ const create = async (req, res) => {
     console.log("FILE:", req.file);
     const service_ids = dedupeServiceIds(rawServiceIds);
 
-    const existingCategory = await Category.findOne({
-      $or: [
-        { name },
-      ],
-      deleted_at: null
-    });
+    const trimmedName = normalizeCatalogName(name);
+    const existingCategory = await Category.findOne(categoryNameExistsQuery(trimmedName));
 
     if (existingCategory) {
       return res.status(409).json({
@@ -460,7 +462,7 @@ const create = async (req, res) => {
     const category_id = await getCategoryId();
     const services = dedupeServiceIds(service_ids);
     const newCategory = new Category({
-      name,
+      name: trimmedName,
       desc,
       category_id,
       city_ids,
@@ -532,14 +534,10 @@ const update = async (req, res) => {
     const wasGloballyActive = isGlobalCatalogRowActive(category);
 
     if (req.body.name) {
-      const name = req.body.name
-      const existingCategory = await Category.findOne({
-        $or: [
-          { name },
-        ],
-        deleted_at: null,
-        _id: { $ne: id },
-      });
+      const trimmedName = normalizeCatalogName(req.body.name);
+      const existingCategory = await Category.findOne(
+        categoryNameExistsQuery(trimmedName, id)
+      );
 
       if (existingCategory) {
         return res.status(409).json({
@@ -548,6 +546,7 @@ const update = async (req, res) => {
           message: 'Category name already exists.',
         });
       }
+      updateData.name = trimmedName;
     }
     if (req.body.state_ids) {
 
@@ -796,8 +795,34 @@ const importRecords = async (req, res) => {
     }
 
 
-    const names = records.map(record => record.name);
-    const existingRecords = await Category.find({ name: { $in: names }, deleted_at: null }).select('name');
+    const normalizedRows = records.map((record) => ({
+      ...record,
+      name: normalizeCatalogName(record.name),
+    }));
+    for (const r of normalizedRows) {
+      if (!r.name) {
+        return res.status(400).json({
+          success: false,
+          status: 400,
+          message: 'Each record must include a non-empty category name.',
+        });
+      }
+    }
+    const importDupMsg = importFileDuplicateNamesMessage(
+      normalizedRows.map((r) => r.name),
+      'category'
+    );
+    if (importDupMsg) {
+      return res.status(409).json({
+        success: false,
+        status: 409,
+        message: importDupMsg,
+      });
+    }
+    const existingRecords = await findExistingCatalogNames(
+      Category,
+      normalizedRows.map((r) => r.name)
+    );
 
     if (existingRecords.length > 0) {
       const duplicateNames = existingRecords.map(record => record.name).join('\n');
@@ -818,7 +843,7 @@ const importRecords = async (req, res) => {
     const enrichedRecords = [];
     const missingStates = new Set();
 
-    for (const record of records) {
+    for (const record of normalizedRows) {
       const state = stateMap.get(record.state_name);
       if (state) {
         enrichedRecords.push({

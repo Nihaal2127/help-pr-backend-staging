@@ -33,6 +33,11 @@ const {
   replacePartnerCatalogFromNormalizedRows,
 } = require('../services/partner_category_service');
 const partnerSubscriptionService = require('../services/partner_subscription_service');
+const {
+  normalizeUserEmail,
+  normalizeUserPhone,
+  checkUserContactUniqueness,
+} = require('../utils/user_contact_uniqueness');
 const { fieldLabel } = require('../utils/field_labels');
 
 const GET_ALL_SORT_FIELDS = ['name', 'email', 'created_at'];
@@ -1514,25 +1519,17 @@ const create = async (req, res) => {
         : (is_active !== undefined
             ? is_active
             : false);
-    const existingUser = await User.findOne({
-      $or: [
-        { phone_number },
-        { email },
-      ],
-      deleted_at: null
+    const normalizedEmail = normalizeUserEmail(email);
+    const normalizedPhone = normalizeUserPhone(phone_number);
+    const uniqueness = await checkUserContactUniqueness({
+      email: normalizedEmail,
+      phone_number: normalizedPhone,
     });
-    if (existingUser) {
-
-      let message = '';
-      if (existingUser.phone_number === phone_number) {
-        message = 'Phone number already exists.';
-      } else if (existingUser.email === email) {
-        message = 'Email already exists.';
-      }
+    if (!uniqueness.ok) {
       return res.status(409).json({
         success: false,
         status: 409,
-        message,
+        message: uniqueness.message,
       });
     }
     if (
@@ -1588,8 +1585,8 @@ const create = async (req, res) => {
       registration_id,
       user_id,
       name,
-      email,
-      phone_number,
+      email: normalizedEmail,
+      phone_number: normalizedPhone,
       address,
       state_id,
       city_id,

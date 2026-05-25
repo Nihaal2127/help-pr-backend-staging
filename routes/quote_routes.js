@@ -12,7 +12,7 @@ const {
   getById,
   getCustomerQuotes,
   update,
-  deleteQuote,
+  // deleteQuote,
 } = require("../controllers/quote_controller");
 
 router.post("/create", authMiddleware, createQuoteMiddleware, create);
@@ -21,6 +21,7 @@ router.get("/getCounts", authMiddleware, getQuoteCounts);
 router.get("/get/:id", authMiddleware, getById);
 router.get("/getCustomerQuotes", authMiddleware, getCustomerQuotes);
 router.put("/update/:id", authMiddleware, updateQuoteMiddleware, update);
-router.delete("/delete/:id", authMiddleware, deleteQuote);
+// Disabled until needed — uncomment deleteQuote import above when re-enabling.
+// router.delete("/delete/:id", authMiddleware, deleteQuote);
 
 module.exports = router;

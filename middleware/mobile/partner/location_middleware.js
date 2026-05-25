@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { fieldLabel } = require('../../../utils/field_labels');
 
 const parseObjectIdList = (raw, fieldName) => {
   if (raw === undefined || raw === null || String(raw).trim() === '') {
@@ -16,7 +17,7 @@ const parseObjectIdList = (raw, fieldName) => {
       return {
         ok: false,
         status: 400,
-        message: `Invalid ${fieldName} format.`,
+        message: `Invalid ${fieldLabel(fieldName)} format.`,
       };
     }
     oids.push(new mongoose.Types.ObjectId(id));
@@ -25,7 +26,7 @@ const parseObjectIdList = (raw, fieldName) => {
     return {
       ok: false,
       status: 400,
-      message: `Provide at least one valid ${fieldName}.`,
+      message: `Provide at least one valid ${fieldLabel(fieldName)}.`,
     };
   }
   return { ok: true, oids };
@@ -89,7 +90,7 @@ const validatePincodesQuery = (req, res, next) => {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'area_id is required.',
+      message: `${fieldLabel('area_id')} is required.`,
     });
   }
 
@@ -116,7 +117,7 @@ const validatePincodesQuery = (req, res, next) => {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'Provide at least one valid area_id.',
+      message: `Provide at least one valid ${fieldLabel('area_id')}.`,
     });
   }
 

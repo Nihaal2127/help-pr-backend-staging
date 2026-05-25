@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { fieldLabel } = require("../utils/field_labels");
 const Order = require("../models/order");
 const OrderAdditionalCharge = require("../models/order_additional_charge");
 const OrderPayment = require("../models/order_payment");
@@ -58,7 +59,7 @@ const normalizeNestedOps = (value, fieldName) => {
     };
   }
   throw new OrderCreationError(
-    `${fieldName} must be an array or an object with create, update, and delete.`,
+    `${fieldLabel(fieldName)} must be an array or an object with create, update, and delete.`,
     400
   );
 };

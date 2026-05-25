@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { fieldLabel } = require('../utils/field_labels');
 const PartnerSubscription = require('../models/partner_subscription');
 const SubscriptionPlan = require('../models/subscription_plan');
 const User = require('../models/user');
@@ -19,7 +20,7 @@ const parseObjectId = (raw, fieldName = 'id') => {
     if (!s || !/^[a-fA-F0-9]{24}$/.test(s)) {
         return {
             ok: false,
-            message: `${fieldName} must be a valid MongoDB ObjectId (24 hex characters).`,
+            message: `${fieldLabel(fieldName)} must be a valid MongoDB ObjectId (24 hex characters).`,
         };
     }
     return { ok: true, oid: new mongoose.Types.ObjectId(s) };
@@ -68,7 +69,7 @@ const loadActivePlan = async (planOid) => {
 
 const DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-const parseOptionalDateQuery = (raw, fieldLabel) => {
+const parseOptionalDateQuery = (raw, fieldName) => {
     if (raw === undefined || raw === null || String(raw).trim() === '') {
         return { ok: true, instant: null };
     }
@@ -79,13 +80,13 @@ const parseOptionalDateQuery = (raw, fieldLabel) => {
             Date.UTC(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
         );
         if (Number.isNaN(instant.getTime())) {
-            return { ok: false, message: `${fieldLabel} must be a valid date.` };
+            return { ok: false, message: `${fieldLabel(fieldName)} must be a valid date.` };
         }
         return { ok: true, instant };
     }
     const d = new Date(s);
     if (Number.isNaN(d.getTime())) {
-        return { ok: false, message: `${fieldLabel} must be a valid date.` };
+        return { ok: false, message: `${fieldLabel(fieldName)} must be a valid date.` };
     }
     return { ok: true, instant: d };
 };
@@ -297,7 +298,7 @@ const listPartnerSubscriptions = async (query, req = null) => {
         const toEnd = toParsed.instant ? endOfUtcDay(toParsed.instant) : null;
 
         if (fromStart && toEnd && fromStart.getTime() > toEnd.getTime()) {
-            return fail(400, 'start_date must be on or before end_date.');
+            return fail(400, 'Start date must be on or before end date.');
         }
 
         applySubscriptionDateRangeFilter(match, fromStart, toEnd);
@@ -457,14 +458,14 @@ const createPartnerSubscription = async (body, assignedByUserId) => {
 
         const start = started_at ? new Date(started_at) : new Date();
         if (Number.isNaN(start.getTime())) {
-            return fail(400, 'started_at must be a valid date.');
+            return fail(400, `${fieldLabel('started_at')} must be a valid date.`);
         }
 
         let endDate = null;
         if (expires_at !== undefined && expires_at !== null && expires_at !== '') {
             endDate = new Date(expires_at);
             if (Number.isNaN(endDate.getTime())) {
-                return fail(400, 'expires_at must be a valid date.');
+                return fail(400, `${fieldLabel('expires_at')} must be a valid date.`);
             }
         } else {
             endDate = computeExpiresAt(start, plan);
@@ -534,7 +535,7 @@ const updatePartnerSubscription = async (id, body) => {
 
         if (body.started_at !== undefined) {
             const d = new Date(body.started_at);
-            if (Number.isNaN(d.getTime())) return fail(400, 'started_at must be a valid date.');
+            if (Number.isNaN(d.getTime())) return fail(400, `${fieldLabel('started_at')} must be a valid date.`);
             row.started_at = d;
         }
 
@@ -543,7 +544,7 @@ const updatePartnerSubscription = async (id, body) => {
                 row.expires_at = null;
             } else {
                 const d = new Date(body.expires_at);
-                if (Number.isNaN(d.getTime())) return fail(400, 'expires_at must be a valid date.');
+                if (Number.isNaN(d.getTime())) return fail(400, `${fieldLabel('expires_at')} must be a valid date.`);
                 row.expires_at = d;
             }
         }
@@ -627,7 +628,7 @@ const importPartnerSubscriptions = async (records, assignedByUserId) => {
         const createdIds = [];
         for (const rec of records) {
             if (!rec.partner_id || !rec.subscription_plan_id) {
-                return fail(400, 'Each record must include partner_id and subscription_plan_id.');
+                return fail(400, 'Each record must include partner and subscription plan.');
             }
 
             const pPartner = parseObjectId(rec.partner_id, 'partner_id');
@@ -637,24 +638,24 @@ const importPartnerSubscriptions = async (records, assignedByUserId) => {
 
             const partnerUser = await loadPartnerUser(pPartner.oid);
             if (!partnerUser) {
-                return fail(404, `Partner not found or not a partner (partner_id: ${rec.partner_id}).`);
+                return fail(404, `Partner not found or not a partner.`);
             }
 
             const plan = await loadActivePlan(pPlan.oid);
             if (!plan) {
-                return fail(404, `Subscription plan not found or inactive (plan: ${rec.subscription_plan_id}).`);
+                return fail(404, `Subscription plan not found or inactive.`);
             }
 
             const start = rec.started_at ? new Date(rec.started_at) : new Date();
             if (Number.isNaN(start.getTime())) {
-                return fail(400, `Invalid started_at for partner ${rec.partner_id}`);
+                return fail(400, `Invalid start date for partner.`);
             }
 
             let endDate = null;
             if (rec.expires_at !== undefined && rec.expires_at !== null && rec.expires_at !== '') {
                 endDate = new Date(rec.expires_at);
                 if (Number.isNaN(endDate.getTime())) {
-                    return fail(400, `Invalid expires_at for partner ${rec.partner_id}`);
+                    return fail(400, `Invalid expiry date for partner.`);
                 }
             } else {
                 endDate = computeExpiresAt(start, plan);

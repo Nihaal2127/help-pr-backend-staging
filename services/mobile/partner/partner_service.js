@@ -676,7 +676,7 @@ const updatePartner = async ({ partnerId, body, files }) => {
       return {
         ok: false,
         status: 400,
-        message: 'Address, state_id, city_id, and pincode are required to add a new address.',
+        message: 'Address, state, city, and pincode are required to add a new address.',
       };
     }
     await createAddressRecord({

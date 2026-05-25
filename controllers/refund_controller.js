@@ -5,6 +5,7 @@ const {
     resolveRefundListScope,
     assertRefundRecordAccess,
 } = require('../utils/refund_access');
+const { fieldLabel } = require('../utils/field_labels');
 
 const sendServiceResult = (res, result) => {
     if (!result.ok) {
@@ -71,7 +72,7 @@ const create = async (req, res) => {
     if (!orderIdRaw || !mongoose.Types.ObjectId.isValid(String(orderIdRaw).trim())) {
         return res.status(400).json({
             success: false,
-            message: 'order_id must be a valid MongoDB ObjectId.',
+            message: `${fieldLabel('order_id')} must be a valid MongoDB ObjectId.`,
         });
     }
 

@@ -33,6 +33,7 @@ const {
   replacePartnerCatalogFromNormalizedRows,
 } = require('../services/partner_category_service');
 const partnerSubscriptionService = require('../services/partner_subscription_service');
+const { fieldLabel } = require('../utils/field_labels');
 
 const GET_ALL_SORT_FIELDS = ['name', 'email', 'created_at'];
 const VERIFICATION_SORT_FIELDS = ['name', 'email', 'created_at'];
@@ -221,7 +222,7 @@ function buildUserListRoleFilter(caller, { franchiseIdFilter, type, partnerListV
         return {
           ok: false,
           status: 400,
-          message: 'franchise_id must be a valid MongoDB ObjectId.',
+          message: `${fieldLabel('franchise_id')} must be a valid MongoDB ObjectId.`,
         };
       }
       return {
@@ -338,7 +339,7 @@ function resolvePartnerListVerificationStatus(isVerifiedRaw) {
   if (key === 'rejected') return { ok: true, verification_status: 3 };
   return {
     ok: false,
-    message: 'is_verified must be one of: approved, pending, rejected.',
+    message: `${fieldLabel('is_verified')} must be one of: approved, pending, rejected.`,
   };
 }
 
@@ -1311,7 +1312,7 @@ const getVerificationAll = async (req, res) => {
         return res.status(400).json({
           success: false,
           status: 400,
-          message: 'verification_status must be 1, 2, or 3.',
+          message: `${fieldLabel('verification_status')} must be 1, 2, or 3.`,
         });
       }
       verificationFilter = { verification_status: vs };
@@ -1831,7 +1832,7 @@ const update = async (req, res) => {
       return res.status(404).json({
         success: false,
         status: 404,
-        message: 'user_id not found'
+        message: `${fieldLabel('user_id')} not found`
       });
     }
 
@@ -1891,7 +1892,7 @@ const update = async (req, res) => {
         return res.status(400).json({
           success: false,
           status: 400,
-          message: 'Address, state_id, city_id, and pincode are required to add a new address.',
+          message: `Address, ${fieldLabel('state_id')}, ${fieldLabel('city_id')}, and pincode are required to add a new address.`,
         });
       }
       await createAddressRecord({
@@ -2626,7 +2627,7 @@ const getPartnerDropDown = async (req, res) => {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: "Missing service_id in query parameters.",
+        message: `Missing ${fieldLabel('service_id')} in query parameters.`,
       });
     }
 

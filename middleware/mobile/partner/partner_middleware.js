@@ -10,6 +10,7 @@ const {
   parseOptionalDateField,
   trimOptionalStringField,
 } = require('../../../utils/multipart_parser');
+const { fieldLabel } = require('../../../utils/field_labels');
 
 const MIN_NAME_LENGTH = 2;
 const MAX_NAME_LENGTH = 50;
@@ -85,7 +86,7 @@ const validatePartnerCatalogPayload = (req, res) => {
     res.status(400).json({
       success: false,
       status: 400,
-      message: 'partner_services must be an array.',
+      message: `${fieldLabel('partner_services')} must be an array.`,
     });
     return false;
   }
@@ -93,7 +94,7 @@ const validatePartnerCatalogPayload = (req, res) => {
     res.status(400).json({
       success: false,
       status: 400,
-      message: 'partner_categories must be an array.',
+      message: `${fieldLabel('partner_categories')} must be an array.`,
     });
     return false;
   }
@@ -228,7 +229,7 @@ const validatePartnerCatalogIfPresent = (req, res) => {
         res.status(400).json({
           success: false,
           status: 400,
-          message: `partner_services[${i}] must be an object.`,
+          message: `${fieldLabel(`partner_services[${i}]`)} must be an object.`,
         });
         return false;
       }

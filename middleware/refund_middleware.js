@@ -30,20 +30,20 @@ const createRefundMiddleware = (req, res, next) => {
     if (!order_id || String(order_id).trim() === '') {
         return res.status(400).json({
             success: false,
-            message: 'order_id is required.',
+            message: 'Order ID is required.',
         });
     }
     if (!isValidObjectIdString(order_id)) {
         return res.status(400).json({
             success: false,
-            message: 'order_id must be a valid MongoDB ObjectId.',
+            message: 'Order ID must be valid.',
         });
     }
 
     if (!isPositiveNumber(refund_amount)) {
         return res.status(400).json({
             success: false,
-            message: 'Valid refund_amount is required.',
+            message: 'Valid refund amount is required.',
         });
     }
 
@@ -54,7 +54,7 @@ const createRefundMiddleware = (req, res, next) => {
     ) {
         return res.status(400).json({
             success: false,
-            message: 'from_admin_commission must be a non-negative number.',
+            message: 'Admin portion must be a non-negative number.',
         });
     }
 
@@ -65,7 +65,7 @@ const createRefundMiddleware = (req, res, next) => {
     ) {
         return res.status(400).json({
             success: false,
-            message: 'from_partner_wallet must be a non-negative number.',
+            message: 'Partner wallet portion must be a non-negative number.',
         });
     }
 
@@ -73,14 +73,14 @@ const createRefundMiddleware = (req, res, next) => {
     if (refundDate === undefined || refundDate === null || String(refundDate).trim() === '') {
         return res.status(400).json({
             success: false,
-            message: 'date is required.',
+            message: 'Refund date is required.',
         });
     }
     const parsed = new Date(refundDate);
     if (Number.isNaN(parsed.getTime())) {
         return res.status(400).json({
             success: false,
-            message: 'date must be a valid date.',
+            message: 'Refund date must be valid.',
         });
     }
 

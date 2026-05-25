@@ -11,6 +11,7 @@ const { checkObjectIdExists } = require('../validator/id_validator')
 
 const { resolveTotalServiceCharge } = require('../utils/order_pricing')
 const { isValidOrderStatus } = require('../enum/order_status_enum')
+const { fieldLabel } = require('../utils/field_labels')
 
 const isValidPositiveAmount = (value) => {
 
@@ -224,7 +225,7 @@ const createOrderMiddleware = async (req, res, next) => {
 
             status: 409,
 
-            message: 'total_service_charge (or service_price) is required and must be greater than 0.',
+            message: `${fieldLabel('total_service_charge')} (or ${fieldLabel('service_price')}) is required and must be greater than 0.`,
 
         });
 
@@ -244,7 +245,7 @@ const createOrderMiddleware = async (req, res, next) => {
 
             status: 409,
 
-            message: 'Valid service_id is required.',
+            message: `Valid ${fieldLabel('service_id')} is required.`,
 
         });
 
@@ -282,7 +283,7 @@ const createOrderMiddleware = async (req, res, next) => {
 
                 status: 409,
 
-                message: 'Send offer_id or discount_amount, not both.',
+                message: `Send ${fieldLabel('offer_id')} or ${fieldLabel('discount_amount')}, not both.`,
 
             });
 
@@ -326,7 +327,7 @@ const checkItemsMiddleware = async (req, res, next) => {
 
             status: 409,
 
-            message: 'service_items must be an array.',
+            message: `${fieldLabel('service_items')} must be an array.`,
 
         });
 
@@ -340,7 +341,7 @@ const checkItemsMiddleware = async (req, res, next) => {
 
             status: 409,
 
-            message: 'Each order must contain exactly one service; service_items must have length 1.',
+            message: `Each order must contain exactly one service; ${fieldLabel('service_items')} must have length 1.`,
 
         });
 
@@ -496,7 +497,7 @@ const checkItemsMiddleware = async (req, res, next) => {
 
                 status: 409,
 
-                message: 'total_service_charge (or service_price) on service_items is required and must be greater than 0.',
+                message: `${fieldLabel('total_service_charge')} (or ${fieldLabel('service_price')}) on ${fieldLabel('service_items')} is required and must be greater than 0.`,
 
             });
 

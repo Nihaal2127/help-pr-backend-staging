@@ -7,6 +7,7 @@ const { parseBoolean } = require('../utils/parser');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
 const { checkObjectIdExists } = require('../validator/id_validator');
 const { normalizeOrderStatus } = require('../enum/order_status_enum');
+const { fieldLabel } = require('../utils/field_labels');
 const getAll = async (req, res) => {
 
   try {
@@ -21,7 +22,7 @@ const getAll = async (req, res) => {
       return res.status(409).json({
         success: false,
         status: 409,
-        message: 'Invalid service_status. Use: in-progress, completed, cancelled, refunded.',
+        message: `Invalid ${fieldLabel('service_status')}. Use: in-progress, completed, cancelled, refunded.`,
       });
     }
     const is_paid = req.query.is_paid !== undefined ? parseBoolean(req.query.is_paid) : null;

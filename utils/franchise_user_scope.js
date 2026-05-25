@@ -122,7 +122,7 @@ const resolveFranchiseCatalogListScope = async (query, userId) => {
         }
         if (scope.isSuper) {
             if (!query.franchise_id) {
-                return { ok: false, status: 400, message: 'franchise_id is required.' };
+                return { ok: false, status: 400, message: 'Franchise is required.' };
             }
             const parsed = parseObjectId(query.franchise_id, 'franchise_id');
             if (!parsed.ok) return { ok: false, status: 400, message: parsed.message };
@@ -131,7 +131,7 @@ const resolveFranchiseCatalogListScope = async (query, userId) => {
         return { ok: false, status: 403, message: 'Access denied.' };
     }
     if (!query.franchise_id) {
-        return { ok: false, status: 400, message: 'franchise_id is required.' };
+        return { ok: false, status: 400, message: 'Franchise is required.' };
     }
     const parsed = parseObjectId(query.franchise_id, 'franchise_id');
     if (!parsed.ok) return { ok: false, status: 400, message: parsed.message };

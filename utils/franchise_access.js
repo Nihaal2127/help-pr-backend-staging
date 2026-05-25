@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { fieldLabel } = require('./field_labels');
 const User = require('../models/user');
 const Franchise = require('../models/franchise');
 
@@ -10,7 +11,7 @@ const parseFranchiseObjectId = (raw, fieldName = 'franchise_id') => {
     if (!s || !/^[a-fA-F0-9]{24}$/i.test(s)) {
         return {
             ok: false,
-            message: `${fieldName} must be a valid MongoDB ObjectId (24 hex characters).`,
+            message: `${fieldLabel(fieldName)} must be a valid MongoDB ObjectId (24 hex characters).`,
         };
     }
     return { ok: true, oid: new mongoose.Types.ObjectId(s) };

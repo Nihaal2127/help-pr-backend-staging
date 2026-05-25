@@ -102,10 +102,10 @@ const listFranchiseServicesForPartner = async (partnerId, categoryIdRaw) => {
     const categoryId =
       categoryIdRaw !== undefined && categoryIdRaw !== null ? String(categoryIdRaw).trim() : '';
     if (!categoryId) {
-      return { ok: false, status: 400, message: 'category_id is required.' };
+      return { ok: false, status: 400, message: 'Category is required.' };
     }
     if (!mongoose.Types.ObjectId.isValid(categoryId)) {
-      return { ok: false, status: 400, message: 'category_id must be a valid MongoDB ObjectId.' };
+      return { ok: false, status: 400, message: 'Category must be a valid MongoDB ObjectId.' };
     }
 
     const partner = await loadPartnerFranchiseId(partnerId);

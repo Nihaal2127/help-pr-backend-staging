@@ -4,6 +4,7 @@ const {
     resolveUserFranchiseOid,
     resolveReqUserId,
 } = require('../utils/franchise_user_scope');
+const { fieldLabel } = require('../utils/field_labels');
 
 const USER_TYPE_ADMIN = 1;
 const USER_TYPE_PARTNER = 2;
@@ -150,7 +151,7 @@ const requireFranchiseRelatedCatalogAccess = async (req, res, next) => {
             return res.status(400).json({
                 success: false,
                 status: 400,
-                message: 'franchise_id must be a valid MongoDB ObjectId.',
+                message: `${fieldLabel('franchise_id')} must be a valid MongoDB ObjectId.`,
             });
         }
 

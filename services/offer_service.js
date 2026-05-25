@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { fieldLabel } = require('../utils/field_labels');
 const Offer = require('../models/offer');
 const { getOfferId } = require('../helper/id_generator');
 const OFFER_TYPES = Offer.OFFER_TYPES;
@@ -13,7 +14,7 @@ const parseObjectId = (raw, fieldName = 'id') => {
     if (!s || !/^[a-fA-F0-9]{24}$/.test(s)) {
         return {
             ok: false,
-            message: `${fieldName} must be a valid MongoDB ObjectId (24 hex characters).`,
+            message: `${fieldLabel(fieldName)} must be a valid MongoDB ObjectId (24 hex characters).`,
         };
     }
     return { ok: true, oid: new mongoose.Types.ObjectId(s) };
@@ -24,22 +25,22 @@ const ok = (status, data) => ({ ok: true, status, data });
 
 const parseNumberField = (value, fieldName) => {
     if (value === undefined || value === null || value === '') {
-        return { ok: false, message: `${fieldName} is required.` };
+        return { ok: false, message: `${fieldLabel(fieldName)} is required.` };
     }
     const n = typeof value === 'number' ? value : Number(String(value).trim());
     if (Number.isNaN(n)) {
-        return { ok: false, message: `${fieldName} must be a valid number.` };
+        return { ok: false, message: `${fieldLabel(fieldName)} must be a valid number.` };
     }
     return { ok: true, n };
 };
 
 const parseDateField = (value, fieldName) => {
     if (value === undefined || value === null || value === '') {
-        return { ok: false, message: `${fieldName} is required.` };
+        return { ok: false, message: `${fieldLabel(fieldName)} is required.` };
     }
     const d = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(d.getTime())) {
-        return { ok: false, message: `${fieldName} must be a valid date.` };
+        return { ok: false, message: `${fieldLabel(fieldName)} must be a valid date.` };
     }
     return { ok: true, d };
 };
@@ -86,7 +87,7 @@ const parseOptionalQueryDate = (value, fieldName) => {
     }
     const d = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(d.getTime())) {
-        return { ok: false, message: `${fieldName} must be a valid date.` };
+        return { ok: false, message: `${fieldLabel(fieldName)} must be a valid date.` };
     }
     return { ok: true, d };
 };
@@ -123,7 +124,7 @@ const applyOfferDateFilters = (filter, query) => {
     if (!pEnd.ok) return { ok: false, message: pEnd.message };
 
     if (pStart.d && pEnd.d && startOfDayUtc(pStart.d) > endOfDayUtc(pEnd.d)) {
-        return { ok: false, message: 'start_date must be on or before end_date.' };
+        return { ok: false, message: 'Start date must be on or before end date.' };
     }
 
     if (pStart.d && !pEnd.d) {

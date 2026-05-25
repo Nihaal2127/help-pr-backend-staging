@@ -10,6 +10,7 @@ const {
   parseOptionalDateField,
   trimOptionalStringField,
 } = require("../utils/multipart_parser");
+const { fieldLabel } = require("../utils/field_labels");
 const { isValidGender, normalizeGender } = require("../enum/gender_enum");
 
 const MIN_USER_AGE_YEARS = 18;
@@ -110,7 +111,7 @@ const validateAccessibleScreens = (items, res) => {
     res.status(400).json({
       success: false,
       status: 400,
-      message: 'accessible_screens must be an array.',
+      message: `${fieldLabel('accessible_screens')} must be an array.`,
     });
     return false;
   }
@@ -120,7 +121,7 @@ const validateAccessibleScreens = (items, res) => {
       res.status(400).json({
         success: false,
         status: 400,
-        message: `accessible_screens[${i}] must be an object with "page" and "url".`,
+        message: `${fieldLabel(`accessible_screens[${i}]`)} must be an object with "page" and "url".`,
       });
       return false;
     }
@@ -128,7 +129,7 @@ const validateAccessibleScreens = (items, res) => {
       res.status(400).json({
         success: false,
         status: 400,
-        message: `accessible_screens[${i}].page must be a non-empty string.`,
+        message: `${fieldLabel(`accessible_screens[${i}].page`)} must be a non-empty string.`,
       });
       return false;
     }
@@ -136,7 +137,7 @@ const validateAccessibleScreens = (items, res) => {
       res.status(400).json({
         success: false,
         status: 400,
-        message: `accessible_screens[${i}].url must be a non-empty string.`,
+        message: `${fieldLabel(`accessible_screens[${i}].url`)} must be a non-empty string.`,
       });
       return false;
     }
@@ -403,7 +404,7 @@ const validatePartnerCatalogPayload = (req, res) => {
     res.status(400).json({
       success: false,
       status: 400,
-      message: 'partner_services must be an array.',
+      message: `${fieldLabel('partner_services')} must be an array.`,
     });
     return false;
   }
@@ -411,7 +412,7 @@ const validatePartnerCatalogPayload = (req, res) => {
     res.status(400).json({
       success: false,
       status: 400,
-      message: 'partner_categories must be an array.',
+      message: `${fieldLabel('partner_categories')} must be an array.`,
     });
     return false;
   }
@@ -427,7 +428,7 @@ const validatePartnerCatalogPayload = (req, res) => {
         res.status(400).json({
           success: false,
           status: 400,
-          message: `partner_services[${i}] must be an object.`,
+          message: `${fieldLabel(`partner_services[${i}]`)} must be an object.`,
         });
         return false;
       }
@@ -436,7 +437,7 @@ const validatePartnerCatalogPayload = (req, res) => {
           res.status(400).json({
             success: false,
             status: 400,
-            message: `partner_services[${i}].category_id must be a valid ObjectId.`,
+            message: `${fieldLabel(`partner_services[${i}].category_id`)} must be a valid ObjectId.`,
           });
           return false;
         }
@@ -446,7 +447,7 @@ const validatePartnerCatalogPayload = (req, res) => {
             res.status(400).json({
               success: false,
               status: 400,
-              message: `partner_services[${i}].services[${j}] is required.`,
+              message: `${fieldLabel(`partner_services[${i}].services[${j}]`)} is required.`,
             });
             return false;
           }
@@ -456,7 +457,7 @@ const validatePartnerCatalogPayload = (req, res) => {
               res.status(400).json({
                 success: false,
                 status: 400,
-                message: `partner_services[${i}].services[${j}] must be a valid service ObjectId.`,
+                message: `${fieldLabel(`partner_services[${i}].services[${j}]`)} must be a valid service ObjectId.`,
               });
               return false;
             }
@@ -466,7 +467,7 @@ const validatePartnerCatalogPayload = (req, res) => {
             res.status(400).json({
               success: false,
               status: 400,
-              message: `partner_services[${i}].services[${j}] must be an object or service id string.`,
+              message: `${fieldLabel(`partner_services[${i}].services[${j}]`)} must be an object or service id string.`,
             });
             return false;
           }
@@ -475,7 +476,7 @@ const validatePartnerCatalogPayload = (req, res) => {
             res.status(400).json({
               success: false,
               status: 400,
-              message: `partner_services[${i}].services[${j}].service_id must be a valid ObjectId.`,
+              message: `${fieldLabel(`partner_services[${i}].services[${j}].service_id`)} must be a valid ObjectId.`,
             });
             return false;
           }
@@ -487,7 +488,7 @@ const validatePartnerCatalogPayload = (req, res) => {
             res.status(400).json({
               success: false,
               status: 400,
-              message: `partner_services[${i}].services[${j}].category_id must be a valid ObjectId.`,
+              message: `${fieldLabel(`partner_services[${i}].services[${j}].category_id`)} must be a valid ObjectId.`,
             });
             return false;
           }
@@ -497,7 +498,7 @@ const validatePartnerCatalogPayload = (req, res) => {
           res.status(400).json({
             success: false,
             status: 400,
-            message: `partner_services[${i}].service_id must be a valid ObjectId.`,
+            message: `${fieldLabel(`partner_services[${i}].service_id`)} must be a valid ObjectId.`,
           });
           return false;
         }
@@ -510,7 +511,7 @@ const validatePartnerCatalogPayload = (req, res) => {
           res.status(400).json({
             success: false,
             status: 400,
-            message: `partner_services[${i}].category_id must be a valid ObjectId.`,
+            message: `${fieldLabel(`partner_services[${i}].category_id`)} must be a valid ObjectId.`,
           });
           return false;
         }
@@ -523,7 +524,7 @@ const validatePartnerCatalogPayload = (req, res) => {
         res.status(400).json({
           success: false,
           status: 400,
-          message: `partner_categories[${i}] must be an object.`,
+          message: `${fieldLabel(`partner_categories[${i}]`)} must be an object.`,
         });
         return false;
       }
@@ -531,7 +532,7 @@ const validatePartnerCatalogPayload = (req, res) => {
         res.status(400).json({
           success: false,
           status: 400,
-          message: `partner_categories[${i}].services must be an array.`,
+          message: `${fieldLabel(`partner_categories[${i}].services`)} must be an array.`,
         });
         return false;
       }
@@ -539,7 +540,7 @@ const validatePartnerCatalogPayload = (req, res) => {
         res.status(400).json({
           success: false,
           status: 400,
-          message: `partner_categories[${i}].category_id must be a valid ObjectId.`,
+          message: `${fieldLabel(`partner_categories[${i}].category_id`)} must be a valid ObjectId.`,
         });
         return false;
       }
@@ -549,7 +550,7 @@ const validatePartnerCatalogPayload = (req, res) => {
           res.status(400).json({
             success: false,
             status: 400,
-            message: `partner_categories[${i}].services[${j}] is required.`,
+            message: `${fieldLabel(`partner_categories[${i}].services[${j}]`)} is required.`,
           });
           return false;
         }
@@ -559,7 +560,7 @@ const validatePartnerCatalogPayload = (req, res) => {
             res.status(400).json({
               success: false,
               status: 400,
-              message: `partner_categories[${i}].services[${j}] must be a valid service ObjectId.`,
+              message: `${fieldLabel(`partner_categories[${i}].services[${j}]`)} must be a valid service ObjectId.`,
             });
             return false;
           }
@@ -569,7 +570,7 @@ const validatePartnerCatalogPayload = (req, res) => {
           res.status(400).json({
             success: false,
             status: 400,
-            message: `partner_categories[${i}].services[${j}] must be an object or service id string.`,
+            message: `${fieldLabel(`partner_categories[${i}].services[${j}]`)} must be an object or service id string.`,
           });
           return false;
         }
@@ -578,7 +579,7 @@ const validatePartnerCatalogPayload = (req, res) => {
           res.status(400).json({
             success: false,
             status: 400,
-            message: `partner_categories[${i}].services[${j}].service_id must be a valid ObjectId.`,
+            message: `${fieldLabel(`partner_categories[${i}].services[${j}].service_id`)} must be a valid ObjectId.`,
           });
           return false;
         }
@@ -591,7 +592,7 @@ const validatePartnerCatalogPayload = (req, res) => {
       res.status(400).json({
         success: false,
         status: 400,
-        message: 'service_ids must be an array when partner_services is omitted.',
+        message: `${fieldLabel('service_ids')} must be an array when ${fieldLabel('partner_services')} is omitted.`,
       });
       return false;
     }
@@ -600,7 +601,7 @@ const validatePartnerCatalogPayload = (req, res) => {
         res.status(400).json({
           success: false,
           status: 400,
-          message: `service_ids[${k}] must be a valid ObjectId.`,
+          message: `${fieldLabel(`service_ids[${k}]`)} must be a valid ObjectId.`,
         });
         return false;
       }
@@ -612,7 +613,7 @@ const validatePartnerCatalogPayload = (req, res) => {
         res.status(400).json({
           success: false,
           status: 400,
-          message: 'category_ids must be an array.',
+          message: `${fieldLabel('category_ids')} must be an array.`,
         });
         return false;
       }
@@ -625,7 +626,7 @@ const validatePartnerCatalogPayload = (req, res) => {
           res.status(400).json({
             success: false,
             status: 400,
-            message: `category_ids[${c}] must be a valid ObjectId.`,
+            message: `${fieldLabel(`category_ids[${c}]`)} must be a valid ObjectId.`,
           });
           return false;
         }
@@ -1437,14 +1438,14 @@ const changePasswordMiddleware = (req, res, next) => {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'user_id is required.',
+      message: `${fieldLabel('user_id')} is required.`,
     });
   }
   if (!mongoose.Types.ObjectId.isValid(user_id)) {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'Invalid user_id format.',
+      message: `Invalid ${fieldLabel('user_id')} format.`,
     });
   }
   if (type === undefined || type === null || String(type).trim() === '') {

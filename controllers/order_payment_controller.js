@@ -5,6 +5,7 @@ const { assertOrderModifyAccess } = require("../utils/order_access");
 const { syncOrderPaymentStatus } = require("../services/order_payment_status_service");
 const { syncAllPartnerOrderPaymentsForOrder } = require("../services/partner_wallet_order_service");
 const { validatePartnerOrderPayment } = require("../services/partner_order_payment_validation");
+const { fieldLabel } = require("../utils/field_labels");
 
 const PAYER_TYPES = new Set(["customer", "partner"]);
 const STATUSES = new Set(["pending", "completed", "failed", "refunded"]);
@@ -28,14 +29,14 @@ const create = async (req, res) => {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: "Valid order_id is required.",
+        message: `Valid ${fieldLabel("order_id")} is required.`,
       });
     }
     if (!payer_type || !PAYER_TYPES.has(payer_type)) {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: "payer_type must be customer or partner.",
+        message: `${fieldLabel("payer_type")} must be customer or partner.`,
       });
     }
     if (amount === undefined || Number(amount) < 0) {

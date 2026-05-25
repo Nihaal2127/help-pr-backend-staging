@@ -5,6 +5,7 @@ const {
     resolvePartnerPayoutListScope,
     assertPartnerRecordAccess,
 } = require('../utils/partner_payout_access');
+const { fieldLabel } = require('../utils/field_labels');
 
 const PARTNER_USER_TYPE = 2;
 
@@ -36,7 +37,7 @@ const applyFranchiseScopeToBody = (body, scopeFilter) => {
 
 const loadPartnerForAccess = async (partnerIdRaw) => {
     if (!partnerIdRaw || !mongoose.Types.ObjectId.isValid(String(partnerIdRaw).trim())) {
-        return { ok: false, status: 400, message: 'partner_id must be a valid MongoDB ObjectId.' };
+        return { ok: false, status: 400, message: `${fieldLabel('partner_id')} must be a valid MongoDB ObjectId.` };
     }
     const partner = await User.findOne({
         _id: partnerIdRaw,

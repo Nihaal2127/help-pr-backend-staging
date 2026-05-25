@@ -4,6 +4,7 @@ const { validationResult } = require('express-validator');
 const { applyPagination } = require('../utils/pagination');
 const { getVerificationId } = require('../helper/id_generator');
 const { getDocuementStatus } = require('../validator/document_validator');
+const { fieldLabel } = require('../utils/field_labels');
 
 const getAll = async (req, res) => {
 
@@ -173,7 +174,7 @@ const updateDocumentStatus = async (req, res) => {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: 'rejection_reason is required when status is reject.',
+        message: `${fieldLabel('rejection_reason')} is required when status is reject.`,
       });
     }
 

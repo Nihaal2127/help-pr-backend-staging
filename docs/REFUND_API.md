@@ -258,11 +258,11 @@ from_admin_commission + from_partner_wallet = refund_amount   (± ₹0.01)
 
 | Message | Cause |
 |---------|--------|
-| `refund_amount exceeds refundable balance (X)` | `refund_amount` &gt; customer net paid |
-| `from_admin_commission + from_partner_wallet must equal refund_amount` | Split mismatch |
-| `from_admin_commission exceeds admin payable for this refund (X)` | Admin slice &gt; `refund_amount −` max partner clawback for this order |
-| `from_partner_wallet exceeds partner credits for this order (X)` | Partner slice &gt; ledger net for **this order** |
-| `Order has no partner; from_partner_wallet must be 0` | Partner debit without partner |
+| `Refund amount exceeds refundable balance (X)` | Refund amount &gt; customer net paid |
+| `Admin portion and partner wallet portion must add up to the refund amount.` | Split mismatch |
+| `Admin portion exceeds the maximum allowed for this refund (X). It includes tax and fees, not commission alone.` | Admin slice &gt; refund amount − max partner clawback for this order |
+| `Partner wallet portion exceeds partner credits for this order (X)` | Partner slice &gt; ledger net for **this order** |
+| `Order has no partner; partner wallet portion must be 0` | Partner debit without partner |
 
 ---
 

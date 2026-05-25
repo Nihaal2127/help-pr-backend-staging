@@ -55,7 +55,7 @@ const createFranchiseMiddleware = (req, res, next) => {
         return res.status(400).json({
             success: false,
             status: 400,
-            message: 'area_id must be an array.',
+            message: 'Area must be an array.',
         });
     }
     const { services, categories } = body;
@@ -119,7 +119,7 @@ const updateFranchiseMiddleware = (req, res, next) => {
         return res.status(400).json({
             success: false,
             status: 400,
-            message: 'area_id must be an array.',
+            message: 'Area must be an array.',
         });
     }
     const { services, categories } = body;

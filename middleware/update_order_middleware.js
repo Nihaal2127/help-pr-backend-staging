@@ -1,5 +1,6 @@
 const Offer = require("../models/offer");
 const { checkObjectIdExists } = require("../validator/id_validator");
+const { fieldLabel } = require("../utils/field_labels");
 
 const isOfferClearValue = (value) =>
   value === null ||
@@ -15,7 +16,7 @@ const updateOrderMiddleware = async (req, res, next) => {
       return res.status(409).json({
         success: false,
         status: 409,
-        message: "total_service_charge must be greater than 0.",
+        message: "Total service charge must be greater than 0.",
       });
     }
   }
@@ -26,7 +27,7 @@ const updateOrderMiddleware = async (req, res, next) => {
       return res.status(409).json({
         success: false,
         status: 409,
-        message: "service_price must be greater than 0.",
+        message: "Service price must be greater than 0.",
       });
     }
   }

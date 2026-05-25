@@ -160,7 +160,7 @@ Prefix **`/api/order`** unless noted.
 | PUT | `/api/order/update/:id` | Update `order_status` and/or **reprice** via `total_service_charge` / `offer_id` — **do not** set `is_paid` manually |
 | PUT | `/api/order/serviceUpdate/:orderServiceId` | Update line item fields (see middleware) |
 | PUT | `/api/order/cancleService/:orderId` | Cancel one line — body `service_items_id` |
-| PUT | `/api/order/cancle/:id` | Cancel whole order — body `cancellation_reasone`; clears pending dues, syncs partner wallet |
+| PUT | `/api/order/cancle/:id` | Cancel whole order — body `cancellation_reasone` |
 | DELETE | `/api/order/delete/:id` | Soft-delete order (`deleted_at`) |
 
 #### `GET /api/order/getAll` query parameters
@@ -383,7 +383,7 @@ Standalone **`/api/order-additional-charges`** and **`/api/order-payments`** rou
 
 | Body field | Effect |
 |------------|--------|
-| `order_status` | Syncs to non-cancelled/refunded line items. **`completed`** requires customer paid in full (`payment_status` = `paid`) → **409** if not. **`cancelled`** / **`refunded`** clear pending dues (`customer_due_amount`, `partner_due_amount` → 0), re-sync partner wallet; `order_payment` rows are not changed |
+| `order_status` | Syncs to non-cancelled/refunded line items. **`completed`** requires customer paid in full (`payment_status` = `paid`) → **409** if not. **`cancelled`** / **`refunded`** clear pending due amounts (`customer_due_amount`, `partner_due_amount` → 0); `order_payment` rows are not changed |
 | `total_service_charge` (or `service_price`) | Reprice using **saved** % on the order |
 | `offer_id` | Apply/change offer; **`order_offer`** replaced |
 | `offer_id: null` | Remove offer |

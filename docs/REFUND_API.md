@@ -168,7 +168,7 @@ Orders eligible for a refund. **All conditions must pass:**
 | `order_id` | Display id only |
 | `total_amount` | `order.total_price` (context only; not the refund cap) |
 | `user_paid` / `refundable_amount` | **Max `refund_amount`** = net customer paid |
-| `partner_payable_amount` | Partner share on a full refund of `refundable_amount` — net wallet credits for **this order** (ledger credits − debits), capped by refundable |
+| `partner_payable_amount` | Max partner clawback for this order — **only** `partner_wallet_ledger` credits − debits where `order_id` matches (not global wallet, not order entitlement) |
 | `admin_payable_amount` | Admin share on full refund — `refundable_amount − partner_payable_amount` (commission, taxes, and remainder) |
 
 ```text
@@ -261,7 +261,7 @@ from_admin_commission + from_partner_wallet = refund_amount   (± ₹0.01)
 | `refund_amount exceeds refundable balance (X)` | `refund_amount` &gt; customer net paid |
 | `from_admin_commission + from_partner_wallet must equal refund_amount` | Split mismatch |
 | `from_admin_commission exceeds order admin commission (X)` | Admin slice &gt; commission cap |
-| `from_partner_wallet exceeds partner wallet balance (X)` | Partner slice &gt; global wallet |
+| `from_partner_wallet exceeds partner credits for this order (X)` | Partner slice &gt; ledger net for **this order** |
 | `Order has no partner; from_partner_wallet must be 0` | Partner debit without partner |
 
 ---

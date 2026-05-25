@@ -229,7 +229,7 @@ Paginated refund history with search, date filter, and sort.
 | `_id` | Store as selected order; send as `order_id` on create |
 | `order_id` | Display in picker/table |
 | `user_paid` / `refundable_amount` | **Max refund amount** (same value; net paid available to refund) |
-| `partner_payable_amount` | Suggested **`from_partner_wallet`** on full refund — partner wallet net credited for **this order** |
+| `partner_payable_amount` | Suggested **`from_partner_wallet`** — ledger credits for **this order only** (0 if partner was never credited on this order) |
 | `admin_payable_amount` | Suggested **`from_admin_commission`** on full refund — remainder (incl. tax); `admin_payable + partner_payable = refundable_amount` |
 | `total_amount` | Pre-fill `total_amount` on create form |
 | `payment_status` | Badge: `paid`, `partially_paid`, etc. |

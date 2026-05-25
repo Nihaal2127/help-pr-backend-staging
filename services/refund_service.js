@@ -9,11 +9,7 @@ const {
     PAYMENT_STATUS_TOLERANCE,
 } = require('../enum/order_payment_status_enum');
 const { syncOrderPaymentStatus } = require('./order_payment_status_service');
-const {
-    syncAllPartnerOrderPaymentsForOrder,
-    computeOrderPartnerCreditAmount,
-} = require('./partner_wallet_order_service');
-const { getWalletAggregatesForPartners } = require('./partner_payout_service');
+const { syncAllPartnerOrderPaymentsForOrder } = require('./partner_wallet_order_service');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
 const {
     ORDER_STATUS_COMPLETED,
@@ -181,13 +177,6 @@ const getRefundableAmountForOrder = async (order) => {
     };
 };
 
-const getPartnerWalletBalance = async (partnerId) => {
-    if (!partnerId) return 0;
-    const walletMap = await getWalletAggregatesForPartners([partnerId]);
-    const wallet = walletMap.get(partnerId.toString());
-    return wallet ? wallet.payable_balance : 0;
-};
-
 /** Net partner wallet credits for an order (credits − debits on ledger rows for that order). */
 const getPartnerWalletNetByOrderIds = async (orderIds) => {
     if (!orderIds.length) return new Map();
@@ -224,26 +213,21 @@ const getPartnerWalletNetByOrderIds = async (orderIds) => {
     );
 };
 
+const getPartnerWalletNetForOrder = async (orderId) => {
+    const map = await getPartnerWalletNetByOrderIds([orderId]);
+    return map.get(orderId.toString()) ?? 0;
+};
+
 /**
- * Partner share of a refund for one order (capped by refundable customer balance).
- * Uses ledger net for the order; falls back to computed entitlement when ledger is empty.
+ * Partner clawback on refund for one order — only wallet ledger net credited for this order_id.
+ * Does not use global partner balance or theoretical order entitlement.
  */
-const resolvePartnerRefundShare = async (orderDoc, refundableAmount, ledgerNetForOrder = null) => {
+const resolvePartnerRefundShare = (refundableAmount, ledgerNetForOrder = 0) => {
     const refundable = roundAmount(refundableAmount);
-    if (!orderDoc?.partner_id || refundable <= PAYMENT_STATUS_TOLERANCE) {
+    if (refundable <= PAYMENT_STATUS_TOLERANCE) {
         return 0;
     }
-
-    let partnerShare =
-        ledgerNetForOrder !== null && ledgerNetForOrder !== undefined
-            ? roundAmount(ledgerNetForOrder)
-            : 0;
-
-    if (partnerShare <= PAYMENT_STATUS_TOLERANCE) {
-        const computed = await computeOrderPartnerCreditAmount(orderDoc);
-        partnerShare = roundAmount(computed?.amount ?? 0);
-    }
-
+    const partnerShare = roundAmount(Math.max(0, ledgerNetForOrder));
     return roundAmount(Math.min(partnerShare, refundable));
 };
 
@@ -469,31 +453,10 @@ const listEligibleOrders = async (query, scopeFilter = {}) => {
         const orderIds = rows.map((row) => row._id);
         const partnerLedgerNetMap = await getPartnerWalletNetByOrderIds(orderIds);
 
-        const needsEntitlementFallback = rows.filter(
-            (row) =>
-                row.partner_id &&
-                (partnerLedgerNetMap.get(row._id.toString()) ?? 0) <= PAYMENT_STATUS_TOLERANCE
-        );
-        const orderDocsForFallback = needsEntitlementFallback.length
-            ? await Order.find({
-                  _id: { $in: needsEntitlementFallback.map((row) => row._id) },
-                  deleted_at: null,
-              }).lean()
-            : [];
-        const orderDocById = new Map(
-            orderDocsForFallback.map((order) => [order._id.toString(), order])
-        );
-
-        const records = await Promise.all(
-            rows.map(async (row) => {
+        const records = rows.map((row) => {
                 const refundable = roundAmount(row.refundable_amount);
                 const ledgerNet = partnerLedgerNetMap.get(row._id.toString()) ?? 0;
-                const orderDoc = orderDocById.get(row._id.toString()) || null;
-                const partnerShare = await resolvePartnerRefundShare(
-                    orderDoc || (row.partner_id ? { _id: row._id, partner_id: row.partner_id } : null),
-                    refundable,
-                    ledgerNet
-                );
+                const partnerShare = resolvePartnerRefundShare(refundable, ledgerNet);
                 const settlement = computeRefundSettlementAmounts(refundable, partnerShare);
 
                 return {
@@ -509,8 +472,7 @@ const listEligibleOrders = async (query, scopeFilter = {}) => {
                     order_status: row.order_status || null,
                     franchise_id: row.franchise_id || null,
                 };
-            })
-        );
+            });
 
         return ok(200, {
             message: 'Eligible orders fetched successfully',
@@ -607,15 +569,15 @@ const createRefund = async (body, createdById = null) => {
             );
         }
 
+        const partnerCreditedForOrder = await getPartnerWalletNetForOrder(order._id);
         if (fromPartnerWallet > 0) {
             if (!order.partner_id) {
                 return fail(400, 'Order has no partner; from_partner_wallet must be 0.');
             }
-            const walletBalance = await getPartnerWalletBalance(order.partner_id);
-            if (fromPartnerWallet > walletBalance + PAYMENT_STATUS_TOLERANCE) {
+            if (fromPartnerWallet > partnerCreditedForOrder + PAYMENT_STATUS_TOLERANCE) {
                 return fail(
                     400,
-                    `from_partner_wallet exceeds partner wallet balance (${roundAmount(walletBalance)}).`
+                    `from_partner_wallet exceeds partner credits for this order (${roundAmount(partnerCreditedForOrder)}).`
                 );
             }
         }
@@ -719,7 +681,7 @@ const buildRefundSummaryForOrder = async (order, refundRecords = [], ledgerNet =
             (refundRecords || []).reduce((sum, row) => sum + (Number(row.refund_amount) || 0), 0)
     );
 
-    const partnerShare = await resolvePartnerRefundShare(order, refundable, ledgerNet);
+    const partnerShare = resolvePartnerRefundShare(refundable, ledgerNet);
     const settlement = computeRefundSettlementAmounts(refundable, partnerShare);
 
     return {

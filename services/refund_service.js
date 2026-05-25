@@ -739,10 +739,14 @@ const buildRefundSummaryForOrder = async (order, refundRecords = [], ledgerNet =
 };
 
 /**
- * Attach `refunds` (history) and `refund_summary` (rollup + settlement preview) to order API records.
+ * Attach `refunds` (history) and optionally `refund_summary` (rollup + settlement preview) to order API records.
+ * @param {object} [options]
+ * @param {boolean} [options.includeRefundSummary=true] — set false for GET /api/order/get/:id
  */
-const attachRefundsToOrderRecords = async (orders) => {
+const attachRefundsToOrderRecords = async (orders, options = {}) => {
     if (!Array.isArray(orders) || !orders.length) return orders;
+
+    const includeRefundSummary = options.includeRefundSummary !== false;
 
     const orderIds = orders
         .map((order) => order._id)
@@ -752,23 +756,22 @@ const attachRefundsToOrderRecords = async (orders) => {
 
     const [refundsByOrder, ledgerNetMap] = await Promise.all([
         listRefundsForOrders(orderIds),
-        getPartnerWalletNetByOrderIds(orderIds),
+        includeRefundSummary ? getPartnerWalletNetByOrderIds(orderIds) : Promise.resolve(new Map()),
     ]);
 
     return Promise.all(
         orders.map(async (order) => {
             const key = order._id?.toString?.() ?? String(order._id);
             const refunds = refundsByOrder.get(key) || [];
-            const refund_summary = await buildRefundSummaryForOrder(
-                order,
-                refunds,
-                ledgerNetMap.get(key) ?? 0
-            );
-            return {
-                ...order,
-                refunds,
-                refund_summary,
-            };
+            const enriched = { ...order, refunds };
+            if (includeRefundSummary) {
+                enriched.refund_summary = await buildRefundSummaryForOrder(
+                    order,
+                    refunds,
+                    ledgerNetMap.get(key) ?? 0
+                );
+            }
+            return enriched;
         })
     );
 };

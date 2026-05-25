@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { register, login, update } = require('../../../controllers/mobile/partner/partner_controller');
 const { categories } = require('../../../controllers/mobile/partner/catalog_controller');
+const { list: listSubscriptionPlans } = require('../../../controllers/mobile/partner/subscription_plan_controller');
 const {
   partnerRegisterMiddleware,
   partnerLoginMiddleware,
@@ -32,5 +33,6 @@ router.put(
   update
 );
 router.get('/categories', mobileAuthMiddleware, categories);
+router.get('/subscription-plans', mobileAuthMiddleware, listSubscriptionPlans);
 
 module.exports = router;

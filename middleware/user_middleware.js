@@ -158,6 +158,27 @@ const isUserCreateRoute = (req) =>
 const isUserUpdateRoute = (req) =>
   String(req.baseUrl || '') === '/api/user' && String(req.path || '').startsWith('/update/');
 
+/** Relative S3/CDN storage key (e.g. user_profile/uuid_file.jpg) from mobile upload. */
+const isStoredProfileImagePath = (value) => {
+  const s = String(value).trim();
+  if (!s || /^https?:\/\//i.test(s)) {
+    return false;
+  }
+  return /^[a-zA-Z0-9_./-]+$/.test(s);
+};
+
+const isValidPartnerProfileUrlValue = (value) => {
+  const s = String(value).trim();
+  if (!s) {
+    return false;
+  }
+  if (isStoredProfileImagePath(s)) {
+    return true;
+  }
+  const urlRegex = /^(https?:\/\/)?([\w.-]+)\.([a-z]{2,6})([\/\w .-]*)*\/?$/;
+  return urlRegex.test(s);
+};
+
 const hasPartnerCatalogFields = (body) =>
   body.partner_services !== undefined ||
   body.partner_categories !== undefined ||
@@ -1101,6 +1122,10 @@ const updateUserMiddleware = async (req, res, next) => {
   trimOptionalStringField(req, "experience");
   if (!validateRequiredDateOfBirthAndGender(req, res)) return;
 
+  if (isUserUpdateRoute(req) && req.body.profile_url !== undefined && String(req.body.profile_url).trim() === '') {
+    delete req.body.profile_url;
+  }
+
   const {
     name,
     email,
@@ -1362,20 +1387,29 @@ const updateUserMiddleware = async (req, res, next) => {
       });
     }
     if (is_from_web !== undefined && is_from_web === false && (type === 2 || type === 3)) {
-      if (profile_url !== undefined && profile_url.trim() === '') {
+      if (isUserUpdateRoute(req)) {
+        if (profile_url !== undefined && !isValidPartnerProfileUrlValue(profile_url)) {
+          return res.status(400).json({
+            success: false,
+            status: 400,
+            message: 'Invalid Profile URL format.',
+          });
+        }
+      } else if (profile_url !== undefined && profile_url.trim() === '') {
         return res.status(400).json({
           success: false,
           status: 400,
-          message: 'Profile url is require.'
+          message: 'Profile url is require.',
         });
-      }
-      const urlRegex = /^(https?:\/\/)?([\w.-]+)\.([a-z]{2,6})([\/\w .-]*)*\/?$/;
-      if (profile_url !== undefined && !urlRegex.test(profile_url)) {
-        return res.status(400).json({
-          success: false,
-          status: 400,
-          message: 'Invalid Profile URL format.'
-        });
+      } else {
+        const urlRegex = /^(https?:\/\/)?([\w.-]+)\.([a-z]{2,6})([\/\w .-]*)*\/?$/;
+        if (profile_url !== undefined && !urlRegex.test(profile_url)) {
+          return res.status(400).json({
+            success: false,
+            status: 400,
+            message: 'Invalid Profile URL format.',
+          });
+        }
       }
     }
     if (is_from_web !== undefined && is_from_web === true) {

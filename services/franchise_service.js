@@ -20,20 +20,10 @@ const {
 } = require('../utils/catalog_availability_resolver');
 const { parseBoolean } = require('../utils/parser');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
-
-const escapeRegExp = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-/** Case-insensitive global franchise name uniqueness (non-deleted rows only). */
-const franchiseNameExists = (trimmedName, excludeId = null) => {
-    const query = {
-        deleted_at: null,
-        name: new RegExp(`^${escapeRegExp(trimmedName)}$`, 'i'),
-    };
-    if (excludeId) {
-        query._id = { $ne: excludeId };
-    }
-    return query;
-};
+const {
+    franchiseNameExistsQuery,
+    normalizeFranchiseName,
+} = require('../utils/franchise_name_uniqueness');
 
 const parseObjectId = (raw, fieldName = 'id') => {
     if (raw instanceof mongoose.Types.ObjectId) {
@@ -344,12 +334,12 @@ const createFranchise = async (body) => {
 
         const { description, desc } = normalizeDescriptionFields(body);
 
-        const trimmedName = String(name).trim();
+        const trimmedName = normalizeFranchiseName(name);
         if (!trimmedName) {
             return fail(400, 'Franchise name is required.');
         }
 
-        const existing = await Franchise.findOne(franchiseNameExists(trimmedName));
+        const existing = await Franchise.findOne(franchiseNameExistsQuery(trimmedName));
         if (existing) {
             return fail(409, 'Franchise name already exists.');
         }
@@ -417,11 +407,11 @@ const updateFranchise = async (id, body) => {
         }
 
         if (body.name !== undefined) {
-            const trimmedName = String(body.name).trim();
+            const trimmedName = normalizeFranchiseName(body.name);
             if (!trimmedName) {
                 return fail(400, 'Franchise name is required.');
             }
-            const existing = await Franchise.findOne(franchiseNameExists(trimmedName, id));
+            const existing = await Franchise.findOne(franchiseNameExistsQuery(trimmedName, id));
             if (existing) return fail(409, 'Franchise name already exists.');
             franchise.name = trimmedName;
         }
@@ -546,7 +536,7 @@ const importFranchises = async (records) => {
             if (!adminCtx) {
                 return fail(400, `Admin user not found for franchise: ${trimmedName}`);
             }
-            const nameConflict = await Franchise.findOne(franchiseNameExists(trimmedName));
+            const nameConflict = await Franchise.findOne(franchiseNameExistsQuery(trimmedName));
             if (nameConflict) {
                 return fail(409, `Franchise name already exists. (${trimmedName})`);
             }

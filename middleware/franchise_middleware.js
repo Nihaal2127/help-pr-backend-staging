@@ -1,3 +1,68 @@
+const Franchise = require('../models/franchise');
+const {
+    findConflictingFranchiseName,
+    normalizeFranchiseName,
+} = require('../utils/franchise_name_uniqueness');
+
+const FRANCHISE_NAME_CONFLICT_MESSAGE = 'Franchise name already exists.';
+
+const ensureFranchiseNameUniqueMiddleware = async (req, res, next) => {
+    try {
+        const trimmedName = normalizeFranchiseName(req.body.name);
+        if (!trimmedName) {
+            return next();
+        }
+        const existing = await findConflictingFranchiseName(Franchise, trimmedName);
+        if (existing) {
+            return res.status(409).json({
+                success: false,
+                status: 409,
+                message: FRANCHISE_NAME_CONFLICT_MESSAGE,
+            });
+        }
+        return next();
+    } catch (error) {
+        console.error('ensureFranchiseNameUniqueMiddleware', error.message);
+        return res.status(500).json({
+            success: false,
+            status: 500,
+            message: 'Internal server error.',
+        });
+    }
+};
+
+const ensureFranchiseNameUniqueOnUpdateMiddleware = async (req, res, next) => {
+    if (req.body.name === undefined) {
+        return next();
+    }
+    try {
+        const trimmedName = normalizeFranchiseName(req.body.name);
+        if (!trimmedName) {
+            return next();
+        }
+        const existing = await findConflictingFranchiseName(
+            Franchise,
+            trimmedName,
+            req.params.id
+        );
+        if (existing) {
+            return res.status(409).json({
+                success: false,
+                status: 409,
+                message: FRANCHISE_NAME_CONFLICT_MESSAGE,
+            });
+        }
+        return next();
+    } catch (error) {
+        console.error('ensureFranchiseNameUniqueOnUpdateMiddleware', error.message);
+        return res.status(500).json({
+            success: false,
+            status: 500,
+            message: 'Internal server error.',
+        });
+    }
+};
+
 const createFranchiseMiddleware = (req, res, next) => {
     const body = req.body;
     const {
@@ -140,4 +205,9 @@ const updateFranchiseMiddleware = (req, res, next) => {
     next();
 };
 
-module.exports = { createFranchiseMiddleware, updateFranchiseMiddleware };
+module.exports = {
+    createFranchiseMiddleware,
+    updateFranchiseMiddleware,
+    ensureFranchiseNameUniqueMiddleware,
+    ensureFranchiseNameUniqueOnUpdateMiddleware,
+};

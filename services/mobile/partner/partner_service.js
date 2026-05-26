@@ -691,6 +691,7 @@ const loginPartner = async ({ email, password, device_token }) => {
     ...populated,
     city_id: populated?.city_id?._id || null,
     city_name: populated?.city_id?.name || null,
+    verification_status_message: verificationStatusToMessage(populated?.verification_status),
   };
   delete data.password;
 

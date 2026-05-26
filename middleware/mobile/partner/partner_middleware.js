@@ -36,6 +36,23 @@ const PARTNER_DOCUMENT_FILE_FIELDS = [
   'aadhar_card',
 ];
 
+const AADHAR_CARD_FIELD = 'aadhar_card';
+
+const hasPartnerDocumentFileUpload = (files) =>
+  PARTNER_DOCUMENT_FILE_FIELDS.some((field) => files?.[field]?.[0]);
+
+const validateAadharCardFileRequired = (req, res) => {
+  if (!req.files?.[AADHAR_CARD_FIELD]?.[0]) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Aadhar card is required.',
+    });
+    return false;
+  }
+  return true;
+};
+
 const PARTNER_UPDATE_SECTION = {
   ALL: 'all',
   BASIC: 'basic-details',
@@ -1013,18 +1030,7 @@ const validatePartnerBasicPartialFields = async (req, res) => {
   return true;
 };
 
-const validatePartnerDocumentsPayload = (req, res) => {
-  const hasDocFile = PARTNER_DOCUMENT_FILE_FIELDS.some((field) => req.files?.[field]?.[0]);
-  if (!hasDocFile) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'At least one verification document file is required.',
-    });
-    return false;
-  }
-  return true;
-};
+const validatePartnerDocumentsPayload = (req, res) => validateAadharCardFileRequired(req, res);
 
 const validatePartnerBankAccountsPayload = (req, res) => {
   if (!hasBankPayload(req.body)) {
@@ -1041,6 +1047,9 @@ const validatePartnerBankAccountsPayload = (req, res) => {
 const validatePartnerUpdatePartialFields = async (req, res) => {
   if (!(await validatePartnerBasicPartialFields(req, res))) return false;
   if (!validateBankPayloadIfPresent(req, res)) return false;
+  if (hasPartnerDocumentFileUpload(req.files) && !validateAadharCardFileRequired(req, res)) {
+    return false;
+  }
   return true;
 };
 

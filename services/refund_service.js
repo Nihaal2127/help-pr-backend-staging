@@ -587,24 +587,15 @@ const createRefund = async (body, createdById = null) => {
         }
 
         const partnerCreditedForOrder = await getPartnerWalletNetForOrder(order._id);
-        const maxPartnerForRefund = roundAmount(
+        const maxPartnerWalletForRefund = roundAmount(
             Math.min(partnerCreditedForOrder, refundAmount)
         );
-        const maxAdminForRefund = roundAmount(
-            Math.max(0, refundAmount - maxPartnerForRefund)
-        );
 
-        if (fromAdminCommission > maxAdminForRefund + PAYMENT_STATUS_TOLERANCE) {
-            return fail(
-                400,
-                `Admin portion exceeds the maximum allowed for this refund (${maxAdminForRefund}). It includes tax and fees, not commission alone.`
-            );
-        }
         if (fromPartnerWallet > 0) {
             if (!order.partner_id) {
                 return fail(400, 'Order has no partner; partner wallet portion must be 0.');
             }
-            if (fromPartnerWallet > partnerCreditedForOrder + PAYMENT_STATUS_TOLERANCE) {
+            if (fromPartnerWallet > maxPartnerWalletForRefund + PAYMENT_STATUS_TOLERANCE) {
                 return fail(
                     400,
                     `Partner wallet portion exceeds partner credits for this order (${roundAmount(partnerCreditedForOrder)}).`

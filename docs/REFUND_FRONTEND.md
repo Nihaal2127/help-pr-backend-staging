@@ -315,7 +315,7 @@ from_admin_commission + from_partner_wallet === refund_amount
 | Rule | Error example |
 |------|----------------|
 | `refund_amount` ≤ refundable balance | `Refund amount exceeds refundable balance (4500).` |
-| `from_admin_commission` ≤ `refund_amount −` partner clawback for this order | `Admin portion exceeds the maximum allowed for this refund (750). It includes tax and fees, not commission alone.` |
+| `from_partner_wallet` ≤ partner ledger net for this order | `Partner wallet portion exceeds partner credits for this order (X).` |
 | `from_partner_wallet` ≤ partner wallet balance | `Partner wallet portion exceeds partner credits for this order (1200).` |
 | Order has no partner and `from_partner_wallet` > 0 | `Order has no partner; partner wallet portion must be 0.` |
 
@@ -386,10 +386,10 @@ interface SelectedEligibleOrder {
 | Input | Max | Min |
 |-------|-----|-----|
 | Refund amount | `maxRefund` | &gt; 0 |
-| From admin commission | `min(maxAdminCommission, refundAmount)` | 0 |
-| From partner wallet | `min(maxPartnerWallet, refundAmount)` | 0 |
+| From admin commission | `refundAmount` (any non-negative split; no server ratio cap) | 0 |
+| From partner wallet | `min(maxPartnerPayable, refundAmount)` — ledger net for this order | 0 |
 
-**Auto-split (optional UX):** When user changes `refund_amount`, you may auto-fill partner wallet first up to `maxPartnerWallet`, then admin commission for the remainder — or let finance staff edit both manually. Server only checks the **sum equals refund_amount**.
+**Split UX:** Finance staff choose both portions; server only requires **admin + partner = refund_amount** (± ₹0.01) and partner ≤ ledger credits for the order. `partner_payable_amount` / `admin_payable_amount` on eligible-orders are **suggested defaults** for a full refund, not enforced on partial refunds.
 
 ```ts
 function validateSplit(refund: number, admin: number, partner: number): string | null {

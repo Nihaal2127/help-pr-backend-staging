@@ -46,6 +46,7 @@ const asRejectedState = (value, defaultValue = null) => {
 const asApprovalStatus = (value, defaultValue = "approve") => {
   if (value === undefined || value === null || value === "") return defaultValue;
   const normalized = String(value).trim().toLowerCase();
+  if (normalized === "approved") return "approve";
   if (["approve", "pending", "rejected"].includes(normalized)) return normalized;
   return defaultValue;
 };
@@ -619,15 +620,17 @@ const update = async (req, res) => {
     let builtServices;
     if (req.body.service_ids !== undefined) {
       const uniqueIds = dedupeServiceIds(req.body.service_ids);
-      const serviceResult = await checkObjectIdExists(Service, uniqueIds, 'service');
-      if (serviceResult.exists === false) {
-        return res.status(409).json({
-          success: false,
-          status: 409,
-          message: serviceResult.message,
-        });
+      if (uniqueIds.length > 0) {
+        const serviceResult = await checkObjectIdExists(Service, uniqueIds, 'service');
+        if (serviceResult.exists === false) {
+          return res.status(409).json({
+            success: false,
+            status: 409,
+            message: serviceResult.message,
+          });
+        }
+        builtServices = dedupeServiceIds(uniqueIds);
       }
-      builtServices = dedupeServiceIds(uniqueIds);
     }
 
     if (builtServices !== undefined) {

@@ -22,7 +22,7 @@ Legacy per-module collections live in **`archive/`** (not for import).
 
 **Order refunds:** see `docs/REFUND_API.md` and folder **38 — Refunds** (or import `Help-PR-Refunds.postman_collection.json`).
 
-**Partner mobile app (full collection):** **Mobile → Partner**. **Mobile-only collection:** import **`Help-PR-Mobile-APIs.postman_collection.json`** — **Partner → Register** then **Login**; **Subscription → List plans** for `GET /api/mobile/partner/subscription-plans`.
+**Partner mobile app (full collection):** **Mobile → Partner**. **Mobile-only collection:** import **`Help-PR-Mobile-APIs.postman_collection.json`** — **Register** / **Login**; **Subscription → List plans**; **Catalog → Categories**; **My services → List** / **Update** (`GET`/`PUT /api/mobile/partner/my-services`).
 
 ## Regenerate after API changes
 

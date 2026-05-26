@@ -761,15 +761,15 @@ const assignFranchiseIdFromLocation = async (user) => {
   return { ok: true };
 };
 
-const VERIFICATION_STATUS_NAMES = {
-  1: 'Pending',
-  2: 'Approved',
-  3: 'Rejected',
+const VERIFICATION_STATUS_MESSAGES = {
+  1: 'Your profile is under verification. We will notify you once it is approved.',
+  2: 'Your account is approved.',
+  3: 'Your registration was rejected. Please contact support or update your documents.',
 };
 
-const verificationStatusToName = (status) => {
+const verificationStatusToMessage = (status) => {
   const n = Number(status);
-  return VERIFICATION_STATUS_NAMES[n] ?? null;
+  return VERIFICATION_STATUS_MESSAGES[n] ?? null;
 };
 
 const buildPartnerResponseData = async (partnerId) => {
@@ -792,7 +792,7 @@ const buildPartnerResponseData = async (partnerId) => {
     area_name: populated?.area_id?.name ?? null,
     franchise_id: populated?.franchise_id?._id ?? populated?.franchise_id ?? null,
     franchise_name: populated?.franchise_id?.name ?? null,
-    verification_status_name: verificationStatusToName(populated?.verification_status),
+    verification_status_message: verificationStatusToMessage(populated?.verification_status),
   };
   delete data.password;
   return data;

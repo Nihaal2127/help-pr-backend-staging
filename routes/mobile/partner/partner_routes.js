@@ -4,6 +4,11 @@ const { register, login, update } = require('../../../controllers/mobile/partner
 const { categories } = require('../../../controllers/mobile/partner/catalog_controller');
 const { list: listSubscriptionPlans } = require('../../../controllers/mobile/partner/subscription_plan_controller');
 const {
+  list: listMyServices,
+  update: updateMyServices,
+} = require('../../../controllers/mobile/partner/my_services_controller');
+const { partnerUpdateMyServicesMiddleware } = require('../../../middleware/mobile/partner/my_services_middleware');
+const {
   partnerRegisterMiddleware,
   partnerLoginMiddleware,
   partnerUpdateMiddleware,
@@ -33,6 +38,8 @@ router.put(
   update
 );
 router.get('/categories', mobileAuthMiddleware, categories);
+router.get('/my-services', mobileAuthMiddleware, listMyServices);
+router.put('/my-services', mobileAuthMiddleware, partnerUpdateMyServicesMiddleware, updateMyServices);
 router.get('/subscription-plans', mobileAuthMiddleware, listSubscriptionPlans);
 
 module.exports = router;

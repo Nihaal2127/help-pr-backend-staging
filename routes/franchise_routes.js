@@ -19,11 +19,19 @@ const {
 const {
     createFranchiseMiddleware,
     updateFranchiseMiddleware,
+    ensureFranchiseNameUniqueMiddleware,
+    ensureFranchiseNameUniqueOnUpdateMiddleware,
 } = require('../middleware/franchise_middleware');
 
 router.use(rateLimiter);
 
-router.post('/create', authMiddleware, createFranchiseMiddleware, create);
+router.post(
+    '/create',
+    authMiddleware,
+    createFranchiseMiddleware,
+    ensureFranchiseNameUniqueMiddleware,
+    create
+);
 router.post('/imports', authMiddleware, importRecords);
 router.get(
     '/related-catalog/:franchise_id',
@@ -34,7 +42,13 @@ router.get(
 router.get('/get/:id', authMiddleware, getById);
 router.get('/getAll', authMiddleware, getAll);
 router.get('/getDropDown', authMiddleware, requireFranchiseDropDownAccess, getDropDown);
-router.put('/update/:id', authMiddleware, updateFranchiseMiddleware, update);
+router.put(
+    '/update/:id',
+    authMiddleware,
+    updateFranchiseMiddleware,
+    ensureFranchiseNameUniqueOnUpdateMiddleware,
+    update
+);
 router.delete('/delete/:id', authMiddleware, deleteFranchise);
 
 module.exports = router;

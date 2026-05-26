@@ -46,6 +46,7 @@ const asRejectedState = (value, defaultValue = null) => {
 const asApprovalStatus = (value, defaultValue = "approve") => {
   if (value === undefined || value === null || value === "") return defaultValue;
   const normalized = String(value).trim().toLowerCase();
+  if (normalized === "approved") return "approve";
   if (["approve", "pending", "rejected"].includes(normalized)) return normalized;
   return defaultValue;
 };
@@ -77,6 +78,53 @@ const getCategoryStatusConfig = (statusFilter = "") => {
   if (value === "inactive") return { is_active: false, is_request: false };
   if (value === "requested" || value === "requested_categories") return { is_request: true };
   return {};
+};
+
+/** Query: sort_by = name | category_name | created_at | services; sort_order | order = asc | desc. Legacy: sort=1|-1 on created_at when sort_by omitted. */
+const parseCategoryGetAllSort = (query) => {
+  const orderRaw = String(
+    query.sort_order ?? query.sortOrder ?? query.order ?? ""
+  )
+    .trim()
+    .toLowerCase();
+
+  const resolveDirection = (defaultWhenMissing = 1) => {
+    if (orderRaw === "asc" || orderRaw === "1") return 1;
+    if (orderRaw === "desc" || orderRaw === "-1") return -1;
+    const legacy = query.sort !== undefined ? parseInt(query.sort, 10) : NaN;
+    if (legacy === 1 || legacy === -1) return legacy;
+    return defaultWhenMissing;
+  };
+
+  const sortByRaw = query.sort_by;
+  if (
+    sortByRaw === undefined ||
+    sortByRaw === null ||
+    String(sortByRaw).trim() === ""
+  ) {
+    const sortOrder = resolveDirection(1);
+    return { sortBy: "created_at", sortOrder, mongoSort: { created_at: sortOrder } };
+  }
+
+  const sortBy = String(sortByRaw).trim().toLowerCase().replace(/-/g, "_");
+  const sortOrder = resolveDirection(1);
+
+  if (sortBy === "services") {
+    return { sortBy: "services", sortOrder, mongoSort: null };
+  }
+
+  const mongoField =
+    sortBy === "name" || sortBy === "category_name"
+      ? "name"
+      : sortBy === "created_at"
+        ? "created_at"
+        : "created_at";
+
+  return {
+    sortBy: mongoField,
+    sortOrder,
+    mongoSort: { [mongoField]: sortOrder },
+  };
 };
 
 const sendFranchiseCategoryResult = (res, result) => {
@@ -349,8 +397,7 @@ const getAll = async (req, res) => {
       filter.is_request = false;
     }
 
-    const sortOrder = req.query.sort !== undefined ? parseInt(req.query.sort) : 1;
-    const sortBy = req.query.sort_by !== undefined ? String(req.query.sort_by).toLowerCase() : 'created_at';
+    const { sortBy, sortOrder, mongoSort } = parseCategoryGetAllSort(req.query);
 
     let categories = [];
     let totalCount = 0;
@@ -374,13 +421,12 @@ const getAll = async (req, res) => {
       totalCount = result[0].totalCount.length > 0 ? result[0].totalCount[0].totalCount : 0;
       totalPages = Math.ceil(totalCount / limit);
     } else {
-      const sort = sortBy === 'category_name' ? { name: sortOrder } : { created_at: sortOrder };
       const pageResult = await applyPagination(
         Category,
         filter,
         page,
         limit,
-        sort
+        mongoSort
       );
       categories = pageResult.data;
       totalCount = pageResult.totalCount;
@@ -574,15 +620,17 @@ const update = async (req, res) => {
     let builtServices;
     if (req.body.service_ids !== undefined) {
       const uniqueIds = dedupeServiceIds(req.body.service_ids);
-      const serviceResult = await checkObjectIdExists(Service, uniqueIds, 'service');
-      if (serviceResult.exists === false) {
-        return res.status(409).json({
-          success: false,
-          status: 409,
-          message: serviceResult.message,
-        });
+      if (uniqueIds.length > 0) {
+        const serviceResult = await checkObjectIdExists(Service, uniqueIds, 'service');
+        if (serviceResult.exists === false) {
+          return res.status(409).json({
+            success: false,
+            status: 409,
+            message: serviceResult.message,
+          });
+        }
+        builtServices = dedupeServiceIds(uniqueIds);
       }
-      builtServices = dedupeServiceIds(uniqueIds);
     }
 
     if (builtServices !== undefined) {

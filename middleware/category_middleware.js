@@ -294,15 +294,23 @@ const updateCategoryMiddleware = (req, res, next) => {
     });
   }
   if (service_ids !== undefined) {
+    if (!Array.isArray(service_ids)) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: "Service ids must be an array.",
+      });
+    }
     if (
-      !Array.isArray(service_ids) ||
-      service_ids.length === 0 ||
-      !service_ids.every((id) => id !== undefined && id !== null && String(id).trim() !== "")
+      service_ids.length > 0 &&
+      !service_ids.every(
+        (id) => id !== undefined && id !== null && String(id).trim() !== ""
+      )
     ) {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: "Service ids must be a non-empty array.",
+        message: "Each service id must be a non-empty value.",
       });
     }
   }

@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-mobile-apis-only",
     "name": "Help PR — Mobile APIs only",
-    "description": "Postman collection for **`/api/mobile/*`** (partner app).\n\n## Suggested test order\n1. **Location** → States → Cities → Areas → Pincodes\n2. **Register** or **Login**\n3. **Update** — profile, location, documents (allowed while pending)\n4. Admin approves → `verification_status` = `2`\n5. **Catalog** → Categories (includes nested `services` per category)\n6. **Update** again — enable `partner_services` + `bank_account` in the same request\n\n**Login:** `POST /login` — change `email` / `password` to test `Invalid email.` or `Invalid password.`\n\n**Update:** `PUT /update` — one request with all fields; disable or clear catalog/bank fields until approved.\n\n**403** (catalog/bank while pending): `Catalog, services, and bank details can only be updated after your account is verified and approved.`",
+    "description": "Postman collection for **`/api/mobile/*`** (partner app).\n\n## Suggested test order\n1. **Location** → States → Cities → Areas → Pincodes\n2. **Register** or **Login**\n3. **Subscription** → List plans (optional — view plans before upgrade)\n4. **Update** — profile, location, documents (allowed while pending)\n5. Admin approves → `verification_status` = `2`\n6. **Catalog** → Categories (includes nested `services` per category)\n7. **Update** again — enable `partner_services` + `bank_account` in the same request\n\n**Login:** `POST /login` — change `email` / `password` to test `Invalid email.` or `Invalid password.`\n\n**Update:** `PUT /update` — one request with all fields; disable or clear catalog/bank fields until approved.\n\n**403** (catalog/bank while pending): `Catalog, services, and bank details can only be updated after your account is verified and approved.`",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -412,6 +412,63 @@
           ]
         },
         {
+          "name": "Subscription",
+          "description": "Bearer required. **GET /subscription-plans** — all active subscription plans (`deleted_at` null).",
+          "item": [
+            {
+              "name": "List plans",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  const rec = j?.data?.[0];",
+                      "  if (rec?._id) pm.collectionVariables.set('subscriptionPlanId', String(rec._id));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/subscription-plans",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "partner",
+                    "subscription-plans"
+                  ]
+                },
+                "description": "**GET /api/mobile/partner/subscription-plans**\n\n- **Auth:** Bearer `{{token}}` (run **Login** or **Register** first)\n- **200** `data[]`: `_id`, `plan_name` (basic | silver | gold | platinum), `plan_description`, `price`, `duration`, `duration_type`, `priority`, `is_active`, timestamps\n- Plans with `deleted_at` null only (includes inactive plans; filter client-side if needed)\n- Sets `{{subscriptionPlanId}}` from first plan in list"
+              },
+              "response": []
+            }
+          ]
+        },
+        {
           "name": "Update",
           "event": [
             {
@@ -688,6 +745,12 @@
       "value": "",
       "type": "string",
       "description": "From Services — second record (multi-service tests)"
+    },
+    {
+      "key": "subscriptionPlanId",
+      "value": "",
+      "type": "string",
+      "description": "From Subscription → List plans — 24-hex ObjectId"
     }
   ]
 }

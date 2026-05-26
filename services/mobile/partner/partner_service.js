@@ -675,16 +675,6 @@ const loginPartner = async ({ email, password, device_token }) => {
     };
   }
 
-  if (Number(user.verification_status) === 3) {
-    return {
-      ok: false,
-      status: 403,
-      message: user.rejected_reasone?.trim()
-        ? `Registration rejected: ${user.rejected_reasone.trim()}`
-        : 'Your partner registration was rejected. Please contact admin.',
-    };
-  }
-
   const isPasswordMatch = await user.comparePassword(password);
   if (!isPasswordMatch) {
     return { ok: false, status: 401, message: 'Invalid password.' };

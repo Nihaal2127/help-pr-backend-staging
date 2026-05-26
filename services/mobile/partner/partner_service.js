@@ -761,6 +761,17 @@ const assignFranchiseIdFromLocation = async (user) => {
   return { ok: true };
 };
 
+const VERIFICATION_STATUS_MESSAGES = {
+  1: 'Your profile is under verification. We will notify you once it is approved.',
+  2: 'Your account is approved.',
+  3: 'Your registration was rejected. Please contact support or update your documents.',
+};
+
+const verificationStatusToMessage = (status) => {
+  const n = Number(status);
+  return VERIFICATION_STATUS_MESSAGES[n] ?? null;
+};
+
 const buildPartnerResponseData = async (partnerId) => {
   const populated = await User.findById(partnerId)
     .populate([
@@ -781,6 +792,7 @@ const buildPartnerResponseData = async (partnerId) => {
     area_name: populated?.area_id?.name ?? null,
     franchise_id: populated?.franchise_id?._id ?? populated?.franchise_id ?? null,
     franchise_name: populated?.franchise_id?.name ?? null,
+    verification_status_message: verificationStatusToMessage(populated?.verification_status),
   };
   delete data.password;
   return data;
@@ -977,7 +989,7 @@ const updatePartner = async ({ partnerId, body, files, section = PARTNER_UPDATE_
     updateData.account_number !== undefined ||
     updateData.ifsc_code !== undefined;
 
-  if (!isVerificationApproved && (runBanks || hasBankPayload || hasCatalogPayload)) {
+  if (!isVerificationApproved && (hasBankPayload || hasCatalogPayload)) {
     return { ok: false, status: 403, message: restrictedUntilApprovedMessage };
   }
 

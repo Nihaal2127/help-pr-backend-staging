@@ -2,13 +2,152 @@
   "info": {
     "_postman_id": "help-pr-mobile-apis-only",
     "name": "Help PR — Mobile APIs only",
-    "description": "Postman collection for **`/api/mobile/*`** (partner + customer apps).\n\n## Partner — suggested test order\n1. **Location** → States → Cities → Areas → Pincodes\n2. **Register** or **Login**\n3. **Subscription** → List plans (optional)\n4. **Update** — profile, location, documents (allowed while pending)\n5. Admin approves → `verification_status` = `2`\n6. **Catalog** → Categories\n7. **Update** again — `partner_services` + `bank_account` (approved only)\n8. **My services** → List → Patch status or Update\n\n## Customer (User)\n1. **Send OTP** — creates customer if phone is new; saves OTP (dev OTP: `123456`)\n2. **Verify OTP** — login; sets `token` / `customerId`\n3. **Pincodes** — Bearer auth required; optional search via `search`; `data[]` has one `\"pincode,area_name,city_name,state_name\"` string per record\n4. **Update** — profile: name, phone, email, DOB, gender (Bearer required)\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.",
+    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** (dropdowns)\n2. **Register** or **Login**\n3. **Subscription** → List plans (optional)\n4. **Update** — profile, location, documents\n5. Admin approves → `verification_status` = `2`\n6. **Catalog** → Categories\n7. **Update** — `partner_services` + `bank_account` (approved only)\n8. **My services** → List → Patch / Update\n\n## Customer (User)\n1. **Common → Location** (address form dropdowns)\n2. **Send OTP** → **Verify OTP** (dev OTP: `123456`)\n3. **Addresses** — List / Create / Update / Delete (Bearer)\n4. **Pincodes** — global search (`search` query, optional)\n5. **Update** — profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
+      "name": "Common",
+      "description": "Shared mobile dropdowns — `routes/mobile/common/location_routes.js`. No Bearer. Used by partner and customer apps.",
+      "item": [
+        {
+          "name": "Location",
+          "description": "Run in order: States → Cities → Areas → Pincodes. Sets `{{stateId}}`, `{{cityId}}`, `{{areaId}}`, `{{pincode}}`.",
+          "item": [
+            {
+              "name": "States",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('success', () => pm.expect(j.success).to.eql(true));",
+                      "  const rec = j?.data?.[0];",
+                      "  if (rec?._id) pm.collectionVariables.set('stateId', String(rec._id));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": { "type": "noauth" },
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/states",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "states"]
+                },
+                "description": "**GET /api/mobile/states** — sets `{{stateId}}`"
+              },
+              "response": []
+            },
+            {
+              "name": "Cities",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  const rec = j?.data?.[0];",
+                      "  if (rec?._id) pm.collectionVariables.set('cityId', String(rec._id));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": { "type": "noauth" },
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/cities?state_id={{stateId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "cities"],
+                  "query": [{ "key": "state_id", "value": "{{stateId}}" }]
+                },
+                "description": "**GET /api/mobile/cities?state_id=** — sets `{{cityId}}`"
+              },
+              "response": []
+            },
+            {
+              "name": "Areas",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  const rec = j?.data?.[0];",
+                      "  if (rec?._id) pm.collectionVariables.set('areaId', String(rec._id));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": { "type": "noauth" },
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/areas?city_id={{cityId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "areas"],
+                  "query": [
+                    { "key": "city_id", "value": "{{cityId}}" },
+                    { "key": "state_id", "value": "{{stateId}}", "disabled": true }
+                  ]
+                },
+                "description": "**GET /api/mobile/areas?city_id=** — sets `{{areaId}}`"
+              },
+              "response": []
+            },
+            {
+              "name": "Pincodes",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  const pc = j?.data?.[0]?.pincode;",
+                      "  if (pc) pm.collectionVariables.set('pincode', String(pc));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": { "type": "noauth" },
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/pincodes?area_id={{areaId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "pincodes"],
+                  "query": [{ "key": "area_id", "value": "{{areaId}}" }]
+                },
+                "description": "**GET /api/mobile/pincodes?area_id=** — dropdown items `{ pincode }`; sets `{{pincode}}`"
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Partner",
-      "description": "Partner mobile — `partner_routes.js` + `location_routes.js`. Includes subscription-plans, categories, my-services (GET/PUT/PATCH status).",
+      "description": "Partner mobile — `partner_routes.js`, `my_services_routes.js`. Use **Common → Location** for dropdowns.",
       "item": [
         {
           "name": "Register",
@@ -143,212 +282,6 @@
             "description": "**POST /api/mobile/partner/login**\n\n- No Authorization\n- **Required:** `email`, `password`\n- **Optional:** `device_token` (FCM push token)\n- **200** `data`: `auth_token`, `verification_status` (1 pending, 2 approved, 3 rejected), `verification_status_message`, `rejected_reasone`, `city_name`, …\n\n**401:** `Invalid email.` | `Invalid password.`\n\nRejected partners can log in; catalog/bank/my-services **update** still requires approval."
           },
           "response": []
-        },
-        {
-          "name": "Location",
-          "description": "Public address dropdowns. No Bearer. Run in order: States → Cities → Areas → Pincodes.",
-          "item": [
-            {
-              "name": "States",
-              "event": [
-                {
-                  "listen": "test",
-                  "script": {
-                    "exec": [
-                      "try {",
-                      "  const j = pm.response.json();",
-                      "  pm.test('success', () => pm.expect(j.success).to.eql(true));",
-                      "  const rec = j?.data?.[0];",
-                      "  if (rec?._id) pm.collectionVariables.set('stateId', String(rec._id));",
-                      "} catch (e) {}"
-                    ],
-                    "type": "text/javascript"
-                  }
-                }
-              ],
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/mobile/partner/states",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "mobile",
-                    "partner",
-                    "states"
-                  ]
-                },
-                "description": "**GET /api/mobile/partner/states** — sets `{{stateId}}`"
-              },
-              "response": []
-            },
-            {
-              "name": "Cities",
-              "event": [
-                {
-                  "listen": "test",
-                  "script": {
-                    "exec": [
-                      "try {",
-                      "  const j = pm.response.json();",
-                      "  const rec = j?.data?.[0];",
-                      "  if (rec?._id) pm.collectionVariables.set('cityId', String(rec._id));",
-                      "} catch (e) {}"
-                    ],
-                    "type": "text/javascript"
-                  }
-                }
-              ],
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/mobile/partner/cities?state_id={{stateId}}",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "mobile",
-                    "partner",
-                    "cities"
-                  ],
-                  "query": [
-                    {
-                      "key": "state_id",
-                      "value": "{{stateId}}"
-                    }
-                  ]
-                },
-                "description": "**GET /api/mobile/partner/cities** — sets `{{cityId}}`"
-              },
-              "response": []
-            },
-            {
-              "name": "Areas",
-              "event": [
-                {
-                  "listen": "test",
-                  "script": {
-                    "exec": [
-                      "try {",
-                      "  const j = pm.response.json();",
-                      "  const rec = j?.data?.[0];",
-                      "  if (rec?._id) pm.collectionVariables.set('areaId', String(rec._id));",
-                      "} catch (e) {}"
-                    ],
-                    "type": "text/javascript"
-                  }
-                }
-              ],
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/mobile/partner/areas?city_id={{cityId}}",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "mobile",
-                    "partner",
-                    "areas"
-                  ],
-                  "query": [
-                    {
-                      "key": "city_id",
-                      "value": "{{cityId}}"
-                    },
-                    {
-                      "key": "state_id",
-                      "value": "{{stateId}}",
-                      "disabled": true
-                    }
-                  ]
-                },
-                "description": "**GET /api/mobile/partner/areas** — sets `{{areaId}}`"
-              },
-              "response": []
-            },
-            {
-              "name": "Pincodes",
-              "event": [
-                {
-                  "listen": "test",
-                  "script": {
-                    "exec": [
-                      "try {",
-                      "  const j = pm.response.json();",
-                      "  const pc = j?.data?.[0]?.pincode;",
-                      "  if (pc) pm.collectionVariables.set('pincode', String(pc));",
-                      "} catch (e) {}"
-                    ],
-                    "type": "text/javascript"
-                  }
-                }
-              ],
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/mobile/partner/pincodes?area_id={{areaId}}",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "mobile",
-                    "partner",
-                    "pincodes"
-                  ],
-                  "query": [
-                    {
-                      "key": "area_id",
-                      "value": "{{areaId}}"
-                    }
-                  ]
-                },
-                "description": "**GET /api/mobile/partner/pincodes** — sets `{{pincode}}` (string)"
-              },
-              "response": []
-            }
-          ]
         },
         {
           "name": "Catalog",
@@ -919,7 +852,7 @@
                 "update"
               ]
             },
-            "description": "**PUT /api/mobile/partner/update**\n\n**Auth:** Bearer `{{token}}`\n**Body:** `multipart/form-data` (do not set Content-Type manually)\n\n### Before sending\n1. **Location** → States → Cities → Areas → Pincodes\n2. **Login** (or Register)\n3. While pending: disable `partner_services` and `bank_account` (or clear values)\n4. After approval (`verification_status` = 2): run **Catalog**, then enable catalog + bank fields\n5. Select files: `image`, `aadhar_card` (and optional other verification files)\n\n| Section | Fields |\n|---------|--------|\n| Profile / location | gender, experience, state_id, city_id, area_id, pincode, address, image, name, email, phone_number, date_of_birth, device_token, password, confirm_password |\n| Services (approved) | partner_services |\n| Banks (approved) | bank_account |\n| Documents | aadhar_card, pan_card, driving_license, vehicle_registration, police_verification_certificate |\n\n`partner_documents` JSON is not supported."
+            "description": "**PUT /api/mobile/partner/update**\n\n**Auth:** Bearer `{{token}}`\n**Body:** `multipart/form-data` (do not set Content-Type manually)\n\n### Before sending\n1. **Common → Location** → States → Cities → Areas → Pincodes\n2. **Login** (or Register)\n3. While pending: disable `partner_services` and `bank_account` (or clear values)\n4. After approval (`verification_status` = 2): run **Catalog**, then enable catalog + bank fields\n5. Select files: `image`, `aadhar_card` (and optional other verification files)\n\n| Section | Fields |\n|---------|--------|\n| Profile / location | gender, experience, state_id, city_id, area_id, pincode, address, image, name, email, phone_number, date_of_birth, device_token, password, confirm_password |\n| Services (approved) | partner_services |\n| Banks (approved) | bank_account |\n| Documents | aadhar_card, pan_card, driving_license, vehicle_registration, police_verification_certificate |\n\n`partner_documents` JSON is not supported."
           },
           "response": []
         }
@@ -927,76 +860,8 @@
     },
     {
       "name": "User",
-      "description": "Customer mobile — `routes/mobile/user/user_routes.js`. **Send OTP** → **Verify OTP** → **Pincodes** (auth + optional search) → **Update**. Use raw JSON for POST/PUT (not form-data).",
+      "description": "Customer mobile — OTP auth, saved addresses, profile. Suggested order: **Common → Location** → **Send OTP** → **Verify OTP** → **Addresses** → **Pincodes** (search) → **Update**. Raw JSON for POST/PUT.",
       "item": [
-        {
-          "name": "Pincodes",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "try {",
-                  "  const j = pm.response.json();",
-                  "  pm.test('Pincodes fetched', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "    pm.expect(j.success).to.eql(true);",
-                  "    pm.expect(j.data).to.be.an('array');",
-                  "  });",
-                  "  if (Array.isArray(j?.data) && j.data.length > 0) {",
-                  "    const first = String(j.data[0]);",
-                  "    const parts = first.split(',');",
-                  "    if (parts.length >= 4) {",
-                  "      pm.collectionVariables.set('samplePincode', parts[0].trim());",
-                  "    }",
-                  "  }",
-                  "} catch (e) {}"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{token}}",
-                  "type": "string"
-                }
-              ]
-            },
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/mobile/user/pincodes?search={{pincodeSearch}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "mobile",
-                "user",
-                "pincodes"
-              ],
-              "query": [
-                {
-                  "key": "search",
-                  "value": "{{pincodeSearch}}",
-                  "disabled": true
-                }
-              ]
-            },
-            "description": "**GET /api/mobile/user/pincodes**\n\n- **Auth:** Bearer `{{token}}`\n- Optional query: `search`\n- Matches across: `pincode`, `area_name`, `city_name`, `state_name`\n- **200** `data`: string array — one pincode per element\n\nEach item format:\n`pincode,area_name,city_name,state_name`\n\nExample:\n```json\n\"data\": [\n  \"560001,Koramangala,Bangalore,Karnataka\",\n  \"560002,Whitefield,Bangalore,Karnataka\"\n]\n```\n\nExamples:\n- `?search=5600`\n- `?search=koramangala`\n- `?search=bangalore`\n- `?search=karnataka`\n\nEnable `search` in Postman query params."
-          },
-          "response": []
-        },
         {
           "name": "Send OTP",
           "event": [
@@ -1126,6 +991,223 @@
               ]
             },
             "description": "**POST /api/mobile/user/verify-otp**\n\n- No Authorization\n- **Required:** `phone_number`, `otp` (use `123456` in dev)\n- **Optional:** `device_token` (FCM)\n\n### Behavior\n- Validates OTP → issues JWT on `data.auth_token`\n- Updates `device_token`, `last_signin` on user\n- Deletes used OTP row\n\n**400:** Invalid or expired OTP\n**401:** Customer not found (run Send OTP first)\n**403:** Account blocked"
+          },
+          "response": []
+        },
+        {
+          "name": "Addresses",
+          "description": "Saved delivery addresses. Run **Common → Location** first for dropdown IDs. Bearer required (run **Verify OTP**).",
+          "item": [
+            {
+              "name": "List addresses",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Addresses listed', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "    pm.expect(j.data).to.be.an('array');",
+                      "  });",
+                      "  const rec = j?.data?.[0];",
+                      "  if (rec?._id) {",
+                      "    pm.collectionVariables.set('addressId', String(rec._id));",
+                      "    if (rec.state_id) pm.collectionVariables.set('stateId', String(rec.state_id));",
+                      "    if (rec.city_id) pm.collectionVariables.set('cityId', String(rec.city_id));",
+                      "    if (rec.area_id) pm.collectionVariables.set('areaId', String(rec.area_id));",
+                      "    if (rec.pincode) pm.collectionVariables.set('pincode', String(rec.pincode));",
+                      "    if (rec.address) pm.collectionVariables.set('customerAddressLine', String(rec.address));",
+                      "  }",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/addresses",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "addresses"]
+                },
+                "description": "**GET /api/mobile/user/addresses**\n\n- **Auth:** Bearer `{{token}}`\n- **200** `data[]`: `_id`, `state_id`, `city_id`, `area_id`, `pincode`, `address`, `state_name`, `city_name`, `area_name`, …\n- Sets `{{addressId}}` from first row"
+              },
+              "response": []
+            },
+            {
+              "name": "Create address",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Address created', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "  });",
+                      "  if (j?.data?._id) pm.collectionVariables.set('addressId', String(j.data._id));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Accept", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"state_id\": \"{{stateId}}\",\n  \"city_id\": \"{{cityId}}\",\n  \"area_id\": \"{{areaId}}\",\n  \"pincode\": \"{{pincode}}\",\n  \"address\": \"{{customerAddressLine}}\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/addresses",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "addresses"]
+                },
+                "description": "**POST /api/mobile/user/addresses**\n\n- **Auth:** Bearer\n- **Required:** `state_id`, `city_id`, `area_id`, `pincode` (from **Common → Pincodes** dropdown), `address` (text)\n- `pincode` may be string `\"560001\"` or object `{ \"pincode\": \"560001\" }`"
+              },
+              "response": []
+            },
+            {
+              "name": "Update address",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Address updated', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "  });",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "PUT",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Accept", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"state_id\": \"{{stateId}}\",\n  \"city_id\": \"{{cityId}}\",\n  \"area_id\": \"{{areaId}}\",\n  \"pincode\": \"{{pincode}}\",\n  \"address\": \"{{customerAddressLine}}\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/addresses/{{addressId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "addresses", "{{addressId}}"]
+                },
+                "description": "**PUT /api/mobile/user/addresses/:id**\n\n- **Auth:** Bearer\n- Path: `{{addressId}}` from List or Create\n- To change location, send all four: `state_id`, `city_id`, `area_id`, `pincode`\n- Or send only `address` to update the text line"
+              },
+              "response": []
+            },
+            {
+              "name": "Delete address",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Address deleted', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "  });",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "DELETE",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/addresses/{{addressId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "addresses", "{{addressId}}"]
+                },
+                "description": "**DELETE /api/mobile/user/addresses/:id**\n\n- **Auth:** Bearer\n- Soft-deletes the address (`deleted_at`)"
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Pincodes (search)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Pincodes fetched', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.data).to.be.an('array');",
+                  "  });",
+                  "  if (Array.isArray(j?.data) && j.data.length > 0) {",
+                  "    const first = String(j.data[0]);",
+                  "    const parts = first.split(',');",
+                  "    if (parts.length >= 4) {",
+                  "      pm.collectionVariables.set('samplePincode', parts[0].trim());",
+                  "    }",
+                  "  }",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/pincodes?search={{pincodeSearch}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "user", "pincodes"],
+              "query": [{ "key": "search", "value": "{{pincodeSearch}}", "disabled": true }]
+            },
+            "description": "**GET /api/mobile/user/pincodes** — global pincode search (not the address-form dropdown).\n\n- **Auth:** Bearer\n- Optional `search` query\n- **200** `data[]`: `\"pincode,area_name,city_name,state_name\"` per line\n\nFor address forms use **Common → Pincodes** (`/api/mobile/pincodes?area_id=`)."
           },
           "response": []
         },
@@ -1411,6 +1493,18 @@
       "value": "",
       "type": "string",
       "description": "Optional search text for User → Pincodes (pincode/area/city/state)"
+    },
+    {
+      "key": "addressId",
+      "value": "",
+      "type": "string",
+      "description": "Customer saved address _id — from List or Create address"
+    },
+    {
+      "key": "customerAddressLine",
+      "value": "Flat 12, MG Road, near metro",
+      "type": "string",
+      "description": "Address text line for Create/Update address"
     }
   ]
 }

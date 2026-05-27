@@ -11,7 +11,7 @@ const {
   partnerRequireMultipartMiddleware,
   PARTNER_DOCUMENT_FILE_FIELDS,
 } = require('../../../middleware/mobile/partner/partner_middleware');
-const mobileAuthMiddleware = require('../../../middleware/mobile/auth_middleware');
+const partnerAuthMiddleware = require('../../../middleware/mobile/partner/partner_auth_middleware');
 const { upload } = require('../../../utils/fileUpload');
 
 const PARTNER_MULTIPART_FIELDS = [
@@ -25,14 +25,14 @@ router.post('/register', partnerRegisterMiddleware, register);
 router.post('/login', partnerLoginMiddleware, login);
 router.put(
   '/update',
-  mobileAuthMiddleware,
+  partnerAuthMiddleware,
   partnerRequireMultipartMiddleware,
   partnerMultipartUpload,
   partnerProfileImageSizeMiddleware,
   partnerUpdateMiddleware,
   update
 );
-router.get('/categories', mobileAuthMiddleware, categories);
-router.get('/subscription-plans', mobileAuthMiddleware, listSubscriptionPlans);
+router.get('/categories', partnerAuthMiddleware, categories);
+router.get('/subscription-plans', partnerAuthMiddleware, listSubscriptionPlans);
 
 module.exports = router;

@@ -1,13 +1,15 @@
 const {
-  listPartnerMyServices,
-  updatePartnerMyServices,
-  updateOnePartnerServiceStatus,
-  updateBulkPartnerServiceStatus,
-} = require('../../../services/mobile/partner/my_services_service');
+  sendOtp,
+  verifyOtpAndLogin,
+  updateUser,
+  listAllPincodes,
+} = require('../../../services/mobile/user/user_service');
 
-const list = async (req, res) => {
+const sendOtpHandler = async (req, res) => {
   try {
-    const result = await listPartnerMyServices(req.user.id);
+    const { phone_number } = req.body;
+    const result = await sendOtp({ phone_number });
+
     if (!result.ok) {
       return res.status(result.status).json({
         success: false,
@@ -19,10 +21,74 @@ const list = async (req, res) => {
     return res.status(200).json({
       success: true,
       status: 200,
-      ...result.data,
+      message: result.message,
     });
-  } catch (err) {
-    console.error('mobile partner my-services', err.message);
+  } catch (error) {
+    console.error('mobile user send-otp', error.message);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Failed to send OTP.',
+    });
+  }
+};
+
+const verifyOtpHandler = async (req, res) => {
+  try {
+    const { phone_number, device_token } = req.body;
+    const result = await verifyOtpAndLogin({
+      phone_number,
+      device_token,
+      validOtp: req.validOtp,
+    });
+
+    if (!result.ok) {
+      return res.status(result.status).json({
+        success: false,
+        status: result.status,
+        message: result.message,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    console.error('mobile user verify-otp', error.message);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Failed to verify OTP.',
+    });
+  }
+};
+
+const updateHandler = async (req, res) => {
+  try {
+    const result = await updateUser({
+      customerId: req.user.id,
+      body: req.body,
+    });
+
+    if (!result.ok) {
+      return res.status(result.status).json({
+        success: false,
+        status: result.status,
+        message: result.message,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    console.error('mobile user update', error.message);
     return res.status(500).json({
       success: false,
       status: 500,
@@ -31,9 +97,10 @@ const list = async (req, res) => {
   }
 };
 
-const update = async (req, res) => {
+const getPincodesHandler = async (req, res) => {
   try {
-    const result = await updatePartnerMyServices(req.user.id, req.body.services);
+    const result = await listAllPincodes();
+
     if (!result.ok) {
       return res.status(result.status).json({
         success: false,
@@ -45,67 +112,11 @@ const update = async (req, res) => {
     return res.status(200).json({
       success: true,
       status: 200,
-      ...result.data,
-      message: 'Partner services updated successfully.',
+      message: result.message,
+      data: result.data,
     });
-  } catch (err) {
-    console.error('mobile partner my-services update', err.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.',
-    });
-  }
-};
-
-const patchStatus = async (req, res) => {
-  try {
-    const result = await updateOnePartnerServiceStatus(
-      req.user.id,
-      req.params.id,
-      req.body.is_active
-    );
-    if (!result.ok) {
-      return res.status(result.status).json({
-        success: false,
-        status: result.status,
-        message: result.message,
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      status: 200,
-      ...result.data,
-    });
-  } catch (err) {
-    console.error('mobile partner my-services patch status', err.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.',
-    });
-  }
-};
-
-const patchBulkStatus = async (req, res) => {
-  try {
-    const result = await updateBulkPartnerServiceStatus(req.user.id, req.body.updates);
-    if (!result.ok) {
-      return res.status(result.status).json({
-        success: false,
-        status: result.status,
-        message: result.message,
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      status: 200,
-      ...result.data,
-    });
-  } catch (err) {
-    console.error('mobile partner my-services patch bulk status', err.message);
+  } catch (error) {
+    console.error('mobile user pincodes', error.message);
     return res.status(500).json({
       success: false,
       status: 500,
@@ -115,8 +126,8 @@ const patchBulkStatus = async (req, res) => {
 };
 
 module.exports = {
-  list,
-  update,
-  patchStatus,
-  patchBulkStatus,
+  sendOtpHandler,
+  verifyOtpHandler,
+  updateHandler,
+  getPincodesHandler,
 };

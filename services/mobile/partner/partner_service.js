@@ -9,7 +9,11 @@ const PartnerSubscription = require('../../../models/partner_subscription');
 const Franchise = require('../../../models/franchise');
 const { getNewId } = require('../../../helper/id_generator');
 const { getDocumentList } = require('../../../controllers/document_controller');
-const { createMultiple } = require('../../../controllers/partner_document_controller');
+const {
+  createMultiple,
+  getPartnerDocumentList,
+} = require('../../../controllers/partner_document_controller');
+const PartnerService = require('../../../models/partner_service');
 const { handleImageUpload } = require('../../../helper/image_uploader');
 const { getUploadType } = require('../../../enum/upload_type_enum');
 const { replacePartnerCatalogFromNormalizedRows } = require('../../../services/partner_category_service');
@@ -773,6 +777,22 @@ const buildPartnerResponseData = async (partnerId) => {
     ])
     .lean();
   if (!populated) return null;
+
+  const partnerOid = new mongoose.Types.ObjectId(String(partnerId));
+
+  const [partner_services, bank_accounts, partner_documents] = await Promise.all([
+    PartnerService.find({ partner_id: partnerOid, deleted_at: null })
+      .populate([
+        { path: 'category_id', select: 'name' },
+        { path: 'service_id', select: 'name' },
+      ])
+      .lean(),
+    PartnerBankAccount.find({ partner_id: partnerOid, deleted_at: null })
+      .sort({ is_primary: -1, created_at: -1 })
+      .lean(),
+    getPartnerDocumentList(partnerOid),
+  ]);
+
   const data = {
     ...populated,
     state_id: populated?.state_id?._id ?? populated?.state_id ?? null,
@@ -784,6 +804,10 @@ const buildPartnerResponseData = async (partnerId) => {
     franchise_id: populated?.franchise_id?._id ?? populated?.franchise_id ?? null,
     franchise_name: populated?.franchise_id?.name ?? null,
     verification_status_message: verificationStatusToMessage(populated?.verification_status),
+    partner_services,
+    bank_accounts,
+    partner_documents,
+    documents: partner_documents,
   };
   delete data.password;
   return data;
@@ -999,6 +1023,10 @@ const updatePartner = async ({ partnerId, body, files, section = PARTNER_UPDATE_
         updatedUser._id,
         normalizePartnerDocuments(mergedPartnerDocs)
       );
+      if (Number(updatedUser.verification_status) === 3) {
+        updatedUser.verification_status = 1;
+        await updatedUser.save();
+      }
     }
 
     if (shouldRunCatalog) {

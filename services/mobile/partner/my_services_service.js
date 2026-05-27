@@ -41,6 +41,44 @@ const parseDescription = (value) => {
   return { ok: true, text: String(value).trim() };
 };
 
+const parseIsActive = (value, fieldName = 'is_active') => {
+  if (value === true || value === 'true') {
+    return { ok: true, active: true };
+  }
+  if (value === false || value === 'false') {
+    return { ok: true, active: false };
+  }
+  return { ok: false, message: `${fieldName} must be true or false.` };
+};
+
+const loadApprovedPartner = async (partnerId) => {
+  if (!mongoose.Types.ObjectId.isValid(String(partnerId))) {
+    return fail(401, 'Invalid token.');
+  }
+
+  const partnerOid = new mongoose.Types.ObjectId(String(partnerId));
+  const partner = await User.findOne({
+    _id: partnerOid,
+    type: USER_TYPE_PARTNER,
+    deleted_at: null,
+  })
+    .select('_id franchise_id verification_status')
+    .lean();
+
+  if (!partner) {
+    return fail(404, 'Partner not found.');
+  }
+
+  if (Number(partner.verification_status) !== 2) {
+    return fail(
+      403,
+      'Catalog, services, and bank details can only be updated after your account is verified and approved.'
+    );
+  }
+
+  return ok(200, { partnerOid, partner });
+};
+
 const assertCategoryAndServiceAvailable = async (categoryOid, serviceOid, franchiseId) => {
   const category = await Category.findOne({ _id: categoryOid, deleted_at: null }).lean();
   if (!category) {
@@ -168,30 +206,12 @@ const listPartnerMyServices = async (partnerId) => {
 
 const updatePartnerMyServices = async (partnerId, servicesInput) => {
   try {
-    if (!mongoose.Types.ObjectId.isValid(String(partnerId))) {
-      return fail(401, 'Invalid token.');
+    const partnerResult = await loadApprovedPartner(partnerId);
+    if (!partnerResult.ok) {
+      return partnerResult;
     }
 
-    const partnerOid = new mongoose.Types.ObjectId(String(partnerId));
-    const partner = await User.findOne({
-      _id: partnerOid,
-      type: USER_TYPE_PARTNER,
-      deleted_at: null,
-    })
-      .select('_id franchise_id verification_status')
-      .lean();
-
-    if (!partner) {
-      return fail(404, 'Partner not found.');
-    }
-
-    if (Number(partner.verification_status) !== 2) {
-      return fail(
-        403,
-        'Catalog, services, and bank details can only be updated after your account is verified and approved.'
-      );
-    }
-
+    const { partnerOid, partner } = partnerResult.data;
     const services = Array.isArray(servicesInput) ? servicesInput : [];
     const seenPartnerServiceIds = new Set();
     const targetServiceIds = new Set();
@@ -283,7 +303,124 @@ const updatePartnerMyServices = async (partnerId, servicesInput) => {
   }
 };
 
+const updateOnePartnerServiceStatus = async (partnerId, partnerServiceId, isActiveInput) => {
+  try {
+    const partnerResult = await loadApprovedPartner(partnerId);
+    if (!partnerResult.ok) {
+      return partnerResult;
+    }
+
+    const { partnerOid } = partnerResult.data;
+    const idParsed = parseObjectId(partnerServiceId, 'id');
+    if (!idParsed.ok) {
+      return fail(400, idParsed.message);
+    }
+
+    const activeParsed = parseIsActive(isActiveInput);
+    if (!activeParsed.ok) {
+      return fail(400, activeParsed.message);
+    }
+
+    const existing = await PartnerService.findOne({
+      _id: idParsed.oid,
+      partner_id: partnerOid,
+      deleted_at: null,
+    });
+
+    if (!existing) {
+      return fail(404, 'Partner service not found.');
+    }
+
+    existing.is_active = activeParsed.active;
+    existing.updated_at = new Date();
+    await existing.save();
+
+    return ok(200, {
+      message: 'Service status updated successfully.',
+      data: {
+        _id: existing._id,
+        is_active: existing.is_active !== false,
+      },
+    });
+  } catch (err) {
+    console.error('updateOnePartnerServiceStatus', err.message);
+    return fail(500, 'Internal server error.');
+  }
+};
+
+const updateBulkPartnerServiceStatus = async (partnerId, updatesInput) => {
+  try {
+    const partnerResult = await loadApprovedPartner(partnerId);
+    if (!partnerResult.ok) {
+      return partnerResult;
+    }
+
+    const { partnerOid } = partnerResult.data;
+    const updates = Array.isArray(updatesInput) ? updatesInput : [];
+    const seenIds = new Set();
+    const parsedUpdates = [];
+
+    for (let i = 0; i < updates.length; i++) {
+      const item = updates[i];
+      const rowLabel = `updates[${i}]`;
+
+      const idParsed = parseObjectId(item?._id, `${rowLabel}._id`);
+      if (!idParsed.ok) {
+        return fail(400, idParsed.message);
+      }
+
+      const idKey = String(idParsed.oid);
+      if (seenIds.has(idKey)) {
+        return fail(400, 'Duplicate partner service id in request.');
+      }
+      seenIds.add(idKey);
+
+      const activeParsed = parseIsActive(item?.is_active, `${rowLabel}.is_active`);
+      if (!activeParsed.ok) {
+        return fail(400, activeParsed.message);
+      }
+
+      parsedUpdates.push({ oid: idParsed.oid, is_active: activeParsed.active });
+    }
+
+    const ids = parsedUpdates.map((u) => u.oid);
+    const rows = await PartnerService.find({
+      _id: { $in: ids },
+      partner_id: partnerOid,
+      deleted_at: null,
+    });
+
+    if (rows.length !== parsedUpdates.length) {
+      return fail(404, 'One or more partner services were not found.');
+    }
+
+    const activeById = new Map(parsedUpdates.map((u) => [String(u.oid), u.is_active]));
+    const updated = [];
+    const now = new Date();
+
+    for (const row of rows) {
+      row.is_active = activeById.get(String(row._id));
+      row.updated_at = now;
+      await row.save();
+      updated.push({
+        _id: row._id,
+        is_active: row.is_active !== false,
+      });
+    }
+
+    return ok(200, {
+      message: 'Service statuses updated successfully.',
+      data: { updated },
+    });
+  } catch (err) {
+    console.error('updateBulkPartnerServiceStatus', err.message);
+    return fail(500, 'Internal server error.');
+  }
+};
+
 module.exports = {
   listPartnerMyServices,
   updatePartnerMyServices,
+  updateOnePartnerServiceStatus,
+  updateBulkPartnerServiceStatus,
 };

@@ -2,13 +2,13 @@
   "info": {
     "_postman_id": "help-pr-mobile-apis-only",
     "name": "Help PR — Mobile APIs only",
-    "description": "Postman collection for **`/api/mobile/*`** (partner app).\n\n## Suggested test order\n1. **Location** → States → Cities → Areas → Pincodes\n2. **Register** or **Login**\n3. **Subscription** → List plans (optional — view plans before upgrade)\n4. **Update** — profile, location, documents (allowed while pending)\n5. Admin approves → `verification_status` = `2`\n6. **Catalog** → Categories (includes nested `services` per category)\n7. **Update** again — enable `partner_services` + `bank_account` in the same request\n\n**Login:** `POST /login` — change `email` / `password` to test `Invalid email.` or `Invalid password.`\n\n**Update:** `PUT /update` — one request with all fields; disable or clear catalog/bank fields until approved.\n\n**403** (catalog/bank while pending): `Catalog, services, and bank details can only be updated after your account is verified and approved.`",
+    "description": "Postman collection for **`/api/mobile/*`** (partner + customer apps).\n\n## Partner — suggested test order\n1. **Location** → States → Cities → Areas → Pincodes\n2. **Register** or **Login**\n3. **Subscription** → List plans (optional)\n4. **Update** — profile, location, documents (allowed while pending)\n5. Admin approves → `verification_status` = `2`\n6. **Catalog** → Categories\n7. **Update** again — `partner_services` + `bank_account` (approved only)\n8. **My services** → List → Patch status or Update\n\n## Customer (User)\n1. **Send OTP** — creates customer if phone is new; saves OTP (dev OTP: `123456`)\n2. **Verify OTP** — login; sets `token` / `customerId`\n3. **Update** — profile: name, phone, email, DOB, gender (Bearer required)\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
       "name": "Partner",
-      "description": "Partner mobile — `routes/mobile/partner/partner_routes.js` + `location_routes.js`",
+      "description": "Partner mobile — `partner_routes.js` + `location_routes.js`. Includes subscription-plans, categories, my-services (GET/PUT/PATCH status).",
       "item": [
         {
           "name": "Register",
@@ -140,7 +140,7 @@
                 "login"
               ]
             },
-            "description": "**POST /api/mobile/partner/login**\n\n- No Authorization\n- **Required:** `email`, `password`\n- **Optional:** `device_token` (FCM push token)\n\n**401:** unknown email → `Invalid email.` | wrong password → `Invalid password.`\n\nTo test errors, edit body: use unregistered email or wrong password."
+            "description": "**POST /api/mobile/partner/login**\n\n- No Authorization\n- **Required:** `email`, `password`\n- **Optional:** `device_token` (FCM push token)\n- **200** `data`: `auth_token`, `verification_status` (1 pending, 2 approved, 3 rejected), `verification_status_message`, `rejected_reasone`, `city_name`, …\n\n**401:** `Invalid email.` | `Invalid password.`\n\nRejected partners can log in; catalog/bank/my-services **update** still requires approval."
           },
           "response": []
         },
@@ -412,6 +412,278 @@
           ]
         },
         {
+          "name": "My services",
+          "description": "Bearer required. Partner's **saved** catalog. Each service includes `is_active` (local on/off). **PATCH status** and **PUT** require `verification_status` = 2 (approved). Run **List** first to set `{{partnerServiceId}}`. Run **Catalog** to refresh `{{categoryId}}` / `{{serviceId}}` for **Update**.",
+          "item": [
+            {
+              "name": "List my services",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  const cat = j?.data?.[0];",
+                      "  if (cat?.category_id) {",
+                      "    pm.collectionVariables.set('myServiceCategoryId', String(cat.category_id));",
+                      "    pm.collectionVariables.set('categoryId', String(cat.category_id));",
+                      "  }",
+                      "  const svc = cat?.services?.[0];",
+                      "  if (svc?._id) pm.collectionVariables.set('partnerServiceId', String(svc._id));",
+                      "  if (svc?.service_id) {",
+                      "    pm.collectionVariables.set('myServiceServiceId', String(svc.service_id));",
+                      "    pm.collectionVariables.set('serviceId', String(svc.service_id));",
+                      "  }",
+                      "  if (svc?.price != null) pm.collectionVariables.set('myServicePrice', String(svc.price));",
+                      "  if (svc?.description) pm.collectionVariables.set('myServiceDescription', String(svc.description));",
+                      "  if (svc?.is_active !== undefined) pm.collectionVariables.set('myServiceIsActive', String(svc.is_active));",
+                      "  const allSvcs = (j?.data || []).flatMap((c) => c?.services || []);",
+                      "  if (allSvcs[1]?._id) pm.collectionVariables.set('partnerServiceId2', String(allSvcs[1]._id));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/my-services",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "partner",
+                    "my-services"
+                  ]
+                },
+                "description": "**GET /api/mobile/partner/my-services**\n\n- **Auth:** Bearer `{{token}}`\n- **200** `data[]`: grouped by category — `category_id`, `category_name`, `services[]` with `_id` (partner_service row), `service_id`, `service_name`, `description`, `price`, `is_active`, `is_accept_request`, `tax`, `payment_type`, `minimum_deposit`, …\n- Empty catalog → `data: []`\n- Sets `{{partnerServiceId}}`, `{{partnerServiceId2}}` (second row, for bulk status), `{{myServiceCategoryId}}`, `{{myServiceServiceId}}`, `{{myServicePrice}}`, `{{myServiceDescription}}`, `{{myServiceIsActive}}`"
+              },
+              "response": []
+            },
+            {
+              "name": "Patch service status (single)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  if (j?.data?.is_active !== undefined) {",
+                      "    pm.collectionVariables.set('myServiceIsActive', String(j.data.is_active));",
+                      "  }",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"is_active\": false\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/my-services/{{partnerServiceId}}/status",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "partner",
+                    "my-services",
+                    "{{partnerServiceId}}",
+                    "status"
+                  ]
+                },
+                "description": "**PATCH /api/mobile/partner/my-services/:id/status**\n\n- **Auth:** Bearer — partner must be **approved** (`verification_status` 2)\n- **Path:** `id` = partner_service row `_id` from **List my services** (`{{partnerServiceId}}`)\n- **Body:** `{ \"is_active\": true | false }` (boolean or `\"true\"` / `\"false\"`)\n- **200:** `{ success, status, message, data: { _id, is_active } }`\n- **403** if not approved | **404** if row not found"
+              },
+              "response": []
+            },
+            {
+              "name": "Patch service status (bulk)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  const first = j?.data?.updated?.[0];",
+                      "  if (first?.is_active !== undefined) {",
+                      "    pm.collectionVariables.set('myServiceIsActive', String(first.is_active));",
+                      "  }",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"updates\": [\n    {\n      \"_id\": \"{{partnerServiceId}}\",\n      \"is_active\": true\n    },\n    {\n      \"_id\": \"{{partnerServiceId2}}\",\n      \"is_active\": false\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/my-services/status",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "partner",
+                    "my-services",
+                    "status"
+                  ]
+                },
+                "description": "**PATCH /api/mobile/partner/my-services/status**\n\n- **Auth:** Bearer — partner must be **approved** (`verification_status` 2)\n- **Body:** `updates` non-empty array; each item **required:** `_id` (partner_service row), `is_active` (true | false)\n- **200:** `{ success, status, message, data: { updated: [{ _id, is_active }, ...] } }`\n- **400** duplicate `_id` in request | **403** if not approved | **404** if any row not found\n\nRun **List my services** first. For a single-row catalog, use one object in `updates` or set `{{partnerServiceId2}}` to a second row id."
+              },
+              "response": []
+            },
+            {
+              "name": "Update my services",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  const cat = j?.data?.[0];",
+                      "  const svc = cat?.services?.[0];",
+                      "  if (svc?._id) pm.collectionVariables.set('partnerServiceId', String(svc._id));",
+                      "  if (svc?.price != null) pm.collectionVariables.set('myServicePrice', String(svc.price));",
+                      "  if (svc?.description) pm.collectionVariables.set('myServiceDescription', String(svc.description));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"services\": [\n    {\n      \"_id\": \"{{partnerServiceId}}\",\n      \"category_id\": \"{{categoryId}}\",\n      \"service_id\": \"{{serviceId}}\",\n      \"price\": {{myServicePrice}},\n      \"description\": \"{{myServiceDescription}}\"\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/my-services",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "partner",
+                    "my-services"
+                  ]
+                },
+                "description": "**PUT /api/mobile/partner/my-services**\n\n- **Auth:** Bearer — partner must be **approved** (`verification_status` 2)\n- **Body:** `services` array; each item **required:** `_id` (partner_service row from List), `category_id`, `service_id`, `price`, `description`\n- **200:** updated grouped `data[]` + message\n- **403** if not approved | **404** if `_id` not found | **409** duplicate `service_id` on another row\n\nRun **List my services** first. Use **Catalog → Categories** to change `categoryId` / `serviceId` dropdown values."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
           "name": "Subscription",
           "description": "Bearer required. **GET /subscription-plans** — all active subscription plans (`deleted_at` null).",
           "item": [
@@ -655,8 +927,226 @@
     },
     {
       "name": "User",
-      "description": "Customer mobile — `routes/mobile/user/index.js` (no endpoints yet).",
-      "item": []
+      "description": "Customer mobile — `routes/mobile/user/user_routes.js`. OTP login + profile update. Run **Send OTP** → **Verify OTP** → **Update** (use raw JSON body, not form-data).",
+      "item": [
+        {
+          "name": "Send OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('OTP sent', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "  });",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone_number\": \"{{customerPhone}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/send-otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "user",
+                "send-otp"
+              ]
+            },
+            "description": "**POST /api/mobile/user/send-otp**\n\n- No Authorization\n- **Required:** `phone_number` (E.164 style, e.g. `+919876543210`)\n\n### Behavior\n- If phone is new → creates customer (`type: 4`) in `users`\n- If customer exists → reuses account\n- If phone belongs to partner/admin → **409**\n- Stores hashed OTP in `otp` collection (dev OTP: **123456**, 10 min expiry)\n- **429** if a valid OTP was already sent for this number\n\nNo SMS is sent in the current build."
+          },
+          "response": []
+        },
+        {
+          "name": "Verify OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const t = j?.data?.auth_token;",
+                  "  if (t) {",
+                  "    pm.collectionVariables.set('token', t);",
+                  "    pm.collectionVariables.set('accessToken', t);",
+                  "    pm.collectionVariables.set('customerToken', t);",
+                  "  }",
+                  "  if (j?.data?._id) {",
+                  "    pm.collectionVariables.set('customerId', String(j.data._id));",
+                  "    pm.collectionVariables.set('userId', String(j.data._id));",
+                  "  }",
+                  "  if (j?.data?.phone_number) {",
+                  "    pm.collectionVariables.set('customerPhone', String(j.data.phone_number));",
+                  "  }",
+                  "  pm.test('Login success', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.data?.auth_token).to.be.a('string');",
+                  "  });",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone_number\": \"{{customerPhone}}\",\n  \"otp\": \"{{customerOtp}}\",\n  \"device_token\": \"{{deviceToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/verify-otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "user",
+                "verify-otp"
+              ]
+            },
+            "description": "**POST /api/mobile/user/verify-otp**\n\n- No Authorization\n- **Required:** `phone_number`, `otp` (use `123456` in dev)\n- **Optional:** `device_token` (FCM)\n\n### Behavior\n- Validates OTP → issues JWT on `data.auth_token`\n- Updates `device_token`, `last_signin` on user\n- Deletes used OTP row\n\n**400:** Invalid or expired OTP\n**401:** Customer not found (run Send OTP first)\n**403:** Account blocked"
+          },
+          "response": []
+        },
+        {
+          "name": "Update",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const t = j?.data?.auth_token;",
+                  "  if (t) {",
+                  "    pm.collectionVariables.set('token', t);",
+                  "    pm.collectionVariables.set('accessToken', t);",
+                  "    pm.collectionVariables.set('customerToken', t);",
+                  "  }",
+                  "  if (j?.data?._id) {",
+                  "    pm.collectionVariables.set('customerId', String(j.data._id));",
+                  "    pm.collectionVariables.set('userId', String(j.data._id));",
+                  "  }",
+                  "  if (j?.data?.phone_number) {",
+                  "    pm.collectionVariables.set('customerPhone', String(j.data.phone_number));",
+                  "  }",
+                  "  if (j?.data?.email) {",
+                  "    pm.collectionVariables.set('customerEmail', String(j.data.email));",
+                  "  }",
+                  "  if (j?.data?.name) {",
+                  "    pm.collectionVariables.set('customerName', String(j.data.name));",
+                  "  }",
+                  "  pm.test('Profile updated', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "  });",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{customerName}}\",\n  \"phone_number\": \"{{customerPhone}}\",\n  \"email\": \"{{customerEmail}}\",\n  \"date_of_birth\": \"{{customerDob}}\",\n  \"gender\": \"{{customerGender}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/update",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "user",
+                "update"
+              ]
+            },
+            "description": "**PUT /api/mobile/user/update**\n\n- **Auth:** Bearer `{{token}}` (from **Verify OTP**)\n- **Body:** raw JSON — send one or more fields\n\n| Field | Rules |\n|-------|--------|\n| `name` | 2–50 characters |\n| `phone_number` | E.164, unique |\n| `email` | valid format, unique |\n| `date_of_birth` | valid date, 18+ |\n| `gender` | `male` \\| `female` \\| `other` |\n\n**200** `data`: updated customer profile + `auth_token`\n\n**400** validation | **403** blocked / wrong account type | **409** phone/email already used"
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "variable": [
@@ -751,6 +1241,96 @@
       "value": "",
       "type": "string",
       "description": "From Subscription → List plans — 24-hex ObjectId"
+    },
+    {
+      "key": "partnerServiceId",
+      "value": "",
+      "type": "string",
+      "description": "From My services → List — partner_service _id (24 hex)"
+    },
+    {
+      "key": "myServiceCategoryId",
+      "value": "",
+      "type": "string",
+      "description": "From My services — saved category_id"
+    },
+    {
+      "key": "myServiceServiceId",
+      "value": "",
+      "type": "string",
+      "description": "From My services — saved service_id"
+    },
+    {
+      "key": "myServicePrice",
+      "value": "500",
+      "type": "string",
+      "description": "Price for PUT my-services (number in JSON)"
+    },
+    {
+      "key": "myServiceDescription",
+      "value": "Updated service description",
+      "type": "string",
+      "description": "Description for PUT my-services"
+    },
+    {
+      "key": "partnerServiceId2",
+      "value": "",
+      "type": "string",
+      "description": "From My services → List — second partner_service _id (bulk status tests)"
+    },
+    {
+      "key": "myServiceIsActive",
+      "value": "true",
+      "type": "string",
+      "description": "From My services — is_active on first service (true | false)"
+    },
+    {
+      "key": "customerPhone",
+      "value": "+919876543210",
+      "type": "string",
+      "description": "Customer OTP login phone (E.164)"
+    },
+    {
+      "key": "customerOtp",
+      "value": "123456",
+      "type": "string",
+      "description": "Dev OTP — fixed until SMS is enabled"
+    },
+    {
+      "key": "customerId",
+      "value": "",
+      "type": "string",
+      "description": "Set by User → Verify OTP"
+    },
+    {
+      "key": "customerToken",
+      "value": "",
+      "type": "string",
+      "description": "Customer JWT — alias of token after Verify OTP"
+    },
+    {
+      "key": "customerName",
+      "value": "Rahul Kumar",
+      "type": "string",
+      "description": "Customer profile name for Update"
+    },
+    {
+      "key": "customerEmail",
+      "value": "customer.mobile@example.com",
+      "type": "string",
+      "description": "Customer profile email for Update"
+    },
+    {
+      "key": "customerDob",
+      "value": "1998-01-15",
+      "type": "string",
+      "description": "Customer date_of_birth (YYYY-MM-DD, 18+)"
+    },
+    {
+      "key": "customerGender",
+      "value": "male",
+      "type": "string",
+      "description": "Customer gender: male | female | other"
     }
   ]
 }

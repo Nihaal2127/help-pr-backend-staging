@@ -9,7 +9,7 @@ const upload = multer({
     console.log('File Type ',file.mimetype);
     const allowedMimeTypes = ["image/jpeg", "image/png", "image/jpg","application/pdf"];
     if (!allowedMimeTypes.includes(file.mimetype)) {
-      return cb(new Error("Only JPEG, JPG, PNG, and Pdf file are allowed"), false);
+      return cb(new Error('Only JPEG, JPG, PNG, and PDF files are allowed.'), false);
     }
     cb(null, true);
   },

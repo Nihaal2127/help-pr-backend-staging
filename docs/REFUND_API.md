@@ -209,7 +209,7 @@ Records a refund. **Append-only.**
 | `from_admin_commission` | No | Default `0`. Admin/platform portion of this refund (commission, tax, fees, etc.). **Chosen by the client**; must satisfy the split rule below — **not** capped at `order.admin_commission` alone |
 | `from_partner_wallet` | No | Default `0`. Partner wallet debit portion |
 | `notes` | No | Stored on refund + payment |
-| `payment_method` | No | Default `"refund"` on payment row |
+| `payment_method` | No | Default `"cash"` on payment row |
 | `transaction_reference` | No | External reference on payment row |
 | `franchise_id` | No | Access scope only (not stored on refund) |
 

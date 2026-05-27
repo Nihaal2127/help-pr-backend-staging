@@ -286,7 +286,7 @@ Read-only view of one refund.
 | `from_admin_commission` | No | Default `0`; must be ≥ 0 |
 | `from_partner_wallet` | No | Default `0`; must be ≥ 0 |
 | `notes` | No | Stored on refund + payment note |
-| `payment_method` | No | Label on refund payment row (default `refund`) |
+| `payment_method` | No | Label on refund payment row (default `cash`) |
 
 **Server derives from `order_id` — do not send in payload**
 

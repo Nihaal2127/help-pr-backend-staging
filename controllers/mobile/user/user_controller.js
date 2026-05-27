@@ -1,4 +1,4 @@
-const { sendOtp, verifyOtpAndLogin } = require('../../../services/mobile/user/user_service');
+const { sendOtp, verifyOtpAndLogin, updateUser } = require('../../../services/mobile/user/user_service');
 
 const sendOtpHandler = async (req, res) => {
   try {
@@ -61,7 +61,39 @@ const verifyOtpHandler = async (req, res) => {
   }
 };
 
+const updateHandler = async (req, res) => {
+  try {
+    const result = await updateUser({
+      customerId: req.user.id,
+      body: req.body,
+    });
+
+    if (!result.ok) {
+      return res.status(result.status).json({
+        success: false,
+        status: result.status,
+        message: result.message,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    console.error('mobile user update', error.message);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Internal server error.',
+    });
+  }
+};
+
 module.exports = {
   sendOtpHandler,
   verifyOtpHandler,
+  updateHandler,
 };

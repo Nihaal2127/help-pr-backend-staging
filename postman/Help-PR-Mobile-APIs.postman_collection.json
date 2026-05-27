@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-mobile-apis-only",
     "name": "Help PR — Mobile APIs only",
-    "description": "Postman collection for **`/api/mobile/*`** (partner app).\n\n## Suggested test order\n1. **Location** → States → Cities → Areas → Pincodes\n2. **Register** or **Login**\n3. **Subscription** → List plans (optional)\n4. **Update** — profile, location, documents (allowed while pending)\n5. Admin approves → `verification_status` = `2`\n6. **Catalog** → Categories (franchise catalog — pick category/service ids)\n7. **Update** again — `partner_services` + `bank_account` (approved only)\n8. **My services** → List → Patch status (single/bulk) or Update (price, description, category, service)\n\n**Login:** returns `verification_status`, `verification_status_message`, `rejected_reasone`. Rejected partners (`verification_status` 3) can still log in.\n\n**403** (catalog/bank / my-services write while not approved): `Catalog, services, and bank details can only be updated after your account is verified and approved.`",
+    "description": "Postman collection for **`/api/mobile/*`** (partner + customer apps).\n\n## Partner — suggested test order\n1. **Location** → States → Cities → Areas → Pincodes\n2. **Register** or **Login**\n3. **Subscription** → List plans (optional)\n4. **Update** — profile, location, documents (allowed while pending)\n5. Admin approves → `verification_status` = `2`\n6. **Catalog** → Categories\n7. **Update** again — `partner_services` + `bank_account` (approved only)\n8. **My services** → List → Patch status or Update\n\n## Customer (User)\n1. **Send OTP** — creates customer if phone is new; saves OTP (dev OTP: `123456`)\n2. **Verify OTP** — login; sets `token` / `customerId`\n3. **Update** — profile: name, phone, email, DOB, gender (Bearer required)\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -927,8 +927,226 @@
     },
     {
       "name": "User",
-      "description": "Customer mobile — `routes/mobile/user/index.js` (no endpoints yet).",
-      "item": []
+      "description": "Customer mobile — `routes/mobile/user/user_routes.js`. OTP login + profile update. Run **Send OTP** → **Verify OTP** → **Update** (use raw JSON body, not form-data).",
+      "item": [
+        {
+          "name": "Send OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('OTP sent', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "  });",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone_number\": \"{{customerPhone}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/send-otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "user",
+                "send-otp"
+              ]
+            },
+            "description": "**POST /api/mobile/user/send-otp**\n\n- No Authorization\n- **Required:** `phone_number` (E.164 style, e.g. `+919876543210`)\n\n### Behavior\n- If phone is new → creates customer (`type: 4`) in `users`\n- If customer exists → reuses account\n- If phone belongs to partner/admin → **409**\n- Stores hashed OTP in `otp` collection (dev OTP: **123456**, 10 min expiry)\n- **429** if a valid OTP was already sent for this number\n\nNo SMS is sent in the current build."
+          },
+          "response": []
+        },
+        {
+          "name": "Verify OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const t = j?.data?.auth_token;",
+                  "  if (t) {",
+                  "    pm.collectionVariables.set('token', t);",
+                  "    pm.collectionVariables.set('accessToken', t);",
+                  "    pm.collectionVariables.set('customerToken', t);",
+                  "  }",
+                  "  if (j?.data?._id) {",
+                  "    pm.collectionVariables.set('customerId', String(j.data._id));",
+                  "    pm.collectionVariables.set('userId', String(j.data._id));",
+                  "  }",
+                  "  if (j?.data?.phone_number) {",
+                  "    pm.collectionVariables.set('customerPhone', String(j.data.phone_number));",
+                  "  }",
+                  "  pm.test('Login success', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.data?.auth_token).to.be.a('string');",
+                  "  });",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone_number\": \"{{customerPhone}}\",\n  \"otp\": \"{{customerOtp}}\",\n  \"device_token\": \"{{deviceToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/verify-otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "user",
+                "verify-otp"
+              ]
+            },
+            "description": "**POST /api/mobile/user/verify-otp**\n\n- No Authorization\n- **Required:** `phone_number`, `otp` (use `123456` in dev)\n- **Optional:** `device_token` (FCM)\n\n### Behavior\n- Validates OTP → issues JWT on `data.auth_token`\n- Updates `device_token`, `last_signin` on user\n- Deletes used OTP row\n\n**400:** Invalid or expired OTP\n**401:** Customer not found (run Send OTP first)\n**403:** Account blocked"
+          },
+          "response": []
+        },
+        {
+          "name": "Update",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const t = j?.data?.auth_token;",
+                  "  if (t) {",
+                  "    pm.collectionVariables.set('token', t);",
+                  "    pm.collectionVariables.set('accessToken', t);",
+                  "    pm.collectionVariables.set('customerToken', t);",
+                  "  }",
+                  "  if (j?.data?._id) {",
+                  "    pm.collectionVariables.set('customerId', String(j.data._id));",
+                  "    pm.collectionVariables.set('userId', String(j.data._id));",
+                  "  }",
+                  "  if (j?.data?.phone_number) {",
+                  "    pm.collectionVariables.set('customerPhone', String(j.data.phone_number));",
+                  "  }",
+                  "  if (j?.data?.email) {",
+                  "    pm.collectionVariables.set('customerEmail', String(j.data.email));",
+                  "  }",
+                  "  if (j?.data?.name) {",
+                  "    pm.collectionVariables.set('customerName', String(j.data.name));",
+                  "  }",
+                  "  pm.test('Profile updated', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "  });",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{customerName}}\",\n  \"phone_number\": \"{{customerPhone}}\",\n  \"email\": \"{{customerEmail}}\",\n  \"date_of_birth\": \"{{customerDob}}\",\n  \"gender\": \"{{customerGender}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/update",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "user",
+                "update"
+              ]
+            },
+            "description": "**PUT /api/mobile/user/update**\n\n- **Auth:** Bearer `{{token}}` (from **Verify OTP**)\n- **Body:** raw JSON — send one or more fields\n\n| Field | Rules |\n|-------|--------|\n| `name` | 2–50 characters |\n| `phone_number` | E.164, unique |\n| `email` | valid format, unique |\n| `date_of_birth` | valid date, 18+ |\n| `gender` | `male` \\| `female` \\| `other` |\n\n**200** `data`: updated customer profile + `auth_token`\n\n**400** validation | **403** blocked / wrong account type | **409** phone/email already used"
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "variable": [
@@ -1065,6 +1283,54 @@
       "value": "true",
       "type": "string",
       "description": "From My services — is_active on first service (true | false)"
+    },
+    {
+      "key": "customerPhone",
+      "value": "+919876543210",
+      "type": "string",
+      "description": "Customer OTP login phone (E.164)"
+    },
+    {
+      "key": "customerOtp",
+      "value": "123456",
+      "type": "string",
+      "description": "Dev OTP — fixed until SMS is enabled"
+    },
+    {
+      "key": "customerId",
+      "value": "",
+      "type": "string",
+      "description": "Set by User → Verify OTP"
+    },
+    {
+      "key": "customerToken",
+      "value": "",
+      "type": "string",
+      "description": "Customer JWT — alias of token after Verify OTP"
+    },
+    {
+      "key": "customerName",
+      "value": "Rahul Kumar",
+      "type": "string",
+      "description": "Customer profile name for Update"
+    },
+    {
+      "key": "customerEmail",
+      "value": "customer.mobile@example.com",
+      "type": "string",
+      "description": "Customer profile email for Update"
+    },
+    {
+      "key": "customerDob",
+      "value": "1998-01-15",
+      "type": "string",
+      "description": "Customer date_of_birth (YYYY-MM-DD, 18+)"
+    },
+    {
+      "key": "customerGender",
+      "value": "male",
+      "type": "string",
+      "description": "Customer gender: male | female | other"
     }
   ]
 }

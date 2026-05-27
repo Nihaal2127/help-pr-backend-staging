@@ -128,7 +128,51 @@ const verifyOtpAndLogin = async ({ phone_number, device_token, validOtp }) => {
   };
 };
 
+const MOBILE_USER_ALLOWED_UPDATE_FIELDS = ['name', 'phone_number', 'email', 'date_of_birth', 'gender'];
+
+const updateUser = async ({ customerId, body }) => {
+  const user = await User.findOne({
+    _id: customerId,
+    type: USER_TYPE_CUSTOMER,
+    deleted_at: null,
+  });
+
+  if (!user) {
+    return { ok: false, status: 404, message: 'Customer not found.' };
+  }
+
+  if (user.is_blocked === true) {
+    return {
+      ok: false,
+      status: 403,
+      message: 'Your account is blocked. Please contact support.',
+    };
+  }
+
+  for (const field of MOBILE_USER_ALLOWED_UPDATE_FIELDS) {
+    if (body[field] !== undefined) {
+      user[field] = body[field];
+    }
+  }
+
+  user.updated_at = new Date();
+  await user.save();
+
+  const data = await buildCustomerLoginData(user);
+  if (!data) {
+    return { ok: false, status: 500, message: 'Failed to load user profile.' };
+  }
+
+  return {
+    ok: true,
+    status: 200,
+    message: 'User updated successfully.',
+    data,
+  };
+};
+
 module.exports = {
   sendOtp,
   verifyOtpAndLogin,
+  updateUser,
 };

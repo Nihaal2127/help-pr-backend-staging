@@ -11,9 +11,11 @@ const {
   userUpdateMiddleware,
 } = require('../../../middleware/mobile/user/user_middleware');
 const userAuthMiddleware = require('../../../middleware/mobile/user/user_auth_middleware');
+const addressRoutes = require('./address_routes');
 
 const router = express.Router();
 
+router.use(addressRoutes);
 router.get('/pincodes', userAuthMiddleware, getPincodesHandler);
 router.post('/send-otp', rateLimitSendOtp, sendOtpHandler);
 router.post('/verify-otp', validateVerifyOtp, verifyOtpHandler);

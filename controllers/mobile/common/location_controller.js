@@ -1,4 +1,4 @@
-const locationService = require('../../../services/mobile/partner/location_service');
+const locationService = require('../../../services/mobile/common/location_service');
 
 const sendServiceResult = (res, result) => {
   if (!result.ok) {

@@ -5,13 +5,13 @@ const {
   cities,
   areas,
   pincodes,
-} = require('../../../controllers/mobile/partner/location_controller');
+} = require('../../../controllers/mobile/common/location_controller');
 const {
   validateStatesQuery,
   validateCitiesQuery,
   validateAreasQuery,
   validatePincodesQuery,
-} = require('../../../middleware/mobile/partner/location_middleware');
+} = require('../../../middleware/mobile/common/location_middleware');
 
 router.get('/states', validateStatesQuery, states);
 router.get('/cities', validateCitiesQuery, cities);

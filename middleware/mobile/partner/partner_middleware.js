@@ -73,6 +73,18 @@ const validateAadharCardFileRequired = (req, res) => {
   return true;
 };
 
+const validateProfileImageRequired = (req, res) => {
+  if (!req.files?.image?.[0]) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Profile photo is required.',
+    });
+    return false;
+  }
+  return true;
+};
+
 const PARTNER_UPDATE_SECTION = {
   ALL: 'all',
   BASIC: 'basic-details',
@@ -1065,6 +1077,7 @@ const validatePartnerBankAccountsPayload = (req, res) => {
 };
 
 const validatePartnerUpdatePartialFields = async (req, res) => {
+  if (!validateProfileImageRequired(req, res)) return false;
   if (!(await validatePartnerBasicPartialFields(req, res))) return false;
   if (!validateBankPayloadIfPresent(req, res)) return false;
   if (requiresAadharCardFile(req) && !validateAadharCardFileRequired(req, res)) {

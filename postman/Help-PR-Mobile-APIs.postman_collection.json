@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-mobile-apis-only",
     "name": "Help PR — Mobile APIs only",
-    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** (dropdowns)\n2. **Register** or **Login**\n3. **Subscription** → List plans (optional)\n4. **Update** — profile, location, documents\n5. Admin approves → `verification_status` = `2`\n6. **Catalog** → Categories\n7. **Update** — `partner_services` + `bank_account` (approved only)\n8. **My services** → List → Patch / Update\n\n## Customer (User)\n1. **Common → Location** (address form dropdowns)\n2. **Send OTP** → **Verify OTP** (dev OTP: `123456`)\n3. **Addresses** — List / Create / Update / Delete (Bearer)\n4. **Pincodes** — global search (`search` query, optional)\n5. **Update** — profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.",
+    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** → Register/Login → Update → Catalog → My services\n\n## Customer (User)\n1. **Send OTP** → **Verify OTP** (dev OTP: `123456`)\n2. **Pincodes (search)** or set `{{homeLocation}}` — e.g. `500032,Gachibowli,Hyderabad,Telangana`\n3. **Home** — categories, services, partners for franchise (Bearer + `location` query)\n4. **Addresses** — CRUD (first address also updates `users` table)\n5. **Update** — multipart `profile_photo` + profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -860,7 +860,7 @@
     },
     {
       "name": "User",
-      "description": "Customer mobile — OTP auth, saved addresses, profile. Suggested order: **Common → Location** → **Send OTP** → **Verify OTP** → **Addresses** → **Pincodes** (search) → **Update**. Raw JSON for POST/PUT.",
+      "description": "Customer mobile — OTP, home, addresses, profile. Order: **Send OTP** → **Verify OTP** → **Pincodes (search)** (sets `homeLocation`) → **Home** → **Addresses** → **Update** (multipart). Address dropdowns: **Common → Location**.",
       "item": [
         {
           "name": "Send OTP",
@@ -995,6 +995,47 @@
           "response": []
         },
         {
+          "name": "Home",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Home loaded', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.data?.categories).to.be.an('array');",
+                  "    pm.expect(j.data?.partners).to.be.an('array');",
+                  "  });",
+                  "  if (j?.data?.franchise_id) {",
+                  "    pm.collectionVariables.set('franchiseId', String(j.data.franchise_id));",
+                  "  }",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/home?location={{homeLocation}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "user", "home"],
+              "query": [{ "key": "location", "value": "{{homeLocation}}" }]
+            },
+            "description": "**GET /api/mobile/user/home?location=**\n\n- **Auth:** Bearer `{{token}}` (run **Verify OTP** first)\n- **Query `location`:** `pincode,area_name,city_name,state_name` — same line as **Pincodes (search)** e.g. `500032,Gachibowli,Hyderabad,Telangana`\n\n**200** `data`:\n- `franchise_id`, `franchise_name`\n- `location` (resolved ids)\n- `categories[]` with nested `services[]`\n- `partners[]` (approved, active)\n\n**400** invalid location / no franchise | **404** location not found"
+          },
+          "response": []
+        },
+        {
           "name": "Addresses",
           "description": "Saved delivery addresses. Run **Common → Location** first for dropdown IDs. Bearer required (run **Verify OTP**).",
           "item": [
@@ -1083,7 +1124,7 @@
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "mobile", "user", "addresses"]
                 },
-                "description": "**POST /api/mobile/user/addresses**\n\n- **Auth:** Bearer\n- **Required:** `state_id`, `city_id`, `area_id`, `pincode` (from **Common → Pincodes** dropdown), `address` (text)\n- `pincode` may be string `\"560001\"` or object `{ \"pincode\": \"560001\" }`"
+                "description": "**POST /api/mobile/user/addresses**\n\n- **Auth:** Bearer\n- **Required:** `state_id`, `city_id`, `area_id`, `pincode` (from **Common → Pincodes** dropdown), `address` (text)\n- `pincode` may be string `\"560001\"` or object `{ \"pincode\": \"560001\" }`\n- **First address** also copies location into `users` table"
               },
               "response": []
             },
@@ -1182,7 +1223,8 @@
                   "    pm.expect(j.data).to.be.an('array');",
                   "  });",
                   "  if (Array.isArray(j?.data) && j.data.length > 0) {",
-                  "    const first = String(j.data[0]);",
+                  "    const first = String(j.data[0]).trim();",
+                  "    pm.collectionVariables.set('homeLocation', first);",
                   "    const parts = first.split(',');",
                   "    if (parts.length >= 4) {",
                   "      pm.collectionVariables.set('samplePincode', parts[0].trim());",
@@ -1263,22 +1305,47 @@
             "method": "PUT",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
                 "key": "Accept",
                 "value": "application/json"
               }
             ],
             "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"{{customerName}}\",\n  \"phone_number\": \"{{customerPhone}}\",\n  \"email\": \"{{customerEmail}}\",\n  \"date_of_birth\": \"{{customerDob}}\",\n  \"gender\": \"{{customerGender}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "{{customerName}}",
+                  "type": "text"
+                },
+                {
+                  "key": "phone_number",
+                  "value": "{{customerPhone}}",
+                  "type": "text"
+                },
+                {
+                  "key": "email",
+                  "value": "{{customerEmail}}",
+                  "type": "text"
+                },
+                {
+                  "key": "date_of_birth",
+                  "value": "{{customerDob}}",
+                  "type": "text",
+                  "description": "YYYY-MM-DD, 18+"
+                },
+                {
+                  "key": "gender",
+                  "value": "{{customerGender}}",
+                  "type": "text",
+                  "description": "male | female | other"
+                },
+                {
+                  "key": "profile_photo",
+                  "type": "file",
+                  "src": [],
+                  "description": "JPEG/PNG/JPG — max 512 KB. Do not set Content-Type header manually."
                 }
-              }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/mobile/user/update",
@@ -1292,7 +1359,7 @@
                 "update"
               ]
             },
-            "description": "**PUT /api/mobile/user/update**\n\n- **Auth:** Bearer `{{token}}` (from **Verify OTP**)\n- **Body:** raw JSON — send one or more fields\n\n| Field | Rules |\n|-------|--------|\n| `name` | 2–50 characters |\n| `phone_number` | E.164, unique |\n| `email` | valid format, unique |\n| `date_of_birth` | valid date, 18+ |\n| `gender` | `male` \\| `female` \\| `other` |\n\n**200** `data`: updated customer profile + `auth_token`\n\n**400** validation | **403** blocked / wrong account type | **409** phone/email already used"
+            "description": "**PUT /api/mobile/user/update**\n\n- **Auth:** Bearer `{{token}}`\n- **Body:** `multipart/form-data` only (do not set Content-Type manually)\n- Send one or more text fields and/or `profile_photo` file\n\n| Field | Rules |\n|-------|--------|\n| `name` | 2–50 characters |\n| `phone_number` | E.164, unique |\n| `email` | valid format, unique |\n| `date_of_birth` | valid date, 18+ |\n| `gender` | `male` \\| `female` \\| `other` |\n| `profile_photo` | image file, max 512 KB → saved as `profile_url` |\n\n**200** `data`: updated profile + `auth_token`"
           },
           "response": []
         }
@@ -1493,6 +1560,18 @@
       "value": "",
       "type": "string",
       "description": "Optional search text for User → Pincodes (pincode/area/city/state)"
+    },
+    {
+      "key": "homeLocation",
+      "value": "500032,Gachibowli,Hyderabad,Telangana",
+      "type": "string",
+      "description": "CSV line for User → Home: pincode,area_name,city_name,state_name. Set by Pincodes (search) test script."
+    },
+    {
+      "key": "franchiseId",
+      "value": "",
+      "type": "string",
+      "description": "Set by User → Home from data.franchise_id"
     },
     {
       "key": "addressId",

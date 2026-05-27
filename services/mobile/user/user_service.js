@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 const crypto = require('crypto');
 const User = require('../../../models/user');
+const Area = require('../../../models/area');
+const City = require('../../../models/city');
 const Otp = require('../../../models/otp');
 const notificationSetting = require('../../../models/notification_settings');
 const { getNewId } = require('../../../helper/id_generator');
@@ -171,8 +173,73 @@ const updateUser = async ({ customerId, body }) => {
   };
 };
 
+const sanitizeCsvField = (value) => String(value ?? '').replace(/,/g, ' ').trim();
+
+const normalizeAreaPincodes = (pincodes) => {
+  if (!pincodes || !Array.isArray(pincodes)) return [];
+  return [...new Set(pincodes.map((p) => String(p).trim()).filter(Boolean))];
+};
+
+const listAllPincodes = async () => {
+  try {
+    const areas = await Area.find({ deleted_at: null })
+      .select('name pincodes city_id state_name')
+      .lean();
+
+    const cityIds = [
+      ...new Set(
+        areas
+          .map((area) => area.city_id && area.city_id.toString())
+          .filter((id) => id && mongoose.Types.ObjectId.isValid(id))
+      ),
+    ].map((id) => new mongoose.Types.ObjectId(id));
+
+    const cities = await City.find({ _id: { $in: cityIds }, deleted_at: null })
+      .select('name')
+      .lean();
+    const cityNameById = new Map(cities.map((city) => [city._id.toString(), city.name]));
+
+    const records = [];
+    for (const area of areas) {
+      const areaName = sanitizeCsvField(area.name);
+      const cityName = sanitizeCsvField(cityNameById.get(String(area.city_id)) || '');
+      const stateName = sanitizeCsvField(area.state_name);
+      for (const pincode of normalizeAreaPincodes(area.pincodes)) {
+        records.push({
+          pincode,
+          area_name: areaName,
+          city_name: cityName,
+          state_name: stateName,
+        });
+      }
+    }
+
+    records.sort((a, b) => {
+      const pinCompare = a.pincode.localeCompare(b.pincode);
+      if (pinCompare !== 0) return pinCompare;
+      return a.area_name.localeCompare(b.area_name);
+    });
+
+    const data = records.map(
+      (record) =>
+        `${sanitizeCsvField(record.pincode)},${record.area_name},${record.city_name},${record.state_name}`
+    );
+
+    return {
+      ok: true,
+      status: 200,
+      message: 'Pincode list fetched successfully.',
+      data,
+    };
+  } catch (err) {
+    console.error('listAllPincodes', err.message);
+    return { ok: false, status: 500, message: 'Internal server error.' };
+  }
+};
+
 module.exports = {
   sendOtp,
   verifyOtpAndLogin,
   updateUser,
+  listAllPincodes,
 };

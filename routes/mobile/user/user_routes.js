@@ -3,6 +3,7 @@ const {
   sendOtpHandler,
   verifyOtpHandler,
   updateHandler,
+  getPincodesHandler,
 } = require('../../../controllers/mobile/user/user_controller');
 const {
   rateLimitSendOtp,
@@ -13,6 +14,7 @@ const mobileAuthMiddleware = require('../../../middleware/mobile/auth_middleware
 
 const router = express.Router();
 
+router.get('/pincodes', getPincodesHandler);
 router.post('/send-otp', rateLimitSendOtp, sendOtpHandler);
 router.post('/verify-otp', validateVerifyOtp, verifyOtpHandler);
 router.put('/update', mobileAuthMiddleware, userUpdateMiddleware, updateHandler);

@@ -85,6 +85,24 @@ const validateProfileImageRequired = (req, res) => {
   return true;
 };
 
+const PARTNER_PROFILE_PHOTO_REQUIRED_BODY_KEYS = new Set([
+  'gender',
+  'experience',
+  'state_id',
+  'city_id',
+  'area_id',
+  'pincode',
+  'address',
+]);
+
+const requiresProfilePhotoForUpdate = (req) => {
+  const body = req.body || {};
+  for (const key of PARTNER_PROFILE_PHOTO_REQUIRED_BODY_KEYS) {
+    if (isPresentBodyValue(body[key])) return true;
+  }
+  return false;
+};
+
 const PARTNER_UPDATE_SECTION = {
   ALL: 'all',
   BASIC: 'basic-details',
@@ -1077,7 +1095,7 @@ const validatePartnerBankAccountsPayload = (req, res) => {
 };
 
 const validatePartnerUpdatePartialFields = async (req, res) => {
-  if (hasBasicUpdatePayload(req) && !validateProfileImageRequired(req, res)) return false;
+  if (requiresProfilePhotoForUpdate(req) && !validateProfileImageRequired(req, res)) return false;
   if (!(await validatePartnerBasicPartialFields(req, res))) return false;
   if (!validateBankPayloadIfPresent(req, res)) return false;
   if (requiresAadharCardFile(req) && !validateAadharCardFileRequired(req, res)) {

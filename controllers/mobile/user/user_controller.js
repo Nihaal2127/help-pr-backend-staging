@@ -99,7 +99,7 @@ const updateHandler = async (req, res) => {
 
 const getPincodesHandler = async (req, res) => {
   try {
-    const search = req.query.search ?? req.query.q;
+    const search = req.query.search;
     const result = await listAllPincodes({ search });
 
     if (!result.ok) {

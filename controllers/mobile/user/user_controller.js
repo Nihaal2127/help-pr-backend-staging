@@ -71,6 +71,7 @@ const updateHandler = async (req, res) => {
     const result = await updateUser({
       customerId: req.user.id,
       body: req.body,
+      files: req.files,
     });
 
     if (!result.ok) {

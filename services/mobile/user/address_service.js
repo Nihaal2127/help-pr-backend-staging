@@ -118,6 +118,11 @@ const createAddress = async (customerId, body) => {
       return locationResult;
     }
 
+    const existingAddressCount = await Address.countDocuments({
+      user_id: customerId,
+      deleted_at: null,
+    });
+
     const user = await User.findOne({
       _id: customerId,
       deleted_at: null,
@@ -125,15 +130,32 @@ const createAddress = async (customerId, body) => {
       .select('name phone_number')
       .lean();
 
+    const addressLine = String(body.address).trim();
     const row = await Address.create({
       user_id: customerId,
       contact_name: user?.name ?? '',
       contact_number: user?.phone_number ?? '',
-      address: String(body.address).trim(),
+      address: addressLine,
       landmark: '',
       ...locationResult.fields,
       address_status: true,
     });
+
+    if (existingAddressCount === 0) {
+      await User.updateOne(
+        { _id: customerId, deleted_at: null },
+        {
+          $set: {
+            address: addressLine,
+            state_id: locationResult.fields.state_id,
+            city_id: locationResult.fields.city_id,
+            area_id: locationResult.fields.area_id,
+            pincode: locationResult.fields.pincode,
+            updated_at: new Date(),
+          },
+        }
+      );
+    }
 
     return ok(200, {
       message: 'Address created successfully.',

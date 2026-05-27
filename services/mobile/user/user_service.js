@@ -6,6 +6,8 @@ const City = require('../../../models/city');
 const Otp = require('../../../models/otp');
 const notificationSetting = require('../../../models/notification_settings');
 const { getNewId } = require('../../../helper/id_generator');
+const { handleImageUpload } = require('../../../helper/image_uploader');
+const { getUploadType } = require('../../../enum/upload_type_enum');
 const { normalizeUserPhone } = require('../../../utils/user_contact_uniqueness');
 const { USER_TYPE_CUSTOMER } = require('../../../constants/user_types');
 
@@ -132,7 +134,7 @@ const verifyOtpAndLogin = async ({ phone_number, device_token, validOtp }) => {
 
 const MOBILE_USER_ALLOWED_UPDATE_FIELDS = ['name', 'phone_number', 'email', 'date_of_birth', 'gender'];
 
-const updateUser = async ({ customerId, body }) => {
+const updateUser = async ({ customerId, body, files }) => {
   const user = await User.findOne({
     _id: customerId,
     type: USER_TYPE_CUSTOMER,
@@ -149,6 +151,15 @@ const updateUser = async ({ customerId, body }) => {
       status: 403,
       message: 'Your account is blocked. Please contact support.',
     };
+  }
+
+  if (files?.profile_photo?.[0]) {
+    user.profile_url = await handleImageUpload(
+      files.profile_photo[0],
+      getUploadType(4),
+      true,
+      user.profile_url
+    );
   }
 
   for (const field of MOBILE_USER_ALLOWED_UPDATE_FIELDS) {

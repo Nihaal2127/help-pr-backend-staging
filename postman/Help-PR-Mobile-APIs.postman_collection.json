@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-mobile-apis-only",
     "name": "Help PR — Mobile APIs only",
-    "description": "Postman collection for **`/api/mobile/*`** (partner + customer apps).\n\n## Partner — suggested test order\n1. **Location** → States → Cities → Areas → Pincodes\n2. **Register** or **Login**\n3. **Subscription** → List plans (optional)\n4. **Update** — profile, location, documents (allowed while pending)\n5. Admin approves → `verification_status` = `2`\n6. **Catalog** → Categories\n7. **Update** again — `partner_services` + `bank_account` (approved only)\n8. **My services** → List → Patch status or Update\n\n## Customer (User)\n1. **Pincodes** — all pincodes (no auth); `data[]` = `\"pincode,area_name,city_name,state_name\"` per line\n2. **Send OTP** — creates customer if phone is new; saves OTP (dev OTP: `123456`)\n3. **Verify OTP** — login; sets `token` / `customerId`\n4. **Update** — profile: name, phone, email, DOB, gender (Bearer required)\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.",
+    "description": "Postman collection for **`/api/mobile/*`** (partner + customer apps).\n\n## Partner — suggested test order\n1. **Location** → States → Cities → Areas → Pincodes\n2. **Register** or **Login**\n3. **Subscription** → List plans (optional)\n4. **Update** — profile, location, documents (allowed while pending)\n5. Admin approves → `verification_status` = `2`\n6. **Catalog** → Categories\n7. **Update** again — `partner_services` + `bank_account` (approved only)\n8. **My services** → List → Patch status or Update\n\n## Customer (User)\n1. **Send OTP** — creates customer if phone is new; saves OTP (dev OTP: `123456`)\n2. **Verify OTP** — login; sets `token` / `customerId`\n3. **Pincodes** — Bearer auth required; optional search via `search`; `data[]` has one `\"pincode,area_name,city_name,state_name\"` string per record\n4. **Update** — profile: name, phone, email, DOB, gender (Bearer required)\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -927,7 +927,7 @@
     },
     {
       "name": "User",
-      "description": "Customer mobile — `routes/mobile/user/user_routes.js`. **Pincodes** (public) → **Send OTP** → **Verify OTP** → **Update**. Use raw JSON for POST/PUT (not form-data).",
+      "description": "Customer mobile — `routes/mobile/user/user_routes.js`. **Send OTP** → **Verify OTP** → **Pincodes** (auth + optional search) → **Update**. Use raw JSON for POST/PUT (not form-data).",
       "item": [
         {
           "name": "Pincodes",
@@ -958,7 +958,14 @@
           ],
           "request": {
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "GET",
             "header": [
@@ -968,7 +975,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/mobile/user/pincodes",
+              "raw": "{{baseUrl}}/api/mobile/user/pincodes?search={{pincodeSearch}}",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -977,9 +984,16 @@
                 "mobile",
                 "user",
                 "pincodes"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "{{pincodeSearch}}",
+                  "disabled": true
+                }
               ]
             },
-            "description": "**GET /api/mobile/user/pincodes**\n\n- No Authorization\n- **200** `data`: string array — one pincode per element\n\nEach item format:\n`pincode,area_name,city_name,state_name`\n\nExample:\n```json\n\"data\": [\n  \"560001,Koramangala,Bangalore,Karnataka\",\n  \"560002,Whitefield,Bangalore,Karnataka\"\n]\n```\n\nParse: split each string by `,` → 4 fields. Sorted by pincode."
+            "description": "**GET /api/mobile/user/pincodes**\n\n- **Auth:** Bearer `{{token}}`\n- Optional query: `search`\n- Matches across: `pincode`, `area_name`, `city_name`, `state_name`\n- **200** `data`: string array — one pincode per element\n\nEach item format:\n`pincode,area_name,city_name,state_name`\n\nExample:\n```json\n\"data\": [\n  \"560001,Koramangala,Bangalore,Karnataka\",\n  \"560002,Whitefield,Bangalore,Karnataka\"\n]\n```\n\nExamples:\n- `?search=5600`\n- `?search=koramangala`\n- `?search=bangalore`\n- `?search=karnataka`\n\nEnable `search` in Postman query params."
           },
           "response": []
         },
@@ -1391,6 +1405,12 @@
       "value": "",
       "type": "string",
       "description": "First pincode from User → Pincodes (optional)"
+    },
+    {
+      "key": "pincodeSearch",
+      "value": "",
+      "type": "string",
+      "description": "Optional search text for User → Pincodes (pincode/area/city/state)"
     }
   ]
 }

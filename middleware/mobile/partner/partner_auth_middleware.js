@@ -1,10 +1,10 @@
 const jwt = require('jsonwebtoken');
 
 /**
- * Mobile API JWT guard. Validates Bearer token from partner/customer mobile apps.
+ * Partner mobile JWT guard. Validates Bearer token.
  * Sets req.user from token payload (id, email, type).
  */
-const mobileAuthMiddleware = (req, res, next) => {
+const partnerAuthMiddleware = (req, res, next) => {
   const token = req.header('Authorization')?.split(' ')[1];
 
   if (!token) {
@@ -20,7 +20,7 @@ const mobileAuthMiddleware = (req, res, next) => {
       req.user = jwt.verify(token, process.env.JWT_SECRET);
     }
     next();
-  } catch (err) {
+  } catch (_err) {
     return res.status(401).json({
       success: false,
       status: 401,
@@ -29,4 +29,4 @@ const mobileAuthMiddleware = (req, res, next) => {
   }
 };
 
-module.exports = mobileAuthMiddleware;
+module.exports = partnerAuthMiddleware;

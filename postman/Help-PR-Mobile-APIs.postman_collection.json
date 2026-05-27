@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-mobile-apis-only",
     "name": "Help PR — Mobile APIs only",
-    "description": "Postman collection for **`/api/mobile/*`** (partner + customer apps).\n\n## Partner — suggested test order\n1. **Location** → States → Cities → Areas → Pincodes\n2. **Register** or **Login**\n3. **Subscription** → List plans (optional)\n4. **Update** — profile, location, documents (allowed while pending)\n5. Admin approves → `verification_status` = `2`\n6. **Catalog** → Categories\n7. **Update** again — `partner_services` + `bank_account` (approved only)\n8. **My services** → List → Patch status or Update\n\n## Customer (User)\n1. **Send OTP** — creates customer if phone is new; saves OTP (dev OTP: `123456`)\n2. **Verify OTP** — login; sets `token` / `customerId`\n3. **Update** — profile: name, phone, email, DOB, gender (Bearer required)\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.",
+    "description": "Postman collection for **`/api/mobile/*`** (partner + customer apps).\n\n## Partner — suggested test order\n1. **Location** → States → Cities → Areas → Pincodes\n2. **Register** or **Login**\n3. **Subscription** → List plans (optional)\n4. **Update** — profile, location, documents (allowed while pending)\n5. Admin approves → `verification_status` = `2`\n6. **Catalog** → Categories\n7. **Update** again — `partner_services` + `bank_account` (approved only)\n8. **My services** → List → Patch status or Update\n\n## Customer (User)\n1. **Pincodes** — all pincodes (no auth); `data[]` = `\"pincode,area_name,city_name,state_name\"` per line\n2. **Send OTP** — creates customer if phone is new; saves OTP (dev OTP: `123456`)\n3. **Verify OTP** — login; sets `token` / `customerId`\n4. **Update** — profile: name, phone, email, DOB, gender (Bearer required)\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -927,8 +927,62 @@
     },
     {
       "name": "User",
-      "description": "Customer mobile — `routes/mobile/user/user_routes.js`. OTP login + profile update. Run **Send OTP** → **Verify OTP** → **Update** (use raw JSON body, not form-data).",
+      "description": "Customer mobile — `routes/mobile/user/user_routes.js`. **Pincodes** (public) → **Send OTP** → **Verify OTP** → **Update**. Use raw JSON for POST/PUT (not form-data).",
       "item": [
+        {
+          "name": "Pincodes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Pincodes fetched', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.data).to.be.an('array');",
+                  "  });",
+                  "  if (Array.isArray(j?.data) && j.data.length > 0) {",
+                  "    const first = String(j.data[0]);",
+                  "    const parts = first.split(',');",
+                  "    if (parts.length >= 4) {",
+                  "      pm.collectionVariables.set('samplePincode', parts[0].trim());",
+                  "    }",
+                  "  }",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/pincodes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "user",
+                "pincodes"
+              ]
+            },
+            "description": "**GET /api/mobile/user/pincodes**\n\n- No Authorization\n- **200** `data`: string array — one pincode per element\n\nEach item format:\n`pincode,area_name,city_name,state_name`\n\nExample:\n```json\n\"data\": [\n  \"560001,Koramangala,Bangalore,Karnataka\",\n  \"560002,Whitefield,Bangalore,Karnataka\"\n]\n```\n\nParse: split each string by `,` → 4 fields. Sorted by pincode."
+          },
+          "response": []
+        },
         {
           "name": "Send OTP",
           "event": [
@@ -1331,6 +1385,12 @@
       "value": "male",
       "type": "string",
       "description": "Customer gender: male | female | other"
+    },
+    {
+      "key": "samplePincode",
+      "value": "",
+      "type": "string",
+      "description": "First pincode from User → Pincodes (optional)"
     }
   ]
 }

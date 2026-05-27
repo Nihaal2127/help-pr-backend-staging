@@ -180,8 +180,11 @@ const normalizeAreaPincodes = (pincodes) => {
   return [...new Set(pincodes.map((p) => String(p).trim()).filter(Boolean))];
 };
 
-const listAllPincodes = async () => {
+const listAllPincodes = async ({ search } = {}) => {
   try {
+    const normalizedSearch =
+      search !== undefined && search !== null ? String(search).trim().toLowerCase() : '';
+
     const areas = await Area.find({ deleted_at: null })
       .select('name pincodes city_id state_name')
       .lean();
@@ -214,13 +217,29 @@ const listAllPincodes = async () => {
       }
     }
 
-    records.sort((a, b) => {
+    const filteredRecords =
+      normalizedSearch === ''
+        ? records
+        : records.filter((r) => {
+            const pincode = String(r.pincode || '').toLowerCase();
+            const area = String(r.area_name || '').toLowerCase();
+            const city = String(r.city_name || '').toLowerCase();
+            const state = String(r.state_name || '').toLowerCase();
+            return (
+              pincode.includes(normalizedSearch) ||
+              area.includes(normalizedSearch) ||
+              city.includes(normalizedSearch) ||
+              state.includes(normalizedSearch)
+            );
+          });
+
+    filteredRecords.sort((a, b) => {
       const pinCompare = a.pincode.localeCompare(b.pincode);
       if (pinCompare !== 0) return pinCompare;
       return a.area_name.localeCompare(b.area_name);
     });
 
-    const data = records.map(
+    const data = filteredRecords.map(
       (record) =>
         `${sanitizeCsvField(record.pincode)},${record.area_name},${record.city_name},${record.state_name}`
     );

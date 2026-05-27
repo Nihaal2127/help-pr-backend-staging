@@ -1077,7 +1077,7 @@ const validatePartnerBankAccountsPayload = (req, res) => {
 };
 
 const validatePartnerUpdatePartialFields = async (req, res) => {
-  if (!validateProfileImageRequired(req, res)) return false;
+  if (hasBasicUpdatePayload(req) && !validateProfileImageRequired(req, res)) return false;
   if (!(await validatePartnerBasicPartialFields(req, res))) return false;
   if (!validateBankPayloadIfPresent(req, res)) return false;
   if (requiresAadharCardFile(req) && !validateAadharCardFileRequired(req, res)) {

@@ -1023,6 +1023,10 @@ const updatePartner = async ({ partnerId, body, files, section = PARTNER_UPDATE_
         updatedUser._id,
         normalizePartnerDocuments(mergedPartnerDocs)
       );
+      if (Number(updatedUser.verification_status) === 3) {
+        updatedUser.verification_status = 1;
+        await updatedUser.save();
+      }
     }
 
     if (shouldRunCatalog) {

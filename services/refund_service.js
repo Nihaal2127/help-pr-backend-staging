@@ -616,7 +616,7 @@ const createRefund = async (body, createdById = null) => {
             order_id: order._id,
             payer_type: 'customer',
             amount: refundAmount,
-            payment_method: body.payment_method || 'refund',
+            payment_method: String(body.payment_method || '').trim() || 'cash',
             status: 'refunded',
             transaction_reference: body.transaction_reference || '',
             paid_at: dateParsed.value,

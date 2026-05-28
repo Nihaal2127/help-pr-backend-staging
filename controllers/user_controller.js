@@ -1229,6 +1229,7 @@ const getAll = async (req, res) => {
 
         balance_amount: service_count_data.balance_amount,
         total_amount: service_count_data.total_amount,
+        paid_amount: service_count_data.paid_amount,
         rating: 0,//This is in Phaase 2
         total_earnings: 0,
         bal_payment: 0,
@@ -2344,6 +2345,7 @@ const update = async (req, res) => {
         no_of_services: service_count_data.no_of_services,
         balance_amount: service_count_data.balance_amount,
         total_amount: service_count_data.total_amount,
+        paid_amount: service_count_data.paid_amount,
       };
     }
     if (Number(updatedUser.type) === 2) {
@@ -2440,6 +2442,7 @@ const getById = async (req, res) => {
 
       response.balance_amount = service_count_data.balance_amount;
       response.total_amount = service_count_data.total_amount;
+      response.paid_amount = service_count_data.paid_amount;
     }
     if (user.type === 2 && user.is_business === true) {
       user = await User.findById(id).populate([

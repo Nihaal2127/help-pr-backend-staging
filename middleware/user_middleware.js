@@ -75,7 +75,8 @@ const validateRequiredDateOfBirthAndGender = (req, res) => {
     return false;
   }
 
-  if (calculateAgeFromBirthDate(birthDate) < MIN_USER_AGE_YEARS) {
+  const userType = Number(req.body.type);
+  if (userType === 2 && calculateAgeFromBirthDate(birthDate) < MIN_USER_AGE_YEARS) {
     res.status(400).json({
       success: false,
       status: 400,
@@ -1141,7 +1142,59 @@ const updateUserMiddleware = async (req, res, next) => {
   parseJSONField(req, "partner_subscription");
   parseOptionalDateField(req, "date_of_birth");
   trimOptionalStringField(req, "experience");
-  if (!validateRequiredDateOfBirthAndGender(req, res)) return;
+  if (req.body.date_of_birth !== undefined) {
+    const dobRaw = req.body.date_of_birth;
+    if (
+      dobRaw === null ||
+      (typeof dobRaw === "string" && dobRaw.trim() === "")
+    ) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: "Date of birth must be a valid date.",
+      });
+    }
+    const birthDate = dobRaw instanceof Date ? dobRaw : new Date(dobRaw);
+    if (Number.isNaN(birthDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: "Date of birth must be a valid date.",
+      });
+    }
+    const userType = Number(req.body.type);
+    if (userType === 2 && calculateAgeFromBirthDate(birthDate) < MIN_USER_AGE_YEARS) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: "Not applicable for individuals below 18 years of age.",
+      });
+    }
+    req.body.date_of_birth = birthDate;
+  }
+
+  if (req.body.gender !== undefined) {
+    const genderRaw = req.body.gender;
+    if (
+      genderRaw === null ||
+      (typeof genderRaw === "string" && genderRaw.trim() === "")
+    ) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'gender must be "male", "female", or "other".',
+      });
+    }
+    if (!isValidGender(genderRaw)) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'gender must be "male", "female", or "other".',
+      });
+    }
+    req.body.gender = normalizeGender(genderRaw);
+  }
+
   if (!normalizeOptionalObjectIdField(req, res, "state_id", "state id")) return;
   if (!normalizeOptionalObjectIdField(req, res, "city_id", "city id")) return;
   if (!normalizeOptionalObjectIdField(req, res, "area_id", "area id")) return;

@@ -17,7 +17,7 @@ const sendServiceResult = (res, result) => {
 
 const list = async (req, res) => {
   try {
-    const result = await subscriptionPlanService.listAllSubscriptionPlans();
+    const result = await subscriptionPlanService.listSubscriptionPlansForDropdown({});
     if (!result.ok) {
       return sendServiceResult(res, result);
     }

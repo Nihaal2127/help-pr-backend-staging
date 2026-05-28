@@ -21,6 +21,7 @@ const formatAddressRecord = (doc) => {
     city_name: o.city || null,
     area_name: o.area || null,
     address_status: o.address_status,
+    deleted_at: o.deleted_at ?? null,
     created_at: o.created_at,
     updated_at: o.updated_at,
   };

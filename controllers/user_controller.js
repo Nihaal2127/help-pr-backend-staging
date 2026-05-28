@@ -1212,7 +1212,7 @@ const getAll = async (req, res) => {
 
       if (Number(user.type) === 2) {
         const pid = user._id.toString();
-        row.last_service_date = await getLastServiceDate(user._id);
+        row.last_service_date = await getLastServiceDate(user._id, user.type);
 
         const rich = partnerIdToRichUser.get(pid);
         if (rich) {
@@ -2305,7 +2305,7 @@ const update = async (req, res) => {
 
     if (effectiveType === 4 || effectiveType === 2) {
       const service_count_data = await getServiceCountData(updatedUser._id);
-      const last_service_date = await getLastServiceDate(updatedUser._id);
+      const last_service_date = await getLastServiceDate(updatedUser._id, updatedUser.type);
       responseRecord = {
         ...updatedUser.toObject(),
         last_service_date,
@@ -2400,7 +2400,7 @@ const getById = async (req, res) => {
       response.area_name = resolveAreaName(user.area_id, areaMap);
     }
     if (user.type === 4 || user.type === 2) {
-      const last_service_date = await getLastServiceDate(user._id);
+      const last_service_date = await getLastServiceDate(user._id, user.type);
       const service_count_data = await getServiceCountData(user._id);
       response.last_service_date = last_service_date;
 

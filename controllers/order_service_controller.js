@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const OrderServices = require('../models/order_services');
+const Order = require('../models/order');
 const User = require('../models/user');
 const { validationResult } = require('express-validator');
 const { applyPagination } = require('../utils/pagination');
@@ -270,10 +271,32 @@ const deleteAccount = async (req, res) => {
   }
 };
 
-const getLastServiceDate = async (user_id) => {
+/** Latest job date from orders (fallback: order_service.service_date). userType: 2 partner, 4 customer. */
+const getLastServiceDate = async (user_id, userType) => {
   try {
-    const lastServcie = await OrderServices.findOne({ user_id: user_id, deleted_at: null }).sort({ service_date: -1 });
-    return lastServcie.service_date;
+    const baseFilter = { deleted_at: null };
+    const orderFilter =
+      userType === 2
+        ? { ...baseFilter, partner_id: user_id }
+        : { ...baseFilter, user_id };
+
+    const lastOrder = await Order.findOne(orderFilter)
+      .sort({ order_date: -1 })
+      .select('order_date')
+      .lean();
+    if (lastOrder?.order_date) {
+      return lastOrder.order_date;
+    }
+
+    const lineFilter =
+      userType === 2
+        ? { ...baseFilter, partner_id: user_id }
+        : { ...baseFilter, user_id };
+    const lastLine = await OrderServices.findOne(lineFilter)
+      .sort({ service_date: -1 })
+      .select('service_date')
+      .lean();
+    return lastLine?.service_date ?? null;
   } catch (err) {
     return null;
   }

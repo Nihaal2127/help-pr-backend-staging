@@ -30,7 +30,17 @@ const {
   ORDER_STATUS_CANCELLED,
   ORDER_STATUS_REFUNDED,
   buildOrderManagementStatusQueryFilter,
+  buildOrderStatusMatchValues,
+  CUSTOMER_REFUND_PAYMENT_STATUSES,
 } = require('../enum/order_status_enum');
+const {
+  ORDER_PAYMENT_STATUS_PAID,
+  ORDER_PAYMENT_STATUS_UNPAID,
+  ORDER_PAYMENT_STATUS_PARTIALLY_PAID,
+  PARTNER_PAYMENT_STATUS_PAID,
+  PARTNER_PAYMENT_STATUS_UNPAID,
+  PARTNER_PAYMENT_STATUS_PARTIALLY_PAID,
+} = require('../enum/order_payment_status_enum');
 const moment = require("moment-timezone");
 const {
     countFranchiseScopedCatalogDashboard,
@@ -1043,69 +1053,160 @@ const getCountData = async (req, res) => {
     }
 };
 
+const EMPTY_SERVICE_COUNT_DATA = {
+    total_service: 0,
+    service_paid: 0,
+    service_unpaid: 0,
+    total_amount: 0,
+    pending_amount: 0,
+    paid_amount: 0,
+    balance_amount: 0,
+    in_progress_service: 0,
+    completed_service: 0,
+    cancelled_service: 0,
+    refunded_service: 0,
+    no_of_services: 0,
+};
+
+/**
+ * Order-level stats for GET /api/user/get/:id (customers type 4, partners type 2).
+ * Uses `order` collection (status + payment rollups), not raw order_service lines.
+ */
 const getServiceCountData = async (id) => {
-    const user = await User.findById(id);
+    const user = await User.findById(id).select('type').lean();
     if (!user) {
         throw new Error('User not found');
     }
-    const filterCondition = user.type === 4 ? { user_id: id } : { partner_id: id };
-    filterCondition.deleted_at = null;
-    try {
-        const amountField = user.type === 2 ? "$partner_earning" : "$total_price";
-        const paid_field = user.type === 2 ? "$is_partner_paid" : "$is_paid";
 
-        const result = await OrderService.aggregate([
-            { $match: { ...filterCondition } },
+    const isCustomer = user.type === 4;
+    const isPartner = user.type === 2;
+    if (!isCustomer && !isPartner) {
+        return { ...EMPTY_SERVICE_COUNT_DATA };
+    }
+
+    const userObjectId = new mongoose.Types.ObjectId(String(id));
+    const matchFilter = {
+        deleted_at: null,
+        ...(isCustomer ? { user_id: userObjectId } : { partner_id: userObjectId }),
+    };
+
+    const inProgressValues =
+        buildOrderStatusMatchValues(ORDER_STATUS_IN_PROGRESS) || [ORDER_STATUS_IN_PROGRESS];
+    const completedValues =
+        buildOrderStatusMatchValues(ORDER_STATUS_COMPLETED) || [ORDER_STATUS_COMPLETED];
+    const cancelledValues =
+        buildOrderStatusMatchValues(ORDER_STATUS_CANCELLED) || [ORDER_STATUS_CANCELLED];
+    const refundedStatusValues =
+        buildOrderStatusMatchValues(ORDER_STATUS_REFUNDED) || [ORDER_STATUS_REFUNDED];
+
+    const countByOrderStatus = (statusValues) => ({
+        $sum: { $cond: [{ $in: ['$order_status', statusValues] }, 1, 0] },
+    });
+
+    const isOrderPaidExpr = isCustomer
+        ? {
+              $or: [
+                  { $eq: ['$user_payment_status', ORDER_PAYMENT_STATUS_PAID] },
+                  { $eq: ['$payment_status', ORDER_PAYMENT_STATUS_PAID] },
+                  { $eq: ['$is_paid', true] },
+              ],
+          }
+        : { $eq: ['$partner_payment_status', PARTNER_PAYMENT_STATUS_PAID] };
+
+    const isOrderUnpaidExpr = isCustomer
+        ? {
+              $in: [
+                  {
+                      $ifNull: [
+                          '$user_payment_status',
+                          { $ifNull: ['$payment_status', ORDER_PAYMENT_STATUS_UNPAID] },
+                      ],
+                  },
+                  [
+                      ORDER_PAYMENT_STATUS_UNPAID,
+                      ORDER_PAYMENT_STATUS_PARTIALLY_PAID,
+                  ],
+              ],
+          }
+        : {
+              $in: [
+                  '$partner_payment_status',
+                  [
+                      PARTNER_PAYMENT_STATUS_UNPAID,
+                      PARTNER_PAYMENT_STATUS_PARTIALLY_PAID,
+                  ],
+              ],
+          };
+
+    const orderAmountExpr = isPartner
+        ? {
+              $add: [
+                  { $ifNull: ['$partner_paid_amount', 0] },
+                  { $ifNull: ['$partner_due_amount', 0] },
+              ],
+          }
+        : { $ifNull: ['$total_price', 0] };
+
+    const orderPendingExpr = isCustomer
+        ? { $ifNull: ['$customer_due_amount', 0] }
+        : { $ifNull: ['$partner_due_amount', 0] };
+
+    const isRefundedOrderExpr = {
+        $or: [
+            { $in: ['$order_status', refundedStatusValues] },
+            { $in: ['$user_payment_status', CUSTOMER_REFUND_PAYMENT_STATUSES] },
+            { $in: ['$payment_status', CUSTOMER_REFUND_PAYMENT_STATUSES] },
+        ],
+    };
+
+    try {
+        const result = await Order.aggregate([
+            { $match: matchFilter },
             {
                 $group: {
                     _id: null,
                     total_service: { $sum: 1 },
-                    service_paid: { $sum: { $cond: [{ $eq: [paid_field, true] }, 1, 0] } },
-                    service_unpaid: { $sum: { $cond: [{ $eq: [paid_field, false] }, 1, 0] } },
-                    total_amount: { $sum: amountField },
-                    pending_amount: {
-                        $sum: { $cond: [{ $eq: [paid_field, false] }, amountField, 0] }
-                    },
+                    service_paid: { $sum: { $cond: [isOrderPaidExpr, 1, 0] } },
+                    service_unpaid: { $sum: { $cond: [isOrderUnpaidExpr, 1, 0] } },
+                    total_amount: { $sum: orderAmountExpr },
+                    pending_amount: { $sum: orderPendingExpr },
                     paid_amount: {
-                        $sum: { $cond: [{ $eq: [paid_field, true] }, amountField, 0] }
+                        $sum: { $cond: [isOrderPaidExpr, orderAmountExpr, 0] },
                     },
-                    in_progress_service: { $sum: { $cond: [{ $eq: ["$service_status", "in-progress"] }, 1, 0] } },
-                    completed_service: { $sum: { $cond: [{ $eq: ["$service_status", "completed"] }, 1, 0] } },
-                    cancelled_service: { $sum: { $cond: [{ $eq: ["$service_status", "cancelled"] }, 1, 0] } },
-                    refunded_service: { $sum: { $cond: [{ $eq: ["$service_status", "refunded"] }, 1, 0] } }
-                }
+                    in_progress_service: countByOrderStatus(inProgressValues),
+                    completed_service: countByOrderStatus(completedValues),
+                    cancelled_service: countByOrderStatus(cancelledValues),
+                    refunded_service: { $sum: { $cond: [isRefundedOrderExpr, 1, 0] } },
+                },
             },
             {
                 $addFields: {
-                    balance_amount: { $subtract: ["$total_amount", "$pending_amount"] }
-                }
-            }
+                    balance_amount: {
+                        $subtract: ['$total_amount', '$pending_amount'],
+                    },
+                },
+            },
         ]);
-        let no_of_services = 0
-        if (user.type === 2) {
-            no_of_services = await PartnerService.countDocuments({ partner_id: id, deleted_at: null });
+
+        let no_of_services = 0;
+        if (isPartner) {
+            no_of_services = await PartnerService.countDocuments({
+                partner_id: id,
+                deleted_at: null,
+            });
         }
+
         if (result.length > 0) {
-            result[0].no_of_services = no_of_services;
-            return result[0];
-        } else {
-            return {
-                total_service: 0,
-                service_paid: 0,
-                service_unpaid: 0,
-                total_amount: 0,
-                pending_amount: 0,
-                paid_amount: 0,
-                balance_amount: 0,
-                in_progress_service: 0,
-                completed_service: 0,
-                cancelled_service: 0,
-                no_of_services: no_of_services,
-            };
+            const row = result[0];
+            delete row._id;
+            row.no_of_services = no_of_services;
+            return row;
         }
+
+        return { ...EMPTY_SERVICE_COUNT_DATA, no_of_services };
     } catch (error) {
         console.error('Error fetching Count data:', error);
-        throw error; // Rethrow the error for better handling
+        throw error;
     }
 };
 

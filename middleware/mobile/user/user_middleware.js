@@ -258,7 +258,6 @@ const userUpdateMiddleware = async (req, res, next) => {
 
   const { name, email, phone_number, date_of_birth, gender } = req.body;
 
-  const missingRequiredProfileFields = [];
   const finalName = name !== undefined ? String(name).trim() : String(existingCustomer.name || '').trim();
   const finalEmail =
     email !== undefined ? String(email).trim() : String(existingCustomer.email || '').trim();
@@ -266,19 +265,24 @@ const userUpdateMiddleware = async (req, res, next) => {
     gender !== undefined ? String(gender).trim() : String(existingCustomer.gender || '').trim();
 
   if (!finalName) {
-    missingRequiredProfileFields.push('name');
-  }
-  if (!finalEmail) {
-    missingRequiredProfileFields.push('email');
-  }
-  if (!finalGender) {
-    missingRequiredProfileFields.push('gender');
-  }
-  if (missingRequiredProfileFields.length > 0) {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: `Missing required field(s): ${missingRequiredProfileFields.join(', ')}.`,
+      message: 'Name is required.',
+    });
+  }
+  if (!finalEmail) {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Email is required.',
+    });
+  }
+  if (!finalGender) {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Gender is required.',
     });
   }
 

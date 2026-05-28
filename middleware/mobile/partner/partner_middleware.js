@@ -24,6 +24,8 @@ const PASSWORD_REGEX =
   /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
 /** Local part: letters, digits, . _ - only; domain with TLD (min 2 letters). */
 const EMAIL_REGEX = /^[a-z0-9._-]+@[a-z0-9.-]+\.[a-z]{2,}$/;
+const BANK_ACCOUNT_NUMBER_REGEX = /^\d{9,18}$/;
+const BANK_IFSC_CODE_REGEX = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 const PARTNER_PROFILE_IMAGE_MAX_BYTES = 512 * 1024;
 const USER_TYPE_PARTNER = 2;
 const PARTNER_VERIFICATION_STATUS_APPROVED = 2;
@@ -58,8 +60,8 @@ const hasBasicUpdatePayload = (req) => {
   return false;
 };
 
-const requiresAadharCardFile = (req) =>
-  hasPartnerDocumentFileUpload(req.files) || !hasBasicUpdatePayload(req);
+/** Aadhar required only when at least one verification document file is uploaded. */
+const requiresAadharCardFile = (req) => hasPartnerDocumentFileUpload(req.files);
 
 const validateAadharCardFileRequired = (req, res) => {
   if (!req.files?.[AADHAR_CARD_FIELD]?.[0]) {
@@ -442,6 +444,29 @@ const getMissingBankAccountFields = (item) => {
   return missing;
 };
 
+const validateBankAccountFormatFields = (item, res, indexLabel = '') => {
+  const prefix = indexLabel ? `${indexLabel} ` : '';
+  const accountNumber = String(item?.account_number ?? '').trim();
+  if (!BANK_ACCOUNT_NUMBER_REGEX.test(accountNumber)) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: `${prefix}Account number must be 9 to 18 digits only.`,
+    });
+    return false;
+  }
+  const ifscCode = String(item?.ifsc_code ?? '').trim().toUpperCase();
+  if (!BANK_IFSC_CODE_REGEX.test(ifscCode)) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: `${prefix}Invalid IFSC code format.`,
+    });
+    return false;
+  }
+  return true;
+};
+
 const validateBankPayloadIfPresent = (req, res) => {
   const body = req.body;
   if (!hasBankPayload(body)) return true;
@@ -473,6 +498,9 @@ const validateBankPayloadIfPresent = (req, res) => {
           status: 400,
           message: missing[0],
         });
+        return false;
+      }
+      if (!validateBankAccountFormatFields(item, res, `bank_account[${i}]`)) {
         return false;
       }
       const accountNumber = String(item.account_number).trim();
@@ -536,6 +564,15 @@ const validateBankPayloadIfPresent = (req, res) => {
       status: 400,
       message: 'IFSC code is required.',
     });
+    return false;
+  }
+
+  if (
+    !validateBankAccountFormatFields(
+      { account_number: accountNumber, ifsc_code: ifscCode },
+      res
+    )
+  ) {
     return false;
   }
 

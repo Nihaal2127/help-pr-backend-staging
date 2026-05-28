@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const Address = require('../../../models/address');
 const { fieldLabel } = require('../../../utils/field_labels');
 
 const ADDRESS_FIELDS = ['state_id', 'city_id', 'area_id', 'pincode', 'address'];
@@ -61,46 +62,42 @@ const validateCreateAddress = (req, res, next) => {
   next();
 };
 
-const validateUpdateAddress = (req, res, next) => {
+const validateUpdateAddress = async (req, res, next) => {
   const { state_id, city_id, area_id, pincode, address } = req.body;
-  const hasAny = ADDRESS_FIELDS.some((field) => req.body[field] !== undefined);
 
-  if (!hasAny) {
-    return sendError(res, 400, 'Provide at least one field to update.');
+  let existingAddress = null;
+  if (req.user?.id && req.params?.id && mongoose.Types.ObjectId.isValid(String(req.user.id))) {
+    existingAddress = await Address.findOne({
+      _id: req.params.id,
+      user_id: req.user.id,
+      deleted_at: null,
+    })
+      .select('state_id city_id area_id pincode address')
+      .lean();
   }
 
-  if (state_id !== undefined) {
-    if (!requireNonEmptyString(state_id, 'state_id', res)) return;
-    if (!requireObjectId(state_id, 'state_id', res)) return;
-  }
-  if (city_id !== undefined) {
-    if (!requireNonEmptyString(city_id, 'city_id', res)) return;
-    if (!requireObjectId(city_id, 'city_id', res)) return;
-  }
-  if (area_id !== undefined) {
-    if (!requireNonEmptyString(area_id, 'area_id', res)) return;
-    if (!requireObjectId(area_id, 'area_id', res)) return;
-  }
-  if (pincode !== undefined && !requireNonEmptyString(pincode, 'pincode', res)) return;
-  if (address !== undefined && !requireNonEmptyString(address, 'address', res)) return;
+  const finalStateId = state_id !== undefined ? state_id : existingAddress?.state_id;
+  const finalCityId = city_id !== undefined ? city_id : existingAddress?.city_id;
+  const finalAreaId = area_id !== undefined ? area_id : existingAddress?.area_id;
+  const finalPincode = pincode !== undefined ? pincode : existingAddress?.pincode;
+  const finalAddress = address !== undefined ? address : existingAddress?.address;
 
-  const locationTouched =
-    state_id !== undefined ||
-    city_id !== undefined ||
-    area_id !== undefined ||
-    pincode !== undefined;
-
-  if (locationTouched) {
-    for (const field of ['state_id', 'city_id', 'area_id', 'pincode']) {
-      if (req.body[field] === undefined) {
-        return sendError(
-          res,
-          400,
-          `When updating location, ${fieldLabel('state_id')}, ${fieldLabel('city_id')}, ${fieldLabel('area_id')}, and pincode must all be sent together.`
-        );
-      }
+  for (const field of ADDRESS_FIELDS) {
+    const value = {
+      state_id: finalStateId,
+      city_id: finalCityId,
+      area_id: finalAreaId,
+      pincode: finalPincode,
+      address: finalAddress,
+    }[field];
+    if (!requireNonEmptyString(value, field, res)) {
+      return;
     }
   }
+
+  if (!requireObjectId(finalStateId, 'state_id', res)) return;
+  if (!requireObjectId(finalCityId, 'city_id', res)) return;
+  if (!requireObjectId(finalAreaId, 'area_id', res)) return;
 
   next();
 };

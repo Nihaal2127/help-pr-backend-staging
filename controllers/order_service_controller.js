@@ -271,32 +271,32 @@ const deleteAccount = async (req, res) => {
   }
 };
 
-/** Latest job date from orders (fallback: order_service.service_date). userType: 2 partner, 4 customer. */
+/** Latest scheduled service date from order_service lines (fallback: order.order_date). */
 const getLastServiceDate = async (user_id, userType) => {
   try {
     const baseFilter = { deleted_at: null };
-    const orderFilter =
-      userType === 2
-        ? { ...baseFilter, partner_id: user_id }
-        : { ...baseFilter, user_id };
-
-    const lastOrder = await Order.findOne(orderFilter)
-      .sort({ order_date: -1 })
-      .select('order_date')
-      .lean();
-    if (lastOrder?.order_date) {
-      return lastOrder.order_date;
-    }
-
     const lineFilter =
       userType === 2
         ? { ...baseFilter, partner_id: user_id }
         : { ...baseFilter, user_id };
+
     const lastLine = await OrderServices.findOne(lineFilter)
       .sort({ service_date: -1 })
       .select('service_date')
       .lean();
-    return lastLine?.service_date ?? null;
+    if (lastLine?.service_date) {
+      return lastLine.service_date;
+    }
+
+    const orderFilter =
+      userType === 2
+        ? { ...baseFilter, partner_id: user_id }
+        : { ...baseFilter, user_id };
+    const lastOrder = await Order.findOne(orderFilter)
+      .sort({ order_date: -1 })
+      .select('order_date')
+      .lean();
+    return lastOrder?.order_date ?? null;
   } catch (err) {
     return null;
   }

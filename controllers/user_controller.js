@@ -31,6 +31,7 @@ const PartnerSubscription = require('../models/partner_subscription');
 const {
   replacePartnerCategoriesFromSignupRows,
   replacePartnerCatalogFromNormalizedRows,
+  mergePartnerCatalogFromNormalizedRows,
 } = require('../services/partner_category_service');
 const partnerSubscriptionService = require('../services/partner_subscription_service');
 const {
@@ -97,6 +98,28 @@ function attachAreaNamesToAddresses(addresses, areaMap) {
     area_name: resolveAreaName(addr.area_id, areaMap),
   }));
 }
+
+const sanitizeOptionalObjectIdRef = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  if (value instanceof mongoose.Types.ObjectId) return value;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    return mongoose.Types.ObjectId.isValid(trimmed) ? new mongoose.Types.ObjectId(trimmed) : null;
+  }
+  if (typeof value === 'object' && value._id) {
+    const rawId = String(value._id).trim();
+    return mongoose.Types.ObjectId.isValid(rawId) ? new mongoose.Types.ObjectId(rawId) : null;
+  }
+  return null;
+};
+
+const sanitizeUserLocationRefsForPopulate = (users) =>
+  (users || []).map((user) => ({
+    ...user,
+    state_id: sanitizeOptionalObjectIdRef(user?.state_id),
+    city_id: sanitizeOptionalObjectIdRef(user?.city_id),
+  }));
 
 const USER_TYPE_FRANCHISE_ADMIN = 1;
 const USER_TYPE_PARTNER = 2;
@@ -951,7 +974,8 @@ const getAllOld = async (req, res) => {
         records: users,
       });
     }
-    const populatedUser = await User.populate(users, [
+    const safeUsersForPopulate = sanitizeUserLocationRefsForPopulate(users);
+    const populatedUser = await User.populate(safeUsersForPopulate, [
       { path: "state_id" },
       { path: "city_id" },
     ]);
@@ -2221,7 +2245,7 @@ const update = async (req, res) => {
         const normalizedServiceRows = normalizePartnerServices(
           resolvedPartnerServicesInput ?? []
         );
-        await replacePartnerCatalogFromNormalizedRows(
+        await mergePartnerCatalogFromNormalizedRows(
           updatedUser._id,
           normalizedServiceRows
         );

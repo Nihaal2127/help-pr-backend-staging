@@ -13,12 +13,10 @@ const {
   createMultiple,
   getPartnerDocumentList,
 } = require('../../../controllers/partner_document_controller');
+const PartnerCategory = require('../../../models/partner_category');
 const PartnerService = require('../../../models/partner_service');
 const { handleImageUpload } = require('../../../helper/image_uploader');
 const { getUploadType } = require('../../../enum/upload_type_enum');
-const {
-  mergePartnerCatalogFromNormalizedRows,
-} = require('../../../services/partner_category_service');
 const {
   normalizeUserEmail,
   normalizeUserPhone,
@@ -329,6 +327,102 @@ const normalizePartnerBankAccount = (payload) => {
   const { accounts } = resolvePartnerBankInputFromBody({ bank_account: payload });
   return accounts[0] ?? null;
 };
+
+const toOid = (id) => {
+  if (!id) return null;
+  if (id instanceof mongoose.Types.ObjectId) return id;
+  return new mongoose.Types.ObjectId(String(id));
+};
+
+const coerceNumber = (v, defaultVal = 0) => {
+  if (v === undefined || v === null || v === '') return defaultVal;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : defaultVal;
+};
+
+async function mergeMobilePartnerCatalogFromNormalizedRows(partnerId, normalizedRows) {
+  const partnerOid = toOid(partnerId);
+  if (!Array.isArray(normalizedRows) || normalizedRows.length === 0) return;
+
+  const byCat = new Map();
+  const latestByService = new Map();
+
+  for (const row of normalizedRows) {
+    if (!row?.category_id || !row?.service_id) continue;
+    const categoryKey = String(row.category_id);
+    const serviceKey = String(row.service_id);
+    if (!byCat.has(categoryKey)) byCat.set(categoryKey, new Set());
+    byCat.get(categoryKey).add(serviceKey);
+    latestByService.set(serviceKey, row);
+  }
+
+  const now = new Date();
+
+  // partner_categories behavior for mobile:
+  // - new category => insert new document
+  // - existing category => keep row, append new service ids, bump updated_at
+  for (const [catStr, serviceSet] of byCat) {
+    const catOid = toOid(catStr);
+    const serviceOids = [...serviceSet].map((id) => toOid(id));
+    await PartnerCategory.findOneAndUpdate(
+      {
+        partner_id: partnerOid,
+        category_id: catOid,
+        deleted_at: null,
+      },
+      {
+        $setOnInsert: {
+          partner_id: partnerOid,
+          category_id: catOid,
+          is_active: true,
+          created_at: now,
+          updated_at: now,
+          deleted_at: null,
+        },
+        $set: { updated_at: now },
+        $addToSet: { services: { $each: serviceOids } },
+      },
+      { upsert: true, new: true }
+    );
+  }
+
+  // keep partner_service additive too (no delete/replace)
+  for (const [serviceStr, row] of latestByService) {
+    const serviceOid = toOid(serviceStr);
+    const categoryOid = toOid(row.category_id);
+    const updateFields = {
+      category_id: categoryOid,
+      description: row.description != null ? String(row.description) : '',
+      price: coerceNumber(row.price, 0),
+      payment_type: row.payment_type != null ? String(row.payment_type).trim() : '',
+      tax: coerceNumber(row.tax, 0),
+      minimum_deposit: coerceNumber(row.minimum_deposit, 0),
+      is_active: row.is_active !== false,
+      is_accept_request: true,
+      updated_at: now,
+      deleted_at: null,
+    };
+
+    const existing = await PartnerService.findOne({
+      partner_id: partnerOid,
+      service_id: serviceOid,
+      deleted_at: null,
+    });
+
+    if (existing) {
+      Object.assign(existing, updateFields);
+      await existing.save();
+      continue;
+    }
+
+    await PartnerService.create({
+      partner_id: partnerOid,
+      service_id: serviceOid,
+      ...updateFields,
+      created_at: now,
+    });
+  }
+}
 
 const resolvePartnerBankInputFromBody = (body) => {
   const hasFlatBankFields =
@@ -1034,7 +1128,7 @@ const updatePartner = async ({ partnerId, body, files, section = PARTNER_UPDATE_
     if (shouldRunCatalog) {
       const resolvedPartnerServicesInput = resolvePartnerServicesInputFromBody(updateData);
       const normalizedServiceRows = normalizePartnerServices(resolvedPartnerServicesInput ?? []);
-      await mergePartnerCatalogFromNormalizedRows(updatedUser._id, normalizedServiceRows);
+      await mergeMobilePartnerCatalogFromNormalizedRows(updatedUser._id, normalizedServiceRows);
     }
 
     if (shouldRunBanks) {

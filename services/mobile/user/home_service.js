@@ -122,7 +122,7 @@ const resolveFranchiseForArea = async (area) => {
     .lean();
 
   if (!franchise) {
-    return fail(400, 'No franchise available for this location.');
+    return fail(400, 'No services are available in this location');
   }
 
   return { ok: true, franchise };

@@ -11,28 +11,29 @@ const {
   partnerRequireMultipartMiddleware,
   PARTNER_DOCUMENT_FILE_FIELDS,
 } = require('../../../middleware/mobile/partner/partner_middleware');
-const mobileAuthMiddleware = require('../../../middleware/mobile/auth_middleware');
+const partnerAuthMiddleware = require('../../../middleware/mobile/partner/partner_auth_middleware');
 const { upload } = require('../../../utils/fileUpload');
+const { wrapMulterUpload } = require('../../../utils/multer_error_handler');
 
 const PARTNER_MULTIPART_FIELDS = [
   { name: 'image', maxCount: 1 },
   ...PARTNER_DOCUMENT_FILE_FIELDS.map((name) => ({ name, maxCount: 1 })),
 ];
 
-const partnerMultipartUpload = upload.fields(PARTNER_MULTIPART_FIELDS);
+const partnerMultipartUpload = wrapMulterUpload(upload.fields(PARTNER_MULTIPART_FIELDS));
 
 router.post('/register', partnerRegisterMiddleware, register);
 router.post('/login', partnerLoginMiddleware, login);
 router.put(
   '/update',
-  mobileAuthMiddleware,
+  partnerAuthMiddleware,
   partnerRequireMultipartMiddleware,
   partnerMultipartUpload,
   partnerProfileImageSizeMiddleware,
   partnerUpdateMiddleware,
   update
 );
-router.get('/categories', mobileAuthMiddleware, categories);
-router.get('/subscription-plans', mobileAuthMiddleware, listSubscriptionPlans);
+router.get('/categories', partnerAuthMiddleware, categories);
+router.get('/subscription-plans', partnerAuthMiddleware, listSubscriptionPlans);
 
 module.exports = router;

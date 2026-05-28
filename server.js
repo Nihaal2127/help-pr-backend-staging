@@ -162,9 +162,22 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // Global Error Handler (optional)
+const { formatUploadErrorResponse } = require('./utils/multer_error_handler');
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ message: 'Server error', error: err.message });
+  const uploadError = formatUploadErrorResponse(err);
+  if (uploadError) {
+    return res.status(uploadError.status).json({
+      success: false,
+      status: uploadError.status,
+      message: uploadError.message,
+    });
+  }
+  res.status(500).json({
+    success: false,
+    status: 500,
+    message: 'Internal server error.',
+  });
 });
 
 // serves static files

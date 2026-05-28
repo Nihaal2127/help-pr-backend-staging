@@ -316,7 +316,7 @@ const normalizeOnePartnerBankAccount = (parsed) => {
   return {
     account_holder_name: String(parsed.account_holder_name ?? parsed.account_name ?? '').trim(),
     account_number: accountNumber,
-    ifsc_code: String(parsed.ifsc_code ?? '').trim(),
+    ifsc_code: String(parsed.ifsc_code ?? '').trim().toUpperCase(),
     bank_name: String(parsed.bank_name ?? '').trim(),
     branch_name: String(parsed.branch_name ?? '').trim(),
     is_primary: normalizedPrimary,

@@ -71,6 +71,7 @@ const updateHandler = async (req, res) => {
     const result = await updateUser({
       customerId: req.user.id,
       body: req.body,
+      files: req.files,
     });
 
     if (!result.ok) {
@@ -99,7 +100,8 @@ const updateHandler = async (req, res) => {
 
 const getPincodesHandler = async (req, res) => {
   try {
-    const result = await listAllPincodes();
+    const search = req.query.search;
+    const result = await listAllPincodes({ search });
 
     if (!result.ok) {
       return res.status(result.status).json({

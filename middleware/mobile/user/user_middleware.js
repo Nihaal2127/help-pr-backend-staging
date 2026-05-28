@@ -16,6 +16,8 @@ const MIN_NAME_LENGTH = 2;
 const MAX_NAME_LENGTH = 50;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const USER_PROFILE_IMAGE_MAX_BYTES = 512 * 1024;
+
 const MOBILE_USER_ALLOWED_UPDATE_FIELDS = new Set([
   'name',
   'phone_number',
@@ -174,6 +176,38 @@ const validateVerifyOtp = async (req, res, next) => {
   }
 };
 
+const userRequireMultipartMiddleware = (req, res, next) => {
+  const ct = String(req.headers['content-type'] || '').toLowerCase();
+  if (!ct.includes('multipart/form-data')) {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Content-Type must be multipart/form-data.',
+    });
+  }
+  return next();
+};
+
+const userProfileImageSizeMiddleware = (req, res, next) => {
+  const img = req.files?.profile_photo?.[0];
+  if (!img) return next();
+  const size =
+    typeof img.size === 'number' && !Number.isNaN(img.size)
+      ? img.size
+      : Buffer.isBuffer(img.buffer)
+        ? img.buffer.length
+        : null;
+  if (size === null) return next();
+  if (size > USER_PROFILE_IMAGE_MAX_BYTES) {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Profile photo must be 512 KB or smaller.',
+    });
+  }
+  return next();
+};
+
 const userUpdateMiddleware = async (req, res, next) => {
   if (!req.user?.id) {
     return res.status(401).json({
@@ -191,9 +225,10 @@ const userUpdateMiddleware = async (req, res, next) => {
     });
   }
 
-  const hasAllowedField = [...MOBILE_USER_ALLOWED_UPDATE_FIELDS].some(
-    (field) => req.body[field] !== undefined
-  );
+  const hasProfilePhoto = Boolean(req.files?.profile_photo?.[0]);
+  const hasAllowedField =
+    hasProfilePhoto ||
+    [...MOBILE_USER_ALLOWED_UPDATE_FIELDS].some((field) => req.body[field] !== undefined);
   if (!hasAllowedField) {
     return res.status(400).json({
       success: false,
@@ -308,5 +343,7 @@ const userUpdateMiddleware = async (req, res, next) => {
 module.exports = {
   rateLimitSendOtp,
   validateVerifyOtp,
+  userRequireMultipartMiddleware,
+  userProfileImageSizeMiddleware,
   userUpdateMiddleware,
 };

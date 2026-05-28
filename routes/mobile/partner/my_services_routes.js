@@ -11,21 +11,21 @@ const {
   partnerPatchMyServiceStatusMiddleware,
   partnerPatchMyServicesBulkStatusMiddleware,
 } = require('../../../middleware/mobile/partner/my_services_middleware');
-const mobileAuthMiddleware = require('../../../middleware/mobile/auth_middleware');
+const partnerAuthMiddleware = require('../../../middleware/mobile/partner/partner_auth_middleware');
 
-router.get('/my-services', mobileAuthMiddleware, listMyServices);
+router.get('/my-services', partnerAuthMiddleware, listMyServices);
 router.patch(
   '/my-services/status',
-  mobileAuthMiddleware,
+  partnerAuthMiddleware,
   partnerPatchMyServicesBulkStatusMiddleware,
   patchMyServicesBulkStatus
 );
 router.patch(
   '/my-services/:id/status',
-  mobileAuthMiddleware,
+  partnerAuthMiddleware,
   partnerPatchMyServiceStatusMiddleware,
   patchMyServiceStatus
 );
-router.put('/my-services', mobileAuthMiddleware, partnerUpdateMyServicesMiddleware, updateMyServices);
+router.put('/my-services', partnerAuthMiddleware, partnerUpdateMyServicesMiddleware, updateMyServices);
 
 module.exports = router;

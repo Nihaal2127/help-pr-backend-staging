@@ -6,6 +6,8 @@ const City = require('../../../models/city');
 const Otp = require('../../../models/otp');
 const notificationSetting = require('../../../models/notification_settings');
 const { getNewId } = require('../../../helper/id_generator');
+const { handleImageUpload } = require('../../../helper/image_uploader');
+const { getUploadType } = require('../../../enum/upload_type_enum');
 const { normalizeUserPhone } = require('../../../utils/user_contact_uniqueness');
 const { USER_TYPE_CUSTOMER } = require('../../../constants/user_types');
 
@@ -132,7 +134,7 @@ const verifyOtpAndLogin = async ({ phone_number, device_token, validOtp }) => {
 
 const MOBILE_USER_ALLOWED_UPDATE_FIELDS = ['name', 'phone_number', 'email', 'date_of_birth', 'gender'];
 
-const updateUser = async ({ customerId, body }) => {
+const updateUser = async ({ customerId, body, files }) => {
   const user = await User.findOne({
     _id: customerId,
     type: USER_TYPE_CUSTOMER,
@@ -149,6 +151,15 @@ const updateUser = async ({ customerId, body }) => {
       status: 403,
       message: 'Your account is blocked. Please contact support.',
     };
+  }
+
+  if (files?.profile_photo?.[0]) {
+    user.profile_url = await handleImageUpload(
+      files.profile_photo[0],
+      getUploadType(4),
+      true,
+      user.profile_url
+    );
   }
 
   for (const field of MOBILE_USER_ALLOWED_UPDATE_FIELDS) {
@@ -180,8 +191,11 @@ const normalizeAreaPincodes = (pincodes) => {
   return [...new Set(pincodes.map((p) => String(p).trim()).filter(Boolean))];
 };
 
-const listAllPincodes = async () => {
+const listAllPincodes = async ({ search } = {}) => {
   try {
+    const normalizedSearch =
+      search !== undefined && search !== null ? String(search).trim().toLowerCase() : '';
+
     const areas = await Area.find({ deleted_at: null })
       .select('name pincodes city_id state_name')
       .lean();
@@ -214,13 +228,29 @@ const listAllPincodes = async () => {
       }
     }
 
-    records.sort((a, b) => {
+    const filteredRecords =
+      normalizedSearch === ''
+        ? records
+        : records.filter((r) => {
+            const pincode = String(r.pincode || '').toLowerCase();
+            const area = String(r.area_name || '').toLowerCase();
+            const city = String(r.city_name || '').toLowerCase();
+            const state = String(r.state_name || '').toLowerCase();
+            return (
+              pincode.includes(normalizedSearch) ||
+              area.includes(normalizedSearch) ||
+              city.includes(normalizedSearch) ||
+              state.includes(normalizedSearch)
+            );
+          });
+
+    filteredRecords.sort((a, b) => {
       const pinCompare = a.pincode.localeCompare(b.pincode);
       if (pinCompare !== 0) return pinCompare;
       return a.area_name.localeCompare(b.area_name);
     });
 
-    const data = records.map(
+    const data = filteredRecords.map(
       (record) =>
         `${sanitizeCsvField(record.pincode)},${record.area_name},${record.city_name},${record.state_name}`
     );

@@ -14,22 +14,22 @@ const {
 } = require('../../../middleware/mobile/user/address_middleware');
 const userAuthMiddleware = require('../../../middleware/mobile/user/user_auth_middleware');
 
-router.get('/addresses', userAuthMiddleware, listHandler);
+router.get('/addresses/get', userAuthMiddleware, listHandler);
 router.post(
-  '/addresses',
+  '/addresses/create',
   userAuthMiddleware,
   normalizeAddressDropdownFields,
   validateCreateAddress,
   createHandler
 );
 router.put(
-  '/addresses/:id',
+  '/addresses/update/:id',
   userAuthMiddleware,
   validateAddressIdParam,
   normalizeAddressDropdownFields,
   validateUpdateAddress,
   updateHandler
 );
-router.delete('/addresses/:id', userAuthMiddleware, validateAddressIdParam, deleteHandler);
+router.delete('/addresses/delete/:id', userAuthMiddleware, validateAddressIdParam, deleteHandler);
 
 module.exports = router;

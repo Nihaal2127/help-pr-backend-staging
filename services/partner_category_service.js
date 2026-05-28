@@ -338,7 +338,6 @@ async function mergePartnerCatalogFromNormalizedRows(partnerId, normalizedRows) 
           is_active: true,
           created_at: new Date(),
           deleted_at: null,
-          services: [],
         },
         $addToSet: { services: { $each: [...serviceSet].map((id) => toOid(id)) } },
       },

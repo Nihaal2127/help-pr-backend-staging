@@ -150,6 +150,27 @@ const validateAccessibleScreens = (items, res) => {
   return true;
 };
 
+/** Normalize optional ObjectId inputs on update: "" => omitted, valid => trimmed string, invalid => 400. */
+const normalizeOptionalObjectIdField = (req, res, fieldName, label) => {
+  const raw = req.body[fieldName];
+  if (raw === undefined || raw === null) return true;
+  const value = String(raw).trim();
+  if (value === "") {
+    delete req.body[fieldName];
+    return true;
+  }
+  if (!mongoose.Types.ObjectId.isValid(value)) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: `Invalid ${label}.`,
+    });
+    return false;
+  }
+  req.body[fieldName] = value;
+  return true;
+};
+
 /** Web user creation for all types (admin, partner, employee, customer, super admin, staff). */
 const isUserCreateRoute = (req) =>
   String(req.baseUrl || '') === '/api/user' &&
@@ -1121,6 +1142,12 @@ const updateUserMiddleware = async (req, res, next) => {
   parseOptionalDateField(req, "date_of_birth");
   trimOptionalStringField(req, "experience");
   if (!validateRequiredDateOfBirthAndGender(req, res)) return;
+  if (!normalizeOptionalObjectIdField(req, res, "state_id", "state id")) return;
+  if (!normalizeOptionalObjectIdField(req, res, "city_id", "city id")) return;
+  if (!normalizeOptionalObjectIdField(req, res, "area_id", "area id")) return;
+  if (!normalizeOptionalObjectIdField(req, res, "franchise_id", "franchise id")) return;
+  if (!normalizeOptionalObjectIdField(req, res, "created_by_id", "created by id")) return;
+  if (!normalizeOptionalObjectIdField(req, res, "business_info_id", "business info id")) return;
 
   if (isUserUpdateRoute(req) && req.body.profile_url !== undefined && String(req.body.profile_url).trim() === '') {
     delete req.body.profile_url;

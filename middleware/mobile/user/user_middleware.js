@@ -37,6 +37,16 @@ const calculateAgeFromBirthDate = (birthDate) => {
   return age;
 };
 
+const capitalizePersonName = (name) =>
+  String(name)
+    .trim()
+    .split(/\s+/)
+    .map((word) => {
+      if (!word) return word;
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(' ');
+
 const validatePersonName = (name, res) => {
   const trimmed = String(name).trim();
   if (trimmed.length < MIN_NAME_LENGTH || trimmed.length > MAX_NAME_LENGTH) {
@@ -47,7 +57,7 @@ const validatePersonName = (name, res) => {
     });
     return null;
   }
-  return trimmed;
+  return capitalizePersonName(trimmed);
 };
 
 const validateDateOfBirth = (dobRaw, res) => {
@@ -278,6 +288,13 @@ const userUpdateMiddleware = async (req, res, next) => {
       message: 'Email is required.',
     });
   }
+  if (!EMAIL_REGEX.test(finalEmail)) {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'Invalid email format.',
+    });
+  }
   if (!finalGender) {
     return res.status(400).json({
       success: false,
@@ -347,7 +364,7 @@ const userUpdateMiddleware = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: 'gender must be "male", "female", or "other".',
+        message: 'Gender must be male, female, or other.',
       });
     }
     req.body.gender = normalizeGender(gender);

@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const User = require('../../../models/user');
 const Category = require('../../../models/category');
 const Service = require('../../../models/service');
+const PartnerService = require('../../../models/partner_service');
 const { resolveFranchiseEffectiveCatalog } = require('../../../utils/catalog_availability_resolver');
 
 const USER_TYPE_PARTNER = 2;
@@ -73,6 +74,17 @@ const listFranchiseCategoriesForPartner = async (partnerId) => {
       (resolved.effectiveServiceIds || []).map((x) => String(x))
     );
 
+    // Exclude services that this partner has already added.
+    const alreadyAddedRows = await PartnerService.find({
+      partner_id: partnerId,
+      deleted_at: null,
+    })
+      .select('service_id')
+      .lean();
+    const alreadyAddedSvcSet = new Set(
+      alreadyAddedRows.map((r) => (r.service_id ? String(r.service_id) : '')).filter(Boolean)
+    );
+
     const categories = await Category.find({
       _id: { $in: ids },
       ...ACTIVE_CATEGORY_FILTER,
@@ -85,7 +97,11 @@ const listFranchiseCategoriesForPartner = async (partnerId) => {
     for (const category of categories) {
       const catServices = Array.isArray(category.services) ? category.services : [];
       for (const sid of catServices) {
-        if (sid && effectiveSvcSet.has(String(sid))) {
+        if (
+          sid &&
+          effectiveSvcSet.has(String(sid)) &&
+          !alreadyAddedSvcSet.has(String(sid))
+        ) {
           serviceIdSet.add(String(sid));
         }
       }
@@ -115,7 +131,10 @@ const listFranchiseCategoriesForPartner = async (partnerId) => {
     const categoriesWithServices = categories.map((c) => {
       const catServices = Array.isArray(c.services) ? c.services : [];
       const intersectionIds = catServices.filter(
-        (sid) => sid && effectiveSvcSet.has(String(sid))
+        (sid) =>
+          sid &&
+          effectiveSvcSet.has(String(sid)) &&
+          !alreadyAddedSvcSet.has(String(sid))
       );
       const services = intersectionIds
         .map((id) => serviceById.get(String(id)))
@@ -129,7 +148,7 @@ const listFranchiseCategoriesForPartner = async (partnerId) => {
         image_url: c.image_url,
         services,
       };
-    });
+    }).filter((c) => Array.isArray(c.services) && c.services.length > 0);
 
     return {
       ok: true,

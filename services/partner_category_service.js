@@ -301,11 +301,100 @@ async function replacePartnerCatalogFromNormalizedRows(partnerId, normalizedRows
   }
 }
 
+/**
+ * Partner mobile update: keep existing catalog rows and only add/update incoming rows.
+ * Does not soft-delete previous partner categories/services.
+ * @param {mongoose.Types.ObjectId} partnerId
+ * @param {object[]} normalizedRows from normalizePartnerServices
+ */
+async function mergePartnerCatalogFromNormalizedRows(partnerId, normalizedRows) {
+  const partnerOid = toOid(partnerId);
+  if (!Array.isArray(normalizedRows) || normalizedRows.length === 0) return;
+
+  const byCat = new Map();
+  const detailLastByService = new Map();
+
+  for (const r of normalizedRows) {
+    if (!r.category_id || !r.service_id) continue;
+    const catStr = String(r.category_id);
+    const sidStr = String(r.service_id);
+    if (!byCat.has(catStr)) byCat.set(catStr, new Set());
+    byCat.get(catStr).add(sidStr);
+    detailLastByService.set(sidStr, r);
+  }
+
+  for (const [catStr, serviceSet] of byCat) {
+    await PartnerCategory.findOneAndUpdate(
+      {
+        partner_id: partnerOid,
+        category_id: toOid(catStr),
+        deleted_at: null,
+      },
+      {
+        $set: { updated_at: new Date() },
+        $setOnInsert: {
+          partner_id: partnerOid,
+          category_id: toOid(catStr),
+          is_active: true,
+          created_at: new Date(),
+          deleted_at: null,
+          services: [],
+        },
+        $addToSet: { services: { $each: [...serviceSet].map((id) => toOid(id)) } },
+      },
+      { upsert: true, new: true }
+    );
+  }
+
+  for (const [sidStr, r] of detailLastByService) {
+    const svcOid = toOid(sidStr);
+    const catOid = toOid(r.category_id);
+    const updateFields = {
+      category_id: catOid,
+      description: r.description != null ? String(r.description) : '',
+      price: coerceNumber(r.price, 0),
+      payment_type: r.payment_type != null ? String(r.payment_type).trim() : '',
+      tax: coerceNumber(r.tax, 0),
+      minimum_deposit: coerceNumber(r.minimum_deposit, 0),
+      is_active: r.is_active !== false,
+      is_accept_request: true,
+      updated_at: new Date(),
+      deleted_at: null,
+    };
+
+    let ps = await PartnerService.findOne({
+      partner_id: partnerOid,
+      service_id: svcOid,
+      deleted_at: null,
+    });
+
+    if (!ps) {
+      ps = await PartnerService.findOne({
+        partner_id: partnerOid,
+        service_id: svcOid,
+      }).sort({ updated_at: -1 });
+    }
+
+    if (!ps) {
+      await PartnerService.create({
+        partner_id: partnerOid,
+        service_id: svcOid,
+        ...updateFields,
+        created_at: new Date(),
+      });
+    } else {
+      Object.assign(ps, updateFields);
+      await ps.save();
+    }
+  }
+}
+
 module.exports = {
   syncPartnerServicesFromPartnerCategories,
   rebuildPartnerCategoriesFromPartnerServices,
   mergeServicesIntoPartnerCategories,
   replacePartnerCategoriesFromSignupRows,
   replacePartnerCatalogFromNormalizedRows,
+  mergePartnerCatalogFromNormalizedRows,
   toOid,
 };

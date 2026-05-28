@@ -16,7 +16,9 @@ const {
 const PartnerService = require('../../../models/partner_service');
 const { handleImageUpload } = require('../../../helper/image_uploader');
 const { getUploadType } = require('../../../enum/upload_type_enum');
-const { replacePartnerCatalogFromNormalizedRows } = require('../../../services/partner_category_service');
+const {
+  mergePartnerCatalogFromNormalizedRows,
+} = require('../../../services/partner_category_service');
 const {
   normalizeUserEmail,
   normalizeUserPhone,
@@ -1032,7 +1034,7 @@ const updatePartner = async ({ partnerId, body, files, section = PARTNER_UPDATE_
     if (shouldRunCatalog) {
       const resolvedPartnerServicesInput = resolvePartnerServicesInputFromBody(updateData);
       const normalizedServiceRows = normalizePartnerServices(resolvedPartnerServicesInput ?? []);
-      await replacePartnerCatalogFromNormalizedRows(updatedUser._id, normalizedServiceRows);
+      await mergePartnerCatalogFromNormalizedRows(updatedUser._id, normalizedServiceRows);
     }
 
     if (shouldRunBanks) {

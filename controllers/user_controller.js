@@ -1872,6 +1872,7 @@ const update = async (req, res) => {
       updateData.pincode !== undefined;
     const hasAddressStatusPayload = updateData.address_status !== undefined;
     const targetAddressId = updateData.address_id;
+    let didAddNewAddress = false;
     if (shouldAddNewAddress) {
       if (
         !hasAddressPayload ||
@@ -1903,6 +1904,7 @@ const update = async (req, res) => {
         pincode: updateData.pincode,
         addressStatus: updateData.address_status,
       });
+      didAddNewAddress = true;
       delete updateData.address;
       delete updateData.state_id;
       delete updateData.city_id;
@@ -1955,6 +1957,7 @@ const update = async (req, res) => {
       const finalCityId = updateData.city_id !== undefined ? updateData.city_id : user.city_id;
       const finalPincode = updateData.pincode !== undefined ? updateData.pincode : user.pincode;
       const finalProfileUrl = updateData.profile_url !== undefined ? updateData.profile_url : user.profile_url;
+      const skipPrimaryLocationRequiredChecks = didAddNewAddress;
 
       if (!finalName || String(finalName).trim() === '') {
         return res.status(400).json({
@@ -1993,49 +1996,48 @@ const update = async (req, res) => {
           message: 'Invalid phone number format.'
         });
       }
-      if (!finalAddress || String(finalAddress).trim() === '') {
-        return res.status(400).json({
-          success: false,
-          status: 400,
-          message: 'Address is required.'
-        });
-      }
-      if (!finalStateId || String(finalStateId).trim() === '') {
+      if (!skipPrimaryLocationRequiredChecks && (!finalStateId || String(finalStateId).trim() === '')) {
         return res.status(400).json({
           success: false,
           status: 400,
           message: 'State is required.'
         });
       }
-      if (!mongoose.Types.ObjectId.isValid(finalStateId)) {
+      if (
+        !skipPrimaryLocationRequiredChecks &&
+        !mongoose.Types.ObjectId.isValid(finalStateId)
+      ) {
         return res.status(400).json({
           success: false,
           status: 400,
           message: 'Invalid state id.'
         });
       }
-      if (!finalCityId || String(finalCityId).trim() === '') {
+      if (!skipPrimaryLocationRequiredChecks && (!finalCityId || String(finalCityId).trim() === '')) {
         return res.status(400).json({
           success: false,
           status: 400,
           message: 'City is required.'
         });
       }
-      if (!mongoose.Types.ObjectId.isValid(finalCityId)) {
+      if (
+        !skipPrimaryLocationRequiredChecks &&
+        !mongoose.Types.ObjectId.isValid(finalCityId)
+      ) {
         return res.status(400).json({
           success: false,
           status: 400,
           message: 'Invalid city id.'
         });
       }
-      if (!finalPincode || String(finalPincode).trim() === '') {
+      if (!skipPrimaryLocationRequiredChecks && (!finalPincode || String(finalPincode).trim() === '')) {
         return res.status(400).json({
           success: false,
           status: 400,
           message: 'Pincode is required.'
         });
       }
-      if (!finalProfileUrl || String(finalProfileUrl).trim() === '') {
+      if (!skipPrimaryLocationRequiredChecks && (!finalProfileUrl || String(finalProfileUrl).trim() === '')) {
         return res.status(400).json({
           success: false,
           status: 400,

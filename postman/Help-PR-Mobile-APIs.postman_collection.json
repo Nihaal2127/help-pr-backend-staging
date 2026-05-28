@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-mobile-apis-only",
     "name": "Help PR — Mobile APIs only",
-    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** → Register/Login → Update → Catalog → My services\n\n## Customer (User)\n1. **Send OTP** → **Verify OTP** (dev OTP: `123456`)\n2. **Pincodes (search)** or set `{{homeLocation}}` — e.g. `500032,Gachibowli,Hyderabad,Telangana`\n3. **Home** — categories, services, partners for franchise (Bearer + `location` query)\n4. **Addresses** — CRUD (first address also updates `users` table)\n5. **Update** — multipart `profile_photo` + profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.",
+    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** → Register/Login → Update → Catalog → My services\n\n## Customer (User)\n1. **Send OTP** → **Verify OTP** (dev OTP: `123456`)\n2. **Pincodes (search)** or set `{{homeLocation}}` — e.g. `500032,Gachibowli,Hyderabad,Telangana`\n3. **Home** — categories, services, partners for franchise (Bearer + `location` query)\n4. **Addresses** — create / get / update / delete (first address also updates `users` table)\n5. **Update** — multipart `profile_photo` + profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -1031,7 +1031,7 @@
               "path": ["api", "mobile", "user", "home"],
               "query": [{ "key": "location", "value": "{{homeLocation}}" }]
             },
-            "description": "**GET /api/mobile/user/home?location=**\n\n- **Auth:** Bearer `{{token}}` (run **Verify OTP** first)\n- **Query `location`:** `pincode,area_name,city_name,state_name` — same line as **Pincodes (search)** e.g. `500032,Gachibowli,Hyderabad,Telangana`\n\n**200** `data`:\n- `franchise_id`, `franchise_name`\n- `location` (resolved ids)\n- `categories[]` with nested `services[]`\n- `partners[]` (approved, active)\n\n**400** invalid location / no franchise | **404** location not found"
+            "description": "**GET /api/mobile/user/home?location=**\n\n- **Auth:** Bearer `{{token}}` (run **Verify OTP** first)\n- **Query `location`:** `pincode,area_name,city_name,state_name` — same line as **Pincodes (search)** e.g. `500032,Gachibowli,Hyderabad,Telangana`\n\n**200** `data`:\n- `franchise_id`, `franchise_name`\n- `location` (resolved ids)\n- `categories[]` with nested `services[]`\n- `partners[]` (approved, active)\n\n**400** invalid location or `No services are available in this location` | **404** location not found"
           },
           "response": []
         },
@@ -1076,11 +1076,11 @@
                 "method": "GET",
                 "header": [{ "key": "Accept", "value": "application/json" }],
                 "url": {
-                  "raw": "{{baseUrl}}/api/mobile/user/addresses",
+                  "raw": "{{baseUrl}}/api/mobile/user/addresses/get",
                   "host": ["{{baseUrl}}"],
-                  "path": ["api", "mobile", "user", "addresses"]
+                  "path": ["api", "mobile", "user", "addresses", "get"]
                 },
-                "description": "**GET /api/mobile/user/addresses**\n\n- **Auth:** Bearer `{{token}}`\n- **200** `data[]`: `_id`, `state_id`, `city_id`, `area_id`, `pincode`, `address`, `state_name`, `city_name`, `area_name`, …\n- Sets `{{addressId}}` from first row"
+                "description": "**GET /api/mobile/user/addresses/get**\n\n- **Auth:** Bearer `{{token}}`\n- **200** `data[]`: active addresses only (`deleted_at: null` in response; soft-deleted rows are omitted)\n- Fields: `_id`, `state_id`, `city_id`, `area_id`, `pincode`, `address`, `state_name`, `city_name`, `area_name`, `address_status`, `deleted_at`, `created_at`, `updated_at`\n- Sets `{{addressId}}` from first row"
               },
               "response": []
             },
@@ -1120,11 +1120,11 @@
                   "options": { "raw": { "language": "json" } }
                 },
                 "url": {
-                  "raw": "{{baseUrl}}/api/mobile/user/addresses",
+                  "raw": "{{baseUrl}}/api/mobile/user/addresses/create",
                   "host": ["{{baseUrl}}"],
-                  "path": ["api", "mobile", "user", "addresses"]
+                  "path": ["api", "mobile", "user", "addresses", "create"]
                 },
-                "description": "**POST /api/mobile/user/addresses**\n\n- **Auth:** Bearer\n- **Required:** `state_id`, `city_id`, `area_id`, `pincode` (from **Common → Pincodes** dropdown), `address` (text)\n- `pincode` may be string `\"560001\"` or object `{ \"pincode\": \"560001\" }`\n- **First address** also copies location into `users` table"
+                "description": "**POST /api/mobile/user/addresses/create**\n\n- **Auth:** Bearer\n- **Required:** `state_id`, `city_id`, `area_id`, `pincode` (from **Common → Pincodes** dropdown), `address` (text)\n- `pincode` may be string `\"560001\"` or object `{ \"pincode\": \"560001\" }`\n- **First address** also copies location into `users` table"
               },
               "response": []
             },
@@ -1163,11 +1163,11 @@
                   "options": { "raw": { "language": "json" } }
                 },
                 "url": {
-                  "raw": "{{baseUrl}}/api/mobile/user/addresses/{{addressId}}",
+                  "raw": "{{baseUrl}}/api/mobile/user/addresses/update/{{addressId}}",
                   "host": ["{{baseUrl}}"],
-                  "path": ["api", "mobile", "user", "addresses", "{{addressId}}"]
+                  "path": ["api", "mobile", "user", "addresses", "update", "{{addressId}}"]
                 },
-                "description": "**PUT /api/mobile/user/addresses/:id**\n\n- **Auth:** Bearer\n- Path: `{{addressId}}` from List or Create\n- To change location, send all four: `state_id`, `city_id`, `area_id`, `pincode`\n- Or send only `address` to update the text line"
+                "description": "**PUT /api/mobile/user/addresses/update/:id**\n\n- **Auth:** Bearer\n- Path: `{{addressId}}` from Get or Create\n- All fields required only if final value is empty (request value or existing saved value)\n- If updating location, send all four: `state_id`, `city_id`, `area_id`, `pincode` together"
               },
               "response": []
             },
@@ -1198,11 +1198,11 @@
                 "method": "DELETE",
                 "header": [{ "key": "Accept", "value": "application/json" }],
                 "url": {
-                  "raw": "{{baseUrl}}/api/mobile/user/addresses/{{addressId}}",
+                  "raw": "{{baseUrl}}/api/mobile/user/addresses/delete/{{addressId}}",
                   "host": ["{{baseUrl}}"],
-                  "path": ["api", "mobile", "user", "addresses", "{{addressId}}"]
+                  "path": ["api", "mobile", "user", "addresses", "delete", "{{addressId}}"]
                 },
-                "description": "**DELETE /api/mobile/user/addresses/:id**\n\n- **Auth:** Bearer\n- Soft-deletes the address (`deleted_at`)"
+                "description": "**DELETE /api/mobile/user/addresses/delete/:id**\n\n- **Auth:** Bearer\n- Soft-deletes the address (row hidden from Get; `deleted_at` set in DB)"
               },
               "response": []
             }
@@ -1359,7 +1359,7 @@
                 "update"
               ]
             },
-            "description": "**PUT /api/mobile/user/update**\n\n- **Auth:** Bearer `{{token}}`\n- **Body:** `multipart/form-data` only (do not set Content-Type manually)\n- Send one or more text fields and/or `profile_photo` file\n\n| Field | Rules |\n|-------|--------|\n| `name` | 2–50 characters |\n| `phone_number` | E.164, unique |\n| `email` | valid format, unique |\n| `date_of_birth` | valid date, 18+ |\n| `gender` | `male` \\| `female` \\| `other` |\n| `profile_photo` | image file, max 512 KB → saved as `profile_url` |\n\n**200** `data`: updated profile + `auth_token`"
+            "description": "**PUT /api/mobile/user/update**\n\n- **Auth:** Bearer `{{token}}`\n- **Body:** `multipart/form-data` only (do not set Content-Type manually)\n- Enable fields you want to update (`name`, `email`, `gender` required only if final value is empty)\n\n| Field | Rules |\n|-------|--------|\n| `name` | 2–50 chars; saved capitalized (e.g. `Ravi Kumar`) |\n| `phone_number` | E.164, unique if sent |\n| `email` | valid format; invalid e.g. `ravigmail.com` → `Invalid email format.` |\n| `date_of_birth` | valid date, 18+ if sent |\n| `gender` | `male`, `female`, or `other` — invalid → `Gender must be male, female, or other.` |\n| `profile_photo` | JPEG/PNG/JPG, max 512 KB |\n\n**200** `data`: updated profile + `auth_token`"
           },
           "response": []
         }

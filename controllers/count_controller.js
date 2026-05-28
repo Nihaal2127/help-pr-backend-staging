@@ -1279,7 +1279,7 @@ const getServiceCountData = async (id) => {
             row.total_amount = roundServiceMoney(row.total_amount);
             row.balance_amount = roundServiceMoney(row.balance_amount);
             row.pending_amount = roundServiceMoney(row.pending_amount);
-            row.paid_amount = roundServiceMoney(row.paid_amount);
+            row.paid_amount = roundServiceMoney(row.total_amount - row.pending_amount);
             return row;
         }
 

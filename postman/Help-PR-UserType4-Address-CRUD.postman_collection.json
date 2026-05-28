@@ -1,0 +1,191 @@
+{
+  "info": {
+    "_postman_id": "help-pr-user-type4-address-crud",
+    "name": "Help PR - User Type 4 Address CRUD",
+    "description": "Standalone collection for customer (user type 4) mobile address APIs.\n\nFlow:\n1) Create Address\n2) Update Address\n3) Delete Address\n\nAuth:\n- Use Bearer token of a customer account (type = 4).\n- Set collection variable {{customerToken}}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Create Address (Type 4)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "try {",
+              "  const j = pm.response.json();",
+              "  const id = j?.data?._id || j?.data?.data?._id;",
+              "  if (id) pm.collectionVariables.set('addressId', String(id));",
+              "} catch (e) {}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{customerToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"state_id\": \"{{stateId}}\",\n  \"city_id\": \"{{cityId}}\",\n  \"area_id\": \"{{areaId}}\",\n  \"pincode\": \"{{pincode}}\",\n  \"address\": \"Flat 302, Green Heights, 5th Main Road\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/mobile/user/addresses",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "mobile",
+            "user",
+            "addresses"
+          ]
+        },
+        "description": "POST /api/mobile/user/addresses\n\nRequired body fields:\n- state_id (ObjectId)\n- city_id (ObjectId)\n- area_id (ObjectId)\n- pincode (string from selected area)\n- address (string)\n\nOn success, this request stores response address _id into {{addressId}}."
+      },
+      "response": []
+    },
+    {
+      "name": "Update Address (Type 4)",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{customerToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"address\": \"Flat 402, Green Heights, 5th Main Road\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/mobile/user/addresses/{{addressId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "mobile",
+            "user",
+            "addresses",
+            "{{addressId}}"
+          ]
+        },
+        "description": "PUT /api/mobile/user/addresses/:id\n\n- Send at least one of: state_id, city_id, area_id, pincode, address.\n- If you update any location field (state/city/area/pincode), send all 4 together.\n- For address-only edit, body with only address is valid."
+      },
+      "response": []
+    },
+    {
+      "name": "Delete Address (Type 4)",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{customerToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/mobile/user/addresses/{{addressId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "mobile",
+            "user",
+            "addresses",
+            "{{addressId}}"
+          ]
+        },
+        "description": "DELETE /api/mobile/user/addresses/:id"
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "customerToken",
+      "value": ""
+    },
+    {
+      "key": "stateId",
+      "value": ""
+    },
+    {
+      "key": "cityId",
+      "value": ""
+    },
+    {
+      "key": "areaId",
+      "value": ""
+    },
+    {
+      "key": "pincode",
+      "value": ""
+    },
+    {
+      "key": "addressId",
+      "value": ""
+    }
+  ]
+}

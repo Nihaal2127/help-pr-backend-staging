@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const mongoose = require('mongoose');
 const Otp = require('../../../models/otp');
+const User = require('../../../models/user');
 const { validatePhoneNumber } = require('../../../validator/form_validator');
 const {
   normalizeUserEmail,
@@ -239,7 +240,47 @@ const userUpdateMiddleware = async (req, res, next) => {
 
   parseOptionalDateField(req, 'date_of_birth');
 
+  const existingCustomer = await User.findOne({
+    _id: req.user.id,
+    type: USER_TYPE_CUSTOMER,
+    deleted_at: null,
+  })
+    .select('name email gender')
+    .lean();
+
+  if (!existingCustomer) {
+    return res.status(404).json({
+      success: false,
+      status: 404,
+      message: 'Customer not found.',
+    });
+  }
+
   const { name, email, phone_number, date_of_birth, gender } = req.body;
+
+  const missingRequiredProfileFields = [];
+  const finalName = name !== undefined ? String(name).trim() : String(existingCustomer.name || '').trim();
+  const finalEmail =
+    email !== undefined ? String(email).trim() : String(existingCustomer.email || '').trim();
+  const finalGender =
+    gender !== undefined ? String(gender).trim() : String(existingCustomer.gender || '').trim();
+
+  if (!finalName) {
+    missingRequiredProfileFields.push('name');
+  }
+  if (!finalEmail) {
+    missingRequiredProfileFields.push('email');
+  }
+  if (!finalGender) {
+    missingRequiredProfileFields.push('gender');
+  }
+  if (missingRequiredProfileFields.length > 0) {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: `Missing required field(s): ${missingRequiredProfileFields.join(', ')}.`,
+    });
+  }
 
   if (name !== undefined) {
     if (name === null || String(name).trim() === '') {

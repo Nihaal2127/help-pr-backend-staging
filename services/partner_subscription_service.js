@@ -471,8 +471,6 @@ const createPartnerSubscription = async (body, assignedByUserId) => {
             endDate = computeExpiresAt(start, plan);
         }
 
-        await cancelActiveForPartner(pPartner.oid);
-
         const assignedBy =
             assignedByUserId !== undefined && assignedByUserId !== null
                 ? parseObjectId(assignedByUserId, 'assigned_by_id')
@@ -489,17 +487,40 @@ const createPartnerSubscription = async (body, assignedByUserId) => {
             return fail(400, 'status must be active, expired, or cancelled.');
         }
 
-        const doc = new PartnerSubscription({
+        // Maintain only one active subscription row per partner:
+        // update existing row; create only if partner has no row yet.
+        const existingRows = await PartnerSubscription.find({
             partner_id: pPartner.oid,
-            subscription_plan_id: pPlan.oid,
-            started_at: start,
-            expires_at: endDate,
-            status: normalizedStatus,
-            assigned_by_id: assignedOid,
-            notes: notes !== undefined && notes !== null ? String(notes) : '',
-        });
+            deleted_at: null,
+        })
+            .sort({ updated_at: -1, created_at: -1 })
+            .select('_id');
 
-        const saved = await doc.save();
+        const primary = existingRows[0] || new PartnerSubscription({ partner_id: pPartner.oid });
+        primary.subscription_plan_id = pPlan.oid;
+        primary.started_at = start;
+        primary.expires_at = endDate;
+        primary.status = normalizedStatus;
+        primary.assigned_by_id = assignedOid;
+        primary.notes = notes !== undefined && notes !== null ? String(notes) : '';
+        primary.updated_at = new Date();
+        if (!primary.created_at) {
+            primary.created_at = new Date();
+        }
+
+        const saved = await primary.save();
+
+        // Soft-delete any extra rows to enforce single-row policy.
+        if (existingRows.length > 1) {
+            await PartnerSubscription.updateMany(
+                {
+                    partner_id: pPartner.oid,
+                    deleted_at: null,
+                    _id: { $ne: saved._id },
+                },
+                { $set: { deleted_at: new Date(), updated_at: new Date() } }
+            );
+        }
         const populated = await PartnerSubscription.findById(saved._id)
             .populate('partner_id', 'name email phone_number')
             .populate('subscription_plan_id')

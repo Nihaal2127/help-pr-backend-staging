@@ -376,7 +376,6 @@ async function mergeMobilePartnerCatalogFromNormalizedRows(partnerId, normalized
           category_id: catOid,
           is_active: true,
           created_at: now,
-          updated_at: now,
           deleted_at: null,
         },
         $set: { updated_at: now },

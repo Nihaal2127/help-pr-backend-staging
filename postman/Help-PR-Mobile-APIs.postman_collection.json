@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-mobile-apis-only",
     "name": "Help PR — Mobile APIs only",
-    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** → Register/Login → Update → Catalog → My services\n\n## Customer (User)\n1. **Send OTP** → **Verify OTP** (dev OTP: `123456`)\n2. **Pincodes (search)** or set `{{homeLocation}}` — e.g. `500032,Gachibowli,Hyderabad,Telangana`\n3. **Home** — categories, services, partners for franchise (Bearer + `location` query)\n4. **Addresses** — create / get / update / delete (first address also updates `users` table)\n5. **Update** — multipart `profile_photo` + profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.",
+    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** → Register/Login → Update → Catalog → My services\n\n## Customer (User)\n1. **Login** → **Verify OTP** (dev OTP: `123456`)\n2. **Pincodes (search)** or set `{{homeLocation}}` — e.g. `500032,Gachibowli,Hyderabad,Telangana`\n3. **Home** — categories, services, partners for franchise (Bearer + `location` query)\n4. **Addresses** — create / get / update / delete (first address also updates `users` table)\n5. **Update** — multipart `profile_photo` + profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -860,10 +860,10 @@
     },
     {
       "name": "User",
-      "description": "Customer mobile — OTP, home, addresses, profile. Order: **Send OTP** → **Verify OTP** → **Pincodes (search)** (sets `homeLocation`) → **Home** → **Addresses** → **Update** (multipart). Address dropdowns: **Common → Location**.",
+      "description": "Customer mobile — OTP, home, addresses, profile. Order: **Login** → **Verify OTP** → **Pincodes (search)** (sets `homeLocation`) → **Home** → **Addresses** → **Update** (multipart). Address dropdowns: **Common → Location**.",
       "item": [
         {
-          "name": "Send OTP",
+          "name": "Login",
           "event": [
             {
               "listen": "test",
@@ -906,7 +906,7 @@
               }
             },
             "url": {
-              "raw": "{{baseUrl}}/api/mobile/user/send-otp",
+              "raw": "{{baseUrl}}/api/mobile/user/login",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -914,10 +914,10 @@
                 "api",
                 "mobile",
                 "user",
-                "send-otp"
+                "login"
               ]
             },
-            "description": "**POST /api/mobile/user/send-otp**\n\n- No Authorization\n- **Required:** `phone_number` (E.164 style, e.g. `+919876543210`)\n\n### Behavior\n- If phone is new → creates customer (`type: 4`) in `users`\n- If customer exists → reuses account\n- If phone belongs to partner/admin → **409**\n- Stores hashed OTP in `otp` collection (dev OTP: **123456**, 10 min expiry)\n- **429** if a valid OTP was already sent for this number\n\nNo SMS is sent in the current build."
+            "description": "**POST /api/mobile/user/login**\n\n- No Authorization\n- **Required:** `phone_number` (E.164 style, e.g. `+919876543210`)\n\n### Behavior\n- If phone is new → creates customer (`type: 4`) in `users`\n- If customer exists → reuses account\n- If phone belongs to partner/admin → **409**\n- Stores hashed OTP in `otp` collection (dev OTP: **123456**, 10 min expiry)\n- **429** if a valid OTP was already sent for this number\n\nNo SMS is sent in the current build."
           },
           "response": []
         },
@@ -990,7 +990,7 @@
                 "verify-otp"
               ]
             },
-            "description": "**POST /api/mobile/user/verify-otp**\n\n- No Authorization\n- **Required:** `phone_number`, `otp` (use `123456` in dev)\n- **Optional:** `device_token` (FCM)\n\n### Behavior\n- Validates OTP → issues JWT on `data.auth_token`\n- Updates `device_token`, `last_signin` on user\n- Deletes used OTP row\n\n**400:** Invalid or expired OTP\n**401:** Customer not found (run Send OTP first)\n**403:** Account blocked"
+            "description": "**POST /api/mobile/user/verify-otp**\n\n- No Authorization\n- **Required:** `phone_number`, `otp` (use `123456` in dev)\n- **Optional:** `device_token` (FCM)\n\n### Behavior\n- Validates OTP → issues JWT on `data.auth_token`\n- Updates `device_token`, `last_signin` on user\n- Deletes used OTP row\n\n**400:** Invalid or expired OTP\n**401:** Customer not found (run Login first)\n**403:** Account blocked"
           },
           "response": []
         },

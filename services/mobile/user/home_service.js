@@ -128,7 +128,7 @@ const resolveFranchiseForArea = async (area) => {
   return { ok: true, franchise };
 };
 
-const buildFranchiseCategories = async (franchiseId) => {
+const buildFranchiseCategories = async (franchiseId, servicePrice = 0) => {
   const resolved = await resolveFranchiseEffectiveCatalog(franchiseId);
   if (!resolved.ok) {
     return fail(resolved.status, resolved.message);
@@ -166,7 +166,7 @@ const buildFranchiseCategories = async (franchiseId) => {
           _id: { $in: [...serviceIdSet] },
           ...ACTIVE_SERVICE_FILTER,
         })
-          .select('name desc tax image_url category_id')
+          .select('name desc tax image_url category_id payment_type')
           .lean();
 
   const serviceById = new Map(serviceDocs.map((s) => [String(s._id), s]));
@@ -178,6 +178,8 @@ const buildFranchiseCategories = async (franchiseId) => {
     tax: s.tax,
     image_url: s.image_url,
     category_id: s.category_id,
+    price: servicePrice,
+    payment_type: s.payment_type ?? '',
   });
 
   const categoriesWithServices = categories.map((c) => {
@@ -233,7 +235,15 @@ const getHomeForLocation = async ({ location }) => {
     const franchiseResult = await resolveFranchiseForArea(areaResult.area);
     if (!franchiseResult.ok) return franchiseResult;
 
-    const catalogResult = await buildFranchiseCategories(franchiseResult.franchise._id);
+    const city = await City.findById(areaResult.area.city_id)
+      .select('city_service_price')
+      .lean();
+    const servicePrice = city?.city_service_price ?? 0;
+
+    const catalogResult = await buildFranchiseCategories(
+      franchiseResult.franchise._id,
+      servicePrice
+    );
     if (!catalogResult.ok) return catalogResult;
 
     const partners = await listFranchisePartners(franchiseResult.franchise._id);

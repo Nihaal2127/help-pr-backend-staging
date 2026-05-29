@@ -53,34 +53,12 @@ const validatePersonName = (name, res) => {
 };
 
 const validateDateOfBirth = (dobRaw, res) => {
-  if (
-    dobRaw === undefined ||
-    dobRaw === null ||
-    (typeof dobRaw === 'string' && dobRaw.trim() === '')
-  ) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'Date of birth is required.',
-    });
-    return null;
-  }
-
   const birthDate = dobRaw instanceof Date ? dobRaw : new Date(dobRaw);
   if (Number.isNaN(birthDate.getTime())) {
     res.status(400).json({
       success: false,
       status: 400,
       message: 'Date of birth must be a valid date.',
-    });
-    return null;
-  }
-
-  if (calculateAgeFromBirthDate(birthDate) < MIN_USER_AGE_YEARS) {
-    res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'Not applicable for individuals below 18 years of age.',
     });
     return null;
   }

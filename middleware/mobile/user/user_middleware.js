@@ -19,14 +19,6 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const USER_PROFILE_IMAGE_MAX_BYTES = 512 * 1024;
 
-const MOBILE_USER_ALLOWED_UPDATE_FIELDS = new Set([
-  'name',
-  'phone_number',
-  'email',
-  'date_of_birth',
-  'gender',
-]);
-
 const calculateAgeFromBirthDate = (birthDate) => {
   const today = new Date();
   let age = today.getFullYear() - birthDate.getFullYear();
@@ -236,18 +228,6 @@ const userUpdateMiddleware = async (req, res, next) => {
     });
   }
 
-  const hasProfilePhoto = Boolean(req.files?.profile_photo?.[0]);
-  const hasAllowedField =
-    hasProfilePhoto ||
-    [...MOBILE_USER_ALLOWED_UPDATE_FIELDS].some((field) => req.body[field] !== undefined);
-  if (!hasAllowedField) {
-    return res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'At least one profile field is required to update.',
-    });
-  }
-
   parseOptionalDateField(req, 'date_of_birth');
 
   const existingCustomer = await User.findOne({
@@ -255,7 +235,7 @@ const userUpdateMiddleware = async (req, res, next) => {
     type: USER_TYPE_CUSTOMER,
     deleted_at: null,
   })
-    .select('name email gender')
+    .select('_id')
     .lean();
 
   if (!existingCustomer) {
@@ -268,62 +248,15 @@ const userUpdateMiddleware = async (req, res, next) => {
 
   const { name, email, phone_number, date_of_birth, gender } = req.body;
 
-  const finalName = name !== undefined ? String(name).trim() : String(existingCustomer.name || '').trim();
-  const finalEmail =
-    email !== undefined ? String(email).trim() : String(existingCustomer.email || '').trim();
-  const finalGender =
-    gender !== undefined ? String(gender).trim() : String(existingCustomer.gender || '').trim();
-
-  if (!finalName) {
-    return res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'Name is required.',
-    });
-  }
-  if (!finalEmail) {
-    return res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'Email is required.',
-    });
-  }
-  if (!EMAIL_REGEX.test(finalEmail)) {
-    return res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'Invalid email format.',
-    });
-  }
-  if (!finalGender) {
-    return res.status(400).json({
-      success: false,
-      status: 400,
-      message: 'Gender is required.',
-    });
-  }
-
-  if (name !== undefined) {
-    if (name === null || String(name).trim() === '') {
-      return res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'Name is required.',
-      });
-    }
+  if (name !== undefined && name !== null && String(name).trim() !== '') {
     const validatedName = validatePersonName(name, res);
     if (validatedName === null) return;
     req.body.name = validatedName;
+  } else {
+    delete req.body.name;
   }
 
-  if (email !== undefined) {
-    if (email === null || String(email).trim() === '') {
-      return res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'Email is required.',
-      });
-    }
+  if (email !== undefined && email !== null && String(email).trim() !== '') {
     if (!EMAIL_REGEX.test(String(email).trim())) {
       return res.status(400).json({
         success: false,
@@ -332,9 +265,11 @@ const userUpdateMiddleware = async (req, res, next) => {
       });
     }
     req.body.email = normalizeUserEmail(email);
+  } else {
+    delete req.body.email;
   }
 
-  if (phone_number !== undefined) {
+  if (phone_number !== undefined && phone_number !== null && String(phone_number).trim() !== '') {
     const phoneResult = validatePhoneNumber(phone_number);
     if (phoneResult.valid === false) {
       return res.status(400).json({
@@ -344,22 +279,19 @@ const userUpdateMiddleware = async (req, res, next) => {
       });
     }
     req.body.phone_number = normalizeUserPhone(phone_number);
+  } else {
+    delete req.body.phone_number;
   }
 
-  if (date_of_birth !== undefined) {
+  if (date_of_birth !== undefined && date_of_birth !== null && String(date_of_birth).trim() !== '') {
     const validatedDob = validateDateOfBirth(date_of_birth, res);
     if (validatedDob === null) return;
     req.body.date_of_birth = validatedDob;
+  } else {
+    delete req.body.date_of_birth;
   }
 
-  if (gender !== undefined) {
-    if (gender === null || String(gender).trim() === '') {
-      return res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'Gender is required.',
-      });
-    }
+  if (gender !== undefined && gender !== null && String(gender).trim() !== '') {
     if (!isValidGender(gender)) {
       return res.status(400).json({
         success: false,
@@ -368,6 +300,8 @@ const userUpdateMiddleware = async (req, res, next) => {
       });
     }
     req.body.gender = normalizeGender(gender);
+  } else {
+    delete req.body.gender;
   }
 
   const customerId = String(req.user.id);

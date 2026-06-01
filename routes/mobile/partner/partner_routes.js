@@ -12,6 +12,7 @@ const {
   PARTNER_DOCUMENT_FILE_FIELDS,
 } = require('../../../middleware/mobile/partner/partner_middleware');
 const partnerAuthMiddleware = require('../../../middleware/mobile/partner/partner_auth_middleware');
+const quoteRoutes = require('./quote_routes');
 const { upload } = require('../../../utils/fileUpload');
 const { wrapMulterUpload } = require('../../../utils/multer_error_handler');
 
@@ -35,5 +36,6 @@ router.put(
 );
 router.get('/categories', partnerAuthMiddleware, categories);
 router.get('/subscription-plans', partnerAuthMiddleware, listSubscriptionPlans);
+router.use(quoteRoutes);
 
 module.exports = router;

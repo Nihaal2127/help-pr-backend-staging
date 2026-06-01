@@ -18,6 +18,7 @@ const {
 } = require('../../../middleware/mobile/user/user_middleware');
 const userAuthMiddleware = require('../../../middleware/mobile/user/user_auth_middleware');
 const addressRoutes = require('./address_routes');
+const quoteRoutes = require('./quote_routes');
 const { uploadImages } = require('../../../utils/fileUpload');
 
 const userMultipartUpload = uploadImages.fields([{ name: 'profile_photo', maxCount: 1 }]);
@@ -25,6 +26,7 @@ const userMultipartUpload = uploadImages.fields([{ name: 'profile_photo', maxCou
 const router = express.Router();
 
 router.use(addressRoutes);
+router.use(quoteRoutes);
 router.get('/home', userAuthMiddleware, validateHomeLocationQuery, getHomeHandler);
 router.get(
   '/partners',

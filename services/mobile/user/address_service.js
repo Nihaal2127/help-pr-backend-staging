@@ -17,6 +17,8 @@ const formatAddressRecord = (doc) => {
     area_id: o.area_id,
     pincode: o.pincode,
     address: o.address,
+    name: o.contact_name ?? '',
+    phone_number: o.contact_number ?? '',
     state_name: o.state || null,
     city_name: o.city || null,
     area_name: o.area || null,
@@ -124,18 +126,11 @@ const createAddress = async (customerId, body) => {
       deleted_at: null,
     });
 
-    const user = await User.findOne({
-      _id: customerId,
-      deleted_at: null,
-    })
-      .select('name phone_number')
-      .lean();
-
     const addressLine = String(body.address).trim();
     const row = await Address.create({
       user_id: customerId,
-      contact_name: user?.name ?? '',
-      contact_number: user?.phone_number ?? '',
+      contact_name: String(body.name).trim(),
+      contact_number: String(body.phone_number).trim(),
       address: addressLine,
       landmark: '',
       ...locationResult.fields,
@@ -197,6 +192,13 @@ const updateAddress = async (customerId, addressId, body) => {
 
     if (body.address !== undefined) {
       row.address = String(body.address).trim();
+    }
+
+    if (body.name !== undefined) {
+      row.contact_name = String(body.name).trim();
+    }
+    if (body.phone_number !== undefined) {
+      row.contact_number = String(body.phone_number).trim();
     }
 
     row.updated_at = new Date();

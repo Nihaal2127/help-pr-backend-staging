@@ -1031,7 +1031,7 @@
               "path": ["api", "mobile", "user", "home"],
               "query": [{ "key": "location", "value": "{{homeLocation}}" }]
             },
-            "description": "**GET /api/mobile/user/home?location=**\n\n- **Auth:** Bearer `{{token}}` (run **Verify OTP** first)\n- **Query `location`:** `pincode,area_name,city_name,state_name` — same line as **Pincodes (search)** e.g. `500032,Gachibowli,Hyderabad,Telangana`\n\n**200** `data`:\n- `franchise_id`, `franchise_name`\n- `location` (resolved ids)\n- `categories[]` with nested `services[]` (`partner_count`, `price_range` { min, max } from effective partner offerings; `price`, `payment_type`)\n- `partners[]` (approved, active)\n\n**400** invalid location or `No services are available in this location` | **404** location not found"
+            "description": "**GET /api/mobile/user/home?location=**\n\n- **Auth:** Bearer `{{token}}` (run **Verify OTP** first)\n- **Query `location`:** `pincode,area_name,city_name,state_name` — same line as **Pincodes (search)** e.g. `500032,Gachibowli,Hyderabad,Telangana`\n\n**200** `data`:\n- `franchise_id`, `franchise_name`\n- `location` (resolved ids)\n- `categories[]` with nested `services[]` (`partner_count`, `price_range` { min, max } from effective partner offerings; `price`, `payment_type`)\n- `partners[]` (approved, active; each with `categories[]` → `services[]` names from effective offerings)\n\n**400** invalid location or `No services are available in this location` | **404** location not found"
           },
           "response": []
         },

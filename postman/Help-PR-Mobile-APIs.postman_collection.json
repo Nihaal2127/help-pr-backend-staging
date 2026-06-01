@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-mobile-apis-only",
     "name": "Help PR — Mobile APIs only",
-    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** → Register/Login → Update → Catalog → My services\n\n## Customer (User)\n1. **Login** → **Verify OTP** (dev OTP: `123456`)\n2. **Pincodes (search)** or set `{{homeLocation}}` — e.g. `500032,Gachibowli,Hyderabad,Telangana`\n3. **Home** — categories, services, partners for franchise (Bearer + `location` query)\n4. **Addresses** — create / get / update / delete (first address also updates `users` table)\n5. **Update** — multipart `profile_photo` + profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.",
+    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** → Register/Login → **Quotes** (accept/reject pending) → Update → Catalog → My services\n\n## Customer (User)\n1. **Login** → **Verify OTP** (dev OTP: `123456`)\n2. **Pincodes (search)** or set `{{homeLocation}}` — e.g. `500032,Gachibowli,Hyderabad,Telangana`\n3. **Home** — categories, services, partners for franchise (Bearer + `location` query)\n4. **Addresses** — create / get / update / delete\n5. **Quotes** — create / list / get / update / cancel (`franchise_id` required on create)\n6. **Update** — multipart `profile_photo` + profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -147,7 +147,7 @@
     },
     {
       "name": "Partner",
-      "description": "Partner mobile — `partner_routes.js`, `my_services_routes.js`. Use **Common → Location** for dropdowns.",
+      "description": "Partner mobile — `partner_routes.js`, `quote_routes.js`, `my_services_routes.js`. Use **Common → Location** for dropdowns. **Quotes:** list pending assigned quotes → accept or reject.",
       "item": [
         {
           "name": "Register",
@@ -674,6 +674,184 @@
           ]
         },
         {
+          "name": "Quotes",
+          "description": "Partner quote actions (Phase 2). **Auth:** Bearer partner JWT (`type` 2) after **Login**.\n\n**Flow:** Customer creates quote with `partner_id` → **pending** → partner **List** → **Accept** (`accepted`) or **Reject** (`failed`).\n\nUse the same `{{quoteId}}` as customer flow (customer **Create quote** sets it) or pick from **List quotes**.",
+          "item": [
+            {
+              "name": "List quotes",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Partner quotes listed', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "    pm.expect(j.records).to.be.an('array');",
+                      "  });",
+                      "  const rec = j?.records?.[0];",
+                      "  if (rec?._id) pm.collectionVariables.set('quoteId', String(rec._id));",
+                      "  if (rec?.status) pm.collectionVariables.set('quoteStatus', String(rec.status));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/quotes?page={{quotesPage}}&limit={{quotesLimit}}&status={{quoteStatusFilter}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "quotes"],
+                  "query": [
+                    { "key": "page", "value": "{{quotesPage}}" },
+                    { "key": "limit", "value": "{{quotesLimit}}" },
+                    {
+                      "key": "status",
+                      "value": "{{quoteStatusFilter}}",
+                      "description": "Default server filter: pending + accepted when empty"
+                    }
+                  ]
+                },
+                "description": "**GET /api/mobile/partner/quotes**\n\n- **Auth:** Bearer partner (`type` 2)\n- Returns quotes where `partner_id` = logged-in partner\n- Default statuses: **pending**, **accepted** (when `status` query omitted)\n- **200:** `totalItems`, `totalPages`, `currentPage`, `limit`, `records[]`"
+              },
+              "response": []
+            },
+            {
+              "name": "Get quote by id",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Partner quote fetched', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "  });",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/quotes/{{quoteId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "quotes", "{{quoteId}}"]
+                },
+                "description": "**GET /api/mobile/partner/quotes/:id**\n\n- **Auth:** Bearer partner — must be assigned on quote (`partner_id`)"
+              },
+              "response": []
+            },
+            {
+              "name": "Accept quote",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Quote accepted', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "    pm.expect(j.data?.status).to.eql('accepted');",
+                      "  });",
+                      "  if (j?.data?.status) pm.collectionVariables.set('quoteStatus', String(j.data.status));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "PUT",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Accept", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"accepted\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/quotes/{{quoteId}}/status",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "quotes", "{{quoteId}}", "status"]
+                },
+                "description": "**PUT /api/mobile/partner/quotes/:id/status**\n\n- **Auth:** Bearer partner\n- **Body:** `{ \"status\": \"accepted\" }`\n- Only from **pending** → **accepted**\n- Customer can then proceed to deposit / convert (Phase 3)"
+              },
+              "response": []
+            },
+            {
+              "name": "Reject quote",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Quote rejected', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "    pm.expect(j.data?.status).to.eql('failed');",
+                      "  });",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "PUT",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Accept", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"failed\",\n  \"rejection_reason\": \"{{quoteRejectionReason}}\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/quotes/{{quoteId}}/status",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "quotes", "{{quoteId}}", "status"]
+                },
+                "description": "**PUT /api/mobile/partner/quotes/:id/status**\n\n- **Auth:** Bearer partner\n- **Body:** `{ \"status\": \"failed\", \"rejection_reason\": \"...\" }` (optional `cancellation_reason`)\n- Only from **pending** → **failed**"
+              },
+              "response": []
+            }
+          ]
+        },
+        {
           "name": "Update",
           "event": [
             {
@@ -860,7 +1038,7 @@
     },
     {
       "name": "User",
-      "description": "Customer mobile — OTP, home, addresses, profile. Order: **Login** → **Verify OTP** → **Pincodes (search)** (sets `homeLocation`) → **Home** → **Addresses** → **Update** (multipart). Address dropdowns: **Common → Location**.",
+      "description": "Customer mobile — OTP, home, addresses, quotes, profile. Order: **Login** → **Verify OTP** → **Pincodes (search)** (sets `homeLocation`) → **Home** → **Addresses** → **Quotes** → **Update** (multipart). Address dropdowns: **Common → Location**.",
       "item": [
         {
           "name": "Login",
@@ -1016,6 +1194,12 @@
                   "  if (cat0?._id) pm.collectionVariables.set('categoryId', String(cat0._id));",
                   "  const svc0 = cat0?.services?.[0];",
                   "  if (svc0?._id) pm.collectionVariables.set('serviceId', String(svc0._id));",
+                  "  const p0 = j?.data?.partners?.[0];",
+                  "  if (p0?._id) pm.collectionVariables.set('quotePartnerId', String(p0._id));",
+                  "  const pSvc = p0?.categories?.[0]?.services?.[0];",
+                  "  if (pSvc?.price != null && !Number.isNaN(Number(pSvc.price))) {",
+                  "    pm.collectionVariables.set('quoteTotalServiceCharge', String(pSvc.price));",
+                  "  }",
                   "} catch (e) {}"
                 ],
                 "type": "text/javascript"
@@ -1053,6 +1237,12 @@
                   "    pm.expect(j.success).to.eql(true);",
                   "    pm.expect(j.data?.partners).to.be.an('array');",
                   "  });",
+                  "  const p0 = j?.data?.partners?.[0];",
+                  "  if (p0?._id) pm.collectionVariables.set('quotePartnerId', String(p0._id));",
+                  "  const pSvc = p0?.categories?.[0]?.services?.[0];",
+                  "  if (pSvc?.price != null && !Number.isNaN(Number(pSvc.price))) {",
+                  "    pm.collectionVariables.set('quoteTotalServiceCharge', String(pSvc.price));",
+                  "  }",
                   "} catch (e) {}"
                 ],
                 "type": "text/javascript"
@@ -1290,6 +1480,235 @@
                   "path": ["api", "mobile", "user", "addresses", "delete", "{{addressId}}"]
                 },
                 "description": "**DELETE /api/mobile/user/addresses/delete/:id**\n\n- **Auth:** Bearer\n- Soft-deletes the address (row hidden from Get; `deleted_at` set in DB)"
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Quotes",
+          "description": "Customer quote requests (Phase 1). **Auth:** Bearer customer JWT (`type` 4) after **Verify OTP**.\n\n**Prerequisites:** **Home** (`{{franchiseId}}`, `{{categoryId}}`, `{{serviceId}}`), **Addresses → Create** (`{{addressId}}`), optional **Partners (list)** (`{{quotePartnerId}}`).\n\n| Step | Request |\n|------|--------|\n| 1 | **Create quote** — sets `{{quoteId}}`; without `partner_id` → `new`, with partner → `pending` |\n| 2 | **List** / **Get** |\n| 3 | **Update** (only `new` / `pending`; cannot change price) |\n| 4 | **Cancel** → `failed` |\n\nPartner accepts via **Partner → Quotes → Accept**.",
+          "item": [
+            {
+              "name": "Create quote",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Quote created', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "  });",
+                      "  const rec = j?.data;",
+                      "  if (rec?._id) pm.collectionVariables.set('quoteId', String(rec._id));",
+                      "  if (rec?.quote_sequence_id) pm.collectionVariables.set('quoteSequenceId', String(rec.quote_sequence_id));",
+                      "  if (rec?.status) pm.collectionVariables.set('quoteStatus', String(rec.status));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Accept", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"franchise_id\": \"{{franchiseId}}\",\n  \"category_id\": \"{{categoryId}}\",\n  \"service_id\": \"{{serviceId}}\",\n  \"address_id\": \"{{addressId}}\",\n  \"partner_id\": \"{{quotePartnerId}}\",\n  \"total_service_charge\": {{quoteTotalServiceCharge}},\n  \"from_date\": \"{{quoteFromDate}}\",\n  \"to_date\": \"{{quoteToDate}}\",\n  \"work_hours_per_day\": {{quoteWorkHoursPerDay}},\n  \"total_work_hours\": {{quoteTotalWorkHours}},\n  \"work_start_time\": \"{{quoteWorkStartTime}}\",\n  \"work_end_time\": \"{{quoteWorkEndTime}}\",\n  \"quote_description\": \"{{quoteDescription}}\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/quotes/create",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "quotes", "create"]
+                },
+                "description": "**POST /api/mobile/user/quotes/create**\n\n- **Auth:** Bearer customer `{{token}}` (`user.type` = 4)\n- **Required:** `franchise_id`, `category_id`, `service_id`, `address_id`, `total_service_charge` (> 0), `from_date`, `to_date`, `work_hours_per_day`, `total_work_hours`, `work_start_time`, `work_end_time` (HH:mm)\n- **Optional:** `partner_id` (omit or empty → status **new**; set → **pending**), `quote_description`\n- **Do not send:** `user_id`, computed pricing (`total_price`, `tax_amount`, …)\n- `user_id` / `created_by_id` set from JWT on server\n- **200** `data`: full quote (`formatQuoteForApi`) incl. pricing snapshot\n\nClear `quotePartnerId` or disable that JSON field to create without partner."
+              },
+              "response": []
+            },
+            {
+              "name": "List quotes",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Quotes listed', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "    pm.expect(j.records).to.be.an('array');",
+                      "  });",
+                      "  const rec = j?.records?.[0];",
+                      "  if (rec?._id) pm.collectionVariables.set('quoteId', String(rec._id));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/quotes?page={{quotesPage}}&limit={{quotesLimit}}&status={{quoteStatusFilter}}&franchise_id={{franchiseId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "quotes"],
+                  "query": [
+                    { "key": "page", "value": "{{quotesPage}}" },
+                    { "key": "limit", "value": "{{quotesLimit}}" },
+                    {
+                      "key": "status",
+                      "value": "{{quoteStatusFilter}}",
+                      "description": "new | pending | accepted | success | failed — leave empty for all"
+                    },
+                    {
+                      "key": "franchise_id",
+                      "value": "{{franchiseId}}",
+                      "description": "Optional franchise filter"
+                    }
+                  ]
+                },
+                "description": "**GET /api/mobile/user/quotes**\n\n- **Auth:** Bearer customer\n- Lists quotes for authenticated customer only\n- **Query:** `page`, `limit` (max 50), optional `status`, optional `franchise_id`\n- **200:** `totalItems`, `totalPages`, `currentPage`, `limit`, `records[]`"
+              },
+              "response": []
+            },
+            {
+              "name": "Get quote by id",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Quote fetched', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "  });",
+                      "  if (j?.data?.status) pm.collectionVariables.set('quoteStatus', String(j.data.status));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/quotes/{{quoteId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "quotes", "{{quoteId}}"]
+                },
+                "description": "**GET /api/mobile/user/quotes/:id**\n\n- **Auth:** Bearer customer — own quotes only\n- **200** `data`: quote detail with populated refs + partner service enrichment"
+              },
+              "response": []
+            },
+            {
+              "name": "Update quote",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Quote updated', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "  });",
+                      "  if (j?.data?.status) pm.collectionVariables.set('quoteStatus', String(j.data.status));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "PUT",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Accept", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"partner_id\": \"{{quotePartnerId}}\",\n  \"quote_description\": \"{{quoteDescription}}\",\n  \"from_date\": \"{{quoteFromDate}}\",\n  \"to_date\": \"{{quoteToDate}}\",\n  \"work_hours_per_day\": {{quoteWorkHoursPerDay}},\n  \"total_work_hours\": {{quoteTotalWorkHours}},\n  \"work_start_time\": \"{{quoteWorkStartTime}}\",\n  \"work_end_time\": \"{{quoteWorkEndTime}}\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/quotes/{{quoteId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "quotes", "{{quoteId}}"]
+                },
+                "description": "**PUT /api/mobile/user/quotes/:id**\n\n- **Auth:** Bearer customer\n- Allowed only while status is **new** or **pending**\n- **Cannot update:** `total_service_charge`, `service_price`, `status`, `franchise_id`\n- Assigning `partner_id` on a **new** quote moves status to **pending**\n- Send only fields to change"
+              },
+              "response": []
+            },
+            {
+              "name": "Cancel quote",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Quote cancelled', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "  });",
+                      "  if (j?.data?.status) pm.collectionVariables.set('quoteStatus', String(j.data.status));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "PUT",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Accept", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"cancellation_reason\": \"{{quoteCancellationReason}}\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/quotes/{{quoteId}}/cancel",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "quotes", "{{quoteId}}", "cancel"]
+                },
+                "description": "**PUT /api/mobile/user/quotes/:id/cancel**\n\n- **Auth:** Bearer customer\n- Sets status to **failed** with optional `cancellation_reason`\n- Not allowed on terminal quotes (`success` / `failed`)"
               },
               "response": []
             }
@@ -1707,6 +2126,108 @@
       "value": "Flat 12, MG Road, near metro",
       "type": "string",
       "description": "Address text line for Create/Update address"
+    },
+    {
+      "key": "quoteId",
+      "value": "",
+      "type": "string",
+      "description": "Quote _id — set by User → Quotes Create/List or Partner → Quotes List"
+    },
+    {
+      "key": "quoteSequenceId",
+      "value": "",
+      "type": "string",
+      "description": "Human-readable quote_sequence_id from create response"
+    },
+    {
+      "key": "quotePartnerId",
+      "value": "",
+      "type": "string",
+      "description": "Partner ObjectId for quote create/update — set by Home or Partners (list); leave empty for new (no partner)"
+    },
+    {
+      "key": "quoteTotalServiceCharge",
+      "value": "5000",
+      "type": "string",
+      "description": "Partner base charge for quote create (JSON number)"
+    },
+    {
+      "key": "quoteFromDate",
+      "value": "2026-06-10",
+      "type": "string",
+      "description": "Quote schedule from_date (ISO date)"
+    },
+    {
+      "key": "quoteToDate",
+      "value": "2026-06-12",
+      "type": "string",
+      "description": "Quote schedule to_date (ISO date)"
+    },
+    {
+      "key": "quoteWorkHoursPerDay",
+      "value": "8",
+      "type": "string",
+      "description": "work_hours_per_day (number in JSON body)"
+    },
+    {
+      "key": "quoteTotalWorkHours",
+      "value": "16",
+      "type": "string",
+      "description": "total_work_hours (number in JSON body)"
+    },
+    {
+      "key": "quoteWorkStartTime",
+      "value": "09:00",
+      "type": "string",
+      "description": "work_start_time HH:mm"
+    },
+    {
+      "key": "quoteWorkEndTime",
+      "value": "17:00",
+      "type": "string",
+      "description": "work_end_time HH:mm"
+    },
+    {
+      "key": "quoteDescription",
+      "value": "Service request from mobile app",
+      "type": "string",
+      "description": "quote_description text"
+    },
+    {
+      "key": "quoteCancellationReason",
+      "value": "Customer changed plans",
+      "type": "string",
+      "description": "cancellation_reason for User → Cancel quote"
+    },
+    {
+      "key": "quoteRejectionReason",
+      "value": "Not available on requested dates",
+      "type": "string",
+      "description": "rejection_reason for Partner → Reject quote"
+    },
+    {
+      "key": "quoteStatus",
+      "value": "",
+      "type": "string",
+      "description": "Last quote status from API response"
+    },
+    {
+      "key": "quoteStatusFilter",
+      "value": "",
+      "type": "string",
+      "description": "List filter: new | pending | accepted | success | failed — empty = all (customer) or pending+accepted (partner default)"
+    },
+    {
+      "key": "quotesPage",
+      "value": "1",
+      "type": "string",
+      "description": "Quotes list page"
+    },
+    {
+      "key": "quotesLimit",
+      "value": "10",
+      "type": "string",
+      "description": "Quotes list limit (max 50)"
     }
   ]
 }

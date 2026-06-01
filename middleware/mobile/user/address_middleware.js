@@ -1,8 +1,66 @@
 const mongoose = require('mongoose');
 const Address = require('../../../models/address');
 const { fieldLabel } = require('../../../utils/field_labels');
+const { validatePhoneNumber } = require('../../../validator/form_validator');
+const { normalizeUserPhone } = require('../../../utils/user_contact_uniqueness');
 
 const ADDRESS_FIELDS = ['state_id', 'city_id', 'area_id', 'pincode', 'address'];
+
+const resolveContactName = (body) => {
+  const raw = body.name !== undefined ? body.name : body.contact_name;
+  if (raw === undefined || raw === null) return undefined;
+  return String(raw).trim();
+};
+
+const resolveContactPhone = (body) => {
+  const raw = body.phone_number !== undefined ? body.phone_number : body.contact_number;
+  if (raw === undefined || raw === null) return undefined;
+  return String(raw).trim();
+};
+
+const validateAndNormalizeContact = (req, res, { required }) => {
+  const name = resolveContactName(req.body);
+  if (required) {
+    if (!name) {
+      sendError(res, 400, `${fieldLabel('name')} is required.`);
+      return false;
+    }
+    req.body.name = name;
+  } else if (name !== undefined) {
+    if (!name) {
+      sendError(res, 400, `${fieldLabel('name')} is required.`);
+      return false;
+    }
+    req.body.name = name;
+  }
+
+  const phoneRaw = resolveContactPhone(req.body);
+  if (required) {
+    if (!phoneRaw) {
+      sendError(res, 400, 'Phone number is required.');
+      return false;
+    }
+    const phoneResult = validatePhoneNumber(phoneRaw);
+    if (!phoneResult.valid) {
+      sendError(res, 400, phoneResult.message);
+      return false;
+    }
+    req.body.phone_number = normalizeUserPhone(phoneRaw);
+  } else if (phoneRaw !== undefined) {
+    if (!phoneRaw) {
+      sendError(res, 400, 'Phone number is required.');
+      return false;
+    }
+    const phoneResult = validatePhoneNumber(phoneRaw);
+    if (!phoneResult.valid) {
+      sendError(res, 400, phoneResult.message);
+      return false;
+    }
+    req.body.phone_number = normalizeUserPhone(phoneRaw);
+  }
+
+  return true;
+};
 
 /** Pincode dropdown items from GET /api/mobile/pincodes return { pincode: "560001" }. */
 const normalizePincodeDropdown = (value) => {
@@ -59,6 +117,10 @@ const validateCreateAddress = (req, res, next) => {
   if (!requireObjectId(city_id, 'city_id', res)) return;
   if (!requireObjectId(area_id, 'area_id', res)) return;
 
+  if (!validateAndNormalizeContact(req, res, { required: true })) {
+    return;
+  }
+
   next();
 };
 
@@ -98,6 +160,10 @@ const validateUpdateAddress = async (req, res, next) => {
   if (!requireObjectId(finalStateId, 'state_id', res)) return;
   if (!requireObjectId(finalCityId, 'city_id', res)) return;
   if (!requireObjectId(finalAreaId, 'area_id', res)) return;
+
+  if (!validateAndNormalizeContact(req, res, { required: false })) {
+    return;
+  }
 
   next();
 };

@@ -25,7 +25,7 @@ const router = express.Router();
 router.use(addressRoutes);
 router.get('/home', userAuthMiddleware, validateHomeLocationQuery, getHomeHandler);
 router.get('/pincodes', userAuthMiddleware, getPincodesHandler);
-router.post('/send-otp', rateLimitSendOtp, sendOtpHandler);
+router.post('/login', rateLimitSendOtp, sendOtpHandler);
 router.post('/verify-otp', validateVerifyOtp, verifyOtpHandler);
 router.put(
   '/update',

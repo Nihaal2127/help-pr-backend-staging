@@ -24,7 +24,7 @@ const sendResult = (res, result) => {
 
 const listHandler = async (req, res) => {
   try {
-    const result = await listAddresses(req.user.id);
+    const result = await listAddresses(req.user.id, { search: req.query.search });
     return sendResult(res, result);
   } catch (error) {
     console.error('mobile user addresses list', error.message);

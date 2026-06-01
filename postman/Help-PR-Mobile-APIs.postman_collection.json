@@ -1012,6 +1012,10 @@
                   "  if (j?.data?.franchise_id) {",
                   "    pm.collectionVariables.set('franchiseId', String(j.data.franchise_id));",
                   "  }",
+                  "  const cat0 = j?.data?.categories?.[0];",
+                  "  if (cat0?._id) pm.collectionVariables.set('categoryId', String(cat0._id));",
+                  "  const svc0 = cat0?.services?.[0];",
+                  "  if (svc0?._id) pm.collectionVariables.set('serviceId', String(svc0._id));",
                   "} catch (e) {}"
                 ],
                 "type": "text/javascript"
@@ -1032,6 +1036,89 @@
               "query": [{ "key": "location", "value": "{{homeLocation}}" }]
             },
             "description": "**GET /api/mobile/user/home?location=**\n\n- **Auth:** Bearer `{{token}}` (run **Verify OTP** first)\n- **Query `location`:** `pincode,area_name,city_name,state_name` — same line as **Pincodes (search)** e.g. `500032,Gachibowli,Hyderabad,Telangana`\n\n**200** `data`:\n- `franchise_id`, `franchise_name`\n- `location` (resolved ids)\n- `categories[]` with nested `services[]` (`partner_count`, `price_range` from **subscribed** partners only; `price`, `payment_type`)\n- `partners[]` (top **20** by `plan_priority` desc; active subscription; `subscription_plan_name`, `categories[]` → `services[]`)\n\n**400** invalid location or `No services are available in this location` | **404** location not found"
+          },
+          "response": []
+        },
+        {
+          "name": "Partners (list)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Partners listed', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.data?.partners).to.be.an('array');",
+                  "  });",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/partners?franchise_id={{franchiseId}}&page={{partnersPage}}&limit={{partnersLimit}}&search={{partnerSearch}}&plan_name={{partnerPlanName}}&category_id={{categoryId}}&service_id={{serviceId}}&min_price={{partnerMinPrice}}&max_price={{partnerMaxPrice}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "user", "partners"],
+              "query": [
+                {
+                  "key": "franchise_id",
+                  "value": "{{franchiseId}}",
+                  "description": "Required. From Home → data.franchise_id"
+                },
+                {
+                  "key": "page",
+                  "value": "{{partnersPage}}",
+                  "description": "Page number (default 1)"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{partnersLimit}}",
+                  "description": "Page size (default 10, max 50)"
+                },
+                {
+                  "key": "search",
+                  "value": "{{partnerSearch}}",
+                  "description": "Partner name substring (alias: q)"
+                },
+                {
+                  "key": "plan_name",
+                  "value": "{{partnerPlanName}}",
+                  "description": "basic | silver | gold | platinum — leave empty to skip"
+                },
+                {
+                  "key": "category_id",
+                  "value": "{{categoryId}}",
+                  "description": "Filter partners offering this category; price_range scoped to category services"
+                },
+                {
+                  "key": "service_id",
+                  "value": "{{serviceId}}",
+                  "description": "Filter partners offering this service; each partner gets single price (no range)"
+                },
+                {
+                  "key": "min_price",
+                  "value": "{{partnerMinPrice}}",
+                  "description": "Min partner_service.price — scoped with category_id / service_id when set"
+                },
+                {
+                  "key": "max_price",
+                  "value": "{{partnerMaxPrice}}",
+                  "description": "Max partner_service.price"
+                }
+              ]
+            },
+            "description": "**GET /api/mobile/user/partners**\n\nRun **Home** first (sets `{{franchiseId}}`, `{{categoryId}}`, `{{serviceId}}`). Clear optional variables to disable a filter.\n\n| Query | Required | Notes |\n|-------|----------|--------|\n| `franchise_id` | Yes | Franchise ObjectId |\n| `page` | No | Default 1 (`{{partnersPage}}`) |\n| `limit` | No | Default 10, max 50 (`{{partnersLimit}}`) |\n| `search` or `q` | No | Partner name (`{{partnerSearch}}`) |\n| `plan_name` | No | basic \\| silver \\| gold \\| platinum (`{{partnerPlanName}}`) |\n| `category_id` | No | Category filter + category-scoped `price_range` (`{{categoryId}}`) |\n| `service_id` | No | Service filter + single `price` per partner (`{{serviceId}}`) |\n| `min_price` / `max_price` | No | Price band (`{{partnerMinPrice}}`, `{{partnerMaxPrice}}`) |\n\n**Partner pricing in response:** `service_id` → `price` only; `category_id` (no service) → `price_range` for that category; else `price_range` for all services.\n\n**200:** `totalItems`, `totalPages`, `currentPage`, `limit`, `data.partners[]` (plan_priority desc)."
           },
           "response": []
         },
@@ -1439,13 +1526,13 @@
       "key": "categoryId",
       "value": "",
       "type": "string",
-      "description": "From Categories — 24-hex ObjectId"
+      "description": "From User → Home (first category) or Partner Catalog — used in Partners list category_id"
     },
     {
       "key": "serviceId",
       "value": "",
       "type": "string",
-      "description": "From Services — first record"
+      "description": "From User → Home (first service) or Partner Catalog — used in Partners list service_id"
     },
     {
       "key": "serviceId2",
@@ -1566,6 +1653,42 @@
       "value": "500032,Gachibowli,Hyderabad,Telangana",
       "type": "string",
       "description": "CSV line for User → Home: pincode,area_name,city_name,state_name. Set by Pincodes (search) test script."
+    },
+    {
+      "key": "partnersPage",
+      "value": "1",
+      "type": "string",
+      "description": "Partners list — page (default 1)"
+    },
+    {
+      "key": "partnersLimit",
+      "value": "10",
+      "type": "string",
+      "description": "Partners list — limit (max 50)"
+    },
+    {
+      "key": "partnerSearch",
+      "value": "",
+      "type": "string",
+      "description": "Partners list — name search; leave empty to skip"
+    },
+    {
+      "key": "partnerPlanName",
+      "value": "",
+      "type": "string",
+      "description": "Partners list — basic | silver | gold | platinum"
+    },
+    {
+      "key": "partnerMinPrice",
+      "value": "",
+      "type": "string",
+      "description": "Partners list — min_price filter"
+    },
+    {
+      "key": "partnerMaxPrice",
+      "value": "",
+      "type": "string",
+      "description": "Partners list — max_price filter"
     },
     {
       "key": "franchiseId",

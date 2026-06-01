@@ -104,9 +104,25 @@ const validateScheduleFields = (body, { partial }) => {
   return { ok: true };
 };
 
+/** Omit or send empty partner_id to create a new (unassigned) quote; valid id → pending. */
+const normalizeOptionalPartnerId = (body) => {
+  if (body.partner_id === undefined || body.partner_id === null) {
+    delete body.partner_id;
+    return;
+  }
+  const trimmed = String(body.partner_id).trim();
+  if (trimmed === '') {
+    delete body.partner_id;
+  } else {
+    body.partner_id = trimmed;
+  }
+};
+
 const validateCreateQuoteBody = (req, res, next) => {
   const body = req.body;
   if (!rejectClientComputedPricing(body, res)) return;
+
+  normalizeOptionalPartnerId(body);
 
   if (!body.franchise_id || !mongoose.Types.ObjectId.isValid(String(body.franchise_id))) {
     return sendError(res, 400, 'Valid franchise_id is required.');
@@ -121,12 +137,7 @@ const validateCreateQuoteBody = (req, res, next) => {
     return sendError(res, 400, 'Valid address_id is required.');
   }
 
-  if (
-    body.partner_id !== undefined &&
-    body.partner_id !== null &&
-    String(body.partner_id).trim() !== '' &&
-    !mongoose.Types.ObjectId.isValid(String(body.partner_id))
-  ) {
+  if (body.partner_id !== undefined && !mongoose.Types.ObjectId.isValid(String(body.partner_id))) {
     return sendError(res, 400, 'Invalid partner_id.');
   }
 
@@ -150,6 +161,10 @@ const validateCreateQuoteBody = (req, res, next) => {
 const validateUpdateQuoteBody = (req, res, next) => {
   const body = req.body;
   if (!rejectClientComputedPricing(body, res)) return;
+
+  if (body.partner_id !== undefined) {
+    normalizeOptionalPartnerId(body);
+  }
 
   if (body.total_service_charge !== undefined || body.service_price !== undefined) {
     return sendError(

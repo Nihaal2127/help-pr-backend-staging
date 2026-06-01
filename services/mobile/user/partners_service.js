@@ -1,11 +1,14 @@
 const mongoose = require('mongoose');
 const { resolveFranchiseEffectiveCatalog } = require('../../../utils/catalog_availability_resolver');
 const { PLAN_NAMES } = require('../../../models/subscription_plan');
+const User = require('../../../models/user');
+const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
 const {
   resolveFranchiseById,
   loadSubscribedFranchisePartners,
   collectEffectivePartnerOfferings,
   mapFranchisePartnerRecords,
+  buildPartnerDetailCatalog,
 } = require('./franchise_partner_scope');
 
 const fail = (status, message) => ({ ok: false, status, message });
@@ -236,6 +239,104 @@ const listFranchisePartnersPaginated = async (query) => {
   }
 };
 
+const mapPartnerProfileLocation = (partner) => ({
+  state_name: partner.state_id?.name ?? null,
+  city_name: partner.city_id?.name ?? null,
+  area_name: partner.area_id?.name ?? null,
+});
+
+const mapPartnerBusinessInfo = (partner) => {
+  if (!partner.is_business || !partner.business_info_id) {
+    return null;
+  }
+  const bi = partner.business_info_id;
+  if (bi.deleted_at != null) {
+    return null;
+  }
+  return {
+    name: bi.name ?? null,
+    provided_service: bi.provided_service ?? null,
+  };
+};
+
+const getPartnerProfileForCustomer = async (partnerId, franchiseId) => {
+  try {
+    const franchiseCtx = await resolveFranchiseById(franchiseId);
+    if (!franchiseCtx.ok) {
+      return fail(franchiseCtx.status, franchiseCtx.message);
+    }
+
+    const partnerKey = String(partnerId ?? '').trim();
+    if (!partnerKey || !mongoose.Types.ObjectId.isValid(partnerKey)) {
+      return fail(400, 'partnerId must be a valid ObjectId.');
+    }
+
+    const partner = await User.findOne({
+      _id: partnerKey,
+      type: USER_TYPE_PARTNER,
+      franchise_id: franchiseCtx.franchise._id,
+      verification_status: 2,
+      is_active: true,
+      is_blocked: { $ne: true },
+      deleted_at: null,
+    })
+      .select(
+        'name profile_url user_id experience is_business business_info_id state_id city_id area_id'
+      )
+      .populate([
+        { path: 'state_id', select: 'name' },
+        { path: 'city_id', select: 'name' },
+        { path: 'area_id', select: 'name' },
+        { path: 'business_info_id', select: 'name provided_service deleted_at' },
+      ])
+      .lean();
+
+    if (!partner) {
+      return fail(404, 'Partner not found.');
+    }
+
+    const subscribed = await loadSubscribedFranchisePartners(franchiseCtx.franchise._id);
+    const plan = subscribed.planByPartnerId.get(String(partner._id));
+    if (!plan) {
+      return fail(404, 'Partner not found.');
+    }
+
+    const catalogResult = await buildPartnerDetailCatalog(
+      franchiseCtx.franchise._id,
+      partner._id
+    );
+    if (!catalogResult.ok) {
+      return fail(catalogResult.status, catalogResult.message);
+    }
+
+    return ok(200, {
+      message: 'Partner profile fetched successfully.',
+      data: {
+        franchise_id: franchiseCtx.franchise._id,
+        franchise_name: franchiseCtx.franchise.name,
+        partner: {
+          _id: partner._id,
+          name: partner.name,
+          profile_url: partner.profile_url,
+          user_id: partner.user_id,
+          experience: partner.experience,
+          professional_summary: partner.experience,
+          subscription_plan_name: plan.plan_name,
+          plan_priority: plan.priority,
+          is_business: partner.is_business === true,
+          business_info: mapPartnerBusinessInfo(partner),
+          location: mapPartnerProfileLocation(partner),
+        },
+        categories: catalogResult.categories,
+      },
+    });
+  } catch (err) {
+    console.error('getPartnerProfileForCustomer', err.message);
+    return fail(500, 'Internal server error.');
+  }
+};
+
 module.exports = {
   listFranchisePartnersPaginated,
+  getPartnerProfileForCustomer,
 };

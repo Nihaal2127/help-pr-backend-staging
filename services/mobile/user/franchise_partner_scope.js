@@ -9,8 +9,10 @@ const PartnerCategory = require('../../../models/partner_category');
 const PartnerService = require('../../../models/partner_service');
 const PartnerSubscription = require('../../../models/partner_subscription');
 const {
+  resolveFranchiseEffectiveCatalog,
   resolveFranchiseAssignedEnabledMaps,
   enrichPartnerServiceApiRecord,
+  loadPartnerAvailabilityContext,
 } = require('../../../utils/catalog_availability_resolver');
 const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
 
@@ -443,10 +445,139 @@ const mapFranchisePartnerRecords = (subscribedPartners, planByPartnerId, effecti
   });
 };
 
+const mapCustomerPartnerServiceRow = (row) => {
+  const service = row.service_id;
+  const category = row.category_id;
+  return {
+    partner_service_id: row._id,
+    service_id: service?._id ?? row.service_id ?? null,
+    service_name: service?.name ?? null,
+    service_desc: service?.desc ?? null,
+    service_image_url: service?.image_url ?? null,
+    category_id: category?._id ?? row.category_id ?? null,
+    description: row.description ?? '',
+    price: row.price ?? 0,
+    tax: row.tax ?? 0,
+    payment_type: row.payment_type ?? '',
+    minimum_deposit: row.minimum_deposit ?? 0,
+    is_accept_request: row.is_accept_request === true,
+  };
+};
+
+/**
+ * Partner catalog for customer profile: only franchise-effective, locally enabled offerings.
+ */
+const buildPartnerDetailCatalog = async (franchiseId, partnerId) => {
+  const catalogResolved = await resolveFranchiseEffectiveCatalog(franchiseId);
+  if (!catalogResolved.ok) {
+    return catalogResolved;
+  }
+
+  const effectiveSvcSet = new Set(
+    (catalogResolved.effectiveServiceIds || []).map((id) => String(id))
+  );
+  if (effectiveSvcSet.size === 0) {
+    return { ok: true, categories: [] };
+  }
+
+  const availabilityCtx = await loadPartnerAvailabilityContext(partnerId);
+  if (!availabilityCtx.ok) {
+    return availabilityCtx;
+  }
+
+  if (
+    availabilityCtx.franchiseId &&
+    String(availabilityCtx.franchiseId) !== String(franchiseId)
+  ) {
+    return { ok: true, categories: [] };
+  }
+
+  const franchiseLocal = await resolveFranchiseAssignedEnabledMaps(franchiseId);
+  if (!franchiseLocal.ok) {
+    return franchiseLocal;
+  }
+
+  const partnerOid = new mongoose.Types.ObjectId(String(partnerId));
+  const serviceOids = [...effectiveSvcSet]
+    .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
+
+  const offeringRows = await PartnerService.find({
+    partner_id: partnerOid,
+    service_id: { $in: serviceOids },
+    deleted_at: null,
+  })
+    .populate([
+      { path: 'category_id', select: 'name desc image_url is_active is_request approval_status' },
+      {
+        path: 'service_id',
+        select: 'name desc image_url category_id is_active is_request approval_status payment_type',
+      },
+    ])
+    .sort({ category_id: 1, created_at: 1 })
+    .lean();
+
+  const resolverCtx = {
+    ok: true,
+    franchiseId,
+    partnerLocal: availabilityCtx.partnerLocal,
+    franchiseLocal,
+  };
+
+  const categoryMap = new Map();
+
+  for (const row of offeringRows) {
+    const serviceKey = String(row.service_id?._id ?? row.service_id ?? '');
+    if (!effectiveSvcSet.has(serviceKey)) continue;
+
+    const enriched = enrichPartnerServiceApiRecord(
+      row,
+      resolverCtx,
+      row.service_id,
+      row.category_id
+    );
+    if (!enriched.effective_active) continue;
+
+    const category = row.category_id;
+    const categoryKey = category?._id
+      ? String(category._id)
+      : row.category_id
+        ? String(row.category_id)
+        : null;
+    if (!categoryKey) continue;
+
+    if (!categoryMap.has(categoryKey)) {
+      categoryMap.set(categoryKey, {
+        category_id: category?._id ?? row.category_id,
+        category_name: category?.name ?? null,
+        category_desc: category?.desc ?? null,
+        category_image_url: category?.image_url ?? null,
+        services: [],
+      });
+    }
+
+    categoryMap.get(categoryKey).services.push(mapCustomerPartnerServiceRow(row));
+  }
+
+  const categories = [...categoryMap.values()]
+    .map((cat) => ({
+      ...cat,
+      services: cat.services.sort((a, b) =>
+        String(a.service_name ?? '').localeCompare(String(b.service_name ?? ''))
+      ),
+    }))
+    .sort((a, b) =>
+      String(a.category_name ?? '').localeCompare(String(b.category_name ?? ''))
+    );
+
+  return { ok: true, categories };
+};
+
 module.exports = {
   resolveFranchiseFromLocation,
   resolveFranchiseById,
   loadSubscribedFranchisePartners,
   collectEffectivePartnerOfferings,
   mapFranchisePartnerRecords,
+  buildPartnerDetailCatalog,
 };

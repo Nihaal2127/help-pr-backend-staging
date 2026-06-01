@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-mobile-apis-only",
     "name": "Help PR — Mobile APIs only",
-    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** → Register/Login → **Quotes** (accept/reject pending) → Update → Catalog → My services\n\n## Customer (User)\n1. **Login** → **Verify OTP** (dev OTP: `123456`)\n2. **Pincodes (search)** or set `{{homeLocation}}` — e.g. `500032,Gachibowli,Hyderabad,Telangana`\n3. **Home** — categories, services, partners for franchise (Bearer + `location` query)\n4. **Addresses** — create / get / update / delete\n5. **Quotes** — create / list / get / update / cancel (`franchise_id` required on create)\n6. **Update** — multipart `profile_photo` + profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.",
+    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** → Register/Login → **Quotes** (accept/reject pending) → Update → Catalog → My services\n\n## Customer (User)\n1. **Login** → **Verify OTP** (dev OTP: `123456`)\n2. **Pincodes (search)** or set `{{homeLocation}}` — e.g. `500032,Gachibowli,Hyderabad,Telangana`\n3. **Home** — categories, services, partners for franchise (Bearer + `location` query)\n4. **Partners** — list → **Get partner profile** (catalog + professional summary) → **Create quote** with `partner_id`\n5. **Addresses** — create / get / update / delete\n6. **Quotes** — create / list / get / update / cancel (`franchise_id` required on create)\n7. **Update** — multipart `profile_photo` + profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -1313,6 +1313,58 @@
           "response": []
         },
         {
+          "name": "Get partner profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Partner profile fetched', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.data?.partner).to.be.an('object');",
+                  "    pm.expect(j.data?.categories).to.be.an('array');",
+                  "  });",
+                  "  const p = j?.data?.partner;",
+                  "  if (p?._id) pm.collectionVariables.set('quotePartnerId', String(p._id));",
+                  "  const svc = j?.data?.categories?.[0]?.services?.[0];",
+                  "  if (svc?.service_id) pm.collectionVariables.set('serviceId', String(svc.service_id));",
+                  "  if (svc?.category_id) pm.collectionVariables.set('categoryId', String(svc.category_id));",
+                  "  if (svc?.price != null && !Number.isNaN(Number(svc.price))) {",
+                  "    pm.collectionVariables.set('quoteTotalServiceCharge', String(svc.price));",
+                  "  }",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/partners/{{quotePartnerId}}?franchise_id={{franchiseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "user", "partners", "{{quotePartnerId}}"],
+              "query": [
+                {
+                  "key": "franchise_id",
+                  "value": "{{franchiseId}}",
+                  "description": "Required. From Home → data.franchise_id"
+                }
+              ]
+            },
+            "description": "**GET /api/mobile/user/partners/:partnerId**\n\nCustomer partner detail + full catalog for requesting a quote.\n\n| Param / query | Required | Notes |\n|---------------|----------|--------|\n| `partnerId` | Yes | Partner Mongo `_id` (`{{quotePartnerId}}` from Home or Partners list) |\n| `franchise_id` | Yes | Same franchise as Home |\n\n**200 `data`:**\n- `partner`: name, profile, `experience` / `professional_summary`, subscription plan, optional `business_info`, `location`\n- `categories[]`: grouped services with `description`, `price`, `tax`, `payment_type`, `minimum_deposit`, `is_accept_request`\n\n**Quote flow:** pick a service → `POST /quotes/create` with `partner_id`, global `service_id`, `category_id`, `total_service_charge` = service `price`."
+          },
+          "response": []
+        },
+        {
           "name": "Addresses",
           "description": "Saved delivery addresses. Run **Common → Location** first for dropdown IDs. Bearer required (run **Verify OTP**).",
           "item": [
@@ -1487,10 +1539,10 @@
         },
         {
           "name": "Quotes",
-          "description": "Customer quote requests (Phase 1). **Auth:** Bearer customer JWT (`type` 4) after **Verify OTP**.\n\n**Prerequisites:** **Home** (`{{franchiseId}}`, `{{categoryId}}`, `{{serviceId}}`), **Addresses → Create** (`{{addressId}}`), optional **Partners (list)** (`{{quotePartnerId}}`).\n\n| Step | Request |\n|------|--------|\n| 1 | **Create quote** — sets `{{quoteId}}`; without `partner_id` → `new`, with partner → `pending` |\n| 2 | **List** / **Get** |\n| 3 | **Update** (only `new` / `pending`; cannot change price) |\n| 4 | **Cancel** → `failed` |\n\nPartner accepts via **Partner → Quotes → Accept**.",
+          "description": "Customer quote requests (Phase 1). **Auth:** Bearer customer JWT (`type` 4) after **Verify OTP**.\n\n**Prerequisites:** **Home** (`{{franchiseId}}`, `{{categoryId}}`, `{{serviceId}}`), **Addresses → Create** (`{{addressId}}`). For **with partner**, run **Partners (list)** first (`{{quotePartnerId}}`).\n\n**Two create types (same endpoint):**\n| Type | `partner_id` | Initial status |\n|------|----------------|----------------|\n| Without partner | omit or `\"\"` | **new** (franchise/admin can assign later) |\n| With partner | valid partner ObjectId | **pending** (partner can accept) |\n\nPartner flow: **Partner → Quotes → Accept**.",
           "item": [
             {
-              "name": "Create quote",
+              "name": "Create quote (without partner)",
               "event": [
                 {
                   "listen": "test",
@@ -1498,9 +1550,58 @@
                     "exec": [
                       "try {",
                       "  const j = pm.response.json();",
-                      "  pm.test('Quote created', function () {",
+                      "  pm.test('Quote created (new)', function () {",
                       "    pm.response.to.have.status(200);",
                       "    pm.expect(j.success).to.eql(true);",
+                      "    pm.expect(j.data?.status).to.eql('new');",
+                      "  });",
+                      "  const rec = j?.data;",
+                      "  if (rec?._id) pm.collectionVariables.set('quoteId', String(rec._id));",
+                      "  if (rec?.quote_sequence_id) pm.collectionVariables.set('quoteSequenceId', String(rec.quote_sequence_id));",
+                      "  if (rec?.status) pm.collectionVariables.set('quoteStatus', String(rec.status));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Accept", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"franchise_id\": \"{{franchiseId}}\",\n  \"category_id\": \"{{categoryId}}\",\n  \"service_id\": \"{{serviceId}}\",\n  \"address_id\": \"{{addressId}}\",\n  \"total_service_charge\": {{quoteTotalServiceCharge}},\n  \"from_date\": \"{{quoteFromDate}}\",\n  \"to_date\": \"{{quoteToDate}}\",\n  \"work_hours_per_day\": {{quoteWorkHoursPerDay}},\n  \"total_work_hours\": {{quoteTotalWorkHours}},\n  \"work_start_time\": \"{{quoteWorkStartTime}}\",\n  \"work_end_time\": \"{{quoteWorkEndTime}}\",\n  \"quote_description\": \"{{quoteDescription}}\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/quotes/create",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "quotes", "create"]
+                },
+                "description": "**POST /api/mobile/user/quotes/create** — no partner\n\n- **No `partner_id` in body** → quote status **new**, `partner_id` null\n- Franchise admin sees quote under `franchise_id`; partner can be assigned later (admin or customer **Update** with `partner_id`)"
+              },
+              "response": []
+            },
+            {
+              "name": "Create quote (with partner)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Quote created (pending)', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "    pm.expect(j.data?.status).to.eql('pending');",
                       "  });",
                       "  const rec = j?.data;",
                       "  if (rec?._id) pm.collectionVariables.set('quoteId', String(rec._id));",
@@ -1532,7 +1633,7 @@
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "mobile", "user", "quotes", "create"]
                 },
-                "description": "**POST /api/mobile/user/quotes/create**\n\n- **Auth:** Bearer customer `{{token}}` (`user.type` = 4)\n- **Required:** `franchise_id`, `category_id`, `service_id`, `address_id`, `total_service_charge` (> 0), `from_date`, `to_date`, `work_hours_per_day`, `total_work_hours`, `work_start_time`, `work_end_time` (HH:mm)\n- **Optional:** `partner_id` (omit or empty → status **new**; set → **pending**), `quote_description`\n- **Do not send:** `user_id`, computed pricing (`total_price`, `tax_amount`, …)\n- `user_id` / `created_by_id` set from JWT on server\n- **200** `data`: full quote (`formatQuoteForApi`) incl. pricing snapshot\n\nClear `quotePartnerId` or disable that JSON field to create without partner."
+                "description": "**POST /api/mobile/user/quotes/create** — with partner\n\n- **Required:** `partner_id` (run **Partners (list)** or **Home** to set `{{quotePartnerId}}`)\n- Status **pending**; partner can **Accept** under **Partner → Quotes**"
               },
               "response": []
             },

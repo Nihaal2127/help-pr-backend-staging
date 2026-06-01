@@ -6,9 +6,16 @@ const {
   getPincodesHandler,
 } = require('../../../controllers/mobile/user/user_controller');
 const { getHomeHandler } = require('../../../controllers/mobile/user/home_controller');
-const { listPartnersHandler } = require('../../../controllers/mobile/user/partners_controller');
+const {
+  listPartnersHandler,
+  getPartnerProfileHandler,
+} = require('../../../controllers/mobile/user/partners_controller');
 const { validateHomeLocationQuery } = require('../../../middleware/mobile/user/home_middleware');
-const { validatePartnersListQuery } = require('../../../middleware/mobile/user/partners_middleware');
+const {
+  validatePartnersListQuery,
+  validatePartnerProfileQuery,
+  validatePartnerIdParam,
+} = require('../../../middleware/mobile/user/partners_middleware');
 const {
   rateLimitSendOtp,
   validateVerifyOtp,
@@ -33,6 +40,13 @@ router.get(
   userAuthMiddleware,
   validatePartnersListQuery,
   listPartnersHandler
+);
+router.get(
+  '/partners/:partnerId',
+  userAuthMiddleware,
+  validatePartnerIdParam,
+  validatePartnerProfileQuery,
+  getPartnerProfileHandler
 );
 router.get('/pincodes', userAuthMiddleware, getPincodesHandler);
 router.post('/login', rateLimitSendOtp, sendOtpHandler);

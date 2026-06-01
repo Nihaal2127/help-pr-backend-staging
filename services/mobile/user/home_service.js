@@ -5,7 +5,13 @@ const City = require('../../../models/city');
 const User = require('../../../models/user');
 const Category = require('../../../models/category');
 const Service = require('../../../models/service');
-const { resolveFranchiseEffectiveCatalog } = require('../../../utils/catalog_availability_resolver');
+const PartnerCategory = require('../../../models/partner_category');
+const PartnerService = require('../../../models/partner_service');
+const {
+  resolveFranchiseEffectiveCatalog,
+  resolveFranchiseAssignedEnabledMaps,
+  enrichPartnerServiceApiRecord,
+} = require('../../../utils/catalog_availability_resolver');
 const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
 
 const fail = (status, message) => ({ ok: false, status, message });
@@ -128,6 +134,179 @@ const resolveFranchiseForArea = async (area) => {
   return { ok: true, franchise };
 };
 
+const isLocallyEnabled = (flag) => Boolean(flag);
+
+const loadPartnerLocalMapsByPartnerId = async (partnerIds) => {
+  const byPartner = new Map();
+  if (!partnerIds.length) return byPartner;
+
+  const partnerOids = partnerIds.map((id) => new mongoose.Types.ObjectId(String(id)));
+  for (const id of partnerIds) {
+    byPartner.set(String(id), {
+      categoryEnabled: new Map(),
+      serviceEnabled: new Map(),
+      serviceCategoryById: new Map(),
+    });
+  }
+
+  const [categoryRows, servicePrefRows] = await Promise.all([
+    PartnerCategory.find({ partner_id: { $in: partnerOids }, deleted_at: null })
+      .select('partner_id category_id is_active')
+      .lean(),
+    PartnerService.find({ partner_id: { $in: partnerOids }, deleted_at: null })
+      .select('partner_id service_id category_id is_active')
+      .lean(),
+  ]);
+
+  for (const row of categoryRows) {
+    const maps = byPartner.get(String(row.partner_id));
+    if (!maps || !row.category_id) continue;
+    maps.categoryEnabled.set(String(row.category_id), isLocallyEnabled(row.is_active));
+  }
+
+  for (const row of servicePrefRows) {
+    const maps = byPartner.get(String(row.partner_id));
+    if (!maps || !row.service_id) continue;
+    const serviceKey = String(row.service_id);
+    maps.serviceEnabled.set(serviceKey, isLocallyEnabled(row.is_active));
+    if (row.category_id) {
+      maps.serviceCategoryById.set(serviceKey, String(row.category_id));
+    }
+  }
+
+  return byPartner;
+};
+
+const listActiveFranchisePartnerIds = async (franchiseId) => {
+  const rows = await User.find({
+    franchise_id: franchiseId,
+    type: USER_TYPE_PARTNER,
+    verification_status: 2,
+    is_active: true,
+    is_blocked: { $ne: true },
+    deleted_at: null,
+  })
+    .select('_id')
+    .lean();
+
+  return rows.map((p) => p._id);
+};
+
+/**
+ * Per-service partner_count and price_range from effective partner_service rows.
+ */
+const buildServiceOfferingStats = async (franchiseId, effectiveServiceIdStrs) => {
+  const effectiveSvcSet = new Set(effectiveServiceIdStrs);
+
+  if (effectiveSvcSet.size === 0) {
+    return new Map();
+  }
+
+  const partnerIds = await listActiveFranchisePartnerIds(franchiseId);
+  if (partnerIds.length === 0) {
+    return new Map();
+  }
+
+  const franchiseLocal = await resolveFranchiseAssignedEnabledMaps(franchiseId);
+  if (!franchiseLocal.ok) {
+    return new Map();
+  }
+
+  const serviceOids = [...effectiveSvcSet]
+    .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
+
+  const partnerOids = partnerIds.map((id) => new mongoose.Types.ObjectId(String(id)));
+
+  const offeringRows = await PartnerService.find({
+    partner_id: { $in: partnerOids },
+    service_id: { $in: serviceOids },
+    deleted_at: null,
+  })
+    .select('partner_id category_id service_id price is_active')
+    .lean();
+
+  if (offeringRows.length === 0) {
+    return new Map();
+  }
+
+  const partnerLocalById = await loadPartnerLocalMapsByPartnerId(partnerIds);
+
+  const serviceIdStrs = [...new Set(offeringRows.map((r) => String(r.service_id)))];
+  const categoryIdStrs = [
+    ...new Set(
+      offeringRows.map((r) => (r.category_id ? String(r.category_id) : '')).filter(Boolean)
+    ),
+  ];
+
+  const [serviceDocs, categoryDocs] = await Promise.all([
+    Service.find({ _id: { $in: serviceIdStrs }, deleted_at: null })
+      .select('_id is_active is_request category_id')
+      .lean(),
+    categoryIdStrs.length === 0
+      ? []
+      : Category.find({ _id: { $in: categoryIdStrs }, deleted_at: null })
+          .select('_id is_active is_request')
+          .lean(),
+  ]);
+
+  const serviceDocById = new Map(serviceDocs.map((s) => [String(s._id), s]));
+  const categoryDocById = new Map(categoryDocs.map((c) => [String(c._id), c]));
+
+  const aggregate = new Map();
+
+  for (const row of offeringRows) {
+    const serviceKey = String(row.service_id);
+    if (!effectiveSvcSet.has(serviceKey)) continue;
+
+    const partnerKey = String(row.partner_id);
+    const partnerLocal = partnerLocalById.get(partnerKey);
+    if (!partnerLocal) continue;
+
+    const categoryKey = row.category_id ? String(row.category_id) : '';
+    const enriched = enrichPartnerServiceApiRecord(
+      row,
+      {
+        ok: true,
+        franchiseId,
+        partnerLocal,
+        franchiseLocal,
+      },
+      serviceDocById.get(serviceKey),
+      categoryKey ? categoryDocById.get(categoryKey) : null
+    );
+
+    if (!enriched.effective_active) continue;
+
+    if (!aggregate.has(serviceKey)) {
+      aggregate.set(serviceKey, { partnerIds: new Set(), prices: [] });
+    }
+
+    const entry = aggregate.get(serviceKey);
+    entry.partnerIds.add(partnerKey);
+
+    const price = Number(row.price);
+    if (!Number.isNaN(price)) {
+      entry.prices.push(price);
+    }
+  }
+
+  const statsByServiceId = new Map();
+  for (const [serviceKey, { partnerIds: offeringPartnerIds, prices }] of aggregate) {
+    const partner_count = offeringPartnerIds.size;
+    let price_range = null;
+    if (prices.length > 0) {
+      price_range = {
+        min: Math.min(...prices),
+        max: Math.max(...prices),
+      };
+    }
+    statsByServiceId.set(serviceKey, { partner_count, price_range });
+  }
+
+  return statsByServiceId;
+};
+
 const buildFranchiseCategories = async (franchiseId) => {
   const resolved = await resolveFranchiseEffectiveCatalog(franchiseId);
   if (!resolved.ok) {
@@ -171,14 +350,24 @@ const buildFranchiseCategories = async (franchiseId) => {
 
   const serviceById = new Map(serviceDocs.map((s) => [String(s._id), s]));
 
-  const mapServiceRecord = (s) => ({
-    _id: s._id,
-    name: s.name,
-    desc: s.desc,
-    tax: s.tax,
-    image_url: s.image_url,
-    category_id: s.category_id,
-  });
+  const offeringStatsByServiceId = await buildServiceOfferingStats(franchiseId, [...effectiveSvcSet]);
+
+  const mapServiceRecord = (s) => {
+    const stats = offeringStatsByServiceId.get(String(s._id)) || {
+      partner_count: 0,
+      price_range: null,
+    };
+    return {
+      _id: s._id,
+      name: s.name,
+      desc: s.desc,
+      tax: s.tax,
+      image_url: s.image_url,
+      category_id: s.category_id,
+      partner_count: stats.partner_count,
+      price_range: stats.price_range,
+    };
+  };
 
   const categoriesWithServices = categories.map((c) => {
     const catServices = Array.isArray(c.services) ? c.services : [];

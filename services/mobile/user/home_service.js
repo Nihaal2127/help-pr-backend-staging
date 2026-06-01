@@ -193,23 +193,22 @@ const listActiveFranchisePartnerIds = async (franchiseId) => {
 };
 
 /**
- * Per-service partner_count and price_range from effective partner_service rows.
+ * Effective partner_service rows for franchise active partners ∩ franchise-effective services.
  */
-const buildServiceOfferingStats = async (franchiseId, effectiveServiceIdStrs) => {
+const collectEffectivePartnerOfferings = async (franchiseId, effectiveServiceIdStrs) => {
   const effectiveSvcSet = new Set(effectiveServiceIdStrs);
-
   if (effectiveSvcSet.size === 0) {
-    return new Map();
+    return [];
   }
 
   const partnerIds = await listActiveFranchisePartnerIds(franchiseId);
   if (partnerIds.length === 0) {
-    return new Map();
+    return [];
   }
 
   const franchiseLocal = await resolveFranchiseAssignedEnabledMaps(franchiseId);
   if (!franchiseLocal.ok) {
-    return new Map();
+    return [];
   }
 
   const serviceOids = [...effectiveSvcSet]
@@ -227,7 +226,7 @@ const buildServiceOfferingStats = async (franchiseId, effectiveServiceIdStrs) =>
     .lean();
 
   if (offeringRows.length === 0) {
-    return new Map();
+    return [];
   }
 
   const partnerLocalById = await loadPartnerLocalMapsByPartnerId(partnerIds);
@@ -241,19 +240,19 @@ const buildServiceOfferingStats = async (franchiseId, effectiveServiceIdStrs) =>
 
   const [serviceDocs, categoryDocs] = await Promise.all([
     Service.find({ _id: { $in: serviceIdStrs }, deleted_at: null })
-      .select('_id is_active is_request category_id')
+      .select('_id name is_active is_request category_id')
       .lean(),
     categoryIdStrs.length === 0
       ? []
       : Category.find({ _id: { $in: categoryIdStrs }, deleted_at: null })
-          .select('_id is_active is_request')
+          .select('_id name is_active is_request')
           .lean(),
   ]);
 
   const serviceDocById = new Map(serviceDocs.map((s) => [String(s._id), s]));
   const categoryDocById = new Map(categoryDocs.map((c) => [String(c._id), c]));
 
-  const aggregate = new Map();
+  const effectiveRows = [];
 
   for (const row of offeringRows) {
     const serviceKey = String(row.service_id);
@@ -277,6 +276,29 @@ const buildServiceOfferingStats = async (franchiseId, effectiveServiceIdStrs) =>
     );
 
     if (!enriched.effective_active) continue;
+
+    const serviceDoc = serviceDocById.get(serviceKey);
+    const categoryDoc = categoryKey ? categoryDocById.get(categoryKey) : null;
+
+    effectiveRows.push({
+      partner_id: row.partner_id,
+      category_id: row.category_id,
+      service_id: row.service_id,
+      price: row.price,
+      category_name: categoryDoc?.name ?? null,
+      service_name: serviceDoc?.name ?? null,
+    });
+  }
+
+  return effectiveRows;
+};
+
+const buildServiceOfferingStats = (effectiveRows) => {
+  const aggregate = new Map();
+
+  for (const row of effectiveRows) {
+    const serviceKey = String(row.service_id);
+    const partnerKey = String(row.partner_id);
 
     if (!aggregate.has(serviceKey)) {
       aggregate.set(serviceKey, { partnerIds: new Set(), prices: [] });
@@ -307,6 +329,51 @@ const buildServiceOfferingStats = async (franchiseId, effectiveServiceIdStrs) =>
   return statsByServiceId;
 };
 
+const groupOfferingsByPartner = (effectiveRows) => {
+  const byPartner = new Map();
+
+  for (const row of effectiveRows) {
+    const partnerKey = String(row.partner_id);
+    const categoryKey = row.category_id ? String(row.category_id) : '';
+    if (!categoryKey) continue;
+
+    if (!byPartner.has(partnerKey)) {
+      byPartner.set(partnerKey, new Map());
+    }
+
+    const categoryMap = byPartner.get(partnerKey);
+    if (!categoryMap.has(categoryKey)) {
+      categoryMap.set(categoryKey, {
+        _id: row.category_id,
+        name: row.category_name,
+        services: [],
+      });
+    }
+
+    categoryMap.get(categoryKey).services.push({
+      _id: row.service_id,
+      name: row.service_name,
+      price: row.price,
+    });
+  }
+
+  const result = new Map();
+  for (const [partnerKey, categoryMap] of byPartner) {
+    const categories = [...categoryMap.values()]
+      .map((cat) => ({
+        ...cat,
+        services: cat.services.sort((a, b) =>
+          String(a.name ?? '').localeCompare(String(b.name ?? ''))
+        ),
+      }))
+      .sort((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? '')));
+
+    result.set(partnerKey, categories);
+  }
+
+  return result;
+};
+
 const buildFranchiseCategories = async (franchiseId, servicePrice = 0) => {
   const resolved = await resolveFranchiseEffectiveCatalog(franchiseId);
   if (!resolved.ok) {
@@ -315,7 +382,7 @@ const buildFranchiseCategories = async (franchiseId, servicePrice = 0) => {
 
   const ids = resolved.effectiveCategoryIds || [];
   if (ids.length === 0) {
-    return { ok: true, categories: [] };
+    return { ok: true, categories: [], effectiveOfferings: [] };
   }
 
   const effectiveSvcSet = new Set((resolved.effectiveServiceIds || []).map((x) => String(x)));
@@ -350,7 +417,10 @@ const buildFranchiseCategories = async (franchiseId, servicePrice = 0) => {
 
   const serviceById = new Map(serviceDocs.map((s) => [String(s._id), s]));
 
-  const offeringStatsByServiceId = await buildServiceOfferingStats(franchiseId, [...effectiveSvcSet]);
+  const effectiveOfferings = await collectEffectivePartnerOfferings(franchiseId, [
+    ...effectiveSvcSet,
+  ]);
+  const offeringStatsByServiceId = buildServiceOfferingStats(effectiveOfferings);
 
   const mapServiceRecord = (s) => {
     const stats = offeringStatsByServiceId.get(String(s._id)) || {
@@ -388,10 +458,14 @@ const buildFranchiseCategories = async (franchiseId, servicePrice = 0) => {
     };
   });
 
-  return { ok: true, categories: categoriesWithServices };
+  return {
+    ok: true,
+    categories: categoriesWithServices,
+    effectiveOfferings,
+  };
 };
 
-const listFranchisePartners = async (franchiseId) => {
+const listFranchisePartners = async (franchiseId, effectiveOfferings = []) => {
   const partners = await User.find({
     franchise_id: franchiseId,
     type: USER_TYPE_PARTNER,
@@ -404,12 +478,15 @@ const listFranchisePartners = async (franchiseId) => {
     .sort({ name: 1 })
     .lean();
 
+  const categoriesByPartnerId = groupOfferingsByPartner(effectiveOfferings);
+
   return partners.map((p) => ({
     _id: p._id,
     name: p.name,
     profile_url: p.profile_url,
     user_id: p.user_id,
     experience: p.experience,
+    categories: categoriesByPartnerId.get(String(p._id)) || [],
   }));
 };
 
@@ -435,7 +512,10 @@ const getHomeForLocation = async ({ location }) => {
     );
     if (!catalogResult.ok) return catalogResult;
 
-    const partners = await listFranchisePartners(franchiseResult.franchise._id);
+    const partners = await listFranchisePartners(
+      franchiseResult.franchise._id,
+      catalogResult.effectiveOfferings || []
+    );
 
     return ok(200, {
       message: 'Home data fetched successfully.',

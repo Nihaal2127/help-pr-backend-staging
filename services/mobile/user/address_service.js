@@ -87,6 +87,24 @@ const resolveLocationFields = async ({ state_id, city_id, area_id, pincode }) =>
   };
 };
 
+const addressMatchesSearch = (record, search) => {
+  if (!search) return true;
+  const term = String(search).trim().toLowerCase();
+  if (!term) return true;
+
+  const haystacks = [
+    record.address,
+    record.pincode,
+    record.name,
+    record.phone_number,
+    record.state_name,
+    record.city_name,
+    record.area_name,
+  ];
+
+  return haystacks.some((value) => String(value ?? '').toLowerCase().includes(term));
+};
+
 const findCustomerAddress = async (customerId, addressId) => {
   if (!mongoose.Types.ObjectId.isValid(String(addressId))) {
     return null;
@@ -98,15 +116,24 @@ const findCustomerAddress = async (customerId, addressId) => {
   });
 };
 
-const listAddresses = async (customerId) => {
+const listAddresses = async (customerId, { search } = {}) => {
   try {
+    const normalizedSearch =
+      search !== undefined && search !== null ? String(search).trim() : '';
+
     const rows = await Address.find({ user_id: customerId, deleted_at: null })
       .sort({ created_at: -1 })
       .lean();
 
+    const formatted = rows.map(formatAddressRecord);
+    const data =
+      normalizedSearch === ''
+        ? formatted
+        : formatted.filter((record) => addressMatchesSearch(record, normalizedSearch));
+
     return ok(200, {
       message: 'Addresses fetched successfully.',
-      data: rows.map(formatAddressRecord),
+      data,
     });
   } catch (err) {
     console.error('mobile user list addresses', err.message);

@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Category = require('../../../models/category');
 const Service = require('../../../models/service');
 const City = require('../../../models/city');
@@ -8,6 +9,7 @@ const {
   collectEffectivePartnerOfferings,
   mapFranchisePartnerRecords,
 } = require('./franchise_partner_scope');
+const { loadCustomerHomeOrders } = require('./home_orders_service');
 
 /** Max partners returned on home (highest plan priority first). */
 const HOME_PARTNERS_LIMIT = 20;
@@ -162,8 +164,12 @@ const buildFranchiseCategories = async (
   };
 };
 
-const getHomeForLocation = async ({ location }) => {
+const getHomeForLocation = async ({ location, userId }) => {
   try {
+    if (!userId || !mongoose.Types.ObjectId.isValid(String(userId))) {
+      return fail(401, 'Invalid token.');
+    }
+
     const franchiseCtx = await resolveFranchiseFromLocation(location);
     if (!franchiseCtx.ok) return franchiseCtx;
 
@@ -189,6 +195,8 @@ const getHomeForLocation = async ({ location }) => {
       catalogResult.effectiveOfferings || []
     );
 
+    const orders = await loadCustomerHomeOrders(userId);
+
     return ok(200, {
       message: 'Home data fetched successfully.',
       data: {
@@ -205,6 +213,7 @@ const getHomeForLocation = async ({ location }) => {
         },
         categories: catalogResult.categories,
         partners,
+        orders,
       },
     });
   } catch (err) {

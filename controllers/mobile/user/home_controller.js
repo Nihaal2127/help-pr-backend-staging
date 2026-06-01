@@ -2,7 +2,10 @@ const { getHomeForLocation } = require('../../../services/mobile/user/home_servi
 
 const getHomeHandler = async (req, res) => {
   try {
-    const result = await getHomeForLocation({ location: req.query.location });
+    const result = await getHomeForLocation({
+      location: req.query.location,
+      userId: req.user?.id,
+    });
 
     if (!result.ok) {
       return res.status(result.status).json({

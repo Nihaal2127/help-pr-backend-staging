@@ -7,12 +7,16 @@ const Category = require('../../../models/category');
 const Service = require('../../../models/service');
 const PartnerCategory = require('../../../models/partner_category');
 const PartnerService = require('../../../models/partner_service');
+const PartnerSubscription = require('../../../models/partner_subscription');
 const {
   resolveFranchiseEffectiveCatalog,
   resolveFranchiseAssignedEnabledMaps,
   enrichPartnerServiceApiRecord,
 } = require('../../../utils/catalog_availability_resolver');
 const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
+
+/** Max partners returned on home (highest plan priority first). */
+const HOME_PARTNERS_LIMIT = 20;
 
 const fail = (status, message) => ({ ok: false, status, message });
 const ok = (status, data) => ({ ok: true, status, data });
@@ -177,8 +181,21 @@ const loadPartnerLocalMapsByPartnerId = async (partnerIds) => {
   return byPartner;
 };
 
-const listActiveFranchisePartnerIds = async (franchiseId) => {
-  const rows = await User.find({
+const comparePartnerPlanPriority = (priorityA, priorityB) => {
+  const a = priorityA == null ? -1 : Number(priorityA);
+  const b = priorityB == null ? -1 : Number(priorityB);
+  if (Number.isNaN(a) && Number.isNaN(b)) return 0;
+  if (Number.isNaN(a)) return 1;
+  if (Number.isNaN(b)) return -1;
+  return b - a;
+};
+
+/**
+ * Franchise partners with a non-expired active subscription on an active plan.
+ * Sorted highest plan priority first, then name.
+ */
+const loadSubscribedFranchisePartners = async (franchiseId) => {
+  const partnerRows = await User.find({
     franchise_id: franchiseId,
     type: USER_TYPE_PARTNER,
     verification_status: 2,
@@ -186,22 +203,77 @@ const listActiveFranchisePartnerIds = async (franchiseId) => {
     is_blocked: { $ne: true },
     deleted_at: null,
   })
-    .select('_id')
+    .select('name profile_url user_id experience')
     .lean();
 
-  return rows.map((p) => p._id);
+  if (partnerRows.length === 0) {
+    return { partnerIds: [], partners: [] };
+  }
+
+  const partnerOids = partnerRows.map((p) => p._id);
+  const now = new Date();
+
+  const subscriptionRows = await PartnerSubscription.find({
+    partner_id: { $in: partnerOids },
+    status: 'active',
+    deleted_at: null,
+    $or: [{ expires_at: null }, { expires_at: { $gt: now } }],
+  })
+    .select('partner_id subscription_plan_id created_at')
+    .populate({
+      path: 'subscription_plan_id',
+      select: 'plan_name priority is_active deleted_at',
+    })
+    .sort({ created_at: -1 })
+    .lean();
+
+  const planByPartnerId = new Map();
+
+  for (const row of subscriptionRows) {
+    const partnerKey = String(row.partner_id);
+    if (planByPartnerId.has(partnerKey)) continue;
+
+    const plan = row.subscription_plan_id;
+    if (!plan || plan.deleted_at != null || plan.is_active !== true) continue;
+
+    planByPartnerId.set(partnerKey, {
+      plan_name: plan.plan_name,
+      priority: plan.priority,
+    });
+  }
+
+  const subscribed = partnerRows
+    .filter((p) => planByPartnerId.has(String(p._id)))
+    .sort((a, b) => {
+      const planA = planByPartnerId.get(String(a._id));
+      const planB = planByPartnerId.get(String(b._id));
+      const byPlan = comparePartnerPlanPriority(planA.priority, planB.priority);
+      if (byPlan !== 0) return byPlan;
+      return String(a.name ?? '').localeCompare(String(b.name ?? ''));
+    })
+    .slice(0, HOME_PARTNERS_LIMIT);
+
+  return {
+    partnerIds: subscribed.map((p) => p._id),
+    partners: subscribed,
+    planByPartnerId,
+  };
 };
 
 /**
  * Effective partner_service rows for franchise active partners ∩ franchise-effective services.
  */
-const collectEffectivePartnerOfferings = async (franchiseId, effectiveServiceIdStrs) => {
+const collectEffectivePartnerOfferings = async (
+  franchiseId,
+  effectiveServiceIdStrs,
+  subscribedPartnerIds = []
+) => {
   const effectiveSvcSet = new Set(effectiveServiceIdStrs);
   if (effectiveSvcSet.size === 0) {
     return [];
   }
 
-  const partnerIds = await listActiveFranchisePartnerIds(franchiseId);
+  const partnerIds = subscribedPartnerIds;
   if (partnerIds.length === 0) {
     return [];
   }
@@ -374,7 +446,11 @@ const groupOfferingsByPartner = (effectiveRows) => {
   return result;
 };
 
-const buildFranchiseCategories = async (franchiseId, servicePrice = 0) => {
+const buildFranchiseCategories = async (
+  franchiseId,
+  servicePrice = 0,
+  subscribedPartnerIds = []
+) => {
   const resolved = await resolveFranchiseEffectiveCatalog(franchiseId);
   if (!resolved.ok) {
     return fail(resolved.status, resolved.message);
@@ -417,9 +493,11 @@ const buildFranchiseCategories = async (franchiseId, servicePrice = 0) => {
 
   const serviceById = new Map(serviceDocs.map((s) => [String(s._id), s]));
 
-  const effectiveOfferings = await collectEffectivePartnerOfferings(franchiseId, [
-    ...effectiveSvcSet,
-  ]);
+  const effectiveOfferings = await collectEffectivePartnerOfferings(
+    franchiseId,
+    [...effectiveSvcSet],
+    subscribedPartnerIds
+  );
   const offeringStatsByServiceId = buildServiceOfferingStats(effectiveOfferings);
 
   const mapServiceRecord = (s) => {
@@ -465,29 +543,22 @@ const buildFranchiseCategories = async (franchiseId, servicePrice = 0) => {
   };
 };
 
-const listFranchisePartners = async (franchiseId, effectiveOfferings = []) => {
-  const partners = await User.find({
-    franchise_id: franchiseId,
-    type: USER_TYPE_PARTNER,
-    verification_status: 2,
-    is_active: true,
-    is_blocked: { $ne: true },
-    deleted_at: null,
-  })
-    .select('name profile_url user_id experience')
-    .sort({ name: 1 })
-    .lean();
-
+const listFranchisePartners = (subscribedPartners, planByPartnerId, effectiveOfferings = []) => {
   const categoriesByPartnerId = groupOfferingsByPartner(effectiveOfferings);
 
-  return partners.map((p) => ({
-    _id: p._id,
-    name: p.name,
-    profile_url: p.profile_url,
-    user_id: p.user_id,
-    experience: p.experience,
-    categories: categoriesByPartnerId.get(String(p._id)) || [],
-  }));
+  return subscribedPartners.map((p) => {
+    const plan = planByPartnerId.get(String(p._id));
+    return {
+      _id: p._id,
+      name: p.name,
+      profile_url: p.profile_url,
+      user_id: p.user_id,
+      experience: p.experience,
+      subscription_plan_name: plan?.plan_name ?? null,
+      plan_priority: plan?.priority ?? null,
+      categories: categoriesByPartnerId.get(String(p._id)) || [],
+    };
+  });
 };
 
 const getHomeForLocation = async ({ location }) => {
@@ -506,14 +577,18 @@ const getHomeForLocation = async ({ location }) => {
       .lean();
     const servicePrice = city?.city_service_price ?? 0;
 
+    const subscribed = await loadSubscribedFranchisePartners(franchiseResult.franchise._id);
+
     const catalogResult = await buildFranchiseCategories(
       franchiseResult.franchise._id,
-      servicePrice
+      servicePrice,
+      subscribed.partnerIds
     );
     if (!catalogResult.ok) return catalogResult;
 
-    const partners = await listFranchisePartners(
-      franchiseResult.franchise._id,
+    const partners = listFranchisePartners(
+      subscribed.partners,
+      subscribed.planByPartnerId,
       catalogResult.effectiveOfferings || []
     );
 

@@ -1146,7 +1146,7 @@
     },
     {
       "name": "User",
-      "description": "Customer mobile — OTP, home, addresses, quotes, profile. Order: **Login** → **Verify OTP** → **Pincodes (search)** (sets `homeLocation`) → **Home** → **Addresses** → **Quotes** → **Update** (multipart). Address dropdowns: **Common → Location**.",
+      "description": "Customer mobile — OTP, home, addresses, orders, quotes, profile. Order: **Login** → **Verify OTP** → **Pincodes (search)** (sets `homeLocation`) → **Home** → **Orders** → **Addresses** → **Quotes** → **Update** (multipart). Address dropdowns: **Common → Location**.",
       "item": [
         {
           "name": "Login",
@@ -1328,6 +1328,117 @@
               "query": [{ "key": "location", "value": "{{homeLocation}}" }]
             },
             "description": "**GET /api/mobile/user/home?location=**\n\n- **Auth:** Bearer `{{token}}` (run **Verify OTP** first)\n- **Query `location`:** `pincode,area_name,city_name,state_name` — same line as **Pincodes (search)** e.g. `500032,Gachibowli,Hyderabad,Telangana`\n\n**200** `data`:\n- `franchise_id`, `franchise_name`\n- `location` (resolved ids)\n- `categories[]` with nested `services[]` (`partner_count`, `price_range` from **subscribed** partners only; `price`, `payment_type`)\n- `partners[]` (top **20** by `plan_priority` desc; active subscription; `subscription_plan_name`, `categories[]` → `services[]`)\n- `orders.in_progress[]`, `orders.completed[]` — authenticated customer's orders (up to 20 each; excludes refunded payment rollups)\n\n**Auth:** customer only (`type` 4). **400** invalid location or `No services are available in this location` | **404** location not found"
+          },
+          "response": []
+        },
+        {
+          "name": "List orders",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Orders listed', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.records).to.be.an('array');",
+                  "  });",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/orders?page={{ordersPage}}&limit={{ordersLimit}}&status={{orderStatusFilter}}&search={{orderSearch}}&from_date={{orderFromDate}}&to_date={{orderToDate}}&is_paid={{orderIsPaid}}&user_payment_status={{orderPaymentStatus}}&franchise_id={{franchiseId}}&partner_id={{quotePartnerId}}&category_id={{categoryId}}&service_id={{serviceId}}&city_id={{cityId}}&address_id={{addressId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "user", "orders"],
+              "query": [
+                { "key": "page", "value": "{{ordersPage}}" },
+                { "key": "limit", "value": "{{ordersLimit}}" },
+                {
+                  "key": "status",
+                  "value": "{{orderStatusFilter}}",
+                  "description": "in-progress | completed | cancelled | refunded — leave empty for all"
+                },
+                {
+                  "key": "search",
+                  "value": "{{orderSearch}}",
+                  "description": "Search in unique_id, address, order_description, customer_description, transaction_id",
+                  "disabled": true
+                },
+                {
+                  "key": "from_date",
+                  "value": "{{orderFromDate}}",
+                  "description": "YYYY-MM-DD",
+                  "disabled": true
+                },
+                {
+                  "key": "to_date",
+                  "value": "{{orderToDate}}",
+                  "description": "YYYY-MM-DD",
+                  "disabled": true
+                },
+                {
+                  "key": "is_paid",
+                  "value": "{{orderIsPaid}}",
+                  "description": "true | false",
+                  "disabled": true
+                },
+                {
+                  "key": "user_payment_status",
+                  "value": "{{orderPaymentStatus}}",
+                  "description": "unpaid | paid | partially_paid | refund | partially_refund",
+                  "disabled": true
+                },
+                {
+                  "key": "franchise_id",
+                  "value": "{{franchiseId}}",
+                  "description": "Optional ObjectId filter",
+                  "disabled": true
+                },
+                {
+                  "key": "partner_id",
+                  "value": "{{quotePartnerId}}",
+                  "description": "Optional ObjectId filter",
+                  "disabled": true
+                },
+                {
+                  "key": "category_id",
+                  "value": "{{categoryId}}",
+                  "description": "Optional ObjectId filter",
+                  "disabled": true
+                },
+                {
+                  "key": "service_id",
+                  "value": "{{serviceId}}",
+                  "description": "Optional ObjectId filter",
+                  "disabled": true
+                },
+                {
+                  "key": "city_id",
+                  "value": "{{cityId}}",
+                  "description": "Optional ObjectId filter",
+                  "disabled": true
+                },
+                {
+                  "key": "address_id",
+                  "value": "{{addressId}}",
+                  "description": "Optional ObjectId filter",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**GET /api/mobile/user/orders**\n\n- **Auth:** Bearer customer\n- Lists orders for authenticated customer only\n- **Pagination:** `page`, `limit` (max 50)\n- **Search:** `search` (or `q`) on unique/order text fields\n- **Filters:** `status`, `from_date`, `to_date`, `is_paid`, `user_payment_status` (or `payment_status`), and optional ObjectId filters: `franchise_id`, `partner_id`, `category_id`, `service_id`, `city_id`, `address_id`\n- **200:** `totalItems`, `totalPages`, `currentPage`, `limit`, `records[]`"
           },
           "response": []
         },
@@ -2728,6 +2839,54 @@
       "value": "10",
       "type": "string",
       "description": "Quotes list limit (max 50)"
+    },
+    {
+      "key": "orderStatusFilter",
+      "value": "",
+      "type": "string",
+      "description": "Orders list filter: in-progress | completed | cancelled | refunded — empty = all"
+    },
+    {
+      "key": "ordersPage",
+      "value": "1",
+      "type": "string",
+      "description": "Orders list page"
+    },
+    {
+      "key": "ordersLimit",
+      "value": "10",
+      "type": "string",
+      "description": "Orders list limit (max 50)"
+    },
+    {
+      "key": "orderSearch",
+      "value": "",
+      "type": "string",
+      "description": "Order search text"
+    },
+    {
+      "key": "orderFromDate",
+      "value": "",
+      "type": "string",
+      "description": "Orders from_date filter (YYYY-MM-DD)"
+    },
+    {
+      "key": "orderToDate",
+      "value": "",
+      "type": "string",
+      "description": "Orders to_date filter (YYYY-MM-DD)"
+    },
+    {
+      "key": "orderIsPaid",
+      "value": "",
+      "type": "string",
+      "description": "Orders is_paid filter (true|false)"
+    },
+    {
+      "key": "orderPaymentStatus",
+      "value": "",
+      "type": "string",
+      "description": "Orders payment status: unpaid|paid|partially_paid|refund|partially_refund"
     },
     {
       "key": "postId",

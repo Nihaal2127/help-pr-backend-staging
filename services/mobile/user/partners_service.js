@@ -13,6 +13,10 @@ const {
   mapFranchisePartnerRecords,
   buildPartnerDetailCatalog,
 } = require('./franchise_partner_scope');
+const {
+  enrichPartnerCatalogWithRatings,
+} = require('./partner_rating_service');
+const { mapRatingSummary } = require('../../../utils/rating_format');
 
 const fail = (status, message) => ({ ok: false, status, message });
 const ok = (status, data) => ({ ok: true, status, data });
@@ -395,7 +399,7 @@ const getPartnerProfileForCustomer = async (partnerId, franchiseId, userId = nul
       deleted_at: null,
     })
       .select(
-        'name profile_url user_id experience is_business business_info_id state_id city_id area_id created_at'
+        'name profile_url user_id experience is_business business_info_id state_id city_id area_id created_at average_rating rating_count'
       )
       .populate([
         { path: 'state_id', select: 'name' },
@@ -424,6 +428,12 @@ const getPartnerProfileForCustomer = async (partnerId, franchiseId, userId = nul
       return fail(catalogResult.status, catalogResult.message);
     }
 
+    const categoriesWithRatings = await enrichPartnerCatalogWithRatings(
+      partner._id,
+      catalogResult.categories
+    );
+    const partnerRatings = mapRatingSummary(partner);
+
     return ok(200, {
       message: 'Partner profile fetched successfully.',
       data: {
@@ -445,8 +455,10 @@ const getPartnerProfileForCustomer = async (partnerId, franchiseId, userId = nul
           completed_services_count: completedServicesCount,
           no_of_services_completed: completedServicesCount,
           is_saved: isSaved,
+          ...partnerRatings,
+          ratings: partnerRatings,
         },
-        categories: catalogResult.categories,
+        categories: categoriesWithRatings,
       },
     });
   } catch (err) {

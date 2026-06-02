@@ -11,6 +11,7 @@ const {
   listSavedPartnersHandler,
   savePartnerHandler,
   unsavePartnerHandler,
+  getPartnerRatingsHandler,
   getPartnerProfileHandler,
 } = require('../../../controllers/mobile/user/partners_controller');
 const { validateHomeLocationQuery } = require('../../../middleware/mobile/user/home_middleware');
@@ -64,6 +65,13 @@ router.delete(
   userAuthMiddleware,
   validatePartnerIdParam,
   unsavePartnerHandler
+);
+router.get(
+  '/partners/:partnerId/ratings',
+  userAuthMiddleware,
+  validatePartnerIdParam,
+  validatePartnerProfileQuery,
+  getPartnerRatingsHandler
 );
 router.get(
   '/partners/:partnerId',

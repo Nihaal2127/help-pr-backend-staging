@@ -10,6 +10,14 @@ const {
 const { QUOTE_STATUSES, normalizeQuoteStatus } = require('../../../enum/quote_status_enum');
 
 const MAX_QUOTE_DESCRIPTION_LEN = 1000;
+const ALLOWED_QUOTE_CONVERT_PAYMENT_METHODS = new Set([
+  'cash',
+  'upi',
+  'card',
+  'online',
+  'bank_transfer',
+  'other',
+]);
 
 const sendError = (res, status, message) =>
   res.status(status).json({
@@ -278,9 +286,17 @@ const validateCancelQuoteBody = (req, res, next) => {
 
 const validateConvertQuoteBody = (req, res, next) => {
   const body = req.body || {};
-  const payment_method = body.payment_method !== undefined ? String(body.payment_method).trim() : '';
+  const payment_method =
+    body.payment_method !== undefined ? String(body.payment_method).trim().toLowerCase() : '';
   if (!payment_method) {
     return sendError(res, 400, 'payment_method is required.');
+  }
+  if (!ALLOWED_QUOTE_CONVERT_PAYMENT_METHODS.has(payment_method)) {
+    return sendError(
+      res,
+      400,
+      `payment_method must be one of: ${Array.from(ALLOWED_QUOTE_CONVERT_PAYMENT_METHODS).join(', ')}.`
+    );
   }
 
   if (body.amount === undefined || body.amount === null || String(body.amount).trim() === '') {

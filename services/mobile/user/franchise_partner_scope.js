@@ -15,6 +15,7 @@ const {
   loadPartnerAvailabilityContext,
 } = require('../../../utils/catalog_availability_resolver');
 const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
+const { mapRatingSummary } = require('../../../utils/rating_format');
 
 const fail = (status, message) => ({ ok: false, status, message });
 
@@ -225,7 +226,7 @@ const loadSubscribedFranchisePartners = async (franchiseId, options = {}) => {
     is_blocked: { $ne: true },
     deleted_at: null,
   })
-    .select('name profile_url user_id experience')
+    .select('name profile_url user_id experience average_rating rating_count')
     .lean();
 
   if (partnerRows.length === 0) {
@@ -441,6 +442,7 @@ const mapFranchisePartnerRecords = (subscribedPartners, planByPartnerId, effecti
       subscription_plan_name: plan?.plan_name ?? null,
       plan_priority: plan?.priority ?? null,
       categories: categoriesByPartnerId.get(String(p._id)) || [],
+      ...mapRatingSummary(p),
     };
   });
 };

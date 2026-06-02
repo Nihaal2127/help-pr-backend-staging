@@ -41,7 +41,10 @@ const assertSavablePartner = async (partnerId) => {
     return fail(built.status, built.message);
   }
 
-  if (!built.records.some((row) => String(row._id) === String(partner._id))) {
+  const builtData = built.data || {};
+  const builtRecords = Array.isArray(builtData.records) ? builtData.records : [];
+
+  if (!builtRecords.some((row) => String(row._id) === String(partner._id))) {
     return fail(404, 'Partner not found.');
   }
 
@@ -191,14 +194,16 @@ const listSavedPartnersPaginated = async (userId, query) => {
         partnerIdAllowlist: [...partnerIdSet],
       });
       if (!built.ok) continue;
+      const builtData = built.data || {};
+      const builtRecords = Array.isArray(builtData.records) ? builtData.records : [];
 
       const franchiseName = franchiseNameById.get(franchiseKey) ?? null;
 
-      for (const record of built.records) {
+      for (const record of builtRecords) {
         const partnerKey = String(record._id);
         merged.push({
           ...record,
-          franchise_id: built.franchise_id,
+          franchise_id: builtData.franchise_id,
           franchise_name: franchiseName,
           saved_at: savedAtByPartnerId.get(partnerKey) ?? null,
           is_saved: true,

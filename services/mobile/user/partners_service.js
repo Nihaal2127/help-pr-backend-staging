@@ -302,15 +302,16 @@ const listFranchisePartnersPaginated = async (query) => {
 
     const built = await buildFranchisePartnerListRecords(franchiseCtx.franchise._id);
     if (!built.ok) return built;
-    if (!Array.isArray(built.records)) {
+    const builtData = built.data || {};
+    if (!Array.isArray(builtData.records)) {
       console.error('listFranchisePartnersPaginated invalid records shape', {
         franchise_id: String(franchiseCtx.franchise._id),
-        records_type: typeof built.records,
+        records_type: typeof builtData.records,
       });
       return fail(500, 'Internal server error.');
     }
 
-    const paginated = paginatePartnerRecords(built.records, {
+    const paginated = paginatePartnerRecords(builtData.records, {
       filters: parsed.filters,
       serviceId: parsed.serviceId,
       categoryId: parsed.categoryId,
@@ -321,8 +322,8 @@ const listFranchisePartnersPaginated = async (query) => {
     return ok(200, {
       message: 'Partners fetched successfully.',
       data: {
-        franchise_id: built.franchise_id,
-        franchise_name: built.franchise_name,
+        franchise_id: builtData.franchise_id,
+        franchise_name: builtData.franchise_name,
         ...paginated,
       },
     });

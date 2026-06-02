@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { resolveFranchiseEffectiveCatalog } = require('../../../utils/catalog_availability_resolver');
 const { PLAN_NAMES } = require('../../../models/subscription_plan');
+const CustomerSavedPartner = require('../../../models/customer_saved_partner');
 const User = require('../../../models/user');
 const OrderService = require('../../../models/order_services');
 const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
@@ -141,6 +142,152 @@ const attachPartnerPriceFields = (partners, serviceId, categoryId) =>
     ...buildPartnerPriceFields(partner, serviceId || null, categoryId || null),
   }));
 
+/** Shared list query parsing (no franchise_id). */
+const parsePartnersListQuery = (query) => {
+  const page = parsePositiveInt(query.page, DEFAULT_PAGE);
+  const limit = Math.min(MAX_LIMIT, parsePositiveInt(query.limit, DEFAULT_LIMIT));
+
+  const minPriceParsed = parseOptionalPrice(query.min_price, 'min_price');
+  if (!minPriceParsed.ok) {
+    return { ok: false, status: 400, message: minPriceParsed.message };
+  }
+  const maxPriceParsed = parseOptionalPrice(query.max_price, 'max_price');
+  if (!maxPriceParsed.ok) {
+    return { ok: false, status: 400, message: maxPriceParsed.message };
+  }
+
+  if (
+    minPriceParsed.value != null &&
+    maxPriceParsed.value != null &&
+    minPriceParsed.value > maxPriceParsed.value
+  ) {
+    return { ok: false, status: 400, message: 'min_price cannot be greater than max_price.' };
+  }
+
+  const planNameRaw = query.plan_name != null ? String(query.plan_name).trim().toLowerCase() : '';
+  if (planNameRaw && !PLAN_NAMES.includes(planNameRaw)) {
+    return {
+      ok: false,
+      status: 400,
+      message: `plan_name must be one of: ${PLAN_NAMES.join(', ')}.`,
+    };
+  }
+
+  const categoryId = query.category_id ? String(query.category_id).trim() : '';
+  if (categoryId && !mongoose.Types.ObjectId.isValid(categoryId)) {
+    return { ok: false, status: 400, message: 'category_id must be a valid ObjectId.' };
+  }
+
+  const serviceId = query.service_id ? String(query.service_id).trim() : '';
+  if (serviceId && !mongoose.Types.ObjectId.isValid(serviceId)) {
+    return { ok: false, status: 400, message: 'service_id must be a valid ObjectId.' };
+  }
+
+  return {
+    ok: true,
+    page,
+    limit,
+    serviceId: serviceId || null,
+    categoryId: categoryId || null,
+    filters: {
+      search: query.search ?? query.q ?? null,
+      plan_name: planNameRaw || null,
+      category_id: categoryId || null,
+      service_id: serviceId || null,
+      min_price: minPriceParsed.value,
+      max_price: maxPriceParsed.value,
+    },
+  };
+};
+
+const paginatePartnerRecords = (records, { filters, serviceId, categoryId, page, limit }) => {
+  const filtered = applyPartnerFilters(records, filters);
+  const totalItems = filtered.length;
+  const totalPages = totalItems === 0 ? 0 : Math.ceil(totalItems / limit);
+  const skip = (page - 1) * limit;
+  const partners = attachPartnerPriceFields(
+    filtered.slice(skip, skip + limit),
+    serviceId,
+    categoryId
+  );
+
+  return {
+    partners,
+    totalItems,
+    totalPages,
+    currentPage: page,
+    limit,
+  };
+};
+
+/**
+ * Build partner list cards for a franchise (subscribed partners + catalog offerings).
+ * Optional partnerIdAllowlist limits to specific partner Mongo ids.
+ */
+const buildFranchisePartnerListRecords = async (franchiseId, options = {}) => {
+  const franchiseCtx = await resolveFranchiseById(franchiseId);
+  if (!franchiseCtx.ok) {
+    return fail(franchiseCtx.status, franchiseCtx.message);
+  }
+
+  const allowSet =
+    options.partnerIdAllowlist != null
+      ? new Set(options.partnerIdAllowlist.map((id) => String(id)))
+      : null;
+
+  const subscribed = await loadSubscribedFranchisePartners(franchiseCtx.franchise._id);
+
+  let partners = subscribed.partners;
+  if (allowSet) {
+    partners = partners.filter((p) => allowSet.has(String(p._id)));
+  }
+
+  if (partners.length === 0) {
+    return ok(200, {
+      franchise_id: franchiseCtx.franchise._id,
+      franchise_name: franchiseCtx.franchise.name,
+      records: [],
+    });
+  }
+
+  const catalogResolved = await resolveFranchiseEffectiveCatalog(franchiseCtx.franchise._id);
+  if (!catalogResolved.ok) {
+    return fail(catalogResolved.status, catalogResolved.message);
+  }
+
+  const effectiveServiceIds = (catalogResolved.effectiveServiceIds || []).map((x) => String(x));
+  const partnerIds = partners.map((p) => p._id);
+
+  const effectiveOfferings = await collectEffectivePartnerOfferings(
+    franchiseCtx.franchise._id,
+    effectiveServiceIds,
+    partnerIds
+  );
+
+  const records = mapFranchisePartnerRecords(
+    partners,
+    subscribed.planByPartnerId,
+    effectiveOfferings
+  );
+
+  return ok(200, {
+    franchise_id: franchiseCtx.franchise._id,
+    franchise_name: franchiseCtx.franchise.name,
+    records,
+  });
+};
+
+const isPartnerSavedByUser = async (userId, partnerId) => {
+  if (!userId || !partnerId) return false;
+  const row = await CustomerSavedPartner.findOne({
+    user_id: new mongoose.Types.ObjectId(String(userId)),
+    partner_id: new mongoose.Types.ObjectId(String(partnerId)),
+  })
+    .select('_id')
+    .lean();
+  return Boolean(row);
+};
+
 const listFranchisePartnersPaginated = async (query) => {
   try {
     const franchiseCtx = await resolveFranchiseById(query.franchise_id);
@@ -148,91 +295,26 @@ const listFranchisePartnersPaginated = async (query) => {
       return fail(franchiseCtx.status, franchiseCtx.message);
     }
 
-    const page = parsePositiveInt(query.page, DEFAULT_PAGE);
-    const limit = Math.min(MAX_LIMIT, parsePositiveInt(query.limit, DEFAULT_LIMIT));
+    const parsed = parsePartnersListQuery(query);
+    if (!parsed.ok) return fail(parsed.status, parsed.message);
 
-    const minPriceParsed = parseOptionalPrice(query.min_price, 'min_price');
-    if (!minPriceParsed.ok) return fail(400, minPriceParsed.message);
-    const maxPriceParsed = parseOptionalPrice(query.max_price, 'max_price');
-    if (!maxPriceParsed.ok) return fail(400, maxPriceParsed.message);
+    const built = await buildFranchisePartnerListRecords(franchiseCtx.franchise._id);
+    if (!built.ok) return built;
 
-    if (
-      minPriceParsed.value != null &&
-      maxPriceParsed.value != null &&
-      minPriceParsed.value > maxPriceParsed.value
-    ) {
-      return fail(400, 'min_price cannot be greater than max_price.');
-    }
-
-    const planNameRaw = query.plan_name != null ? String(query.plan_name).trim().toLowerCase() : '';
-    if (planNameRaw && !PLAN_NAMES.includes(planNameRaw)) {
-      return fail(
-        400,
-        `plan_name must be one of: ${PLAN_NAMES.join(', ')}.`
-      );
-    }
-
-    const categoryId = query.category_id ? String(query.category_id).trim() : '';
-    if (categoryId && !mongoose.Types.ObjectId.isValid(categoryId)) {
-      return fail(400, 'category_id must be a valid ObjectId.');
-    }
-
-    const serviceId = query.service_id ? String(query.service_id).trim() : '';
-    if (serviceId && !mongoose.Types.ObjectId.isValid(serviceId)) {
-      return fail(400, 'service_id must be a valid ObjectId.');
-    }
-
-    const subscribed = await loadSubscribedFranchisePartners(franchiseCtx.franchise._id);
-
-    const catalogResolved = await resolveFranchiseEffectiveCatalog(franchiseCtx.franchise._id);
-    if (!catalogResolved.ok) {
-      return fail(catalogResolved.status, catalogResolved.message);
-    }
-
-    const effectiveServiceIds = (catalogResolved.effectiveServiceIds || []).map((x) =>
-      String(x)
-    );
-
-    const effectiveOfferings = await collectEffectivePartnerOfferings(
-      franchiseCtx.franchise._id,
-      effectiveServiceIds,
-      subscribed.partnerIds
-    );
-
-    const allRecords = mapFranchisePartnerRecords(
-      subscribed.partners,
-      subscribed.planByPartnerId,
-      effectiveOfferings
-    );
-
-    const filtered = applyPartnerFilters(allRecords, {
-      search: query.search ?? query.q,
-      plan_name: planNameRaw || null,
-      category_id: categoryId || null,
-      service_id: serviceId || null,
-      min_price: minPriceParsed.value,
-      max_price: maxPriceParsed.value,
+    const paginated = paginatePartnerRecords(built.records, {
+      filters: parsed.filters,
+      serviceId: parsed.serviceId,
+      categoryId: parsed.categoryId,
+      page: parsed.page,
+      limit: parsed.limit,
     });
-
-    const totalItems = filtered.length;
-    const totalPages = totalItems === 0 ? 0 : Math.ceil(totalItems / limit);
-    const skip = (page - 1) * limit;
-    const partners = attachPartnerPriceFields(
-      filtered.slice(skip, skip + limit),
-      serviceId || null,
-      categoryId || null
-    );
 
     return ok(200, {
       message: 'Partners fetched successfully.',
       data: {
-        franchise_id: franchiseCtx.franchise._id,
-        franchise_name: franchiseCtx.franchise.name,
-        partners,
-        totalItems,
-        totalPages,
-        currentPage: page,
-        limit,
+        franchise_id: built.franchise_id,
+        franchise_name: built.franchise_name,
+        ...paginated,
       },
     });
   } catch (err) {
@@ -277,7 +359,7 @@ const mapPartnerBusinessInfo = (partner) => {
   };
 };
 
-const getPartnerProfileForCustomer = async (partnerId, franchiseId) => {
+const getPartnerProfileForCustomer = async (partnerId, franchiseId, userId = null) => {
   try {
     const franchiseCtx = await resolveFranchiseById(franchiseId);
     if (!franchiseCtx.ok) {
@@ -319,9 +401,10 @@ const getPartnerProfileForCustomer = async (partnerId, franchiseId) => {
       return fail(404, 'Partner not found.');
     }
 
-    const [catalogResult, completedServicesCount] = await Promise.all([
+    const [catalogResult, completedServicesCount, isSaved] = await Promise.all([
       buildPartnerDetailCatalog(franchiseCtx.franchise._id, partner._id),
       countPartnerCompletedServices(partner._id),
+      userId ? isPartnerSavedByUser(userId, partner._id) : Promise.resolve(false),
     ]);
     if (!catalogResult.ok) {
       return fail(catalogResult.status, catalogResult.message);
@@ -347,6 +430,7 @@ const getPartnerProfileForCustomer = async (partnerId, franchiseId) => {
           joined_at: partner.created_at ?? null,
           completed_services_count: completedServicesCount,
           no_of_services_completed: completedServicesCount,
+          is_saved: isSaved,
         },
         categories: catalogResult.categories,
       },
@@ -360,4 +444,8 @@ const getPartnerProfileForCustomer = async (partnerId, franchiseId) => {
 module.exports = {
   listFranchisePartnersPaginated,
   getPartnerProfileForCustomer,
+  parsePartnersListQuery,
+  paginatePartnerRecords,
+  buildFranchisePartnerListRecords,
+  isPartnerSavedByUser,
 };

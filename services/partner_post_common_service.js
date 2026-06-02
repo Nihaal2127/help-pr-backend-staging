@@ -1,0 +1,337 @@
+const mongoose = require('mongoose');
+const { v4: uuidv4 } = require('uuid');
+const PartnerPost = require('../models/partner_post');
+const PartnerPostLike = require('../models/partner_post_like');
+const User = require('../models/user');
+const Order = require('../models/order');
+const Category = require('../models/category');
+const Service = require('../models/service');
+const { USER_TYPE_PARTNER } = require('../constants/user_types');
+const { POST_TYPE_ORDER, POST_TYPE_LEGACY_WORK } = require('../enum/post_type_enum');
+const { POST_STATUS_PUBLISHED } = require('../enum/post_report_reason_enum');
+const { ORDER_STATUS_COMPLETED } = require('../enum/order_status_enum');
+
+const fail = (status, message) => ({ ok: false, status, message });
+const ok = (status, data) => ({ ok: true, status, data });
+
+const DEFAULT_PAGE = 1;
+const DEFAULT_LIMIT = 10;
+const MAX_LIMIT = 50;
+const MIN_IMAGES = 1;
+const MAX_IMAGES = 4;
+const MAX_DESCRIPTION_LENGTH = 500;
+const MIN_LEGACY_SERVICE_NAME_LENGTH = 3;
+
+const OBJECT_ID_HEX_24 = /^[a-fA-F0-9]{24}$/;
+
+const parsePositiveInt = (raw, fallback) => {
+  const n = parseInt(String(raw ?? ''), 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+};
+
+const parseObjectId = (raw, fieldName) => {
+  const s = raw !== undefined && raw !== null ? String(raw).trim() : '';
+  if (!s || !OBJECT_ID_HEX_24.test(s)) {
+    return { ok: false, message: `${fieldName} must be a valid id.` };
+  }
+  return { ok: true, oid: new mongoose.Types.ObjectId(s) };
+};
+
+const generateShareToken = () => uuidv4().replace(/-/g, '');
+
+const buildShareUrl = (shareToken) => {
+  const base = String(process.env.MOBILE_APP_DEEP_LINK_BASE || 'helppr://post').replace(/\/$/, '');
+  return `${base}/${shareToken}`;
+};
+
+const assertPartnerCanPost = async (partnerId) => {
+  if (!mongoose.Types.ObjectId.isValid(String(partnerId))) {
+    return fail(401, 'Invalid token.');
+  }
+
+  const partnerOid = new mongoose.Types.ObjectId(String(partnerId));
+  const partner = await User.findOne({
+    _id: partnerOid,
+    type: USER_TYPE_PARTNER,
+    deleted_at: null,
+  })
+    .select('_id franchise_id verification_status is_active is_blocked')
+    .lean();
+
+  if (!partner) {
+    return fail(404, 'Partner not found.');
+  }
+
+  if (Number(partner.verification_status) !== 2) {
+    return fail(
+      403,
+      'Posts can only be created after your account is verified and approved.'
+    );
+  }
+
+  if (!partner.is_active || partner.is_blocked) {
+    return fail(403, 'Your partner account is not active.');
+  }
+
+  if (!partner.franchise_id) {
+    return fail(400, 'Partner is not linked to a franchise.');
+  }
+
+  return ok(200, { partnerOid, partner });
+};
+
+const validateOrderLink = async (partnerId, orderId) => {
+  const orderParsed = parseObjectId(orderId, 'order_id');
+  if (!orderParsed.ok) {
+    return fail(400, orderParsed.message);
+  }
+
+  const partnerResult = await assertPartnerCanPost(partnerId);
+  if (!partnerResult.ok) {
+    return partnerResult;
+  }
+
+  const { partnerOid, partner } = partnerResult.data;
+
+  const order = await Order.findOne({
+    _id: orderParsed.oid,
+    deleted_at: null,
+  })
+    .select('_id partner_id franchise_id category_id service_id order_status unique_id')
+    .lean();
+
+  if (!order) {
+    return fail(404, 'Order not found.');
+  }
+
+  if (String(order.partner_id) !== String(partnerOid)) {
+    return fail(403, 'You can only link posts to your own orders.');
+  }
+
+  if (String(order.franchise_id) !== String(partner.franchise_id)) {
+    return fail(400, 'Order does not belong to your franchise.');
+  }
+
+  if (order.order_status !== ORDER_STATUS_COMPLETED) {
+    return fail(400, 'Only completed orders can be linked to a post.');
+  }
+
+  const existingPost = await PartnerPost.findOne({
+    order_id: orderParsed.oid,
+    deleted_at: null,
+  })
+    .select('_id')
+    .lean();
+
+  if (existingPost) {
+    return fail(409, 'This order is already linked to another post.');
+  }
+
+  return ok(200, {
+    orderOid: orderParsed.oid,
+    category_id: order.category_id,
+    service_id: order.service_id,
+    order_unique_id: order.unique_id,
+  });
+};
+
+const loadLinkedLabels = async (posts) => {
+  const categoryIds = new Set();
+  const serviceIds = new Set();
+
+  for (const post of posts) {
+    if (post.category_id) categoryIds.add(String(post.category_id));
+    if (post.service_id) serviceIds.add(String(post.service_id));
+  }
+
+  const [categories, services] = await Promise.all([
+    categoryIds.size
+      ? Category.find({ _id: { $in: [...categoryIds] }, deleted_at: null })
+          .select('name')
+          .lean()
+      : [],
+    serviceIds.size
+      ? Service.find({ _id: { $in: [...serviceIds] }, deleted_at: null })
+          .select('name')
+          .lean()
+      : [],
+  ]);
+
+  const categoryById = new Map(categories.map((c) => [String(c._id), c.name]));
+  const serviceById = new Map(services.map((s) => [String(s._id), s.name]));
+
+  return { categoryById, serviceById };
+};
+
+const loadLikedPostIds = async (userId, postIds) => {
+  if (!userId || postIds.length === 0) {
+    return new Set();
+  }
+
+  const likes = await PartnerPostLike.find({
+    user_id: new mongoose.Types.ObjectId(String(userId)),
+    post_id: { $in: postIds.map((id) => new mongoose.Types.ObjectId(String(id))) },
+  })
+    .select('post_id')
+    .lean();
+
+  return new Set(likes.map((l) => String(l.post_id)));
+};
+
+const loadPartnerSummaries = async (partnerIds) => {
+  if (partnerIds.length === 0) {
+    return new Map();
+  }
+
+  const partners = await User.find({
+    _id: { $in: partnerIds },
+    deleted_at: null,
+  })
+    .select('_id name profile_url')
+    .lean();
+
+  return new Map(
+    partners.map((p) => [
+      String(p._id),
+      {
+        _id: p._id,
+        name: p.name,
+        profile_url: p.profile_url,
+      },
+    ])
+  );
+};
+
+const buildLinkedBlock = (post, { categoryById, serviceById }) => {
+  if (post.post_type === POST_TYPE_ORDER) {
+    return {
+      order_id: post.order_id,
+      service_name: post.service_id ? serviceById.get(String(post.service_id)) || null : null,
+      category_name: post.category_id ? categoryById.get(String(post.category_id)) || null : null,
+    };
+  }
+
+  if (post.post_type === POST_TYPE_LEGACY_WORK) {
+    return {
+      legacy_service_name: post.legacy_service_name || '',
+      service_name: post.service_id ? serviceById.get(String(post.service_id)) || null : null,
+      category_name: post.category_id ? categoryById.get(String(post.category_id)) || null : null,
+    };
+  }
+
+  return null;
+};
+
+const mapPostRecord = (post, options = {}) => {
+  const {
+    userId = null,
+    likedPostIds = new Set(),
+    partnerById = new Map(),
+    categoryById = new Map(),
+    serviceById = new Map(),
+    includePartner = true,
+  } = options;
+
+  const record = {
+    _id: post._id,
+    partner_id: post.partner_id,
+    franchise_id: post.franchise_id,
+    post_type: post.post_type,
+    description: post.description,
+    image_urls: post.image_urls || [],
+    status: post.status,
+    share_token: post.share_token,
+    share_url: buildShareUrl(post.share_token),
+    likes_count: post.likes_count ?? 0,
+    shares_count: post.shares_count ?? 0,
+    reports_count: post.reports_count ?? 0,
+    created_at: post.created_at,
+    updated_at: post.updated_at,
+    linked: buildLinkedBlock(post, { categoryById, serviceById }),
+  };
+
+  if (userId) {
+    record.is_liked = likedPostIds.has(String(post._id));
+  }
+
+  if (includePartner && post.partner_id) {
+    const partner = partnerById.get(String(post.partner_id));
+    if (partner) {
+      record.partner = partner;
+    }
+  }
+
+  return record;
+};
+
+const mapPostRecords = async (posts, options = {}) => {
+  const { userId = null, includePartner = true } = options;
+
+  if (posts.length === 0) {
+    return [];
+  }
+
+  const postIds = posts.map((p) => p._id);
+  const partnerIds = [...new Set(posts.map((p) => String(p.partner_id)).filter(Boolean))];
+
+  const [likedPostIds, partnerById, labelMaps] = await Promise.all([
+    loadLikedPostIds(userId, postIds),
+    includePartner ? loadPartnerSummaries(partnerIds.map((id) => new mongoose.Types.ObjectId(id))) : Promise.resolve(new Map()),
+    loadLinkedLabels(posts),
+  ]);
+
+  return posts.map((post) =>
+    mapPostRecord(post, {
+      userId,
+      likedPostIds,
+      partnerById,
+      categoryById: labelMaps.categoryById,
+      serviceById: labelMaps.serviceById,
+      includePartner,
+    })
+  );
+};
+
+const publishedPostFilter = (extra = {}) => ({
+  status: POST_STATUS_PUBLISHED,
+  deleted_at: null,
+  ...extra,
+});
+
+const findPublishedPostById = async (postId) => {
+  const parsed = parseObjectId(postId, 'post_id');
+  if (!parsed.ok) {
+    return fail(400, parsed.message);
+  }
+
+  const post = await PartnerPost.findOne(publishedPostFilter({ _id: parsed.oid })).lean();
+  if (!post) {
+    return fail(404, 'Post not found.');
+  }
+
+  return ok(200, { post, postOid: parsed.oid });
+};
+
+module.exports = {
+  fail,
+  ok,
+  DEFAULT_PAGE,
+  DEFAULT_LIMIT,
+  MAX_LIMIT,
+  MIN_IMAGES,
+  MAX_IMAGES,
+  MAX_DESCRIPTION_LENGTH,
+  MIN_LEGACY_SERVICE_NAME_LENGTH,
+  parsePositiveInt,
+  parseObjectId,
+  generateShareToken,
+  buildShareUrl,
+  assertPartnerCanPost,
+  validateOrderLink,
+  mapPostRecord,
+  mapPostRecords,
+  publishedPostFilter,
+  findPublishedPostById,
+  POST_TYPE_ORDER,
+  POST_TYPE_LEGACY_WORK,
+};

@@ -1033,6 +1033,114 @@
             "description": "**PUT /api/mobile/partner/update**\n\n**Auth:** Bearer `{{token}}`\n**Body:** `multipart/form-data` (do not set Content-Type manually)\n\n### Before sending\n1. **Common → Location** → States → Cities → Areas → Pincodes\n2. **Login** (or Register)\n3. While pending: disable `partner_services` and `bank_account` (or clear values)\n4. After approval (`verification_status` = 2): run **Catalog**, then enable catalog + bank fields\n5. Select files: `image`, `aadhar_card` (and optional other verification files)\n\n| Section | Fields |\n|---------|--------|\n| Profile / location | gender, experience, state_id, city_id, area_id, pincode, address, image, name, email, phone_number, date_of_birth, device_token, password, confirm_password |\n| Services (approved) | partner_services |\n| Banks (approved) | bank_account |\n| Documents | aadhar_card, pan_card, driving_license, vehicle_registration, police_verification_certificate |\n\n`partner_documents` JSON is not supported."
           },
           "response": []
+        },
+        {
+          "name": "Posts",
+          "description": "Partner portfolio posts — `post_routes.js`. Requires verified partner. See `docs/PARTNER_POST_FRONTEND.md`.",
+          "item": [
+            {
+              "name": "Order options",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/posts/order-options?page=1&limit=10",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "posts", "order-options"],
+                  "query": [
+                    { "key": "page", "value": "1" },
+                    { "key": "limit", "value": "10" }
+                  ]
+                },
+                "description": "**GET /api/mobile/partner/posts/order-options**"
+              },
+              "response": []
+            },
+            {
+              "name": "Create post (legacy work)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  if (j?.data?._id) pm.collectionVariables.set('postId', String(j.data._id));",
+                      "  if (j?.data?.share_token) pm.collectionVariables.set('postShareToken', String(j.data.share_token));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    { "key": "post_type", "value": "legacy_work", "type": "text" },
+                    { "key": "legacy_service_name", "value": "Home painting before joining app", "type": "text" },
+                    { "key": "description", "value": "Sample legacy work post from Postman.", "type": "text" },
+                    { "key": "images", "type": "file", "src": [], "description": "Add 1-4 JPEG/PNG files" }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/posts",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "posts"]
+                },
+                "description": "**POST /api/mobile/partner/posts** — multipart, 1-4 images."
+              },
+              "response": []
+            },
+            {
+              "name": "List own posts",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/posts?page=1&limit=10",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "posts"],
+                  "query": [
+                    { "key": "page", "value": "1" },
+                    { "key": "limit", "value": "10" }
+                  ]
+                },
+                "description": "**GET /api/mobile/partner/posts**"
+              },
+              "response": []
+            },
+            {
+              "name": "Get post",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/posts/{{postId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "posts", "{{postId}}"]
+                },
+                "description": "**GET /api/mobile/partner/posts/:postId**"
+              },
+              "response": []
+            },
+            {
+              "name": "Delete post",
+              "request": {
+                "method": "DELETE",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/posts/{{postId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "posts", "{{postId}}"]
+                },
+                "description": "**DELETE /api/mobile/partner/posts/:postId**"
+              },
+              "response": []
+            }
+          ]
         }
       ]
     },
@@ -1319,6 +1427,70 @@
           "response": []
         },
         {
+          "name": "Partners (saved list)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/partners/saved?page={{partnersPage}}&limit={{partnersLimit}}&search={{partnerSearch}}&plan_name={{partnerPlanName}}&category_id={{categoryId}}&service_id={{serviceId}}&min_price={{partnerMinPrice}}&max_price={{partnerMaxPrice}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "user", "partners", "saved"],
+              "query": [
+                { "key": "page", "value": "{{partnersPage}}" },
+                { "key": "limit", "value": "{{partnersLimit}}" },
+                { "key": "search", "value": "{{partnerSearch}}", "disabled": true },
+                { "key": "plan_name", "value": "{{partnerPlanName}}", "disabled": true },
+                { "key": "category_id", "value": "{{categoryId}}", "disabled": true },
+                { "key": "service_id", "value": "{{serviceId}}", "disabled": true },
+                { "key": "min_price", "value": "{{partnerMinPrice}}", "disabled": true },
+                { "key": "max_price", "value": "{{partnerMaxPrice}}", "disabled": true }
+              ]
+            },
+            "description": "**GET /api/mobile/user/partners/saved**\n\nNo `franchise_id`. Same filters as **Partners (list)**. Each partner includes `franchise_id`, `franchise_name`, `saved_at`, `is_saved: true`. Sorted by most recently saved."
+          },
+          "response": []
+        },
+        {
+          "name": "Save partner",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/partners/{{quotePartnerId}}/save",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "user", "partners", "{{quotePartnerId}}", "save"]
+            },
+            "description": "**POST /api/mobile/user/partners/:partnerId/save** — no body. Partner must be verified with active subscription. **201** on first save; **200** if already saved."
+          },
+          "response": []
+        },
+        {
+          "name": "Unsave partner",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "DELETE",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/partners/{{quotePartnerId}}/save",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "user", "partners", "{{quotePartnerId}}", "save"]
+            },
+            "description": "**DELETE /api/mobile/user/partners/:partnerId/save** — **404** if not in saved list."
+          },
+          "response": []
+        },
+        {
           "name": "Get partner profile",
           "event": [
             {
@@ -1366,7 +1538,7 @@
                 }
               ]
             },
-            "description": "**GET /api/mobile/user/partners/:partnerId**\n\nCustomer partner detail + full catalog for requesting a quote.\n\n| Param / query | Required | Notes |\n|---------------|----------|--------|\n| `partnerId` | Yes | Partner Mongo `_id` (`{{quotePartnerId}}` from Home or Partners list) |\n| `franchise_id` | Yes | Same franchise as Home |\n\n**200 `data.partner`:** name, profile, `experience` / `professional_summary`, subscription plan, optional `business_info`, `location`, `joined_at` (account `created_at`), `completed_services_count` / `no_of_services_completed` (completed order service lines)\n\n**200 `data.categories[]`:** grouped services with `description`, `price`, `tax`, `payment_type`, `minimum_deposit`, `is_accept_request`\n\n**Quote flow:** pick a service → `POST /quotes/create` with `partner_id`, global `service_id`, `category_id`, `total_service_charge` = service `price`."
+            "description": "**GET /api/mobile/user/partners/:partnerId**\n\nCustomer partner detail + full catalog for requesting a quote.\n\n| Param / query | Required | Notes |\n|---------------|----------|--------|\n| `partnerId` | Yes | Partner Mongo `_id` (`{{quotePartnerId}}` from Home or Partners list) |\n| `franchise_id` | Yes | Same franchise as Home |\n\n**200 `data.partner`:** name, profile, `experience` / `professional_summary`, subscription plan, optional `business_info`, `location`, `joined_at` (account `created_at`), `completed_services_count` / `no_of_services_completed` (completed order service lines), `is_saved` (boolean)\n\n**200 `data.categories[]`:** grouped services with `description`, `price`, `tax`, `payment_type`, `minimum_deposit`, `is_accept_request`\n\n**Quote flow:** pick a service → `POST /quotes/create` with `partner_id`, global `service_id`, `category_id`, `total_service_charge` = service `price`."
           },
           "response": []
         },
@@ -1975,6 +2147,130 @@
             "description": "**PUT /api/mobile/user/update**\n\n- **Auth:** Bearer `{{token}}`\n- **Body:** `multipart/form-data` only (do not set Content-Type manually)\n- Enable fields you want to update (`name`, `email`, `gender` required only if final value is empty)\n\n| Field | Rules |\n|-------|--------|\n| `name` | 2–50 chars; saved capitalized (e.g. `Ravi Kumar`) |\n| `phone_number` | E.164, unique if sent |\n| `email` | valid format; invalid e.g. `ravigmail.com` → `Invalid email format.` |\n| `date_of_birth` | valid date, 18+ if sent |\n| `gender` | `male`, `female`, or `other` — invalid → `Gender must be male, female, or other.` |\n| `profile_photo` | JPEG/PNG/JPG, max 512 KB |\n\n**200** `data`: updated profile + `auth_token`"
           },
           "response": []
+        },
+        {
+          "name": "Posts",
+          "description": "Customer post feed, gallery, like, share, report — `post_routes.js`. See `docs/PARTNER_POST_FRONTEND.md`.",
+          "item": [
+            {
+              "name": "Feed",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/posts/feed?franchise_id={{franchiseId}}&page=1&limit=10",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "posts", "feed"],
+                  "query": [
+                    { "key": "franchise_id", "value": "{{franchiseId}}" },
+                    { "key": "page", "value": "1" },
+                    { "key": "limit", "value": "10" }
+                  ]
+                },
+                "description": "**GET /api/mobile/user/posts/feed** — run Home first for `{{franchiseId}}`."
+              },
+              "response": []
+            },
+            {
+              "name": "Partner profile posts",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/partners/{{quotePartnerId}}/posts?franchise_id={{franchiseId}}&page=1&limit=10",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "partners", "{{quotePartnerId}}", "posts"],
+                  "query": [
+                    { "key": "franchise_id", "value": "{{franchiseId}}" },
+                    { "key": "page", "value": "1" },
+                    { "key": "limit", "value": "10" }
+                  ]
+                },
+                "description": "**GET /api/mobile/user/partners/:partnerId/posts**"
+              },
+              "response": []
+            },
+            {
+              "name": "Get post",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/posts/{{postId}}?franchise_id={{franchiseId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "posts", "{{postId}}"],
+                  "query": [{ "key": "franchise_id", "value": "{{franchiseId}}" }]
+                },
+                "description": "**GET /api/mobile/user/posts/:postId**"
+              },
+              "response": []
+            },
+            {
+              "name": "Resolve share token (public)",
+              "request": {
+                "auth": { "type": "noauth" },
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/posts/share/{{postShareToken}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "posts", "share", "{{postShareToken}}"]
+                },
+                "description": "**GET /api/mobile/user/posts/share/:shareToken** — no auth."
+              },
+              "response": []
+            },
+            {
+              "name": "Like post",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/posts/{{postId}}/like",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "posts", "{{postId}}", "like"]
+                },
+                "description": "**POST /api/mobile/user/posts/:postId/like** — toggle."
+              },
+              "response": []
+            },
+            {
+              "name": "Share post",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/posts/{{postId}}/share",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "posts", "{{postId}}", "share"]
+                },
+                "description": "**POST /api/mobile/user/posts/:postId/share** — returns share_url."
+              },
+              "response": []
+            },
+            {
+              "name": "Report post",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Accept", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"reason\": \"spam\",\n  \"details\": \"Optional details from Postman.\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/posts/{{postId}}/report",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "posts", "{{postId}}", "report"]
+                },
+                "description": "**POST /api/mobile/user/posts/:postId/report**"
+              },
+              "response": []
+            }
+          ]
         }
       ]
     }
@@ -2335,6 +2631,18 @@
       "value": "10",
       "type": "string",
       "description": "Quotes list limit (max 50)"
+    },
+    {
+      "key": "postId",
+      "value": "",
+      "type": "string",
+      "description": "Partner post Mongo _id"
+    },
+    {
+      "key": "postShareToken",
+      "value": "",
+      "type": "string",
+      "description": "Deep link share token from post create/share"
     }
   ]
 }

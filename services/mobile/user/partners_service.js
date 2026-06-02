@@ -2,7 +2,9 @@ const mongoose = require('mongoose');
 const { resolveFranchiseEffectiveCatalog } = require('../../../utils/catalog_availability_resolver');
 const { PLAN_NAMES } = require('../../../models/subscription_plan');
 const User = require('../../../models/user');
+const OrderService = require('../../../models/order_services');
 const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
+const { ORDER_STATUS_COMPLETED } = require('../../../enum/order_status_enum');
 const {
   resolveFranchiseById,
   loadSubscribedFranchisePartners,
@@ -245,6 +247,22 @@ const mapPartnerProfileLocation = (partner) => ({
   area_name: partner.area_id?.name ?? null,
 });
 
+/** Completed order service lines (same basis as admin GET partner service count). */
+const countPartnerCompletedServices = async (partnerId) => {
+  const partnerOid = new mongoose.Types.ObjectId(String(partnerId));
+  const result = await OrderService.aggregate([
+    {
+      $match: {
+        partner_id: partnerOid,
+        service_status: ORDER_STATUS_COMPLETED,
+        deleted_at: null,
+      },
+    },
+    { $count: 'total' },
+  ]);
+  return result[0]?.total ?? 0;
+};
+
 const mapPartnerBusinessInfo = (partner) => {
   if (!partner.is_business || !partner.business_info_id) {
     return null;
@@ -281,7 +299,7 @@ const getPartnerProfileForCustomer = async (partnerId, franchiseId) => {
       deleted_at: null,
     })
       .select(
-        'name profile_url user_id experience is_business business_info_id state_id city_id area_id'
+        'name profile_url user_id experience is_business business_info_id state_id city_id area_id created_at'
       )
       .populate([
         { path: 'state_id', select: 'name' },
@@ -301,10 +319,10 @@ const getPartnerProfileForCustomer = async (partnerId, franchiseId) => {
       return fail(404, 'Partner not found.');
     }
 
-    const catalogResult = await buildPartnerDetailCatalog(
-      franchiseCtx.franchise._id,
-      partner._id
-    );
+    const [catalogResult, completedServicesCount] = await Promise.all([
+      buildPartnerDetailCatalog(franchiseCtx.franchise._id, partner._id),
+      countPartnerCompletedServices(partner._id),
+    ]);
     if (!catalogResult.ok) {
       return fail(catalogResult.status, catalogResult.message);
     }
@@ -326,6 +344,9 @@ const getPartnerProfileForCustomer = async (partnerId, franchiseId) => {
           is_business: partner.is_business === true,
           business_info: mapPartnerBusinessInfo(partner),
           location: mapPartnerProfileLocation(partner),
+          joined_at: partner.created_at ?? null,
+          completed_services_count: completedServicesCount,
+          no_of_services_completed: completedServicesCount,
         },
         categories: catalogResult.categories,
       },

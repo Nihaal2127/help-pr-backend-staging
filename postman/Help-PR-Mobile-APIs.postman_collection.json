@@ -1279,36 +1279,42 @@
                 {
                   "key": "search",
                   "value": "{{partnerSearch}}",
-                  "description": "Partner name substring (alias: q)"
+                  "description": "Partner name substring (alias: q)",
+                  "disabled": true
                 },
                 {
                   "key": "plan_name",
                   "value": "{{partnerPlanName}}",
-                  "description": "basic | silver | gold | platinum — leave empty to skip"
+                  "description": "basic | silver | gold | platinum — leave empty to skip",
+                  "disabled": true
                 },
                 {
                   "key": "category_id",
                   "value": "{{categoryId}}",
-                  "description": "Filter partners offering this category; price_range scoped to category services"
+                  "description": "Filter partners offering this category; price_range scoped to category services. Disabled by default — enable only when filtering.",
+                  "disabled": true
                 },
                 {
                   "key": "service_id",
                   "value": "{{serviceId}}",
-                  "description": "Filter partners offering this service; each partner gets single price (no range)"
+                  "description": "Filter partners offering this service; each partner gets single price (no range). Disabled by default — enable only when filtering.",
+                  "disabled": true
                 },
                 {
                   "key": "min_price",
                   "value": "{{partnerMinPrice}}",
-                  "description": "Min partner_service.price — scoped with category_id / service_id when set"
+                  "description": "Min partner_service.price — scoped with category_id / service_id when set",
+                  "disabled": true
                 },
                 {
                   "key": "max_price",
                   "value": "{{partnerMaxPrice}}",
-                  "description": "Max partner_service.price"
+                  "description": "Max partner_service.price",
+                  "disabled": true
                 }
               ]
             },
-            "description": "**GET /api/mobile/user/partners**\n\nRun **Home** first (sets `{{franchiseId}}`, `{{categoryId}}`, `{{serviceId}}`). Clear optional variables to disable a filter.\n\n| Query | Required | Notes |\n|-------|----------|--------|\n| `franchise_id` | Yes | Franchise ObjectId |\n| `page` | No | Default 1 (`{{partnersPage}}`) |\n| `limit` | No | Default 10, max 50 (`{{partnersLimit}}`) |\n| `search` or `q` | No | Partner name (`{{partnerSearch}}`) |\n| `plan_name` | No | basic \\| silver \\| gold \\| platinum (`{{partnerPlanName}}`) |\n| `category_id` | No | Category filter + category-scoped `price_range` (`{{categoryId}}`) |\n| `service_id` | No | Service filter + single `price` per partner (`{{serviceId}}`) |\n| `min_price` / `max_price` | No | Price band (`{{partnerMinPrice}}`, `{{partnerMaxPrice}}`) |\n\n**Partner pricing in response:** `service_id` → `price` only; `category_id` (no service) → `price_range` for that category; else `price_range` for all services.\n\n**200:** `totalItems`, `totalPages`, `currentPage`, `limit`, `data.partners[]` (plan_priority desc)."
+            "description": "**GET /api/mobile/user/partners**\n\nRun **Home** first (sets `{{franchiseId}}`). Optional filters are **disabled by default** in this request so you get all eligible partners for the franchise — enable `category_id` / `service_id` only when you want to narrow the list.\n\n| Query | Required | Notes |\n|-------|----------|--------|\n| `franchise_id` | Yes | Franchise ObjectId |\n| `page` | No | Default 1 (`{{partnersPage}}`) |\n| `limit` | No | Default 10, max 50 (`{{partnersLimit}}`) |\n| `search` or `q` | No | Partner name (`{{partnerSearch}}`) |\n| `plan_name` | No | basic \\| silver \\| gold \\| platinum (`{{partnerPlanName}}`) |\n| `category_id` | No | **Filters** to partners offering this category; also scopes `price_range` |\n| `service_id` | No | **Filters** to partners offering this service; sets single `price` per partner |\n| `min_price` / `max_price` | No | Price band (`{{partnerMinPrice}}`, `{{partnerMaxPrice}}`) |\n\n**Why only 1 partner?** If `category_id` or `service_id` is sent (e.g. from Home variables), only partners with that service **effectively enabled** (franchise + global + partner catalog chain) are returned. Check root `totalItems` vs `data.partners.length`.\n\n**Mobile eligibility** (stricter than admin subscription list): partner `verification_status` = 2, `is_active` true, not blocked; subscription `status` active, not expired; linked plan `is_active` true and not deleted.\n\n**Partner pricing in response:** `service_id` → `price` only; `category_id` (no service) → `price_range` for that category; else `price_range` for all services.\n\n**200:** `totalItems`, `totalPages`, `currentPage`, `limit`, `data.partners[]` (plan_priority desc)."
           },
           "response": []
         },
@@ -1360,7 +1366,7 @@
                 }
               ]
             },
-            "description": "**GET /api/mobile/user/partners/:partnerId**\n\nCustomer partner detail + full catalog for requesting a quote.\n\n| Param / query | Required | Notes |\n|---------------|----------|--------|\n| `partnerId` | Yes | Partner Mongo `_id` (`{{quotePartnerId}}` from Home or Partners list) |\n| `franchise_id` | Yes | Same franchise as Home |\n\n**200 `data`:**\n- `partner`: name, profile, `experience` / `professional_summary`, subscription plan, optional `business_info`, `location`\n- `categories[]`: grouped services with `description`, `price`, `tax`, `payment_type`, `minimum_deposit`, `is_accept_request`\n\n**Quote flow:** pick a service → `POST /quotes/create` with `partner_id`, global `service_id`, `category_id`, `total_service_charge` = service `price`."
+            "description": "**GET /api/mobile/user/partners/:partnerId**\n\nCustomer partner detail + full catalog for requesting a quote.\n\n| Param / query | Required | Notes |\n|---------------|----------|--------|\n| `partnerId` | Yes | Partner Mongo `_id` (`{{quotePartnerId}}` from Home or Partners list) |\n| `franchise_id` | Yes | Same franchise as Home |\n\n**200 `data.partner`:** name, profile, `experience` / `professional_summary`, subscription plan, optional `business_info`, `location`, `joined_at` (account `created_at`), `completed_services_count` / `no_of_services_completed` (completed order service lines)\n\n**200 `data.categories[]`:** grouped services with `description`, `price`, `tax`, `payment_type`, `minimum_deposit`, `is_accept_request`\n\n**Quote flow:** pick a service → `POST /quotes/create` with `partner_id`, global `service_id`, `category_id`, `total_service_charge` = service `price`."
           },
           "response": []
         },

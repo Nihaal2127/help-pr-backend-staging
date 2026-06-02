@@ -33,7 +33,7 @@ POST /api/mobile/user/partners/:partnerId/save
 DELETE /api/mobile/user/partners/:partnerId/save
 ```
 
-- No request body.
+- **No request body** — only the path parameter `partnerId` (and customer Bearer token). The server ignores any JSON body on POST.
 - Save uses the partner’s franchise from their account (verified + active subscription required).
 - **201** first save; **200** if already saved.
 - **404** partner not eligible or not found; **404** on delete if not saved.

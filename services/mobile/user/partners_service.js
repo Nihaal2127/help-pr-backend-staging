@@ -201,7 +201,9 @@ const parsePartnersListQuery = (query) => {
 };
 
 const paginatePartnerRecords = (records, { filters, serviceId, categoryId, page, limit }) => {
-  const filtered = applyPartnerFilters(records, filters);
+  const safeRecords = Array.isArray(records) ? records : [];
+  const safeFilters = filters || {};
+  const filtered = applyPartnerFilters(safeRecords, safeFilters);
   const totalItems = filtered.length;
   const totalPages = totalItems === 0 ? 0 : Math.ceil(totalItems / limit);
   const skip = (page - 1) * limit;
@@ -300,6 +302,13 @@ const listFranchisePartnersPaginated = async (query) => {
 
     const built = await buildFranchisePartnerListRecords(franchiseCtx.franchise._id);
     if (!built.ok) return built;
+    if (!Array.isArray(built.records)) {
+      console.error('listFranchisePartnersPaginated invalid records shape', {
+        franchise_id: String(franchiseCtx.franchise._id),
+        records_type: typeof built.records,
+      });
+      return fail(500, 'Internal server error.');
+    }
 
     const paginated = paginatePartnerRecords(built.records, {
       filters: parsed.filters,
@@ -318,7 +327,11 @@ const listFranchisePartnersPaginated = async (query) => {
       },
     });
   } catch (err) {
-    console.error('listFranchisePartnersPaginated', err.message);
+    console.error('listFranchisePartnersPaginated', {
+      message: err?.message,
+      stack: err?.stack,
+      query,
+    });
     return fail(500, 'Internal server error.');
   }
 };

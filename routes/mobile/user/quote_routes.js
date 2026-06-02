@@ -7,6 +7,7 @@ const {
   getQuoteHandler,
   updateQuoteHandler,
   cancelQuoteHandler,
+  convertQuoteToOrderHandler,
 } = require('../../../controllers/mobile/user/quote_controller');
 const {
   validateCreateQuoteBody,
@@ -14,6 +15,7 @@ const {
   validateQuoteIdParam,
   validateListQuotesQuery,
   validateCancelQuoteBody,
+  validateConvertQuoteBody,
 } = require('../../../middleware/mobile/user/quote_middleware');
 
 router.post('/quotes/create', userAuthMiddleware, validateCreateQuoteBody, createQuoteHandler);
@@ -32,6 +34,13 @@ router.put(
   validateQuoteIdParam,
   validateCancelQuoteBody,
   cancelQuoteHandler
+);
+router.post(
+  '/quotes/:id/convert-to-order',
+  userAuthMiddleware,
+  validateQuoteIdParam,
+  validateConvertQuoteBody,
+  convertQuoteToOrderHandler
 );
 
 module.exports = router;

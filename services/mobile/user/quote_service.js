@@ -6,6 +6,7 @@ const { getQuoteSequenceId } = require('../../../helper/id_generator');
 const { checkObjectIdExists } = require('../../../validator/id_validator');
 const { applyPagination } = require('../../../utils/pagination');
 const { OrderCreationError } = require('../../../errors/order_creation_error');
+const OrderPayment = require('../../../models/order_payment');
 const {
   resolveQuotePricing,
   applyPricingToQuote,
@@ -39,6 +40,12 @@ const {
   buildHistoryChange,
   appendQuoteHistory,
 } = require('../../../utils/quote_history_helper');
+const {
+  createOrderFromQuote,
+} = require('../../order_creation_service');
+const { syncOrderPaymentStatus } = require('../../order_payment_status_service');
+const { syncAllPartnerOrderPaymentsForOrder } = require('../../partner_wallet_order_service');
+const { formatOrderForApi } = require('../../../utils/order_api_format');
 
 const fail = (status, message) => ({ ok: false, status, message });
 const ok = (status, data) => ({ ok: true, status, data });
@@ -443,10 +450,109 @@ const cancelCustomerQuote = async (customerId, quoteId, body) => {
   }
 };
 
+const convertCustomerQuoteToOrder = async (customerId, quoteId, body) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(String(quoteId))) {
+      return fail(400, 'Invalid quote id.');
+    }
+
+    const quote = await Quote.findOne({ _id: quoteId, deleted_at: null });
+    if (!quote) {
+      return fail(404, 'Quote not found.');
+    }
+
+    const access = assertCustomerOwnsQuote(customerId, quote);
+    if (!access.ok) return access;
+
+    const currentStatus = resolveQuoteStatus(quote);
+    if (currentStatus !== 'accepted') {
+      return fail(409, 'Only accepted quotes can be converted to order.');
+    }
+    if (quote.order_id) {
+      return fail(409, 'Quote is already linked to an order.');
+    }
+
+    const minimumDeposit = Number(quote.minimum_deposit_amount) || 0;
+    const totalPrice = Number(quote.total_price) || 0;
+    const paidAmount = Number(body.amount);
+
+    if (paidAmount < minimumDeposit) {
+      return fail(
+        409,
+        `Minimum deposit is ${minimumDeposit}. Amount must be at least minimum_deposit_amount.`
+      );
+    }
+    if (totalPrice > 0 && paidAmount > totalPrice) {
+      return fail(409, 'Amount cannot exceed quote total_price.');
+    }
+
+    let created;
+    try {
+      created = await createOrderFromQuote(quote);
+    } catch (error) {
+      if (error instanceof OrderCreationError) {
+        return fail(error.status, error.message);
+      }
+      throw error;
+    }
+
+    const paymentStatus = body.payment_status ? String(body.payment_status).trim() : 'completed';
+    const allowedPaymentStatuses = new Set(['pending', 'completed']);
+    if (!allowedPaymentStatuses.has(paymentStatus)) {
+      return fail(400, 'payment_status must be either pending or completed.');
+    }
+
+    const orderPayment = new OrderPayment({
+      order_id: created.order._id,
+      payer_type: 'customer',
+      amount: paidAmount,
+      payment_method: String(body.payment_method || '').trim(),
+      status: paymentStatus,
+      transaction_reference: body.transaction_reference
+        ? String(body.transaction_reference).trim()
+        : '',
+      paid_at:
+        body.paid_at !== undefined && body.paid_at !== null && body.paid_at !== ''
+          ? new Date(body.paid_at)
+          : paymentStatus === 'completed'
+            ? new Date()
+            : null,
+      notes: body.notes ? String(body.notes).trim() : '',
+    });
+    await orderPayment.save();
+
+    await syncOrderPaymentStatus(created.order._id);
+    await syncAllPartnerOrderPaymentsForOrder(created.order._id);
+
+    const linkedQuote = await Quote.findById(quote._id)
+      .populate(QUOTE_MOBILE_DETAIL_POPULATE)
+      .lean();
+    await attachPartnerServiceToQuote(linkedQuote);
+
+    return ok(200, {
+      message: 'Quote converted to order successfully.',
+      data: {
+        quote: formatQuoteForApi(linkedQuote),
+        order: formatOrderForApi(created.order),
+        payment: orderPayment.toObject(),
+        deposit: {
+          minimum_deposit_amount: minimumDeposit,
+          paid_amount: paidAmount,
+          remaining_deposit_due: Math.max(0, minimumDeposit - paidAmount),
+        },
+      },
+    });
+  } catch (err) {
+    console.error('mobile user convert quote', err.message);
+    return fail(500, 'Internal server error.');
+  }
+};
+
 module.exports = {
   createCustomerQuote,
   listCustomerQuotes,
   getCustomerQuoteById,
   updateCustomerQuote,
   cancelCustomerQuote,
+  convertCustomerQuoteToOrder,
 };

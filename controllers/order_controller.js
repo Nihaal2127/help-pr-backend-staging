@@ -18,6 +18,8 @@ const { buildOrderInvoiceHtml } = require('../utils/order_invoice_html');
 const { getOrderId } = require('../helper/id_generator');
 const { checkObjectIdExists } = require('../validator/id_validator');
 const { fieldLabel } = require('../utils/field_labels');
+const { USER_TYPE_CUSTOMER } = require('../constants/user_types');
+const { getCallerId } = require('../utils/auth_caller');
 const {
   ORDER_STATUS_CANCELLED,
   ORDER_STATUS_COMPLETED,
@@ -494,12 +496,24 @@ const getCustomerOrder = async (req, res) => {
         message: "Please enter user id",
       });
     }
-    const userResult = checkObjectIdExists(User, user_id, 'user');
+    const userResult = await checkObjectIdExists(User, user_id, 'user');
     if (userResult.exists === false) {
       return res.status(400).json({
         success: false,
         status: 400,
         message: userResult.message,
+      });
+    }
+    const callerId = getCallerId(req);
+    if (
+      Number(req?.user?.type) === USER_TYPE_CUSTOMER &&
+      callerId &&
+      String(callerId) !== String(user_id)
+    ) {
+      return res.status(403).json({
+        success: false,
+        status: 403,
+        message: 'Customers can only view their own orders.',
       });
     }
     filter.user_id = new mongoose.Types.ObjectId(user_id);

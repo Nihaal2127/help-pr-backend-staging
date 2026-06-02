@@ -1345,6 +1345,10 @@
                   "    pm.expect(j.success).to.eql(true);",
                   "    pm.expect(j.records).to.be.an('array');",
                   "  });",
+                  "  const completed = (j?.records || []).find((o) => o.order_status === 'completed');",
+                  "  if (completed?._id) pm.collectionVariables.set('orderId', String(completed._id));",
+                  "  const line = completed?.service_items?.[0];",
+                  "  if (line?._id) pm.collectionVariables.set('orderServiceItemId', String(line._id));",
                   "} catch (e) {}"
                 ],
                 "type": "text/javascript"
@@ -1438,7 +1442,51 @@
                 }
               ]
             },
-            "description": "**GET /api/mobile/user/orders**\n\n- **Auth:** Bearer customer\n- Lists orders for authenticated customer only\n- **Pagination:** `page`, `limit` (max 50)\n- **Search:** `search` (or `q`) on unique/order text fields\n- **Filters:** `status`, `from_date`, `to_date`, `is_paid`, `user_payment_status` (or `payment_status`), and optional ObjectId filters: `franchise_id`, `partner_id`, `category_id`, `service_id`, `city_id`, `address_id`\n- **200:** `totalItems`, `totalPages`, `currentPage`, `limit`, `records[]`"
+            "description": "**GET /api/mobile/user/orders**\n\n- **Auth:** Bearer customer\n- Lists orders for authenticated customer only\n- **Pagination:** `page`, `limit` (max 50)\n- **Search:** `search` (or `q`) on unique/order text fields\n- **Filters:** `status`, `from_date`, `to_date`, `is_paid`, `user_payment_status` (or `payment_status`), and optional ObjectId filters: `franchise_id`, `partner_id`, `category_id`, `service_id`, `city_id`, `address_id`\n- **200:** `totalItems`, `totalPages`, `currentPage`, `limit`, `records[]` — each record may include `service_items[].rating`, `review_text`, `reviewed_at` when reviewed"
+          },
+          "response": []
+        },
+        {
+          "name": "Submit order review",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Order review submitted', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.record?.rating).to.be.a('number');",
+                  "  });",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rating\": {{orderReviewRating}},\n  \"review_text\": \"{{orderReviewText}}\",\n  \"service_items_id\": \"{{orderServiceItemId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/orders/{{orderId}}/review",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "user", "orders", "{{orderId}}", "review"]
+            },
+            "description": "**POST /api/mobile/user/orders/:orderId/review**\n\nSubmit or update a customer review for a **completed** order.\n\n| Field | Required | Notes |\n|-------|----------|--------|\n| `rating` | Yes | Number **1–5** (decimals allowed, e.g. 4.5) |\n| `review_text` | No | Free-text review |\n| `service_items_id` | No* | Order service line `_id` — required when order has multiple service lines |\n\n**Rules:** customer token only; order must belong to caller; order + line must be `completed`.\n\n**Side effects:** updates partner overall rating, global service rating, and partner+service rating rollups.\n\n**200 `record`:** `order_id`, `service_items_id`, `rating`, `review_text`, `reviewed_at`, `partner_id`, `service_id`"
           },
           "response": []
         },
@@ -1699,6 +1747,61 @@
           ]
         },
         {
+          "name": "Get partner ratings",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Partner ratings fetched', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.data?.service_ratings).to.be.an('array');",
+                  "    pm.expect(j.data?.recent_reviews).to.be.an('array');",
+                  "  });",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/partners/{{quotePartnerId}}/ratings?franchise_id={{franchiseId}}&service_id={{serviceId}}&review_limit={{partnerReviewLimit}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "user", "partners", "{{quotePartnerId}}", "ratings"],
+              "query": [
+                {
+                  "key": "franchise_id",
+                  "value": "{{franchiseId}}",
+                  "description": "Required. From Home → data.franchise_id"
+                },
+                {
+                  "key": "service_id",
+                  "value": "{{serviceId}}",
+                  "description": "Optional — filter service_ratings and recent_reviews to one service",
+                  "disabled": true
+                },
+                {
+                  "key": "review_limit",
+                  "value": "{{partnerReviewLimit}}",
+                  "description": "Recent reviews count (default 10, max 20)"
+                }
+              ]
+            },
+            "description": "**GET /api/mobile/user/partners/:partnerId/ratings**\n\nPartner rating summary for customer app.\n\n| Query | Required | Notes |\n|-------|----------|--------|\n| `franchise_id` | Yes | Same franchise as Home |\n| `service_id` | No | Filter to one service |\n| `review_limit` | No | Recent reviews (default 10, max 20) |\n\n**200 `data`:**\n- `average_rating`, `rating_count` — partner overall\n- `service_ratings[]` — per service this partner offers (`average_rating` = partner on that service; `service_average_rating` = global service rating)\n- `recent_reviews[]` — latest customer reviews (`order_unique_id`, `rating`, `review_text`, `reviewed_at`, `service_name`)"
+          },
+          "response": []
+        },
+        {
           "name": "Get partner profile",
           "event": [
             {
@@ -1746,7 +1849,7 @@
                 }
               ]
             },
-            "description": "**GET /api/mobile/user/partners/:partnerId**\n\nCustomer partner detail + full catalog for requesting a quote.\n\n| Param / query | Required | Notes |\n|---------------|----------|--------|\n| `partnerId` | Yes | Partner Mongo `_id` (`{{quotePartnerId}}` from Home or Partners list) |\n| `franchise_id` | Yes | Same franchise as Home |\n\n**200 `data.partner`:** name, profile, `experience` / `professional_summary`, subscription plan, optional `business_info`, `location`, `joined_at` (account `created_at`), `completed_services_count` / `no_of_services_completed` (completed order service lines), `is_saved` (boolean)\n\n**200 `data.categories[]`:** grouped services with `description`, `price`, `tax`, `payment_type`, `minimum_deposit`, `is_accept_request`\n\n**Quote flow:** pick a service → `POST /quotes/create` with `partner_id`, global `service_id`, `category_id`, `total_service_charge` = service `price`."
+            "description": "**GET /api/mobile/user/partners/:partnerId**\n\nCustomer partner detail + full catalog for requesting a quote.\n\n| Param / query | Required | Notes |\n|---------------|----------|--------|\n| `partnerId` | Yes | Partner Mongo `_id` (`{{quotePartnerId}}` from Home or Partners list) |\n| `franchise_id` | Yes | Same franchise as Home |\n\n**200 `data.partner`:** name, profile, `experience` / `professional_summary`, subscription plan, optional `business_info`, `location`, `joined_at`, `completed_services_count`, `is_saved`, **`average_rating`**, **`rating_count`**, **`ratings`** `{ average_rating, rating_count }`\n\n**200 `data.categories[].services[]`:** plus **`average_rating`** / **`rating_count`** (partner on that service), **`service_average_rating`** / **`service_rating_count`** (global service), `description`, `price`, `tax`, `payment_type`, `minimum_deposit`, `is_accept_request`\n\n**Quote flow:** pick a service → `POST /quotes/create` with `partner_id`, global `service_id`, `category_id`, `total_service_charge` = service `price`."
           },
           "response": []
         },
@@ -2241,7 +2344,7 @@
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "mobile", "user", "quotes", "{{quoteId}}", "convert-to-order"]
                 },
-                "description": "**POST /api/mobile/user/quotes/:id/convert-to-order**\n\n- **Auth:** Bearer customer\n- Quote must be in **accepted** status and belong to logged-in customer\n- **Required:** `amount`, `payment_method`\n- `amount` must be >= quote `minimum_deposit_amount`\n- Creates order from quote and records customer `order_payment` row"
+                "description": "**POST /api/mobile/user/quotes/:id/convert-to-order**\n\n- **Auth:** Bearer customer\n- Quote must be in **accepted** status and belong to logged-in customer\n- **Required:** `amount`, `payment_method`\n- **Allowed `payment_method`:** `cash` | `upi` | `card` | `online` | `bank_transfer` | `other`\n- `amount` must be >= quote `minimum_deposit_amount`\n- Creates order from quote and records customer `order_payment` row"
               },
               "response": []
             }
@@ -2896,7 +2999,7 @@
       "key": "quotePaymentMethod",
       "value": "cash",
       "type": "string",
-      "description": "Payment method for quote conversion payment record (cash, upi, card, etc.)"
+      "description": "Payment method for conversion: cash | upi | card | online | bank_transfer | other"
     },
     {
       "key": "quoteTransactionReference",
@@ -2957,6 +3060,36 @@
       "value": "",
       "type": "string",
       "description": "Orders payment status: unpaid|paid|partially_paid|refund|partially_refund"
+    },
+    {
+      "key": "orderId",
+      "value": "",
+      "type": "string",
+      "description": "Order Mongo _id — set from completed order list for review"
+    },
+    {
+      "key": "orderServiceItemId",
+      "value": "",
+      "type": "string",
+      "description": "Order service line _id (service_items[0]._id) — optional when order has one line"
+    },
+    {
+      "key": "orderReviewRating",
+      "value": "5",
+      "type": "string",
+      "description": "Review rating 1-5 for POST orders/:orderId/review"
+    },
+    {
+      "key": "orderReviewText",
+      "value": "Great service, very professional.",
+      "type": "string",
+      "description": "Optional review text"
+    },
+    {
+      "key": "partnerReviewLimit",
+      "value": "10",
+      "type": "string",
+      "description": "Recent reviews limit for GET partners/:partnerId/ratings (max 20)"
     },
     {
       "key": "postId",

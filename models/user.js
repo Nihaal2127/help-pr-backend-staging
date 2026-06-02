@@ -77,6 +77,9 @@ var userSchema = new schema(
     created_at: { type: Date, default: Date.now },
     updated_at: { type: Date, default: Date.now },
     deleted_at: { type: Date, default: null },
+    rating_total: { type: Number, default: 0 },
+    rating_count: { type: Number, default: 0 },
+    average_rating: { type: Number, default: 0 },
   },
   {
     timestamps: false,

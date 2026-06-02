@@ -2,6 +2,7 @@ const {
   listFranchisePartnersPaginated,
   getPartnerProfileForCustomer,
 } = require('../../../services/mobile/user/partners_service');
+const { getPartnerRatingsSummary } = require('../../../services/mobile/user/partner_rating_service');
 const {
   savePartnerForCustomer,
   unsavePartnerForCustomer,
@@ -136,6 +137,34 @@ const unsavePartnerHandler = async (req, res) => {
   }
 };
 
+const getPartnerRatingsHandler = async (req, res) => {
+  try {
+    const result = await getPartnerRatingsSummary(req.params.partnerId, req.query);
+
+    if (!result.ok) {
+      return res.status(result.status).json({
+        success: false,
+        status: result.status,
+        message: result.message,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: result.data.message,
+      data: result.data.data,
+    });
+  } catch (error) {
+    console.error('mobile user partner ratings', error.message);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Internal server error.',
+    });
+  }
+};
+
 const getPartnerProfileHandler = async (req, res) => {
   try {
     const result = await getPartnerProfileForCustomer(
@@ -173,5 +202,6 @@ module.exports = {
   listSavedPartnersHandler,
   savePartnerHandler,
   unsavePartnerHandler,
+  getPartnerRatingsHandler,
   getPartnerProfileHandler,
 };

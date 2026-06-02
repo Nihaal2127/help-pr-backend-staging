@@ -43,6 +43,8 @@ var orderServiceSchema = new schema(
     is_paid: { type: Boolean, default: false },
     cancellation_reasone: { type: String, default: "", require: false },
     rating: { type: Number, default: 0, require: true },
+    review_text: { type: String, default: "", trim: true },
+    reviewed_at: { type: Date, default: null },
 
     created_at: { type: Date, default: Date.now },
     updated_at: { type: Date, default: Date.now },

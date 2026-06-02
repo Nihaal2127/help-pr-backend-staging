@@ -1456,24 +1456,103 @@
         },
         {
           "name": "Save partner",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Save partner', function () {",
+                  "    pm.expect([200, 201]).to.include(pm.response.code);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.data?.is_saved).to.eql(true);",
+                  "  });",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "auth": {
               "type": "bearer",
               "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
             },
             "method": "POST",
-            "header": [{ "key": "Accept", "value": "application/json" }],
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": { "raw": { "language": "json" } }
+            },
             "url": {
               "raw": "{{baseUrl}}/api/mobile/user/partners/{{quotePartnerId}}/save",
               "host": ["{{baseUrl}}"],
               "path": ["api", "mobile", "user", "partners", "{{quotePartnerId}}", "save"]
             },
-            "description": "**POST /api/mobile/user/partners/:partnerId/save** — no body. Partner must be verified with active subscription. **201** on first save; **200** if already saved."
+            "description": "**POST /api/mobile/user/partners/:partnerId/save**\n\n| Input | Required | Notes |\n|-------|----------|--------|\n| Path `partnerId` | Yes | `{{quotePartnerId}}` — from **Home**, **Partners (list)**, or **Get partner profile** |\n| Request body | **No** | API does not read the body. `{}` in Postman is only a placeholder (same as **Like post**). |\n| `Authorization` | Yes | Customer Bearer `{{token}}` |\n\nPartner must be verified (`verification_status` 2) with an active subscription in their franchise.\n\n**Responses**\n- **201** first save\n- **200** already saved (idempotent)\n- **404** partner not found / not eligible\n\n```json\n{\n  \"success\": true,\n  \"status\": 201,\n  \"message\": \"Partner saved successfully.\",\n  \"data\": {\n    \"partner_id\": \"...\",\n    \"franchise_id\": \"...\",\n    \"is_saved\": true,\n    \"saved_at\": \"2026-06-02T10:00:00.000Z\"\n  }\n}\n```"
           },
-          "response": []
+          "response": [
+            {
+              "name": "201 Partner saved",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/partners/{{quotePartnerId}}/save",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "partners", "{{quotePartnerId}}", "save"]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"status\": 201,\n  \"message\": \"Partner saved successfully.\",\n  \"data\": {\n    \"partner_id\": \"665f00000000000000000001\",\n    \"franchise_id\": \"665f00000000000000000002\",\n    \"is_saved\": true,\n    \"saved_at\": \"2026-06-02T10:00:00.000Z\"\n  }\n}"
+            },
+            {
+              "name": "200 Already saved",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/partners/{{quotePartnerId}}/save",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "partners", "{{quotePartnerId}}", "save"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"status\": 200,\n  \"message\": \"Partner already saved.\",\n  \"data\": {\n    \"partner_id\": \"665f00000000000000000001\",\n    \"franchise_id\": \"665f00000000000000000002\",\n    \"is_saved\": true,\n    \"saved_at\": \"2026-06-02T09:00:00.000Z\"\n  }\n}"
+            }
+          ]
         },
         {
           "name": "Unsave partner",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Unsave partner', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.data?.is_saved).to.eql(false);",
+                  "  });",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "auth": {
               "type": "bearer",
@@ -1486,9 +1565,27 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "mobile", "user", "partners", "{{quotePartnerId}}", "save"]
             },
-            "description": "**DELETE /api/mobile/user/partners/:partnerId/save** — **404** if not in saved list."
+            "description": "**DELETE /api/mobile/user/partners/:partnerId/save**\n\n| Input | Required | Notes |\n|-------|----------|--------|\n| Path `partnerId` | Yes | `{{quotePartnerId}}` |\n| Request body | **No** | Leave Body empty (DELETE has no payload). |\n| `Authorization` | Yes | Customer Bearer `{{token}}` |\n\n**Responses**\n- **200** removed from saved list\n- **404** partner was not saved\n\n```json\n{\n  \"success\": true,\n  \"status\": 200,\n  \"message\": \"Partner removed from saved list.\",\n  \"data\": {\n    \"partner_id\": \"...\",\n    \"is_saved\": false\n  }\n}\n```"
           },
-          "response": []
+          "response": [
+            {
+              "name": "200 Removed",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/partners/{{quotePartnerId}}/save",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "partners", "{{quotePartnerId}}", "save"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"status\": 200,\n  \"message\": \"Partner removed from saved list.\",\n  \"data\": {\n    \"partner_id\": \"665f00000000000000000001\",\n    \"is_saved\": false\n  }\n}"
+            }
+          ]
         },
         {
           "name": "Get partner profile",

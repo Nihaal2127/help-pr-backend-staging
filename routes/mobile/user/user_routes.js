@@ -8,6 +8,9 @@ const {
 const { getHomeHandler } = require('../../../controllers/mobile/user/home_controller');
 const {
   listPartnersHandler,
+  listSavedPartnersHandler,
+  savePartnerHandler,
+  unsavePartnerHandler,
   getPartnerProfileHandler,
 } = require('../../../controllers/mobile/user/partners_controller');
 const { validateHomeLocationQuery } = require('../../../middleware/mobile/user/home_middleware');
@@ -26,6 +29,7 @@ const {
 const userAuthMiddleware = require('../../../middleware/mobile/user/user_auth_middleware');
 const addressRoutes = require('./address_routes');
 const quoteRoutes = require('./quote_routes');
+const postRoutes = require('./post_routes');
 const { uploadImages } = require('../../../utils/fileUpload');
 
 const userMultipartUpload = uploadImages.fields([{ name: 'profile_photo', maxCount: 1 }]);
@@ -34,12 +38,26 @@ const router = express.Router();
 
 router.use(addressRoutes);
 router.use(quoteRoutes);
+router.use(postRoutes);
 router.get('/home', userAuthMiddleware, validateHomeLocationQuery, getHomeHandler);
 router.get(
   '/partners',
   userAuthMiddleware,
   validatePartnersListQuery,
   listPartnersHandler
+);
+router.get('/partners/saved', userAuthMiddleware, listSavedPartnersHandler);
+router.post(
+  '/partners/:partnerId/save',
+  userAuthMiddleware,
+  validatePartnerIdParam,
+  savePartnerHandler
+);
+router.delete(
+  '/partners/:partnerId/save',
+  userAuthMiddleware,
+  validatePartnerIdParam,
+  unsavePartnerHandler
 );
 router.get(
   '/partners/:partnerId',

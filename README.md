@@ -20,6 +20,7 @@ Health check: `GET /health` → `{ "status": "OK" }`
 |----------|-------------|
 | **[docs/PROJECT_FLOW_AND_ROLES.md](docs/PROJECT_FLOW_AND_ROLES.md)** | **End-to-end flows, user roles, and access matrix** |
 | [docs/ORDER_MODULE_FRONTEND.md](docs/ORDER_MODULE_FRONTEND.md) | Orders, payments, pricing |
+| [docs/PARTNER_POST_FRONTEND.md](docs/PARTNER_POST_FRONTEND.md) | Partner portfolio posts, feed, like, share, report |
 | [docs/REFUND_API.md](docs/REFUND_API.md) | Refunds |
 | [postman/README.md](postman/README.md) | Postman collections and test order |
 
@@ -84,6 +85,7 @@ Typical variables (set in `.env`):
 - `MONGO_URI` — MongoDB connection string
 - `JWT_SECRET` — JWT signing secret
 - `PORT` — Local port (default `5001`)
+- `MOBILE_APP_DEEP_LINK_BASE` — Base URL for post share deep links (default `helppr://post`)
 - AWS / S3, Razorpay, Firebase, mail — per integration
 
 ## Scripts

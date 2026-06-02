@@ -48,6 +48,7 @@ const expenseCategoryManagementRoutes = require('./routes/expense_category_manag
 const expenseManagementRoutes = require('./routes/expense_management_routes');
 const partnerPayoutRoutes = require('./routes/partner_payout_routes');
 const refundRoutes = require('./routes/refund_routes');
+const partnerPostRoutes = require('./routes/partner_post_routes');
 const { chatRoutes, registerChatSocket } = require('./src/modules/chat');
 const mobileRoutes = require('./routes/mobile');
 const { publicImageUrlsResponseMiddleware } = require('./middleware/public_image_urls_response_middleware');
@@ -143,6 +144,7 @@ app.use('/api/expense-category-management', expenseCategoryManagementRoutes);
 app.use('/api/expense-management', expenseManagementRoutes);
 app.use('/api/partner_payout', partnerPayoutRoutes);
 app.use('/api/refund', refundRoutes);
+app.use('/api/partner-post', partnerPostRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/mobile', mobileRoutes);
 

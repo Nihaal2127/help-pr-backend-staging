@@ -1,16 +1,43 @@
 const {
-  listFranchisePartnersPaginated,
-  getPartnerProfileForCustomer,
-} = require('../../../services/mobile/user/partners_service');
-const {
-  savePartnerForCustomer,
-  unsavePartnerForCustomer,
-  listSavedPartnersPaginated,
-} = require('../../../services/mobile/user/saved_partners_service');
+  createPartnerPost,
+  listPartnerPosts,
+  listOrderOptions,
+  getPartnerPostById,
+  updatePartnerPost,
+  deletePartnerPost,
+} = require('../../../services/mobile/partner/post_service');
 
-const listPartnersHandler = async (req, res) => {
+const createPostHandler = async (req, res) => {
   try {
-    const result = await listFranchisePartnersPaginated(req.query);
+    const result = await createPartnerPost(req.user.id, req.body, req.files);
+
+    if (!result.ok) {
+      return res.status(result.status).json({
+        success: false,
+        status: result.status,
+        message: result.message,
+      });
+    }
+
+    return res.status(result.status).json({
+      success: true,
+      status: result.status,
+      message: result.data.message,
+      data: result.data.post,
+    });
+  } catch (error) {
+    console.error('mobile partner create post', error.message);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Internal server error.',
+    });
+  }
+};
+
+const listPostsHandler = async (req, res) => {
+  try {
+    const result = await listPartnerPosts(req.user.id, req.query);
 
     if (!result.ok) {
       return res.status(result.status).json({
@@ -28,14 +55,10 @@ const listPartnersHandler = async (req, res) => {
       totalPages: result.data.data.totalPages,
       currentPage: result.data.data.currentPage,
       limit: result.data.data.limit,
-      data: {
-        franchise_id: result.data.data.franchise_id,
-        franchise_name: result.data.data.franchise_name,
-        partners: result.data.data.partners,
-      },
+      data: { records: result.data.data.records },
     });
   } catch (error) {
-    console.error('mobile user partners list', error.message);
+    console.error('mobile partner list posts', error.message);
     return res.status(500).json({
       success: false,
       status: 500,
@@ -44,9 +67,9 @@ const listPartnersHandler = async (req, res) => {
   }
 };
 
-const listSavedPartnersHandler = async (req, res) => {
+const listOrderOptionsHandler = async (req, res) => {
   try {
-    const result = await listSavedPartnersPaginated(req.user.id, req.query);
+    const result = await listOrderOptions(req.user.id, req.query);
 
     if (!result.ok) {
       return res.status(result.status).json({
@@ -64,12 +87,10 @@ const listSavedPartnersHandler = async (req, res) => {
       totalPages: result.data.data.totalPages,
       currentPage: result.data.data.currentPage,
       limit: result.data.data.limit,
-      data: {
-        partners: result.data.data.partners,
-      },
+      data: { records: result.data.data.records },
     });
   } catch (error) {
-    console.error('mobile user saved partners list', error.message);
+    console.error('mobile partner post order options', error.message);
     return res.status(500).json({
       success: false,
       status: 500,
@@ -78,39 +99,9 @@ const listSavedPartnersHandler = async (req, res) => {
   }
 };
 
-const savePartnerHandler = async (req, res) => {
+const getPostHandler = async (req, res) => {
   try {
-    const result = await savePartnerForCustomer(req.user.id, req.params.partnerId);
-
-    if (!result.ok) {
-      return res.status(result.status).json({
-        success: false,
-        status: result.status,
-        message: result.message,
-      });
-    }
-
-    const httpStatus = result.data.message === 'Partner saved successfully.' ? 201 : 200;
-
-    return res.status(httpStatus).json({
-      success: true,
-      status: httpStatus,
-      message: result.data.message,
-      data: result.data.data,
-    });
-  } catch (error) {
-    console.error('mobile user save partner', error.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.',
-    });
-  }
-};
-
-const unsavePartnerHandler = async (req, res) => {
-  try {
-    const result = await unsavePartnerForCustomer(req.user.id, req.params.partnerId);
+    const result = await getPartnerPostById(req.user.id, req.params.postId);
 
     if (!result.ok) {
       return res.status(result.status).json({
@@ -124,10 +115,10 @@ const unsavePartnerHandler = async (req, res) => {
       success: true,
       status: 200,
       message: result.data.message,
-      data: result.data.data,
+      data: result.data.post,
     });
   } catch (error) {
-    console.error('mobile user unsave partner', error.message);
+    console.error('mobile partner get post', error.message);
     return res.status(500).json({
       success: false,
       status: 500,
@@ -136,12 +127,13 @@ const unsavePartnerHandler = async (req, res) => {
   }
 };
 
-const getPartnerProfileHandler = async (req, res) => {
+const updatePostHandler = async (req, res) => {
   try {
-    const result = await getPartnerProfileForCustomer(
-      req.params.partnerId,
-      req.query.franchise_id,
-      req.user.id
+    const result = await updatePartnerPost(
+      req.user.id,
+      req.params.postId,
+      req.body,
+      req.files
     );
 
     if (!result.ok) {
@@ -156,10 +148,37 @@ const getPartnerProfileHandler = async (req, res) => {
       success: true,
       status: 200,
       message: result.data.message,
-      data: result.data.data,
+      data: result.data.post,
     });
   } catch (error) {
-    console.error('mobile user partner profile', error.message);
+    console.error('mobile partner update post', error.message);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Internal server error.',
+    });
+  }
+};
+
+const deletePostHandler = async (req, res) => {
+  try {
+    const result = await deletePartnerPost(req.user.id, req.params.postId);
+
+    if (!result.ok) {
+      return res.status(result.status).json({
+        success: false,
+        status: result.status,
+        message: result.message,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: result.data.message,
+    });
+  } catch (error) {
+    console.error('mobile partner delete post', error.message);
     return res.status(500).json({
       success: false,
       status: 500,
@@ -169,9 +188,10 @@ const getPartnerProfileHandler = async (req, res) => {
 };
 
 module.exports = {
-  listPartnersHandler,
-  listSavedPartnersHandler,
-  savePartnerHandler,
-  unsavePartnerHandler,
-  getPartnerProfileHandler,
+  createPostHandler,
+  listPostsHandler,
+  listOrderOptionsHandler,
+  getPostHandler,
+  updatePostHandler,
+  deletePostHandler,
 };

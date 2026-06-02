@@ -276,10 +276,52 @@ const validateCancelQuoteBody = (req, res, next) => {
   next();
 };
 
+const validateConvertQuoteBody = (req, res, next) => {
+  const body = req.body || {};
+  const payment_method = body.payment_method !== undefined ? String(body.payment_method).trim() : '';
+  if (!payment_method) {
+    return sendError(res, 400, 'payment_method is required.');
+  }
+
+  if (body.amount === undefined || body.amount === null || String(body.amount).trim() === '') {
+    return sendError(res, 400, 'amount is required.');
+  }
+  const amount = Number(body.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return sendError(res, 400, 'amount must be greater than 0.');
+  }
+  req.body.amount = amount;
+  req.body.payment_method = payment_method;
+
+  if (
+    body.transaction_reference !== undefined &&
+    body.transaction_reference !== null &&
+    typeof body.transaction_reference !== 'string'
+  ) {
+    return sendError(res, 400, 'transaction_reference must be a string.');
+  }
+  if (
+    body.notes !== undefined &&
+    body.notes !== null &&
+    typeof body.notes !== 'string'
+  ) {
+    return sendError(res, 400, 'notes must be a string.');
+  }
+  if (body.paid_at !== undefined && body.paid_at !== null && body.paid_at !== '') {
+    const paidAt = new Date(body.paid_at);
+    if (Number.isNaN(paidAt.getTime())) {
+      return sendError(res, 400, 'paid_at must be a valid date.');
+    }
+  }
+
+  next();
+};
+
 module.exports = {
   validateCreateQuoteBody,
   validateUpdateQuoteBody,
   validateQuoteIdParam,
   validateListQuotesQuery,
   validateCancelQuoteBody,
+  validateConvertQuoteBody,
 };

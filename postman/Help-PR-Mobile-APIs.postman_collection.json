@@ -2198,6 +2198,52 @@
                 "description": "**PUT /api/mobile/user/quotes/:id/cancel**\n\n- **Auth:** Bearer customer\n- Sets status to **failed** with optional `cancellation_reason`\n- Not allowed on terminal quotes (`success` / `failed`)"
               },
               "response": []
+            },
+            {
+              "name": "Convert to order (deposit payment)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Quote converted to order', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "    pm.expect(j.data?.quote?.status).to.eql('success');",
+                      "  });",
+                      "  if (j?.data?.order?._id) pm.collectionVariables.set('orderId', String(j.data.order._id));",
+                      "  if (j?.data?.quote?.status) pm.collectionVariables.set('quoteStatus', String(j.data.quote.status));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Accept", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"amount\": {{quoteDepositAmount}},\n  \"payment_method\": \"{{quotePaymentMethod}}\",\n  \"payment_status\": \"completed\",\n  \"transaction_reference\": \"{{quoteTransactionReference}}\",\n  \"notes\": \"{{quotePaymentNotes}}\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/quotes/{{quoteId}}/convert-to-order",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "quotes", "{{quoteId}}", "convert-to-order"]
+                },
+                "description": "**POST /api/mobile/user/quotes/:id/convert-to-order**\n\n- **Auth:** Bearer customer\n- Quote must be in **accepted** status and belong to logged-in customer\n- **Required:** `amount`, `payment_method`\n- `amount` must be >= quote `minimum_deposit_amount`\n- Creates order from quote and records customer `order_payment` row"
+              },
+              "response": []
             }
           ]
         },
@@ -2839,6 +2885,30 @@
       "value": "10",
       "type": "string",
       "description": "Quotes list limit (max 50)"
+    },
+    {
+      "key": "quoteDepositAmount",
+      "value": "1000",
+      "type": "string",
+      "description": "Deposit amount used for convert-to-order (must be >= minimum_deposit_amount)"
+    },
+    {
+      "key": "quotePaymentMethod",
+      "value": "cash",
+      "type": "string",
+      "description": "Payment method for quote conversion payment record (cash, upi, card, etc.)"
+    },
+    {
+      "key": "quoteTransactionReference",
+      "value": "",
+      "type": "string",
+      "description": "Optional payment reference for conversion"
+    },
+    {
+      "key": "quotePaymentNotes",
+      "value": "Customer paid minimum deposit",
+      "type": "string",
+      "description": "Optional notes for conversion payment"
     },
     {
       "key": "orderStatusFilter",

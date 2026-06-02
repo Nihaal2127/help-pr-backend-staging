@@ -4,6 +4,7 @@ const {
   getCustomerQuoteById,
   updateCustomerQuote,
   cancelCustomerQuote,
+  convertCustomerQuoteToOrder,
 } = require('../../../services/mobile/user/quote_service');
 
 const getCallerId = (req) => req.user?.id || req.user?._id;
@@ -129,10 +130,29 @@ const cancelQuoteHandler = async (req, res) => {
   }
 };
 
+const convertQuoteToOrderHandler = async (req, res) => {
+  try {
+    const result = await convertCustomerQuoteToOrder(
+      getCallerId(req),
+      req.params.id,
+      req.body || {}
+    );
+    return sendResult(res, result);
+  } catch (error) {
+    console.error('mobile user quote convert handler', error.message);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Internal server error.',
+    });
+  }
+};
+
 module.exports = {
   createQuoteHandler,
   listQuotesHandler,
   getQuoteHandler,
   updateQuoteHandler,
   cancelQuoteHandler,
+  convertQuoteToOrderHandler,
 };

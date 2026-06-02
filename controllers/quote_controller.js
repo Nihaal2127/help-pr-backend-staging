@@ -13,6 +13,7 @@ const { getQuoteSequenceId } = require("../helper/id_generator");
 const { checkObjectIdExists } = require("../validator/id_validator");
 const {
   USER_TYPE_ADMIN,
+  USER_TYPE_CUSTOMER,
   mapUserTypeToRole,
 } = require("../constants/user_types");
 const { getCallerId } = require("../utils/auth_caller");
@@ -544,6 +545,19 @@ const getCustomerQuotes = async (req, res) => {
         success: false,
         status: 400,
         message: userResult.message,
+      });
+    }
+
+    const callerId = getCallerId(req);
+    if (
+      Number(req?.user?.type) === USER_TYPE_CUSTOMER &&
+      callerId &&
+      String(callerId) !== String(user_id)
+    ) {
+      return res.status(403).json({
+        success: false,
+        status: 403,
+        message: "Customers can only view their own quotes.",
       });
     }
 

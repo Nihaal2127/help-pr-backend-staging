@@ -30,15 +30,21 @@ const userAuthMiddleware = require('../../../middleware/mobile/user/user_auth_mi
 const addressRoutes = require('./address_routes');
 const quoteRoutes = require('./quote_routes');
 const postRoutes = require('./post_routes');
+const orderRoutes = require('./order_routes');
 const { uploadImages } = require('../../../utils/fileUpload');
 
 const userMultipartUpload = uploadImages.fields([{ name: 'profile_photo', maxCount: 1 }]);
 
 const router = express.Router();
 
+// Public auth routes must be registered before sub-routers (post_routes applies auth via router.use).
+router.post('/login', rateLimitSendOtp, sendOtpHandler);
+router.post('/verify-otp', validateVerifyOtp, verifyOtpHandler);
+
 router.use(addressRoutes);
 router.use(quoteRoutes);
 router.use(postRoutes);
+router.use(orderRoutes);
 router.get('/home', userAuthMiddleware, validateHomeLocationQuery, getHomeHandler);
 router.get(
   '/partners',
@@ -67,8 +73,6 @@ router.get(
   getPartnerProfileHandler
 );
 router.get('/pincodes', userAuthMiddleware, getPincodesHandler);
-router.post('/login', rateLimitSendOtp, sendOtpHandler);
-router.post('/verify-otp', validateVerifyOtp, verifyOtpHandler);
 router.put(
   '/update',
   userAuthMiddleware,

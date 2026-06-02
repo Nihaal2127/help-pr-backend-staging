@@ -20,18 +20,23 @@ const {
 
 router.get('/posts/share/:shareToken', validateShareTokenParam, resolveShareTokenHandler);
 
-router.use(userAuthMiddleware);
-
-router.get('/posts/feed', validateFranchiseIdQuery, listFeedHandler);
+router.get('/posts/feed', userAuthMiddleware, validateFranchiseIdQuery, listFeedHandler);
 router.get(
   '/partners/:partnerId/posts',
+  userAuthMiddleware,
   validatePartnerIdParam,
   validateFranchiseIdQuery,
   listPartnerPostsHandler
 );
-router.get('/posts/:postId', validatePostIdParam, getPostHandler);
-router.post('/posts/:postId/like', validatePostIdParam, toggleLikeHandler);
-router.post('/posts/:postId/share', validatePostIdParam, sharePostHandler);
-router.post('/posts/:postId/report', validatePostIdParam, validateReportBody, reportPostHandler);
+router.get('/posts/:postId', userAuthMiddleware, validatePostIdParam, getPostHandler);
+router.post('/posts/:postId/like', userAuthMiddleware, validatePostIdParam, toggleLikeHandler);
+router.post('/posts/:postId/share', userAuthMiddleware, validatePostIdParam, sharePostHandler);
+router.post(
+  '/posts/:postId/report',
+  userAuthMiddleware,
+  validatePostIdParam,
+  validateReportBody,
+  reportPostHandler
+);
 
 module.exports = router;

@@ -14,11 +14,20 @@ const toObjectId = (value) => {
   return new mongoose.Types.ObjectId(String(value));
 };
 
+/** ObjectId, string id, or populated `{ _id }` from QUOTE_MOBILE_DETAIL_POPULATE */
+const resolveRefId = (ref) => {
+  if (ref == null) return null;
+  if (typeof ref === 'object' && ref._id != null) return String(ref._id);
+  if (typeof ref === 'object' && ref.id != null) return String(ref.id);
+  return String(ref);
+};
+
 const assertCustomerOwnsQuote = (customerId, quote) => {
   if (!quote) {
     return fail(404, 'Quote not found.');
   }
-  if (!quote.user_id || String(quote.user_id) !== String(customerId)) {
+  const quoteUserId = resolveRefId(quote.user_id);
+  if (!quoteUserId || quoteUserId !== String(customerId)) {
     return fail(403, 'You are not allowed to access this quote.');
   }
   return pass();
@@ -28,7 +37,8 @@ const assertPartnerAssignedToQuote = (partnerId, quote) => {
   if (!quote) {
     return fail(404, 'Quote not found.');
   }
-  if (!quote.partner_id || String(quote.partner_id) !== String(partnerId)) {
+  const quotePartnerId = resolveRefId(quote.partner_id);
+  if (!quotePartnerId || quotePartnerId !== String(partnerId)) {
     return fail(403, 'You are not assigned to this quote.');
   }
   return pass();

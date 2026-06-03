@@ -65,6 +65,7 @@ const listQuotesHandler = async (req, res) => {
       status: 200,
       message: result.data.message,
       totalItems: result.data.data.totalItems,
+      todayCount: result.data.data.todayCount,
       totalPages: result.data.data.totalPages,
       currentPage: result.data.data.currentPage,
       limit: result.data.data.limit,

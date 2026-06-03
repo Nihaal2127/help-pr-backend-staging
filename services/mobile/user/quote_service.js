@@ -46,6 +46,11 @@ const {
 const { syncOrderPaymentStatus } = require('../../order_payment_status_service');
 const { syncAllPartnerOrderPaymentsForOrder } = require('../../partner_wallet_order_service');
 const { formatOrderForApi } = require('../../../utils/order_api_format');
+const { escapeRegExp } = require('../../../utils/string_helpers');
+const {
+  buildQuoteDateRangeFilter,
+  buildQuoteTodayOverlapFilter,
+} = require('../../../utils/schedule_date_filters');
 
 const fail = (status, message) => ({ ok: false, status, message });
 const ok = (status, data) => ({ ok: true, status, data });
@@ -107,7 +112,7 @@ const validateRefsForCreate = async (customerId, body) => {
   return { ok: true, franchise: franchiseCheck.franchise };
 };
 
-const buildListFilter = (customerId, query) => {
+const buildCustomerQuotesListFilter = (customerId, query) => {
   const filter = {
     deleted_at: null,
     user_id: toObjectId(customerId),
@@ -127,7 +132,32 @@ const buildListFilter = (customerId, query) => {
     }
   }
 
-  return filter;
+  const searchRaw = query.search ?? query.q;
+  if (searchRaw !== undefined && String(searchRaw).trim() !== '') {
+    const search = String(searchRaw).trim();
+    const regex = new RegExp(escapeRegExp(search), 'i');
+    filter.$or = [
+      { quote_sequence_id: regex },
+      { quote_description: regex },
+      { cancellation_reason: regex },
+      { rejection_reason: regex },
+    ];
+  }
+
+  const dateRangeResult = buildQuoteDateRangeFilter(query);
+  if (!dateRangeResult.ok) {
+    return { ok: false, status: 409, message: dateRangeResult.message };
+  }
+  Object.assign(filter, dateRangeResult.filter);
+
+  return { ok: true, filter };
+};
+
+const mergeMongoFilters = (...parts) => {
+  const filters = parts.filter((part) => part && Object.keys(part).length > 0);
+  if (filters.length === 0) return {};
+  if (filters.length === 1) return filters[0];
+  return { $and: filters };
 };
 
 const createCustomerQuote = async (customerId, body) => {
@@ -204,18 +234,28 @@ const listCustomerQuotes = async (customerId, query) => {
   try {
     const page = parsePositiveInt(query.page, 1);
     const limit = Math.min(parsePositiveInt(query.limit, 10), 50);
-    const filter = buildListFilter(customerId, query);
+    const filterResult = buildCustomerQuotesListFilter(customerId, query);
+    if (!filterResult.ok) {
+      return fail(filterResult.status, filterResult.message);
+    }
+    const filter = filterResult.filter;
     const sort = { created_at: -1 };
 
-    const { data, totalCount, totalPages, currentPage } = await applyPagination(
-      Quote,
-      filter,
-      page,
-      limit,
-      sort,
-      {},
-      QUOTE_MOBILE_DETAIL_POPULATE
-    );
+    const todayOverlapResult = buildQuoteTodayOverlapFilter();
+    const todayCountFilter = mergeMongoFilters(filter, todayOverlapResult.filter);
+
+    const [{ data, totalCount, totalPages, currentPage }, todayCount] = await Promise.all([
+      applyPagination(
+        Quote,
+        filter,
+        page,
+        limit,
+        sort,
+        {},
+        QUOTE_MOBILE_DETAIL_POPULATE
+      ),
+      Quote.countDocuments(todayCountFilter),
+    ]);
 
     await attachPartnerServiceToQuotes(data);
 
@@ -223,6 +263,7 @@ const listCustomerQuotes = async (customerId, query) => {
       message: 'Quotes fetched successfully.',
       data: {
         totalItems: totalCount,
+        todayCount,
         totalPages,
         currentPage,
         limit,

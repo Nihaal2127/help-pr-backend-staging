@@ -2139,6 +2139,9 @@
                       "    pm.response.to.have.status(200);",
                       "    pm.expect(j.success).to.eql(true);",
                       "    pm.expect(j.records).to.be.an('array');",
+                      "    pm.expect(j.totalItems).to.be.a('number');",
+                      "    pm.expect(j.todayCount).to.be.a('number');",
+                      "    pm.expect(j.todayCount).to.be.at.most(j.totalItems);",
                       "  });",
                       "  const rec = j?.records?.[0];",
                       "  if (rec?._id) pm.collectionVariables.set('quoteId', String(rec._id));",
@@ -2156,7 +2159,7 @@
                 "method": "GET",
                 "header": [{ "key": "Accept", "value": "application/json" }],
                 "url": {
-                  "raw": "{{baseUrl}}/api/mobile/user/quotes?page={{quotesPage}}&limit={{quotesLimit}}&status={{quoteStatusFilter}}&franchise_id={{franchiseId}}",
+                  "raw": "{{baseUrl}}/api/mobile/user/quotes?page={{quotesPage}}&limit={{quotesLimit}}&status={{quoteStatusFilter}}&search={{quoteSearch}}&from_date={{quoteListFromDate}}&to_date={{quoteListToDate}}&franchise_id={{franchiseId}}",
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "mobile", "user", "quotes"],
                   "query": [
@@ -2168,13 +2171,31 @@
                       "description": "new | pending | accepted | success | failed — leave empty for all"
                     },
                     {
+                      "key": "search",
+                      "value": "{{quoteSearch}}",
+                      "disabled": true,
+                      "description": "Optional — quote_sequence_id, quote_description, cancellation_reason, rejection_reason (alias: q)"
+                    },
+                    {
+                      "key": "from_date",
+                      "value": "{{quoteListFromDate}}",
+                      "disabled": true,
+                      "description": "Optional schedule overlap filter (YYYY-MM-DD)"
+                    },
+                    {
+                      "key": "to_date",
+                      "value": "{{quoteListToDate}}",
+                      "disabled": true,
+                      "description": "Optional schedule overlap filter (YYYY-MM-DD)"
+                    },
+                    {
                       "key": "franchise_id",
                       "value": "{{franchiseId}}",
                       "description": "Optional franchise filter"
                     }
                   ]
                 },
-                "description": "**GET /api/mobile/user/quotes**\n\n- **Auth:** Bearer customer\n- Lists quotes for authenticated customer only\n- **Query:** `page`, `limit` (max 50), optional `status`, optional `franchise_id`\n- **200:** `totalItems`, `totalPages`, `currentPage`, `limit`, `records[]`"
+                "description": "**GET /api/mobile/user/quotes**\n\n- **Auth:** Bearer customer\n- Lists quotes for authenticated customer only\n- **Pagination:** `page`, `limit` (max 50)\n- **Search:** `search` (or `q`) on `quote_sequence_id`, `quote_description`, `cancellation_reason`, `rejection_reason`\n- **Date range:** `from_date`, `to_date` (YYYY-MM-DD) — quotes whose schedule window overlaps the range (same as admin quote list)\n- **Filters:** optional `status`, optional `franchise_id`\n- **200:** `totalItems` (all matching filters), `todayCount` (subset whose schedule overlaps **today** UTC, same filters), `totalPages`, `currentPage`, `limit`, `records[]`"
               },
               "response": []
             },
@@ -2976,6 +2997,24 @@
       "value": "",
       "type": "string",
       "description": "List filter: new | pending | accepted | success | failed — empty = all (customer) or pending+accepted (partner default)"
+    },
+    {
+      "key": "quoteSearch",
+      "value": "",
+      "type": "string",
+      "description": "Quotes list search text (quote_sequence_id, description, cancellation/rejection reason)"
+    },
+    {
+      "key": "quoteListFromDate",
+      "value": "",
+      "type": "string",
+      "description": "Quotes list from_date filter (YYYY-MM-DD) — enable on List quotes request"
+    },
+    {
+      "key": "quoteListToDate",
+      "value": "",
+      "type": "string",
+      "description": "Quotes list to_date filter (YYYY-MM-DD) — enable on List quotes request"
     },
     {
       "key": "quotesPage",

@@ -19,7 +19,7 @@ const handleError = (res, error) => {
 
 const createChat = async (req, res) => {
   try {
-    const chat = await chatService.createChat(req.body);
+    const chat = await chatService.createChat(req.body, req.user.id);
     return res.status(201).json({
       success: true,
       status: 201,
@@ -47,7 +47,7 @@ const getChats = async (req, res) => {
 
 const getChat = async (req, res) => {
   try {
-    const chat = await chatService.getChatById(req.params.id);
+    const chat = await chatService.getChatById(req.params.id, req.user.id, req.user.type);
     return res.status(200).json({
       success: true,
       status: 200,
@@ -61,7 +61,12 @@ const getChat = async (req, res) => {
 
 const transferChat = async (req, res) => {
   try {
-    const chat = await chatService.transferChat(req.params.id, req.body.newAssignedTo);
+    const chat = await chatService.transferChat(
+      req.params.id,
+      req.body.newAssignedTo,
+      req.user.id,
+      req.user.type
+    );
     return res.status(200).json({
       success: true,
       status: 200,
@@ -75,7 +80,13 @@ const transferChat = async (req, res) => {
 
 const convertChat = async (req, res) => {
   try {
-    const chat = await chatService.convertChat(req.params.id, req.body.type, req.body.context || {});
+    const chat = await chatService.convertChat(
+      req.params.id,
+      req.body.type,
+      req.body.context || {},
+      req.user.id,
+      req.user.type
+    );
     return res.status(200).json({
       success: true,
       status: 200,
@@ -89,7 +100,12 @@ const convertChat = async (req, res) => {
 
 const addMembers = async (req, res) => {
   try {
-    const chat = await chatService.addParticipants(req.params.id, req.body.userIds);
+    const chat = await chatService.addParticipants(
+      req.params.id,
+      req.body.userIds,
+      req.user.id,
+      req.user.type
+    );
     return res.status(200).json({
       success: true,
       status: 200,
@@ -103,7 +119,12 @@ const addMembers = async (req, res) => {
 
 const removeMember = async (req, res) => {
   try {
-    const chat = await chatService.removeParticipant(req.params.id, req.params.userId);
+    const chat = await chatService.removeParticipant(
+      req.params.id,
+      req.params.userId,
+      req.user.id,
+      req.user.type
+    );
     return res.status(200).json({
       success: true,
       status: 200,

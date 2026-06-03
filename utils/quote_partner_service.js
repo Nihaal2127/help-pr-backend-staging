@@ -40,7 +40,6 @@ const partnerServiceMapKey = (partnerId, globalServiceId, categoryId) =>
 const attachPartnerServiceToQuote = async (quote) => {
   const filter = buildPartnerServiceLookupFilter(quote);
   if (!filter) {
-    quote.service_id = null;
     return quote;
   }
 
@@ -95,7 +94,6 @@ const attachPartnerServiceToQuotes = async (quotes) => {
   for (const quote of quotes) {
     const filter = buildPartnerServiceLookupFilter(quote);
     if (!filter) {
-      quote.service_id = null;
       continue;
     }
     const key = partnerServiceMapKey(

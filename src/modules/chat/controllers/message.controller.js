@@ -1,5 +1,6 @@
 const messageService = require("../services/message.service");
 const ChatError = require("../utils/chatError");
+const { emitToChat } = require("../sockets/chatEmitter");
 
 const handleError = (res, error) => {
   if (error instanceof ChatError) {
@@ -23,7 +24,8 @@ const sendMessage = async (req, res) => {
       ...req.body,
       senderId: req.user.id,
     };
-    const message = await messageService.sendMessage(payload);
+    const message = await messageService.sendMessage(payload, req.user.type);
+    emitToChat(payload.chatId, "receive_message", message);
     return res.status(201).json({
       success: true,
       status: 201,
@@ -37,7 +39,7 @@ const sendMessage = async (req, res) => {
 
 const getMessages = async (req, res) => {
   try {
-    const messages = await messageService.getMessages(req.query.chatId, {
+    const messages = await messageService.getMessages(req.query.chatId, req.user.id, req.user.type, {
       after: req.query.after,
       limit: req.query.limit ? Number(req.query.limit) : 50,
     });

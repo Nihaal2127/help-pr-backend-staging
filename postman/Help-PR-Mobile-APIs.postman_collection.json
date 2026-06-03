@@ -2074,7 +2074,7 @@
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "mobile", "user", "quotes", "create"]
                 },
-                "description": "**POST /api/mobile/user/quotes/create** — no partner\n\n- **No `partner_id` in body** → quote status **new**, `partner_id` null\n- Franchise admin sees quote under `franchise_id`; partner can be assigned later (admin or customer **Update** with `partner_id`)"
+                "description": "**POST /api/mobile/user/quotes/create** — no partner\n\n- **No `partner_id` in body** → quote status **new**, `partner_id` null\n- **Pricing:** `total_service_charge` / `total_price` are **0** until a partner is assigned (**Update** with `partner_id` → server sets charge from `partner_service.price`)\n- Do not send `total_service_charge` on this flow\n- Franchise admin sees quote under `franchise_id`; partner assigned later via **Update** or admin"
               },
               "response": []
             },
@@ -2122,7 +2122,7 @@
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "mobile", "user", "quotes", "create"]
                 },
-                "description": "**POST /api/mobile/user/quotes/create** — with partner\n\n- **Required:** `partner_id` (run **Partners (list)** or **Home** to set `{{quotePartnerId}}`)\n- Status **pending**; partner can **Accept** under **Partner → Quotes**"
+                "description": "**POST /api/mobile/user/quotes/create** — with partner\n\n- **Required:** `partner_id` (run **Partners (list)** or **Home** to set `{{quotePartnerId}}`)\n- **`total_service_charge` optional:** resolved from that partner's `partner_service.price` when omitted\n- Status **pending**; partner can **Accept** under **Partner → Quotes**"
               },
               "response": []
             },

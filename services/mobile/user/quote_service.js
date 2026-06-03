@@ -317,11 +317,9 @@ const updateCustomerQuote = async (customerId, quoteId, body) => {
     const historyChanges = [];
     const previousValues = applyCustomerQuoteFieldUpdates(quote, body);
 
-    if (quotePricingInputChanged({ service_id: body.service_id })) {
+    if (quotePricingInputChanged(body)) {
       try {
-        const { pricing } = await resolveQuotePricing(
-          buildQuotePricingBody(quote, { service_id: body.service_id })
-        );
+        const { pricing } = await resolveQuotePricing(buildQuotePricingBody(quote, body));
         const pricingBefore = {
           total_service_charge: quote.total_service_charge,
           commission_amount: quote.commission_amount,

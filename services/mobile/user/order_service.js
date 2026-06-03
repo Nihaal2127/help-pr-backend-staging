@@ -2,7 +2,10 @@ const mongoose = require('mongoose');
 const Order = require('../../../models/order');
 const { formatOrderRecords } = require('../../../utils/order_api_format');
 const { escapeRegExp } = require('../../../utils/string_helpers');
-const { buildOrderDateRangeFilter } = require('../../../utils/schedule_date_filters');
+const {
+  buildOrderDateRangeFilter,
+  buildOrderTodayOverlapFilter,
+} = require('../../../utils/schedule_date_filters');
 const { isValidOrderPaymentStatus } = require('../../../enum/order_payment_status_enum');
 const {
   ORDER_STATUSES,
@@ -25,6 +28,13 @@ const parseOptionalBoolean = (raw) => {
   if (normalized === 'true') return { ok: true, value: true };
   if (normalized === 'false') return { ok: true, value: false };
   return { ok: false, message: 'Invalid is_paid filter. Use true or false.' };
+};
+
+const mergeMongoFilters = (...parts) => {
+  const filters = parts.filter((part) => part && Object.keys(part).length > 0);
+  if (filters.length === 0) return {};
+  if (filters.length === 1) return filters[0];
+  return { $and: filters };
 };
 
 const addObjectIdFilter = (query, key, filter) => {
@@ -126,13 +136,17 @@ const listCustomerOrders = async (customerId, query = {}) => {
       }
     }
 
-    const [rows, totalItems] = await Promise.all([
+    const todayOverlapResult = buildOrderTodayOverlapFilter();
+    const todayCountFilter = mergeMongoFilters(filter, todayOverlapResult.filter);
+
+    const [rows, totalItems, todayCount] = await Promise.all([
       Order.find(filter)
         .sort({ updated_at: -1, created_at: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
       Order.countDocuments(filter),
+      Order.countDocuments(todayCountFilter),
     ]);
 
     const totalPages = Math.max(Math.ceil(totalItems / limit), 1);
@@ -141,6 +155,7 @@ const listCustomerOrders = async (customerId, query = {}) => {
       message: 'Orders fetched successfully.',
       data: {
         totalItems,
+        todayCount,
         totalPages,
         currentPage: page,
         limit,

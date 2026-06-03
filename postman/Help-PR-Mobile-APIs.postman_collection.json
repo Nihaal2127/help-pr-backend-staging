@@ -1344,6 +1344,9 @@
                   "    pm.response.to.have.status(200);",
                   "    pm.expect(j.success).to.eql(true);",
                   "    pm.expect(j.records).to.be.an('array');",
+                  "    pm.expect(j.totalItems).to.be.a('number');",
+                  "    pm.expect(j.todayCount).to.be.a('number');",
+                  "    pm.expect(j.todayCount).to.be.at.most(j.totalItems);",
                   "  });",
                   "  const completed = (j?.records || []).find((o) => o.order_status === 'completed');",
                   "  if (completed?._id) pm.collectionVariables.set('orderId', String(completed._id));",
@@ -1442,7 +1445,7 @@
                 }
               ]
             },
-            "description": "**GET /api/mobile/user/orders**\n\n- **Auth:** Bearer customer\n- Lists orders for authenticated customer only\n- **Pagination:** `page`, `limit` (max 50)\n- **Search:** `search` (or `q`) on unique/order text fields\n- **Filters:** `status`, `from_date`, `to_date`, `is_paid`, `user_payment_status` (or `payment_status`), and optional ObjectId filters: `franchise_id`, `partner_id`, `category_id`, `service_id`, `city_id`, `address_id`\n- **200:** `totalItems`, `totalPages`, `currentPage`, `limit`, `records[]` — each record may include `service_items[].rating`, `review_text`, `reviewed_at` when reviewed"
+            "description": "**GET /api/mobile/user/orders**\n\n- **Auth:** Bearer customer\n- Lists orders for authenticated customer only\n- **Pagination:** `page`, `limit` (max 50)\n- **Search:** `search` (or `q`) on unique/order text fields\n- **Filters:** `status`, `from_date`, `to_date`, `is_paid`, `user_payment_status` (or `payment_status`), and optional ObjectId filters: `franchise_id`, `partner_id`, `category_id`, `service_id`, `city_id`, `address_id`\n- **200:** `totalItems` (all matching filters), `todayCount` (subset whose schedule overlaps **today** UTC, same filters), `totalPages`, `currentPage`, `limit`, `records[]` — each record may include `service_items[].rating`, `review_text`, `reviewed_at` when reviewed"
           },
           "response": []
         },

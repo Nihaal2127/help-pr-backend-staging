@@ -116,9 +116,16 @@ const buildOrderDateRangeFilter = (query) => {
   return { ok: true, filter: { $or: branches } };
 };
 
+/** Orders scheduled on the current UTC calendar day (overlap with today). */
+const buildOrderTodayOverlapFilter = () => {
+  const today = new Date().toISOString().slice(0, 10);
+  return buildOrderDateRangeFilter({ from_date: today, to_date: today });
+};
+
 module.exports = {
   buildScheduleDateRangeCore,
   buildQuoteDateRangeFilter,
   buildQuoteTodayOverlapFilter,
   buildOrderDateRangeFilter,
+  buildOrderTodayOverlapFilter,
 };

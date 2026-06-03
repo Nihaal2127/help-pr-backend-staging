@@ -5,10 +5,15 @@ const {
   resolveTotalServiceCharge,
 } = require("../utils/order_pricing");
 const { loadServiceForPricing } = require("./order_pricing_service");
+const {
+  resolveQuoteBaseCharge,
+  hasPartnerId,
+} = require("./quote_charge_resolver");
 
 /**
- * Quotes accept only partner base amount (total_service_charge).
- * Commission and tax are derived from the global service rates (no offers / additional charges).
+ * Quotes accept partner base amount (total_service_charge).
+ * Without partner: charge is 0 until a partner is assigned (update).
+ * With partner: charge from body or partner_service.price; commission/tax from global service rates.
  */
 const resolveQuotePricing = async (body) => {
   const serviceId = body?.service_id;
@@ -19,10 +24,17 @@ const resolveQuotePricing = async (body) => {
     );
   }
 
-  const totalCharge = resolveTotalServiceCharge(body, {});
+  const totalCharge = await resolveQuoteBaseCharge(body);
+
+  if (!hasPartnerId(body.partner_id)) {
+    const service = await loadServiceForPricing(serviceId);
+    const pricing = buildOrderPricingFromService(service, 0, null);
+    return { pricing, service };
+  }
+
   if (totalCharge === null || totalCharge <= 0) {
     throw new OrderCreationError(
-      "total_service_charge (or service_price) is required and must be greater than 0.",
+      "Unable to determine service price for the selected partner. Ensure the partner offers this service or send total_service_charge.",
       409
     );
   }
@@ -47,7 +59,7 @@ const applyPricingToQuote = (quote, pricing) => {
 };
 
 const quotePricingInputChanged = (body) =>
-  ["total_service_charge", "service_price", "service_id"].some(
+  ["total_service_charge", "service_price", "service_id", "partner_id"].some(
     (key) => body[key] !== undefined
   );
 
@@ -59,10 +71,22 @@ const resolveQuoteCharge = (quote, body = {}) => {
   return stored > 0 ? stored : 0;
 };
 
-const buildQuotePricingBody = (quote, body) => ({
-  service_id: body.service_id !== undefined ? body.service_id : quote.service_id,
-  total_service_charge: resolveQuoteCharge(quote, body) || null,
-});
+const buildQuotePricingBody = (quote, body) => {
+  const partnerId =
+    body.partner_id !== undefined ? body.partner_id : quote.partner_id;
+  const reloadFromPartnerOffering =
+    hasPartnerId(partnerId) &&
+    (body.partner_id !== undefined || body.service_id !== undefined);
+
+  return {
+    service_id: body.service_id !== undefined ? body.service_id : quote.service_id,
+    partner_id: partnerId,
+    category_id: body.category_id !== undefined ? body.category_id : quote.category_id,
+    total_service_charge: reloadFromPartnerOffering
+      ? null
+      : resolveQuoteCharge(quote, body) || null,
+  };
+};
 
 /** True when stored quote lacks a server-computed pricing snapshot. */
 const quotePricingSnapshotComplete = (quote) => {
@@ -91,11 +115,12 @@ const ensureQuotePricingForConversion = async (quote, body = {}) => {
     quotePricingInputChanged(body) || !quotePricingSnapshotComplete(quote);
 
   if (needsRecalc) {
-    const { pricing } = await resolveQuotePricing({
-      service_id: quote.service_id,
-      total_service_charge: charge,
-      service_price: charge,
-    });
+    const { pricing } = await resolveQuotePricing(
+      buildQuotePricingBody(quote, {
+        total_service_charge: charge,
+        service_price: charge,
+      })
+    );
     applyPricingToQuote(quote, pricing);
   }
 

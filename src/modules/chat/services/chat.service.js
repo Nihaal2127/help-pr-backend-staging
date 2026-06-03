@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Chat = require("../models/chat.model");
 const ChatError = require("../utils/chatError");
+const { assertChatAccess, assertChatManageAccess } = require("../utils/chatAccess");
 const { fieldLabel } = require("../../../../utils/field_labels");
 
 const ensureObjectId = (value, fieldName) => {
@@ -9,8 +10,11 @@ const ensureObjectId = (value, fieldName) => {
   }
 };
 
-const createChat = async (payload) => {
-  const participants = [...new Set((payload.participants || []).map((id) => String(id)))];
+const createChat = async (payload, creatorUserId) => {
+  ensureObjectId(creatorUserId, "userId");
+  const participants = [
+    ...new Set([...(payload.participants || []).map((id) => String(id)), String(creatorUserId)]),
+  ];
   if (participants.length === 0) {
     throw new ChatError("At least one participant is required.", 400, "VALIDATION_ERROR");
   }
@@ -31,42 +35,44 @@ const createChat = async (payload) => {
 
 const getUserChats = async (userId) => {
   ensureObjectId(userId, "userId");
-  return Chat.find({ participants: new mongoose.Types.ObjectId(userId) }).sort({ updatedAt: -1 });
+  const userObjectId = new mongoose.Types.ObjectId(userId);
+  return Chat.find({
+    $or: [{ participants: userObjectId }, { assignedTo: userObjectId }],
+  }).sort({ updatedAt: -1 });
 };
 
-const getChatById = async (chatId) => {
-  ensureObjectId(chatId, "chatId");
-  const chat = await Chat.findById(chatId);
-  if (!chat) {
-    throw new ChatError("Chat not found.", 404, "CHAT_NOT_FOUND");
-  }
-  return chat;
+const getChatById = async (chatId, userId, userType) => {
+  return assertChatAccess(chatId, userId, userType);
 };
 
-const addParticipants = async (chatId, userIds) => {
-  const chat = await getChatById(chatId);
+const addParticipants = async (chatId, userIds, actorUserId, userType) => {
+  const chat = await assertChatManageAccess(chatId, actorUserId, userType);
   const newUserIds = [...new Set((userIds || []).map((id) => String(id)))];
   chat.participants = [...new Set([...chat.participants.map((id) => String(id)), ...newUserIds])];
   await chat.save();
   return chat;
 };
 
-const removeParticipant = async (chatId, userId) => {
-  const chat = await getChatById(chatId);
-  chat.participants = chat.participants.filter((participant) => String(participant) !== String(userId));
+const removeParticipant = async (chatId, userId, actorUserId, userType) => {
+  const chat = await assertChatManageAccess(chatId, actorUserId, userType);
+  const remaining = chat.participants.filter((participant) => String(participant) !== String(userId));
+  if (remaining.length === 0) {
+    throw new ChatError("Chat must have at least one participant.", 400, "VALIDATION_ERROR");
+  }
+  chat.participants = remaining;
   await chat.save();
   return chat;
 };
 
-const transferChat = async (chatId, newAssignedTo) => {
-  const chat = await getChatById(chatId);
+const transferChat = async (chatId, newAssignedTo, actorUserId, userType) => {
+  const chat = await assertChatManageAccess(chatId, actorUserId, userType);
   chat.assignedTo = newAssignedTo;
   await chat.save();
   return chat;
 };
 
-const convertChat = async (chatId, type, context = {}) => {
-  const chat = await getChatById(chatId);
+const convertChat = async (chatId, type, context, actorUserId, userType) => {
+  const chat = await assertChatManageAccess(chatId, actorUserId, userType);
   chat.type = type;
   chat.context = {
     ...chat.context,
@@ -76,9 +82,9 @@ const convertChat = async (chatId, type, context = {}) => {
   return chat;
 };
 
-const linkChats = async (chatId, linkedChatId) => {
-  const chat = await getChatById(chatId);
-  await getChatById(linkedChatId);
+const linkChats = async (chatId, linkedChatId, actorUserId, userType) => {
+  const chat = await assertChatManageAccess(chatId, actorUserId, userType);
+  await assertChatAccess(linkedChatId, actorUserId, userType);
   chat.linkedChats = [...new Set([...chat.linkedChats.map((id) => String(id)), String(linkedChatId)])];
   await chat.save();
   return chat;

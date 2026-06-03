@@ -50,6 +50,7 @@ const partnerPayoutRoutes = require('./routes/partner_payout_routes');
 const refundRoutes = require('./routes/refund_routes');
 const partnerPostRoutes = require('./routes/partner_post_routes');
 const { chatRoutes, registerChatSocket } = require('./src/modules/chat');
+const { setChatIo } = require('./src/modules/chat/sockets/chatEmitter');
 const mobileRoutes = require('./routes/mobile');
 const { publicImageUrlsResponseMiddleware } = require('./middleware/public_image_urls_response_middleware');
 
@@ -197,6 +198,7 @@ if (!isLambda) {
       methods: ['GET', 'POST'],
     },
   });
+  setChatIo(io);
   registerChatSocket(io);
 
   httpServer.listen(PORT, () => {

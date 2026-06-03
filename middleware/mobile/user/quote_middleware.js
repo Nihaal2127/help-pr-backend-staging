@@ -149,13 +149,15 @@ const validateCreateQuoteBody = (req, res, next) => {
     return sendError(res, 400, 'Invalid partner_id.');
   }
 
-  const charge = resolveTotalServiceCharge(body, {});
-  if (charge === null || charge <= 0) {
-    return sendError(
-      res,
-      409,
-      'total_service_charge (or service_price) is required and must be greater than 0.'
-    );
+  if (body.partner_id === undefined) {
+    delete body.total_service_charge;
+    delete body.service_price;
+  } else {
+    const charge = resolveTotalServiceCharge(body, {});
+    if (charge !== null && charge <= 0) {
+      delete body.total_service_charge;
+      delete body.service_price;
+    }
   }
 
   const schedule = validateScheduleFields(body, { partial: false });

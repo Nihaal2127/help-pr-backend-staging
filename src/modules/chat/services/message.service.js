@@ -2,16 +2,11 @@ const mongoose = require("mongoose");
 const Chat = require("../models/chat.model");
 const Message = require("../models/message.model");
 const ChatError = require("../utils/chatError");
+const { assertChatAccess } = require("../utils/chatAccess");
+const { notifyChatMessagePush } = require("./chatNotification.service");
 
-const sendMessage = async (payload) => {
-  if (!mongoose.Types.ObjectId.isValid(payload.chatId)) {
-    throw new ChatError("chatId must be valid.", 400, "INVALID_CHAT_ID");
-  }
-
-  const chat = await Chat.findById(payload.chatId);
-  if (!chat) {
-    throw new ChatError("Chat not found.", 404, "CHAT_NOT_FOUND");
-  }
+const sendMessage = async (payload, userType) => {
+  const chat = await assertChatAccess(payload.chatId, payload.senderId, userType);
 
   const message = await Message.create({
     chatId: payload.chatId,
@@ -34,13 +29,15 @@ const sendMessage = async (payload) => {
   };
   await chat.save();
 
+  notifyChatMessagePush(chat, message).catch((error) => {
+    console.error("Chat push notification error:", error.message);
+  });
+
   return message;
 };
 
-const getMessages = async (chatId, { after, limit = 50 }) => {
-  if (!mongoose.Types.ObjectId.isValid(chatId)) {
-    throw new ChatError("chatId must be valid.", 400, "INVALID_CHAT_ID");
-  }
+const getMessages = async (chatId, userId, userType, { after, limit = 50 }) => {
+  await assertChatAccess(chatId, userId, userType);
 
   const query = { chatId };
   if (after) {
@@ -51,13 +48,33 @@ const getMessages = async (chatId, { after, limit = 50 }) => {
 };
 
 const createSystemMessage = async (chatId, content) => {
-  return sendMessage({
+  const message = await Message.create({
     chatId,
     senderId: new mongoose.Types.ObjectId("000000000000000000000000"),
     type: "system",
     content,
     metadata: { source: "system" },
   });
+
+  const chat = await Chat.findById(chatId);
+  if (chat) {
+    chat.lastMessage = {
+      _id: message._id,
+      chatId: message.chatId,
+      senderId: message.senderId,
+      type: message.type,
+      content: message.content,
+      fileUrl: message.fileUrl,
+      metadata: message.metadata,
+      createdAt: message.createdAt,
+    };
+    await chat.save();
+    notifyChatMessagePush(chat, message).catch((error) => {
+      console.error("Chat push notification error:", error.message);
+    });
+  }
+
+  return message;
 };
 
 module.exports = {

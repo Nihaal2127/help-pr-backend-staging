@@ -367,6 +367,149 @@ const getListCollectionNames = (models) => {
   return names;
 };
 
+const hydrateUserRef = (user) => {
+  if (!user || typeof user !== "object" || user._id == null) return null;
+  return {
+    _id: user._id,
+    name: user.name,
+    user_id: user.user_id,
+    email: user.email,
+    phone_number: user.phone_number,
+    profile_url: user.profile_url,
+    type: user.type,
+  };
+};
+
+const hydrateCategoryRef = (category) => {
+  if (!category || typeof category !== "object" || category._id == null) return null;
+  return {
+    _id: category._id,
+    name: category.name,
+    category_id: category.category_id,
+    desc: category.desc,
+    image_url: category.image_url,
+    approval_status: category.approval_status,
+    is_request: category.is_request,
+    is_active: category.is_active,
+    rejection_reason: category.rejection_reason,
+  };
+};
+
+const hydrateServiceRef = (service) => {
+  if (!service || typeof service !== "object" || service._id == null) return null;
+  return {
+    _id: service._id,
+    name: service.name,
+    service_id: service.service_id,
+    desc: service.desc,
+    image_url: service.image_url,
+    approval_status: service.approval_status,
+    is_request: service.is_request,
+    is_active: service.is_active,
+    rejection_reason: service.rejection_reason,
+  };
+};
+
+const hydrateFranchiseRef = (franchise) => {
+  if (!franchise || typeof franchise !== "object" || franchise._id == null) return null;
+  return {
+    _id: franchise._id,
+    name: franchise.name,
+    city_name: franchise.city_name,
+    state_name: franchise.state_name,
+  };
+};
+
+const hydrateCityRef = (city) => {
+  if (!city || typeof city !== "object" || city._id == null) return null;
+  return {
+    _id: city._id,
+    name: city.name,
+  };
+};
+
+const hydrateQuoteRef = (quote) => {
+  if (!quote || typeof quote !== "object" || quote._id == null) return null;
+  return {
+    _id: quote._id,
+    quote_sequence_id: quote.quote_sequence_id,
+    quote_description: quote.quote_description,
+    status: quote.status,
+    service_price: quote.service_price,
+    from_date: quote.from_date,
+    to_date: quote.to_date,
+    created_at: quote.created_at,
+  };
+};
+
+const hydrateAddressRef = (address) => {
+  if (!address || typeof address !== "object" || address._id == null) return null;
+  const out = { ...address };
+  if (out.city_id && typeof out.city_id === "object" && out.city_id._id != null) {
+    out.city_id = { _id: out.city_id._id, name: out.city_id.name };
+  }
+  if (out.state_id && typeof out.state_id === "object" && out.state_id._id != null) {
+    out.state_id = { _id: out.state_id._id, name: out.state_id.name };
+  }
+  if (out.area_id && typeof out.area_id === "object" && out.area_id._id != null) {
+    out.area_id = { _id: out.area_id._id, name: out.area_id.name };
+  }
+  return out;
+};
+
+/** Map admin/detail *_info fields to embedded FK objects (order getAll list parity). */
+const embedOrderDetailForeignKeys = (record) => {
+  if (!record || typeof record !== "object") return record;
+
+  const user = hydrateUserRef(record.user_info);
+  const partner = hydrateUserRef(record.partner_info);
+  const employee = hydrateUserRef(record.employee_info);
+  const createdBy = hydrateUserRef(record.created_by_info);
+  const category = hydrateCategoryRef(record.category_info);
+  const service = hydrateServiceRef(record.service_info);
+  const franchise = hydrateFranchiseRef(record.franchise_info);
+  const city = hydrateCityRef(record.city_info);
+  const quote = hydrateQuoteRef(record.quote_info);
+  const address = hydrateAddressRef(record.address_info);
+
+  const {
+    user_info: _u,
+    partner_info: _p,
+    employee_info: _e,
+    created_by_info: _c,
+    category_info: _cat,
+    service_info: _svc,
+    franchise_info: _f,
+    address_info: _a,
+    city_info: _city,
+    quote_info: _q,
+    created_by_name: _cbn,
+    ...rest
+  } = record;
+
+  return {
+    ...rest,
+    user_id: user,
+    partner_id: partner,
+    employee_id: employee,
+    created_by_id: createdBy,
+    category_id: category,
+    service_id: service,
+    franchise_id: franchise,
+    city_id: city,
+    quote_id: quote,
+    address_id: address,
+    user_name: user?.name ?? null,
+    user_unique_id: user?.user_id ?? record.user_unique_id ?? null,
+    partner_name: partner?.name ?? null,
+    partner_unique_id: partner?.user_id ?? null,
+    employee_name: employee?.name ?? null,
+    category_name: category?.name ?? null,
+    service_name: service?.name ?? null,
+    city_name: city?.name ?? null,
+  };
+};
+
 module.exports = {
   buildEntityListPipeline,
   buildServiceItemsLookupStage,
@@ -374,4 +517,12 @@ module.exports = {
   getListCollectionNames,
   buildSearchMatchStage,
   buildListFacetStages,
+  hydrateUserRef,
+  hydrateCategoryRef,
+  hydrateServiceRef,
+  hydrateFranchiseRef,
+  hydrateCityRef,
+  hydrateQuoteRef,
+  hydrateAddressRef,
+  embedOrderDetailForeignKeys,
 };

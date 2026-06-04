@@ -11,6 +11,7 @@ const {
   ORDER_STATUSES,
   buildOrderManagementStatusQueryFilter,
 } = require('../../../enum/order_status_enum');
+const { loadOrderDetailLean } = require('../../order_detail_service');
 
 const fail = (status, message) => ({ ok: false, status, message });
 const ok = (status, data) => ({ ok: true, status, data });
@@ -168,6 +169,41 @@ const listCustomerOrders = async (customerId, query = {}) => {
   }
 };
 
+const getCustomerOrderById = async (customerId, orderId) => {
+  try {
+    if (!customerId || !mongoose.Types.ObjectId.isValid(String(customerId))) {
+      return fail(401, 'Invalid token.');
+    }
+    if (!orderId || !mongoose.Types.ObjectId.isValid(String(orderId))) {
+      return fail(400, 'Invalid order id.');
+    }
+
+    const order = await Order.findOne({
+      _id: orderId,
+      user_id: new mongoose.Types.ObjectId(String(customerId)),
+      deleted_at: null,
+    });
+
+    if (!order) {
+      return fail(404, 'Order not found.');
+    }
+
+    const record = await loadOrderDetailLean(order._id);
+    if (!record) {
+      return fail(404, 'Order not found.');
+    }
+
+    return ok(200, {
+      message: 'Order details fetched successfully.',
+      record,
+    });
+  } catch (err) {
+    console.error('mobile user get order details', err.message);
+    return fail(500, 'Internal server error.');
+  }
+};
+
 module.exports = {
   listCustomerOrders,
+  getCustomerOrderById,
 };

@@ -1450,6 +1450,46 @@
           "response": []
         },
         {
+          "name": "Get order details",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Order details fetched', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.record).to.be.an('object');",
+                  "    pm.expect(j.record._id).to.be.a('string');",
+                  "  });",
+                  "  if (j?.record?._id) pm.collectionVariables.set('orderId', String(j.record._id));",
+                  "  const line = j?.record?.service_items?.[0];",
+                  "  if (line?._id) pm.collectionVariables.set('orderServiceItemId', String(line._id));",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/orders/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "user", "orders", "{{orderId}}"]
+            },
+            "description": "**GET /api/mobile/user/orders/:orderId**\n\n- **Auth:** Bearer customer\n- Returns full detail for one order belonging to the authenticated customer\n- **Path `orderId`:** order Mongo `_id` (24-char hex)\n\n**200 `record` includes:** populated `category_info`, `city_info`, `address_info`, `franchise_info`, `quote_info`; **`service_items[]`** with `partner_info`, `service_info`, review fields when present; **`additional_charges`**, **`order_payments`**, **`order_offer`**; **`refunds`**, **`refund_summary`** when applicable; payment breakdown fields.\n\n**404** order not found or not owned by caller | **400** invalid order id"
+          },
+          "response": []
+        },
+        {
           "name": "Submit order review",
           "event": [
             {

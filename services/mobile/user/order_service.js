@@ -1,5 +1,13 @@
 const mongoose = require('mongoose');
 const Order = require('../../../models/order');
+const User = require('../../../models/user');
+const Service = require('../../../models/service');
+const Category = require('../../../models/category');
+const City = require('../../../models/city');
+const State = require('../../../models/state');
+const Address = require('../../../models/address');
+const Franchise = require('../../../models/franchise');
+const Quote = require('../../../models/quote');
 const { formatOrderRecords } = require('../../../utils/order_api_format');
 const { escapeRegExp } = require('../../../utils/string_helpers');
 const {
@@ -12,6 +20,45 @@ const {
   buildOrderManagementStatusQueryFilter,
 } = require('../../../enum/order_status_enum');
 const { loadOrderDetailLean } = require('../../order_detail_service');
+const { embedOrderDetailForeignKeys } = require('../../../utils/list_aggregation');
+const {
+  buildEntityListPipeline,
+  parseFacetListResult,
+  getListCollectionNames,
+} = require('../../../utils/list_aggregation');
+const { attachRefundsToOrderRecords } = require('../../refund_service');
+
+const MOBILE_ORDER_LIST_SEARCH_FIELDS = [
+  'unique_id',
+  'user_unique_id',
+  'address',
+  'comments',
+  'transaction_id',
+  'payment_mode_id',
+  'discount_code',
+  'customer_description',
+  'order_description',
+  '_quote.quote_sequence_id',
+  '_quote.quote_description',
+  '_user.name',
+  '_user.user_id',
+  '_user.email',
+  '_user.phone_number',
+  '_partner.name',
+  '_partner.user_id',
+  '_partner.email',
+  '_partner.phone_number',
+  '_employee.name',
+  '_employee.user_id',
+  '_created_by.name',
+  '_created_by.user_id',
+  '_category.name',
+  '_category.category_id',
+  '_service.name',
+  '_service.service_id',
+  '_city.name',
+  '_franchise.name',
+];
 
 const fail = (status, message) => ({ ok: false, status, message });
 const ok = (status, data) => ({ ok: true, status, data });
@@ -75,16 +122,10 @@ const listCustomerOrders = async (customerId, query = {}) => {
     }
 
     const searchRaw = query.search ?? query.q;
+    let searchRegex = null;
     if (searchRaw !== undefined && String(searchRaw).trim() !== '') {
       const search = String(searchRaw).trim();
-      const regex = new RegExp(escapeRegExp(search), 'i');
-      filter.$or = [
-        { unique_id: regex },
-        { address: regex },
-        { order_description: regex },
-        { customer_description: regex },
-        { transaction_id: regex },
-      ];
+      searchRegex = new RegExp(escapeRegExp(search), 'i');
     }
 
     const dateRangeResult = buildOrderDateRangeFilter(query);
@@ -140,17 +181,60 @@ const listCustomerOrders = async (customerId, query = {}) => {
     const todayOverlapResult = buildOrderTodayOverlapFilter();
     const todayCountFilter = mergeMongoFilters(filter, todayOverlapResult.filter);
 
-    const [rows, totalItems, todayCount] = await Promise.all([
-      Order.find(filter)
-        .sort({ updated_at: -1, created_at: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      Order.countDocuments(filter),
+    const collections = getListCollectionNames({
+      users: User,
+      categories: Category,
+      services: Service,
+      cities: City,
+      franchise: Franchise,
+      quotes: Quote,
+      address: Address,
+      states: State,
+    });
+
+    const pipeline = buildEntityListPipeline({
+      baseFilter: filter,
+      sortStage: { updated_at: -1, created_at: -1 },
+      skip,
+      limit,
+      regex: searchRegex,
+      searchFields: MOBILE_ORDER_LIST_SEARCH_FIELDS,
+      collections,
+      includeRootCityLookup: true,
+      includeQuoteLookup: true,
+      includeServiceItemsLookup: false,
+      extraAddFields: {
+        city_id: {
+          $cond: [
+            { $ifNull: ['$_city._id', false] },
+            { _id: '$_city._id', name: '$_city.name' },
+            null,
+          ],
+        },
+        quote_id: {
+          $cond: [
+            { $ifNull: ['$_quote._id', false] },
+            {
+              _id: '$_quote._id',
+              quote_sequence_id: '$_quote.quote_sequence_id',
+              quote_description: '$_quote.quote_description',
+              status: '$_quote.status',
+            },
+            null,
+          ],
+        },
+      },
+      extraProject: { service_items: 0 },
+    });
+
+    const [aggResult, todayCount] = await Promise.all([
+      Order.aggregate(pipeline).collation({ locale: 'en', strength: 2 }).exec(),
       Order.countDocuments(todayCountFilter),
     ]);
 
+    const { data: rows, totalCount: totalItems } = parseFacetListResult(aggResult, limit);
     const totalPages = Math.max(Math.ceil(totalItems / limit), 1);
+    const records = await attachRefundsToOrderRecords(formatOrderRecords(rows));
 
     return ok(200, {
       message: 'Orders fetched successfully.',
@@ -160,7 +244,7 @@ const listCustomerOrders = async (customerId, query = {}) => {
         totalPages,
         currentPage: page,
         limit,
-        records: formatOrderRecords(rows),
+        records,
       },
     });
   } catch (err) {
@@ -195,7 +279,7 @@ const getCustomerOrderById = async (customerId, orderId) => {
 
     return ok(200, {
       message: 'Order details fetched successfully.',
-      record,
+      record: embedOrderDetailForeignKeys(record),
     });
   } catch (err) {
     console.error('mobile user get order details', err.message);

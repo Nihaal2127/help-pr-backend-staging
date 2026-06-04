@@ -1445,7 +1445,7 @@
                 }
               ]
             },
-            "description": "**GET /api/mobile/user/orders**\n\n- **Auth:** Bearer customer\n- Lists orders for authenticated customer only\n- **Pagination:** `page`, `limit` (max 50)\n- **Search:** `search` (or `q`) on unique/order text fields\n- **Filters:** `status`, `from_date`, `to_date`, `is_paid`, `user_payment_status` (or `payment_status`), and optional ObjectId filters: `franchise_id`, `partner_id`, `category_id`, `service_id`, `city_id`, `address_id`\n- **200:** `totalItems` (all matching filters), `todayCount` (subset whose schedule overlaps **today** UTC, same filters), `totalPages`, `currentPage`, `limit`, `records[]` — each record may include `service_items[].rating`, `review_text`, `reviewed_at` when reviewed"
+            "description": "**GET /api/mobile/user/orders**\n\n- **Auth:** Bearer customer\n- Lists orders for authenticated customer only\n- **Pagination:** `page`, `limit` (max 50)\n- **Search:** `search` (or `q`) on order fields plus linked user, partner, category, service, city, franchise, and quote text\n- **Filters:** `status`, `from_date`, `to_date`, `is_paid`, `user_payment_status` (or `payment_status`), and optional ObjectId filters: `franchise_id`, `partner_id`, `category_id`, `service_id`, `city_id`, `address_id`\n- **200:** `totalItems` (all matching filters), `todayCount` (subset whose schedule overlaps **today** UTC, same filters), `totalPages`, `currentPage`, `limit`, `records[]` — each record includes hydrated `user_id`, `partner_id`, `employee_id`, `franchise_id`, `city_id`, `category_id`, `service_id`, `created_by_id`, `address_id`, and `quote_id` objects (admin getAll parity); `refunds` / `refund_summary` when applicable; `service_items` is omitted from list rows"
           },
           "response": []
         },
@@ -1485,7 +1485,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "mobile", "user", "orders", "{{orderId}}"]
             },
-            "description": "**GET /api/mobile/user/orders/:orderId**\n\n- **Auth:** Bearer customer\n- Returns full detail for one order belonging to the authenticated customer\n- **Path `orderId`:** order Mongo `_id` (24-char hex)\n\n**200 `record` includes:** populated `category_info`, `city_info`, `address_info`, `franchise_info`, `quote_info`; **`service_items[]`** with `partner_info`, `service_info`, review fields when present; **`additional_charges`**, **`order_payments`**, **`order_offer`**; **`refunds`**, **`refund_summary`** when applicable; payment breakdown fields.\n\n**404** order not found or not owned by caller | **400** invalid order id"
+            "description": "**GET /api/mobile/user/orders/:orderId**\n\n- **Auth:** Bearer customer\n- Returns full detail for one order belonging to the authenticated customer\n- **Path `orderId`:** order Mongo `_id` (24-char hex)\n\n**200 `record` includes:** hydrated `user_id`, `partner_id`, `employee_id`, `franchise_id`, `city_id`, `category_id`, `service_id`, `created_by_id`, `address_id`, and `quote_id` objects (same shape as orders list / admin getAll); display names (`user_name`, `partner_name`, etc.); **`service_items[]`** with `partner_info`, `service_info`, review fields when present; **`additional_charges`**, **`order_payments`**, **`order_offer`**; **`refunds`**, **`refund_summary`** when applicable; payment breakdown fields.\n\n**404** order not found or not owned by caller | **400** invalid order id"
           },
           "response": []
         },

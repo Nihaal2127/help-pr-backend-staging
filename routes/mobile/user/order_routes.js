@@ -4,10 +4,17 @@ const userAuthMiddleware = require('../../../middleware/mobile/user/user_auth_mi
 const { validateOrderIdParam } = require('../../../middleware/mobile/user/order_middleware');
 const {
   listOrdersHandler,
+  getOrderDetailsHandler,
   submitOrderReviewHandler,
 } = require('../../../controllers/mobile/user/order_controller');
 
 router.get('/orders', userAuthMiddleware, listOrdersHandler);
+router.get(
+  '/orders/:orderId',
+  userAuthMiddleware,
+  validateOrderIdParam,
+  getOrderDetailsHandler
+);
 router.post(
   '/orders/:orderId/review',
   userAuthMiddleware,

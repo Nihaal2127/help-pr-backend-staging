@@ -8,16 +8,9 @@ const {
   CUSTOMER_QUOTE_FIELD_UPDATE_KEYS,
 } = require('../../../utils/mobile_quote_constants');
 const { QUOTE_STATUSES, normalizeQuoteStatus } = require('../../../enum/quote_status_enum');
+const { ALLOWED_CUSTOMER_PAYMENT_METHODS } = require('../../../utils/mobile_payment_constants');
 
 const MAX_QUOTE_DESCRIPTION_LEN = 1000;
-const ALLOWED_QUOTE_CONVERT_PAYMENT_METHODS = new Set([
-  'cash',
-  'upi',
-  'card',
-  'online',
-  'bank_transfer',
-  'other',
-]);
 
 const sendError = (res, status, message) =>
   res.status(status).json({
@@ -293,11 +286,11 @@ const validateConvertQuoteBody = (req, res, next) => {
   if (!payment_method) {
     return sendError(res, 400, 'payment_method is required.');
   }
-  if (!ALLOWED_QUOTE_CONVERT_PAYMENT_METHODS.has(payment_method)) {
+  if (!ALLOWED_CUSTOMER_PAYMENT_METHODS.has(payment_method)) {
     return sendError(
       res,
       400,
-      `payment_method must be one of: ${Array.from(ALLOWED_QUOTE_CONVERT_PAYMENT_METHODS).join(', ')}.`
+      `payment_method must be one of: ${Array.from(ALLOWED_CUSTOMER_PAYMENT_METHODS).join(', ')}.`
     );
   }
 

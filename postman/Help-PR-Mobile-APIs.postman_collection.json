@@ -1490,6 +1490,149 @@
           "response": []
         },
         {
+          "name": "List order payments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Order payments listed', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.records).to.be.an('array');",
+                  "  });",
+                  "  const p0 = j?.records?.[0];",
+                  "  if (p0?._id) pm.collectionVariables.set('orderPaymentId', String(p0._id));",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/orders/{{orderId}}/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "user", "orders", "{{orderId}}", "payments"]
+            },
+            "description": "**GET /api/mobile/user/orders/:orderId/payments**\n\n- **Auth:** Bearer customer\n- Lists **customer** `order_payment` rows for the caller's order only (not partner ledger rows)\n- **404** if order is not owned by caller"
+          },
+          "response": []
+        },
+        {
+          "name": "Create order payment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Order payment created', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.record?._id).to.be.a('string');",
+                  "  });",
+                  "  if (j?.record?._id) pm.collectionVariables.set('orderPaymentId', String(j.record._id));",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": {{orderPaymentAmount}},\n  \"payment_method\": \"{{orderPaymentMethod}}\",\n  \"status\": \"{{orderPaymentStatus}}\",\n  \"transaction_reference\": \"{{orderPaymentReference}}\",\n  \"notes\": \"{{orderPaymentNotes}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/orders/{{orderId}}/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "user", "orders", "{{orderId}}", "payments"]
+            },
+            "description": "**POST /api/mobile/user/orders/:orderId/payments**\n\nRecord a **customer** payment on the caller's order (same ledger as admin `/api/order-payments/create` with `payer_type: customer`).\n\n| Field | Required | Notes |\n|-------|----------|--------|\n| `amount` | Yes | >= 0 |\n| `payment_method` | Yes | `cash` \\| `upi` \\| `card` \\| `online` \\| `bank_transfer` \\| `other` |\n| `status` | No | `pending` (default) \\| `completed` \\| `failed` \\| `refunded` |\n| `transaction_reference`, `installment_index`, `due_date`, `paid_at`, `notes` | No | Same as admin |\n\n**201** returns `record` + `order` payment rollup (`payment_status`, `is_paid`, `customer_due_amount`, etc.). Runs `syncOrderPaymentStatus`."
+          },
+          "response": []
+        },
+        {
+          "name": "Update order payment",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": {{orderPaymentAmount}},\n  \"payment_method\": \"{{orderPaymentMethod}}\",\n  \"status\": \"completed\",\n  \"transaction_reference\": \"{{orderPaymentReference}}\",\n  \"notes\": \"{{orderPaymentNotes}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/orders/{{orderId}}/payments/{{orderPaymentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                "api",
+                "mobile",
+                "user",
+                "orders",
+                "{{orderId}}",
+                "payments",
+                "{{orderPaymentId}}"
+              ]
+            },
+            "description": "**PUT /api/mobile/user/orders/:orderId/payments/:paymentId**\n\nUpdate a **customer** payment row on the caller's order. Partial body allowed. Re-syncs order payment status."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete order payment",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "DELETE",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/orders/{{orderId}}/payments/{{orderPaymentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                "api",
+                "mobile",
+                "user",
+                "orders",
+                "{{orderId}}",
+                "payments",
+                "{{orderPaymentId}}"
+              ]
+            },
+            "description": "**DELETE /api/mobile/user/orders/:orderId/payments/:paymentId**\n\nSoft-delete a **customer** payment on the caller's order. Re-syncs `order_payment_status` / due amounts."
+          },
+          "response": []
+        },
+        {
           "name": "Submit order review",
           "event": [
             {
@@ -3154,6 +3297,42 @@
       "value": "",
       "type": "string",
       "description": "Order service line _id (service_items[0]._id) — optional when order has one line"
+    },
+    {
+      "key": "orderPaymentId",
+      "value": "",
+      "type": "string",
+      "description": "Customer order_payment Mongo _id"
+    },
+    {
+      "key": "orderPaymentAmount",
+      "value": "500",
+      "type": "string",
+      "description": "Payment amount for order payments APIs"
+    },
+    {
+      "key": "orderPaymentMethod",
+      "value": "upi",
+      "type": "string",
+      "description": "cash | upi | card | online | bank_transfer | other"
+    },
+    {
+      "key": "orderPaymentStatus",
+      "value": "completed",
+      "type": "string",
+      "description": "pending | completed | failed | refunded"
+    },
+    {
+      "key": "orderPaymentReference",
+      "value": "UPIREF123",
+      "type": "string",
+      "description": "Optional transaction reference"
+    },
+    {
+      "key": "orderPaymentNotes",
+      "value": "Partial payment from mobile",
+      "type": "string",
+      "description": "Optional payment notes"
     },
     {
       "key": "orderReviewRating",

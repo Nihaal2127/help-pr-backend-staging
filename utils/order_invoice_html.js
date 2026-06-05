@@ -1,3 +1,11 @@
+const INVOICE_LOGO_URL =
+  'http://helper-admin-dashboard-staging.s3-website.ap-south-1.amazonaws.com/static/media/login_logo.dd37de4b8ee5c0dddd7a63cb3e3b7a5c.svg';
+const INVOICE_BRAND_NAME = 'Help PR';
+const INVOICE_TAGLINE = 'Trusted Home Services';
+const INVOICE_SUPPORT_PHONE = '+91 1800-123-4567';
+const INVOICE_SUPPORT_EMAIL = 'support@helppr.in';
+const INVOICE_SUPPORT_WEBSITE = 'www.helppr.in';
+
 const escapeHtml = (value) =>
   String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -25,6 +33,19 @@ const formatDate = (value) => {
   });
 };
 
+const formatDateTime = (value = new Date()) => {
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return '—';
+  return dt.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+};
+
 const formatAddressLine = (record) => {
   const info = record.address_info;
   if (info && typeof info === 'object') {
@@ -46,46 +67,73 @@ const formatAddressLine = (record) => {
   return '—';
 };
 
-const STATUS_BADGE_STYLES = {
-  paid: 'badge badge--success',
-  partially_paid: 'badge badge--warning',
-  unpaid: 'badge badge--danger',
-  refund: 'badge badge--info',
-  partially_refund: 'badge badge--info',
-  completed: 'badge badge--success',
-  'in-progress': 'badge badge--warning',
-  cancelled: 'badge badge--danger',
-  refunded: 'badge badge--info',
-  pending: 'badge badge--warning',
-  failed: 'badge badge--danger',
+const STATUS_COLOR_CLASS = {
+  paid: 'text-success',
+  partially_paid: 'text-warning',
+  unpaid: 'text-danger',
+  refund: 'text-info',
+  partially_refund: 'text-info',
+  completed: 'text-success',
+  'in-progress': 'text-warning',
+  cancelled: 'text-danger',
+  refunded: 'text-info',
+  pending: 'text-warning',
+  failed: 'text-danger',
 };
 
-const statusBadge = (value) => {
+const statusText = (value) => {
   const raw = String(value ?? '—').trim();
-  const key = raw.toLowerCase().replace(/\s+/g, '_');
-  const cls = STATUS_BADGE_STYLES[key] || 'badge badge--neutral';
-  return `<span class="${cls}">${escapeHtml(raw)}</span>`;
+  const key = raw.toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_');
+  const normalizedKey = key === 'in_progress' ? 'in-progress' : key;
+  const cls = STATUS_COLOR_CLASS[normalizedKey] || STATUS_COLOR_CLASS[key] || '';
+  const display = raw === '—' ? raw : raw.replace(/_/g, ' ').replace(/-/g, ' ');
+  return `<span class="${cls}">${escapeHtml(display)}</span>`;
 };
 
-const moneyCell = (value) => `<span class="money">₹ ${formatMoney(value)}</span>`;
+const moneyCell = (value) => `₹ ${formatMoney(value)}`;
+
+const iconSvg = (name) => {
+  const icons = {
+    person:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>',
+    tools:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4z"/><path d="M16 4l4 4"/></svg>',
+    list:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>',
+    card:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>',
+    store:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l2-5h14l2 5"/><path d="M5 9v10h14V9"/><path d="M9 19V12h6v7"/></svg>',
+    mail:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>',
+    phone:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.8.5 2.6a2 2 0 0 1-.5 1.9L8 9a16 16 0 0 0 6 6l.8-1.1a2 2 0 0 1 1.9-.5c.9.2 1.7.4 2.6.5A2 2 0 0 1 22 16.9z"/></svg>',
+    pin:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s7-4.5 7-11a7 7 0 1 0-14 0c0 6.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+    headset:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 14a8 8 0 0 1 16 0"/><path d="M4 14v3a2 2 0 0 0 2 2h1v-7H6a2 2 0 0 0-2 2z"/><path d="M20 14v3a2 2 0 0 1-2 2h-1v-7h1a2 2 0 0 1 2 2z"/></svg>',
+    doc:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>',
+  };
+  return icons[name] || '';
+};
 
 const buildServiceRows = (serviceItems) => {
   if (!Array.isArray(serviceItems) || serviceItems.length === 0) {
     return '<tr><td colspan="4" class="empty-row">No line items</td></tr>';
   }
   return serviceItems
-    .map((item, index) => {
+    .map((item) => {
       const name = item.service_info?.name || item.service_info?.service_id || 'Service';
       const partner = item.partner_info?.name || '—';
       const price = formatMoney(
         item.total_service_charge ?? item.service_price ?? item.total_price ?? 0
       );
-      const rowClass = index % 2 === 0 ? 'row-even' : 'row-odd';
-      return `<tr class="${rowClass}">
-        <td><span class="item-name">${escapeHtml(name)}</span></td>
+      return `<tr>
+        <td>${escapeHtml(name)}</td>
         <td>${escapeHtml(partner)}</td>
-        <td>${statusBadge(item.service_status || '—')}</td>
-        <td class="col-amount"><span class="money">₹ ${price}</span></td>
+        <td>${statusText(item.service_status || '—')}</td>
+        <td class="col-amount">₹ ${price}</td>
       </tr>`;
     })
     .join('');
@@ -97,11 +145,10 @@ const buildChargeRows = (charges) => {
   }
   return charges
     .map(
-      (c, index) => `<tr class="${index % 2 === 0 ? 'row-even' : 'row-odd'} charge-row">
-        <td colspan="3">
-          <span class="charge-label">${escapeHtml(c.label || c.charge_type || 'Additional charge')}</span>
-          <span class="charge-tag">Additional</span>
-        </td>
+      (c) => `<tr>
+        <td>${escapeHtml(c.label || c.charge_type || 'Additional charge')}</td>
+        <td>—</td>
+        <td><span class="text-muted">additional</span></td>
         <td class="col-amount">${moneyCell(c.total_amount ?? c.amount)}</td>
       </tr>`
     )
@@ -115,45 +162,64 @@ const buildPaymentRows = (payments) => {
   }
   return customerPayments
     .map(
-      (p, index) => `<tr class="${index % 2 === 0 ? 'row-even' : 'row-odd'}">
+      (p) => `<tr>
         <td>${formatDate(p.paid_at || p.created_at)}</td>
-        <td><span class="method-pill">${escapeHtml(p.payment_method || '—')}</span></td>
-        <td>${statusBadge(p.status || '—')}</td>
+        <td>${escapeHtml(p.payment_method || '—')}</td>
+        <td>${statusText(p.status || '—')}</td>
         <td class="col-amount">${moneyCell(p.amount)}</td>
       </tr>`
     )
     .join('');
 };
 
-const buildTotalsRows = (record) => {
+const buildTotalsTable = (record) => {
   const rows = [
     { label: 'Subtotal', value: record.sub_total },
     { label: `Tax (${formatMoney(record.tax_percent)}%)`, value: record.tax_amount ?? record.tax },
-    { label: 'Discount', value: record.discount_amount ?? 0, muted: true },
-    { label: 'Additional charges', value: record.additional_charges_total },
+    { label: 'Discount', value: record.discount_amount ?? 0 },
+    { label: 'Additional Charges', value: record.additional_charges_total },
   ];
 
-  return rows
+  const body = rows
     .map(
-      (row) => `<div class="total-line${row.muted ? ' total-line--muted' : ''}">
-        <span>${escapeHtml(row.label)}</span>
-        <span>${moneyCell(row.value)}</span>
-      </div>`
+      (row) => `<tr>
+        <td class="totals-label">${escapeHtml(row.label)}</td>
+        <td class="totals-value">${moneyCell(row.value)}</td>
+      </tr>`
     )
     .join('');
+
+  return `<table class="totals-table">
+    <tbody>
+      ${body}
+      <tr class="totals-grand">
+        <td class="totals-label">Grand Total</td>
+        <td class="totals-value">${moneyCell(record.total_price)}</td>
+      </tr>
+      <tr class="totals-paid">
+        <td class="totals-label">Paid</td>
+        <td class="totals-value">${moneyCell(record.customer_net_paid)}</td>
+      </tr>
+      <tr class="totals-due">
+        <td class="totals-label">Due</td>
+        <td class="totals-value">${moneyCell(record.customer_due_amount)}</td>
+      </tr>
+    </tbody>
+  </table>`;
 };
 
 const INVOICE_STYLES = `
   :root {
-    --brand: #0f766e;
-    --brand-dark: #0d5c56;
-    --brand-light: #ccfbf1;
-    --ink: #0f172a;
+    --navy: #1a3a5c;
+    --navy-dark: #0f2744;
+    --blue: #2563eb;
+    --blue-light: #e8f4fc;
+    --blue-soft: #d6ebfa;
+    --ink: #1e293b;
     --muted: #64748b;
-    --border: #e2e8f0;
-    --surface: #f8fafc;
+    --border: #d8e2ec;
     --white: #ffffff;
-    --success: #059669;
+    --success: #16a34a;
     --warning: #d97706;
     --danger: #dc2626;
     --info: #0284c7;
@@ -163,377 +229,410 @@ const INVOICE_STYLES = `
 
   body {
     margin: 0;
-    padding: 32px 24px;
+    padding: 28px 16px;
     font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
     color: var(--ink);
-    background: #eef2f7;
-    line-height: 1.5;
+    background: #edf2f7;
+    line-height: 1.45;
     -webkit-font-smoothing: antialiased;
   }
 
   .invoice {
-    max-width: 820px;
+    max-width: 860px;
     margin: 0 auto;
     background: var(--white);
-    border-radius: 16px;
-    overflow: hidden;
-    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
     border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 8px 30px rgba(26, 58, 92, 0.08);
   }
 
-  .invoice-header {
+  .top-bar {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: 24px;
-    padding: 32px 36px 28px;
-    background: linear-gradient(135deg, var(--brand) 0%, var(--brand-dark) 100%);
-    color: var(--white);
+    gap: 20px;
+    padding: 28px 32px 20px;
+    border-bottom: 1px solid var(--border);
   }
 
-  .brand-block { flex: 1; min-width: 0; }
-
-  .brand-name {
-    margin: 0 0 6px;
-    font-size: 26px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
+  .brand-wrap {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
   }
 
-  .brand-sub {
-    margin: 0;
-    font-size: 14px;
-    opacity: 0.9;
-  }
-
-  .franchise-line {
-    margin-top: 14px;
-    font-size: 13px;
-    opacity: 0.85;
-  }
-
-  .invoice-meta {
-    text-align: right;
+  .brand-logo {
+    width: 52px;
+    height: 52px;
+    object-fit: contain;
     flex-shrink: 0;
   }
 
-  .invoice-label {
-    display: inline-block;
-    margin-bottom: 8px;
-    padding: 6px 14px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.18);
+  .brand-text { min-width: 0; }
+
+  .brand-name {
+    margin: 0;
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--navy);
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+  }
+
+  .brand-name span { color: var(--success); }
+
+  .brand-tagline {
+    margin: 4px 0 0;
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  .invoice-title {
+    margin: 0;
+    font-size: 34px;
+    font-weight: 800;
+    color: var(--navy);
+    letter-spacing: 0.04em;
+    line-height: 1;
+  }
+
+  .meta-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 24px;
+    padding: 18px 32px 22px;
+    border-bottom: 1px solid var(--border);
+    align-items: start;
+  }
+
+  .meta-list {
+    display: grid;
+    gap: 7px;
+    font-size: 14px;
+  }
+
+  .meta-item {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    gap: 8px;
+    align-items: baseline;
+  }
+
+  .meta-label {
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  .meta-value { color: var(--ink); font-weight: 600; }
+
+  .meta-value--link { color: var(--blue); }
+
+  .franchise-box {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #fafcff;
+    min-width: 200px;
+  }
+
+  .franchise-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: var(--blue-light);
+    color: var(--navy);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .franchise-icon svg { width: 22px; height: 22px; }
+
+  .franchise-label {
+    margin: 0;
     font-size: 12px;
-    font-weight: 600;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  .franchise-name {
+    margin: 2px 0 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--navy);
+  }
+
+  .cards-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    padding: 22px 32px;
+  }
+
+  .info-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--white);
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 16px;
+    background: var(--navy);
+    color: var(--white);
+    font-size: 12px;
+    font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
 
-  .invoice-id {
-    margin: 0 0 4px;
-    font-size: 22px;
-    font-weight: 700;
-    letter-spacing: -0.01em;
+  .card-header svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
   }
 
-  .invoice-date {
-    margin: 0;
-    font-size: 13px;
-    opacity: 0.9;
-  }
+  .card-body { padding: 16px 18px; }
 
-  .status-strip {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    padding: 14px 36px;
-    background: var(--brand-light);
-    border-bottom: 1px solid #99f6e4;
-  }
-
-  .status-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    color: var(--brand-dark);
-    font-weight: 500;
-  }
-
-  .status-item strong {
-    font-weight: 600;
-    color: var(--ink);
-  }
-
-  .invoice-body { padding: 28px 36px 36px; }
-
-  .info-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-    margin-bottom: 28px;
-  }
-
-  .info-card {
-    padding: 18px 20px;
-    border-radius: 12px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-  }
-
-  .info-card--accent {
-    background: linear-gradient(180deg, #f0fdfa 0%, var(--surface) 100%);
-    border-color: #99f6e4;
-  }
-
-  .card-title {
+  .customer-name {
     margin: 0 0 12px;
-    font-size: 11px;
+    font-size: 18px;
     font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--muted);
+    color: var(--navy);
   }
 
-  .card-name {
-    margin: 0 0 6px;
-    font-size: 17px;
-    font-weight: 700;
-    color: var(--ink);
-  }
-
-  .card-line {
-    margin: 0 0 4px;
-    font-size: 13px;
-    color: var(--muted);
-  }
-
-  .card-line:last-child { margin-bottom: 0; }
-
-  .service-pills {
+  .detail-line {
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 4px;
-  }
-
-  .service-pill {
-    display: inline-block;
-    padding: 5px 12px;
-    border-radius: 999px;
-    background: var(--white);
-    border: 1px solid var(--border);
-    font-size: 12px;
-    font-weight: 500;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 0 0 8px;
+    font-size: 13px;
     color: var(--ink);
   }
 
-  .section { margin-bottom: 28px; }
+  .detail-line:last-child { margin-bottom: 0; }
 
-  .section-head {
+  .detail-line svg {
+    width: 15px;
+    height: 15px;
+    color: var(--muted);
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .service-field {
+    margin: 0 0 10px;
+    font-size: 14px;
+  }
+
+  .service-field:last-child { margin-bottom: 0; }
+
+  .service-field strong {
+    color: var(--muted);
+    font-weight: 600;
+    margin-right: 6px;
+  }
+
+  .section {
+    margin: 0 32px 22px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .section-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    margin-bottom: 12px;
-  }
-
-  .section-title {
-    margin: 0;
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--ink);
-  }
-
-  .section-count {
+    gap: 10px;
+    padding: 11px 16px;
     font-size: 12px;
-    color: var(--muted);
-    font-weight: 500;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 
-  .table-wrap {
-    border-radius: 12px;
-    overflow: hidden;
-    border: 1px solid var(--border);
+  .section-header svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
   }
 
-  table {
+  .section-header--light {
+    background: var(--blue-light);
+    color: var(--navy);
+    border-bottom: 1px solid var(--blue-soft);
+  }
+
+  .section-header--dark {
+    background: var(--navy);
+    color: var(--white);
+  }
+
+  .table-wrap { overflow-x: auto; }
+
+  table.data-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
   }
 
-  thead th {
-    padding: 12px 16px;
+  .data-table thead th {
+    padding: 11px 16px;
     text-align: left;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--muted);
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
+    color: var(--navy);
+    background: var(--blue-light);
+    border-bottom: 1px solid var(--blue-soft);
   }
 
-  thead th.col-amount,
-  td.col-amount { text-align: right; }
+  .data-table thead th.col-amount,
+  .data-table td.col-amount {
+    text-align: right;
+    white-space: nowrap;
+  }
 
-  tbody td {
-    padding: 13px 16px;
-    border-bottom: 1px solid var(--border);
+  .data-table tbody td {
+    padding: 12px 16px;
+    border-bottom: 1px solid #edf2f7;
     vertical-align: middle;
   }
 
-  tbody tr:last-child td { border-bottom: none; }
+  .data-table tbody tr:last-child td { border-bottom: none; }
 
-  .row-even { background: var(--white); }
-  .row-odd { background: #fafbfc; }
-
-  .item-name { font-weight: 600; color: var(--ink); }
-
-  .charge-label { font-weight: 500; }
-
-  .charge-tag {
-    display: inline-block;
-    margin-left: 8px;
-    padding: 2px 8px;
-    border-radius: 4px;
-    background: #fef3c7;
-    color: #92400e;
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    vertical-align: middle;
-  }
+  .data-table tbody tr:nth-child(even) { background: #fbfdff; }
 
   .empty-row {
     text-align: center;
     color: var(--muted);
     font-style: italic;
-    padding: 24px 16px !important;
+    padding: 22px 16px !important;
   }
 
-  .money {
-    font-variant-numeric: tabular-nums;
-    font-weight: 600;
+  .totals-wrap {
+    display: flex;
+    justify-content: flex-end;
+    padding: 14px 16px 18px;
+    border-top: 1px solid #edf2f7;
+    background: #fbfdff;
+  }
+
+  .totals-table {
+    border-collapse: collapse;
+    min-width: 280px;
+    font-size: 14px;
+  }
+
+  .totals-table td {
+    padding: 6px 0 6px 24px;
+    vertical-align: middle;
+  }
+
+  .totals-label {
+    text-align: right;
+    color: var(--muted);
+    font-weight: 500;
+    padding-right: 20px !important;
     white-space: nowrap;
   }
 
-  .method-pill {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 6px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    font-size: 12px;
-    text-transform: capitalize;
-  }
-
-  .badge {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 999px;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: capitalize;
-    letter-spacing: 0.02em;
-  }
-
-  .badge--success { background: #d1fae5; color: var(--success); }
-  .badge--warning { background: #fef3c7; color: var(--warning); }
-  .badge--danger  { background: #fee2e2; color: var(--danger); }
-  .badge--info    { background: #e0f2fe; color: var(--info); }
-  .badge--neutral { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
-
-  .summary-grid {
-    display: grid;
-    grid-template-columns: 1fr 300px;
-    gap: 24px;
-    align-items: start;
-  }
-
-  .payments-block { min-width: 0; }
-
-  .totals-card {
-    padding: 20px 22px;
-    border-radius: 12px;
-    background: linear-gradient(180deg, #f0fdfa 0%, var(--white) 100%);
-    border: 1px solid #99f6e4;
-  }
-
-  .totals-title {
-    margin: 0 0 14px;
-    font-size: 11px;
+  .totals-value {
+    text-align: right;
     font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--brand-dark);
-  }
-
-  .total-line {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 16px;
-    padding: 7px 0;
-    font-size: 13px;
     color: var(--ink);
-    border-bottom: 1px dashed var(--border);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    min-width: 110px;
   }
 
-  .total-line:last-of-type { border-bottom: none; }
-
-  .total-line--muted span:first-child { color: var(--muted); }
-
-  .total-line--grand {
-    margin-top: 10px;
-    padding-top: 14px;
-    border-top: 2px solid var(--brand);
-    border-bottom: none;
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--brand-dark);
+  .totals-grand td {
+    padding-top: 10px;
+    background: var(--blue-light);
   }
 
-  .total-line--grand .money {
-    font-size: 20px;
-    color: var(--brand);
+  .totals-grand .totals-label,
+  .totals-grand .totals-value {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--navy);
+    padding-top: 10px;
+    padding-bottom: 10px;
   }
 
-  .total-line--paid {
-    color: var(--success);
-    font-weight: 600;
-  }
+  .totals-paid .totals-value { color: var(--success); }
+  .totals-due .totals-value { color: var(--danger); }
 
-  .total-line--due {
-    font-weight: 700;
-    color: var(--danger);
-    background: #fef2f2;
-    margin: 8px -10px 0;
-    padding: 10px 10px !important;
-    border-radius: 8px;
-    border: none !important;
-  }
+  .text-success { color: var(--success); font-weight: 600; text-transform: lowercase; }
+  .text-warning { color: var(--warning); font-weight: 600; text-transform: lowercase; }
+  .text-danger  { color: var(--danger); font-weight: 600; text-transform: lowercase; }
+  .text-info    { color: var(--info); font-weight: 600; text-transform: lowercase; }
+  .text-muted   { color: var(--muted); font-weight: 500; text-transform: lowercase; }
 
   .invoice-footer {
-    padding: 20px 36px 28px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0;
     border-top: 1px solid var(--border);
-    background: var(--surface);
-    text-align: center;
+    background: #fafcff;
   }
 
-  .footer-thanks {
-    margin: 0 0 6px;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--ink);
-  }
-
-  .footer-note {
-    margin: 0;
+  .footer-col {
+    padding: 22px 24px;
+    border-right: 1px solid var(--border);
     font-size: 12px;
     color: var(--muted);
   }
+
+  .footer-col:last-child { border-right: none; }
+
+  .footer-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--navy);
+  }
+
+  .footer-head svg {
+    width: 16px;
+    height: 16px;
+    color: var(--navy);
+  }
+
+  .footer-line { margin: 0 0 4px; }
+  .footer-line:last-child { margin-bottom: 0; }
+
+  .footer-center { text-align: center; }
+
+  .footer-thanks {
+    margin: 0 0 6px;
+    font-family: "Segoe Script", "Brush Script MT", cursive;
+    font-size: 26px;
+    color: var(--navy);
+    font-weight: 400;
+    line-height: 1.2;
+  }
+
+  .footer-sub {
+    margin: 0;
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .footer-right { text-align: right; }
 
   @media print {
     body {
@@ -548,37 +647,44 @@ const INVOICE_STYLES = `
       border-radius: 0;
     }
 
-    .invoice-header {
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-
-    .status-strip,
-    .info-card--accent,
-    .totals-card {
+    .card-header,
+    .section-header--dark,
+    .section-header--light,
+    .data-table thead th,
+    .totals-grand td {
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
   }
 
-  @media (max-width: 640px) {
-    body { padding: 12px; }
+  @media (max-width: 720px) {
+    body { padding: 10px; }
 
-    .invoice-header {
-      flex-direction: column;
-      padding: 24px 20px;
+    .top-bar,
+    .meta-row,
+    .cards-grid {
+      padding-left: 18px;
+      padding-right: 18px;
     }
 
-    .invoice-meta { text-align: left; }
+    .top-bar { flex-direction: column; }
+    .invoice-title { font-size: 28px; }
 
-    .status-strip,
-    .invoice-body,
-    .invoice-footer { padding-left: 20px; padding-right: 20px; }
+    .meta-row { grid-template-columns: 1fr; }
+    .cards-grid { grid-template-columns: 1fr; }
+    .section { margin-left: 18px; margin-right: 18px; }
 
-    .info-grid,
-    .summary-grid {
+    .invoice-footer {
       grid-template-columns: 1fr;
     }
+
+    .footer-col {
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .footer-col:last-child { border-bottom: none; }
+    .footer-right { text-align: left; }
   }
 `;
 
@@ -587,140 +693,153 @@ const INVOICE_STYLES = `
  */
 const buildOrderInvoiceHtml = (record) => {
   const orderId = record.unique_id || record._id;
+  const invoiceNo = `INV-${orderId}`;
   const customerName = record.user_info?.name || '—';
   const customerEmail = record.user_info?.email || '—';
   const customerPhone = record.user_info?.phone_number || '—';
-  const franchiseName = record.franchise_info?.name || 'Help PR';
-  const franchiseLocation = [record.franchise_info?.city_name, record.franchise_info?.state_name]
-    .filter((part) => part != null && String(part).trim() !== '')
-    .join(', ');
+  const franchiseName = record.franchise_info?.name || '—';
   const address = formatAddressLine(record);
   const category = record.category_info?.name || '—';
   const service = record.service_info?.name || '—';
   const paymentStatus = record.user_payment_status || record.payment_status || '—';
   const orderStatus = record.order_status || '—';
-  const serviceItemCount = Array.isArray(record.service_items) ? record.service_items.length : 0;
-  const chargeCount = Array.isArray(record.additional_charges) ? record.additional_charges.length : 0;
-  const lineItemCount = serviceItemCount + chargeCount;
-  const paymentCount = (record.order_payments || []).filter((p) => p.payer_type === 'customer').length;
-  const dueAmount = Number(record.customer_due_amount) || 0;
+  const invoiceDate = formatDate(record.order_date || record.created_at);
+  const generatedAt = formatDateTime(new Date());
+  const brandParts = String(INVOICE_BRAND_NAME).trim().split(/\s+/);
+  const brandNameHtml =
+    brandParts.length > 1
+      ? `${escapeHtml(brandParts[0])} <span>${escapeHtml(brandParts.slice(1).join(' '))}</span>`
+      : escapeHtml(INVOICE_BRAND_NAME);
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Invoice ${escapeHtml(orderId)}</title>
+  <title>Invoice ${escapeHtml(invoiceNo)}</title>
   <style>${INVOICE_STYLES}</style>
 </head>
 <body>
   <div class="invoice">
-    <header class="invoice-header">
-      <div class="brand-block">
-        <h1 class="brand-name">Help PR</h1>
-        <p class="brand-sub">Service order invoice</p>
-        <div class="franchise-line">
-          <strong>${escapeHtml(franchiseName)}</strong>${franchiseLocation ? ` · ${escapeHtml(franchiseLocation)}` : ''}
+    <div class="top-bar">
+      <div class="brand-wrap">
+        <img class="brand-logo" src="${INVOICE_LOGO_URL}" alt="${escapeHtml(INVOICE_BRAND_NAME)} logo" />
+        <div class="brand-text">
+          <h1 class="brand-name">${brandNameHtml}</h1>
+          <p class="brand-tagline">${escapeHtml(INVOICE_TAGLINE)}</p>
         </div>
       </div>
-      <div class="invoice-meta">
-        <span class="invoice-label">Tax Invoice</span>
-        <p class="invoice-id">#${escapeHtml(orderId)}</p>
-        <p class="invoice-date">Issued ${formatDate(record.order_date || record.created_at)}</p>
-      </div>
-    </header>
-
-    <div class="status-strip">
-      <div class="status-item"><strong>Order</strong> ${statusBadge(orderStatus)}</div>
-      <div class="status-item"><strong>Payment</strong> ${statusBadge(paymentStatus)}</div>
+      <h2 class="invoice-title">INVOICE</h2>
     </div>
 
-    <div class="invoice-body">
-      <div class="info-grid">
-        <div class="info-card info-card--accent">
-          <h2 class="card-title">Bill to</h2>
-          <p class="card-name">${escapeHtml(customerName)}</p>
-          <p class="card-line">${escapeHtml(customerEmail)}</p>
-          <p class="card-line">${escapeHtml(customerPhone)}</p>
-          <p class="card-line">${escapeHtml(address)}</p>
+    <div class="meta-row">
+      <div class="meta-list">
+        <div class="meta-item">
+          <span class="meta-label">Invoice No.</span>
+          <span class="meta-value">${escapeHtml(invoiceNo)}</span>
         </div>
-        <div class="info-card">
-          <h2 class="card-title">Service details</h2>
-          <div class="service-pills">
-            <span class="service-pill">${escapeHtml(category)}</span>
-            <span class="service-pill">${escapeHtml(service)}</span>
-          </div>
+        <div class="meta-item">
+          <span class="meta-label">Order ID</span>
+          <span class="meta-value meta-value--link">${escapeHtml(orderId)}</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Invoice Date</span>
+          <span class="meta-value">${escapeHtml(invoiceDate)}</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Order Status</span>
+          <span class="meta-value">${statusText(orderStatus)}</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Payment Status</span>
+          <span class="meta-value">${statusText(paymentStatus)}</span>
         </div>
       </div>
-
-      <section class="section">
-        <div class="section-head">
-          <h2 class="section-title">Line items</h2>
-          <span class="section-count">${lineItemCount} item${lineItemCount === 1 ? '' : 's'}</span>
+      <div class="franchise-box">
+        <div class="franchise-icon">${iconSvg('store')}</div>
+        <div>
+          <p class="franchise-label">Franchise</p>
+          <p class="franchise-name">${escapeHtml(franchiseName)}</p>
         </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Service</th>
-                <th>Partner</th>
-                <th>Status</th>
-                <th class="col-amount">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${buildServiceRows(record.service_items)}
-              ${buildChargeRows(record.additional_charges)}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <div class="summary-grid">
-        <section class="section payments-block">
-          <div class="section-head">
-            <h2 class="section-title">Payment history</h2>
-            <span class="section-count">${paymentCount} payment${paymentCount === 1 ? '' : 's'}</span>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Method</th>
-                  <th>Status</th>
-                  <th class="col-amount">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${buildPaymentRows(record.order_payments)}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <aside class="totals-card">
-          <h2 class="totals-title">Amount summary</h2>
-          ${buildTotalsRows(record)}
-          <div class="total-line total-line--grand">
-            <span>Total</span>
-            <span>${moneyCell(record.total_price)}</span>
-          </div>
-          <div class="total-line total-line--paid">
-            <span>Paid</span>
-            <span>${moneyCell(record.customer_net_paid)}</span>
-          </div>
-          <div class="total-line total-line--due">
-            <span>Amount due</span>
-            <span>${moneyCell(dueAmount)}</span>
-          </div>
-        </aside>
       </div>
     </div>
+
+    <div class="cards-grid">
+      <div class="info-card">
+        <div class="card-header">${iconSvg('person')} Bill to</div>
+        <div class="card-body">
+          <p class="customer-name">${escapeHtml(customerName)}</p>
+          <p class="detail-line">${iconSvg('mail')}<span>${escapeHtml(customerEmail)}</span></p>
+          <p class="detail-line">${iconSvg('phone')}<span>${escapeHtml(customerPhone)}</span></p>
+          <p class="detail-line">${iconSvg('pin')}<span>${escapeHtml(address)}</span></p>
+        </div>
+      </div>
+      <div class="info-card">
+        <div class="card-header">${iconSvg('tools')} Service details</div>
+        <div class="card-body">
+          <p class="service-field"><strong>Category:</strong>${escapeHtml(category)}</p>
+          <p class="service-field"><strong>Service:</strong>${escapeHtml(service)}</p>
+        </div>
+      </div>
+    </div>
+
+    <section class="section">
+      <div class="section-header section-header--light">${iconSvg('list')} Line items</div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Service</th>
+              <th>Partner</th>
+              <th>Status</th>
+              <th class="col-amount">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${buildServiceRows(record.service_items)}
+            ${buildChargeRows(record.additional_charges)}
+          </tbody>
+        </table>
+      </div>
+      <div class="totals-wrap">
+        ${buildTotalsTable(record)}
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header section-header--dark">${iconSvg('card')} Payment history</div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Method</th>
+              <th>Status</th>
+              <th class="col-amount">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${buildPaymentRows(record.order_payments)}
+          </tbody>
+        </table>
+      </div>
+    </section>
 
     <footer class="invoice-footer">
-      <p class="footer-thanks">Thank you for choosing Help PR</p>
-      <p class="footer-note">This is a computer-generated invoice and does not require a signature.</p>
+      <div class="footer-col">
+        <div class="footer-head">${iconSvg('headset')} Need Help?</div>
+        <p class="footer-line">${escapeHtml(INVOICE_SUPPORT_PHONE)}</p>
+        <p class="footer-line">${escapeHtml(INVOICE_SUPPORT_EMAIL)}</p>
+        <p class="footer-line">${escapeHtml(INVOICE_SUPPORT_WEBSITE)}</p>
+      </div>
+      <div class="footer-col footer-center">
+        <p class="footer-thanks">Thank You!</p>
+        <p class="footer-sub">for choosing ${escapeHtml(INVOICE_BRAND_NAME)}.<br />We appreciate your business.</p>
+      </div>
+      <div class="footer-col footer-right">
+        <div class="footer-head">${iconSvg('doc')} Generated On</div>
+        <p class="footer-line">${escapeHtml(generatedAt)}</p>
+      </div>
     </footer>
   </div>
 </body>

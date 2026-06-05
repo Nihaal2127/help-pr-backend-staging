@@ -1,4 +1,5 @@
 const {
+  listAllCustomerOrderPayments,
   listCustomerOrderPayments,
   createCustomerOrderPayment,
   updateCustomerOrderPayment,
@@ -6,6 +7,37 @@ const {
 } = require('../../../services/mobile/user/order_payment_service');
 
 const getCallerId = (req) => req.user?.id || req.user?._id;
+
+const listAllOrderPaymentsHandler = async (req, res) => {
+  try {
+    const result = await listAllCustomerOrderPayments(getCallerId(req), req.query);
+    if (!result.ok) {
+      return res.status(result.status).json({
+        success: false,
+        status: result.status,
+        message: result.message,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: result.data.message,
+      totalItems: result.data.data.totalItems,
+      totalPages: result.data.data.totalPages,
+      currentPage: result.data.data.currentPage,
+      limit: result.data.data.limit,
+      records: result.data.data.records,
+    });
+  } catch (error) {
+    console.error('mobile user list all order payments handler', error.message);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Internal server error.',
+    });
+  }
+};
 
 const listOrderPaymentsHandler = async (req, res) => {
   try {
@@ -131,6 +163,7 @@ const deleteOrderPaymentHandler = async (req, res) => {
 };
 
 module.exports = {
+  listAllOrderPaymentsHandler,
   listOrderPaymentsHandler,
   createOrderPaymentHandler,
   updateOrderPaymentHandler,

@@ -1,12 +1,19 @@
 const mongoose = require('mongoose');
 const Order = require('../../../models/order');
 const OrderPayment = require('../../../models/order_payment');
+const { applyPagination } = require('../../../utils/pagination');
+const { buildFieldDateRangeFilter } = require('../../../utils/schedule_date_filters');
 const { syncOrderPaymentStatus } = require('../../order_payment_status_service');
 const { syncAllPartnerOrderPaymentsForOrder } = require('../../partner_wallet_order_service');
 
 const PAYER_TYPE_CUSTOMER = 'customer';
 const fail = (status, message) => ({ ok: false, status, message });
 const ok = (status, data) => ({ ok: true, status, data });
+
+const parsePositiveInt = (raw, fallback) => {
+  const n = parseInt(String(raw ?? ''), 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+};
 
 const loadCustomerOrder = async (customerId, orderId) => {
   if (!customerId || !mongoose.Types.ObjectId.isValid(String(customerId))) {
@@ -44,6 +51,98 @@ const syncAfterPaymentChange = async (orderId) => {
   const syncResult = await syncOrderPaymentStatus(orderId);
   await syncAllPartnerOrderPaymentsForOrder(orderId);
   return syncResult;
+};
+
+const listAllCustomerOrderPayments = async (customerId, query = {}) => {
+  try {
+    if (!customerId || !mongoose.Types.ObjectId.isValid(String(customerId))) {
+      return fail(401, 'Invalid token.');
+    }
+
+    const page = parsePositiveInt(query.page, 1);
+    const limit = Math.min(parsePositiveInt(query.limit, 10), 50);
+    const customerOid = new mongoose.Types.ObjectId(String(customerId));
+
+    const orderFilter = {
+      user_id: customerOid,
+      deleted_at: null,
+    };
+
+    if (query.order_id !== undefined && String(query.order_id).trim() !== '') {
+      if (!mongoose.Types.ObjectId.isValid(String(query.order_id))) {
+        return fail(400, 'Invalid order_id filter.');
+      }
+      orderFilter._id = new mongoose.Types.ObjectId(String(query.order_id));
+    }
+
+    const orderIds = await Order.find(orderFilter).distinct('_id');
+    if (orderIds.length === 0) {
+      return ok(200, {
+        message: 'Order payments fetched.',
+        data: {
+          totalItems: 0,
+          totalPages: 0,
+          currentPage: page,
+          limit,
+          records: [],
+        },
+      });
+    }
+
+    const paymentFilter = {
+      order_id: { $in: orderIds },
+      payer_type: PAYER_TYPE_CUSTOMER,
+      deleted_at: null,
+    };
+
+    if (query.status !== undefined && String(query.status).trim() !== '') {
+      paymentFilter.status = String(query.status).trim().toLowerCase();
+    }
+    if (query.payment_method !== undefined && String(query.payment_method).trim() !== '') {
+      paymentFilter.payment_method = String(query.payment_method).trim().toLowerCase();
+    }
+
+    const dateRangeResult = buildFieldDateRangeFilter(query, 'created_at');
+    if (!dateRangeResult.ok) {
+      return fail(400, dateRangeResult.message);
+    }
+    Object.assign(paymentFilter, dateRangeResult.filter);
+
+    const { data, totalCount, totalPages, currentPage } = await applyPagination(
+      OrderPayment,
+      paymentFilter,
+      page,
+      limit,
+      { created_at: -1 }
+    );
+
+    const uniqueOrderIds = [...new Set(data.map((row) => String(row.order_id)))];
+    const orders = await Order.find({ _id: { $in: uniqueOrderIds } })
+      .select(
+        'unique_id payment_status user_payment_status is_paid total_price customer_paid_amount customer_due_amount customer_net_paid'
+      )
+      .lean();
+    const orderById = Object.fromEntries(orders.map((order) => [String(order._id), order]));
+
+    const records = data.map((row) => ({
+      ...row,
+      order: orderById[String(row.order_id)] || null,
+    }));
+
+    return ok(200, {
+      message: 'Order payments fetched.',
+      data: {
+        totalItems: totalCount,
+        totalPages,
+        currentPage,
+        limit,
+        records,
+      },
+    });
+  } catch (err) {
+    console.error('mobile user list all order payments', err.message);
+    return fail(500, 'Internal server error.');
+  }
 };
 
 const listCustomerOrderPayments = async (customerId, orderId) => {
@@ -221,6 +320,7 @@ const deleteCustomerOrderPayment = async (customerId, orderId, paymentId) => {
 };
 
 module.exports = {
+  listAllCustomerOrderPayments,
   listCustomerOrderPayments,
   createCustomerOrderPayment,
   updateCustomerOrderPayment,

@@ -1,31 +1,126 @@
 const mongoose = require('mongoose');
 const Order = require('../../../models/order');
 const { formatOrderForApi } = require('../../../utils/order_api_format');
+const { startOfUtcDay, endOfUtcDay } = require('../../../utils/date_bounds');
+const {
+  hydrateUserRef,
+  hydrateCategoryRef,
+  hydrateServiceRef,
+  hydrateFranchiseRef,
+} = require('../../../utils/list_aggregation');
 const {
   ORDER_STATUS_IN_PROGRESS,
   ORDER_STATUS_COMPLETED,
   buildOrderManagementStatusQueryFilter,
 } = require('../../../enum/order_status_enum');
 
-const HOME_ORDERS_PER_STATUS_LIMIT = 20;
+const HOME_ORDERS_PER_STATUS_LIMIT = 10;
 
-const extractRefId = (ref) => {
-  if (!ref) return null;
-  if (typeof ref === 'object' && ref._id != null) return ref._id;
-  return ref;
+/** 0 = schedule overlaps today, 1 = future, 2 = past, 3 = no usable schedule dates */
+const IN_PROGRESS_SCHEDULE_PRIORITY = {
+  TODAY: 0,
+  FUTURE: 1,
+  PAST: 2,
+  UNDATED: 3,
 };
 
-const extractRefName = (ref) => {
-  if (!ref) return null;
-  if (typeof ref === 'object' && ref.name != null) return ref.name;
-  return null;
+const HOME_ORDER_POPULATE = [
+  {
+    path: 'category_id',
+    select:
+      'name category_id desc image_url approval_status is_request is_active rejection_reason',
+  },
+  {
+    path: 'service_id',
+    select:
+      'name service_id desc image_url approval_status is_request is_active rejection_reason',
+  },
+  {
+    path: 'partner_id',
+    select: 'name user_id email phone_number profile_url type',
+  },
+  { path: 'franchise_id', select: 'name city_name state_name' },
+];
+
+const scheduleOverlapsRange = (order, rangeFrom, rangeTo) => {
+  const from = order.from_date ? new Date(order.from_date) : null;
+  const to = order.to_date ? new Date(order.to_date) : null;
+  const orderDate = order.order_date ? new Date(order.order_date) : null;
+
+  if (from && to && from <= rangeTo && to >= rangeFrom) return true;
+  if (from && !to && from >= rangeFrom && from <= rangeTo) return true;
+  if (to && !from && to >= rangeFrom && to <= rangeTo) return true;
+  if (orderDate && orderDate >= rangeFrom && orderDate <= rangeTo) return true;
+  return false;
+};
+
+const getInProgressScheduleSortMeta = (order, todayStart, todayEnd) => {
+  const from = order.from_date ? new Date(order.from_date) : null;
+  const to = order.to_date ? new Date(order.to_date) : null;
+  const orderDate = order.order_date ? new Date(order.order_date) : null;
+  const rangeStart = from || orderDate || to;
+  const rangeEnd = to || from || orderDate;
+
+  if (!rangeStart && !rangeEnd) {
+    return {
+      priority: IN_PROGRESS_SCHEDULE_PRIORITY.UNDATED,
+      sortDate: null,
+    };
+  }
+
+  if (scheduleOverlapsRange(order, todayStart, todayEnd)) {
+    return {
+      priority: IN_PROGRESS_SCHEDULE_PRIORITY.TODAY,
+      sortDate: rangeStart,
+    };
+  }
+
+  if (rangeStart > todayEnd) {
+    return {
+      priority: IN_PROGRESS_SCHEDULE_PRIORITY.FUTURE,
+      sortDate: rangeStart,
+    };
+  }
+
+  if (rangeEnd < todayStart) {
+    return {
+      priority: IN_PROGRESS_SCHEDULE_PRIORITY.PAST,
+      sortDate: rangeEnd,
+    };
+  }
+
+  return {
+    priority: IN_PROGRESS_SCHEDULE_PRIORITY.UNDATED,
+    sortDate: rangeStart,
+  };
+};
+
+const compareInProgressHomeOrders = (left, right, todayStart, todayEnd) => {
+  const leftMeta = getInProgressScheduleSortMeta(left, todayStart, todayEnd);
+  const rightMeta = getInProgressScheduleSortMeta(right, todayStart, todayEnd);
+
+  if (leftMeta.priority !== rightMeta.priority) {
+    return leftMeta.priority - rightMeta.priority;
+  }
+
+  const leftTime = leftMeta.sortDate?.getTime() ?? 0;
+  const rightTime = rightMeta.sortDate?.getTime() ?? 0;
+
+  if (leftMeta.priority === IN_PROGRESS_SCHEDULE_PRIORITY.PAST) {
+    if (rightTime !== leftTime) return rightTime - leftTime;
+  } else if (leftTime !== rightTime) {
+    return leftTime - rightTime;
+  }
+
+  return (right.updated_at?.getTime() ?? 0) - (left.updated_at?.getTime() ?? 0);
 };
 
 const mapMobileHomeOrder = (order) => {
   const formatted = formatOrderForApi(order);
-  const categoryRef = formatted.category_id;
-  const serviceRef = formatted.service_id;
-  const partnerRef = formatted.partner_id;
+  const category = hydrateCategoryRef(formatted.category_id);
+  const service = hydrateServiceRef(formatted.service_id);
+  const partner = hydrateUserRef(formatted.partner_id);
+  const franchise = hydrateFranchiseRef(formatted.franchise_id);
 
   return {
     _id: formatted._id,
@@ -38,22 +133,21 @@ const mapMobileHomeOrder = (order) => {
     total_price: formatted.total_price,
     user_payment_status: formatted.user_payment_status ?? formatted.payment_status ?? 'unpaid',
     is_paid: Boolean(formatted.is_paid),
-    category_id: extractRefId(categoryRef),
-    service_id: extractRefId(serviceRef),
-    partner_id: extractRefId(partnerRef),
-    franchise_id: formatted.franchise_id,
-    category_name: extractRefName(categoryRef),
-    service_name: extractRefName(serviceRef),
-    partner_name: extractRefName(partnerRef),
-    partner_profile_url:
-      partnerRef && typeof partnerRef === 'object' ? partnerRef.profile_url ?? null : null,
+    category_id: category,
+    service_id: service,
+    partner_id: partner,
+    franchise_id: franchise,
+    category_name: category?.name ?? null,
+    service_name: service?.name ?? null,
+    partner_name: partner?.name ?? null,
+    partner_profile_url: partner?.profile_url ?? null,
     created_at: formatted.created_at,
     updated_at: formatted.updated_at,
   };
 };
 
-const listOrdersForCustomerByStatus = async (userId, status) => {
-  const statusFilter = buildOrderManagementStatusQueryFilter(status);
+const listCompletedHomeOrders = async (userId) => {
+  const statusFilter = buildOrderManagementStatusQueryFilter(ORDER_STATUS_COMPLETED);
   if (!statusFilter) {
     return [];
   }
@@ -67,20 +161,41 @@ const listOrdersForCustomerByStatus = async (userId, status) => {
   })
     .sort({ updated_at: -1, created_at: -1 })
     .limit(HOME_ORDERS_PER_STATUS_LIMIT)
-    .populate([
-      { path: 'category_id', select: 'name' },
-      { path: 'service_id', select: 'name' },
-      { path: 'partner_id', select: 'name profile_url' },
-    ])
+    .populate(HOME_ORDER_POPULATE)
     .lean();
 
   return rows.map(mapMobileHomeOrder);
 };
 
+const listInProgressHomeOrders = async (userId) => {
+  const statusFilter = buildOrderManagementStatusQueryFilter(ORDER_STATUS_IN_PROGRESS);
+  if (!statusFilter) {
+    return [];
+  }
+
+  const userOid = new mongoose.Types.ObjectId(String(userId));
+  const todayStart = startOfUtcDay(new Date());
+  const todayEnd = endOfUtcDay(new Date());
+
+  const rows = await Order.find({
+    user_id: userOid,
+    deleted_at: null,
+    ...statusFilter,
+  })
+    .populate(HOME_ORDER_POPULATE)
+    .lean();
+
+  const sorted = rows
+    .sort((left, right) => compareInProgressHomeOrders(left, right, todayStart, todayEnd))
+    .slice(0, HOME_ORDERS_PER_STATUS_LIMIT);
+
+  return sorted.map(mapMobileHomeOrder);
+};
+
 const loadCustomerHomeOrders = async (userId) => {
   const [in_progress, completed] = await Promise.all([
-    listOrdersForCustomerByStatus(userId, ORDER_STATUS_IN_PROGRESS),
-    listOrdersForCustomerByStatus(userId, ORDER_STATUS_COMPLETED),
+    listInProgressHomeOrders(userId),
+    listCompletedHomeOrders(userId),
   ]);
 
   return { in_progress, completed };

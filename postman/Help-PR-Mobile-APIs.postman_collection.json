@@ -2111,7 +2111,22 @@
                   "    pm.expect(j.success).to.eql(true);",
                   "    pm.expect(j.data?.partner).to.be.an('object');",
                   "    pm.expect(j.data?.categories).to.be.an('array');",
+                  "    pm.expect(j.data.partner).to.have.property('average_rating');",
+                  "    pm.expect(j.data.partner).to.have.property('rating_count');",
+                  "    pm.expect(j.data.partner.ratings).to.be.an('object');",
+                  "    pm.expect(j.data.partner.ratings).to.have.property('average_rating');",
+                  "    pm.expect(j.data.partner.ratings).to.have.property('rating_count');",
                   "  });",
+                  "  const svc0 = j?.data?.categories?.[0]?.services?.[0];",
+                  "  if (svc0) {",
+                  "    pm.test('Service catalog includes ratings', function () {",
+                  "      pm.expect(svc0).to.have.property('average_rating');",
+                  "      pm.expect(svc0).to.have.property('rating_count');",
+                  "      pm.expect(svc0).to.have.property('service_average_rating');",
+                  "      pm.expect(svc0).to.have.property('service_rating_count');",
+                  "      pm.expect(svc0.ratings).to.be.an('object');",
+                  "    });",
+                  "  }",
                   "  const p = j?.data?.partner;",
                   "  if (p?._id) pm.collectionVariables.set('quotePartnerId', String(p._id));",
                   "  const svc = j?.data?.categories?.[0]?.services?.[0];",
@@ -2145,7 +2160,7 @@
                 }
               ]
             },
-            "description": "**GET /api/mobile/user/partners/:partnerId**\n\nCustomer partner detail + full catalog for requesting a quote.\n\n| Param / query | Required | Notes |\n|---------------|----------|--------|\n| `partnerId` | Yes | Partner Mongo `_id` (`{{quotePartnerId}}` from Home or Partners list) |\n| `franchise_id` | Yes | Same franchise as Home |\n\n**200 `data.partner`:** name, profile, `experience` / `professional_summary`, subscription plan, optional `business_info`, `location`, `joined_at`, `completed_services_count`, `is_saved`, **`average_rating`**, **`rating_count`**, **`ratings`** `{ average_rating, rating_count }`\n\n**200 `data.categories[].services[]`:** plus **`average_rating`** / **`rating_count`** (partner on that service), **`service_average_rating`** / **`service_rating_count`** (global service), `description`, `price`, `tax`, `payment_type`, `minimum_deposit`, `is_accept_request`\n\n**Quote flow:** pick a service → `POST /quotes/create` with `partner_id`, global `service_id`, `category_id`, `total_service_charge` = service `price`."
+            "description": "**GET /api/mobile/user/partners/:partnerId**\n\nCustomer partner detail + full catalog for requesting a quote.\n\n| Param / query | Required | Notes |\n|---------------|----------|--------|\n| `partnerId` | Yes | Partner Mongo `_id` (`{{quotePartnerId}}` from Home or Partners list) |\n| `franchise_id` | Yes | Same franchise as Home |\n\n**200 `data.partner`:** name, profile, `experience` / `professional_summary`, subscription plan, optional `business_info`, `location`, `joined_at`, `completed_services_count`, `is_saved`, **`average_rating`**, **`rating_count`**, **`ratings`** `{ average_rating, rating_count }`\n\n**200 `data.categories[].services[]`:** plus **`average_rating`** / **`rating_count`** and **`ratings`** (partner on that service), **`service_average_rating`** / **`service_rating_count`** (global service), `description`, `price`, `tax`, `payment_type`, `minimum_deposit`, `is_accept_request`\n\nRatings roll up from completed order reviews (`POST /api/mobile/user/orders/:orderId/review`). Use **Get partner ratings** for `service_ratings[]` and `recent_reviews[]`.\n\n**Quote flow:** pick a service → `POST /quotes/create` with `partner_id`, global `service_id`, `category_id`, `total_service_charge` = service `price`."
           },
           "response": []
         },

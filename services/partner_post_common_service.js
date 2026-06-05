@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { attachPartnerRatingFields } = require('../utils/rating_format');
 const { v4: uuidv4 } = require('uuid');
 const PartnerPost = require('../models/partner_post');
 const PartnerPostLike = require('../models/partner_post_like');
@@ -187,7 +188,7 @@ const loadPartnerSummaries = async (partnerIds) => {
     _id: { $in: partnerIds },
     deleted_at: null,
   })
-    .select('_id name profile_url')
+    .select('_id name profile_url average_rating rating_count')
     .lean();
 
   return new Map(
@@ -197,6 +198,7 @@ const loadPartnerSummaries = async (partnerIds) => {
         _id: p._id,
         name: p.name,
         profile_url: p.profile_url,
+        ...attachPartnerRatingFields(p),
       },
     ])
   );

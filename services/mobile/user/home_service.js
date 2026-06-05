@@ -9,6 +9,7 @@ const {
   collectEffectivePartnerOfferings,
   mapFranchisePartnerRecords,
 } = require('./franchise_partner_scope');
+const { enrichPartnerListRecordsWithServiceRatings } = require('./partner_rating_service');
 const { loadCustomerHomeOrders } = require('./home_orders_service');
 
 /** Max partners returned on home (highest plan priority first). */
@@ -222,6 +223,7 @@ const getHomeForLocation = async ({ location, userId }) => {
       subscribed.planByPartnerId,
       catalogResult.effectiveOfferings || []
     );
+    const partnersWithRatings = await enrichPartnerListRecordsWithServiceRatings(partners);
 
     return ok(200, {
       message: 'Home data fetched successfully.',
@@ -231,7 +233,7 @@ const getHomeForLocation = async ({ location, userId }) => {
         franchise_name: franchiseCtx.franchise.name,
         location: buildResolvedLocation(franchiseCtx),
         categories: catalogResult.categories,
-        partners,
+        partners: partnersWithRatings,
         orders,
       },
     });

@@ -15,7 +15,7 @@ const {
   loadPartnerAvailabilityContext,
 } = require('../../../utils/catalog_availability_resolver');
 const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
-const { mapRatingSummary } = require('../../../utils/rating_format');
+const { attachPartnerRatingFields } = require('../../../utils/rating_format');
 
 const fail = (status, message) => ({ ok: false, status, message });
 
@@ -453,7 +453,7 @@ const mapFranchisePartnerRecords = (subscribedPartners, planByPartnerId, effecti
       subscription_plan_name: plan?.plan_name ?? null,
       plan_priority: plan?.priority ?? null,
       categories: categoriesByPartnerId.get(String(p._id)) || [],
-      ...mapRatingSummary(p),
+      ...attachPartnerRatingFields(p),
     };
   });
 };

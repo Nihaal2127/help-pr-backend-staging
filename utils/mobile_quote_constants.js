@@ -1,6 +1,6 @@
 const QUOTE_MOBILE_DETAIL_POPULATE = [
   { path: 'user_id', select: 'name user_id email phone_number profile_url type' },
-  { path: 'partner_id', select: 'name user_id email phone_number profile_url type' },
+  { path: 'partner_id', select: 'name user_id email phone_number profile_url type average_rating rating_count' },
   { path: 'employee_id', select: 'name user_id email phone_number profile_url type' },
   { path: 'created_by_id', select: 'name user_id email phone_number profile_url type' },
   {

@@ -3,6 +3,7 @@ const OrderAdditionalCharge = require('../models/order_additional_charge');
 const OrderPayment = require('../models/order_payment');
 const OrderOffer = require('../models/order_offer');
 const { formatOrderForApi } = require('../utils/order_api_format');
+const { attachPartnerRatingFields } = require('../utils/rating_format');
 const { attachRefundsToOrderRecords } = require('./refund_service');
 
 const ORDER_DETAIL_POPULATE = [
@@ -16,7 +17,7 @@ const ORDER_DETAIL_POPULATE = [
   { path: 'created_by_id', select: 'name user_id email phone_number profile_url' },
   {
     path: 'partner_id',
-    select: 'name user_id email phone_number profile_url city_id',
+    select: 'name user_id email phone_number profile_url city_id average_rating rating_count',
     populate: [{ path: 'city_id', select: 'name' }],
   },
   { path: 'employee_id', select: 'name user_id email phone_number profile_url' },
@@ -33,13 +34,23 @@ const ORDER_DETAIL_POPULATE = [
     populate: [
       {
         path: 'partner_id',
-        select: 'name user_id email phone_number profile_url city_id',
+        select: 'name user_id email phone_number profile_url city_id average_rating rating_count',
         populate: [{ path: 'city_id', select: 'name' }],
       },
       { path: 'service_id', select: 'name service_id desc image_url' },
     ],
   },
 ];
+
+function mapPartnerInfoBlock(partnerDoc) {
+  if (!partnerDoc || !partnerDoc._id) return null;
+  return {
+    ...partnerDoc,
+    city_name: partnerDoc.city_id?.name || null,
+    city_id: partnerDoc.city_id?._id || null,
+    ...attachPartnerRatingFields(partnerDoc),
+  };
+}
 
 function shapeOrderDetailResponse(populatedOrderData, additional_charges, order_payments, order_offer) {
   return formatOrderForApi({
@@ -66,11 +77,7 @@ function shapeOrderDetailResponse(populatedOrderData, additional_charges, order_
     partner_id: populatedOrderData.partner_id?._id ?? populatedOrderData.partner_id,
     partner_info:
       populatedOrderData.partner_id && populatedOrderData.partner_id._id
-        ? {
-            ...populatedOrderData.partner_id,
-            city_name: populatedOrderData.partner_id.city_id?.name || null,
-            city_id: populatedOrderData.partner_id.city_id?._id || null,
-          }
+        ? mapPartnerInfoBlock(populatedOrderData.partner_id)
         : null,
 
     employee_id: populatedOrderData.employee_id?._id ?? populatedOrderData.employee_id,
@@ -94,11 +101,7 @@ function shapeOrderDetailResponse(populatedOrderData, additional_charges, order_
       return {
         ...serviceItem,
         ...(hasValidPartner && {
-          partner_info: {
-            ...serviceItem.partner_id,
-            city_name: serviceItem.partner_id.city_id?.name || null,
-            city_id: serviceItem.partner_id.city_id?._id || null,
-          },
+          partner_info: mapPartnerInfoBlock(serviceItem.partner_id),
         }),
         service_info: serviceItem.service_id,
         partner_id: undefined,

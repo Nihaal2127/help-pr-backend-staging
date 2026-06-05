@@ -21,7 +21,7 @@ const {
 } = require('../../../enum/order_status_enum');
 const { loadOrderDetailLean } = require('../../order_detail_service');
 const { buildOrderInvoiceHtml } = require('../../../utils/order_invoice_html');
-const { embedOrderDetailForeignKeys } = require('../../../utils/list_aggregation');
+const { attachPartnerRatingFields } = require('../../../utils/rating_format');
 const {
   buildEntityListPipeline,
   parseFacetListResult,
@@ -96,6 +96,17 @@ const addObjectIdFilter = (query, key, filter) => {
   }
   filter[key] = new mongoose.Types.ObjectId(String(raw));
   return { ok: true };
+};
+
+const attachPartnerRatingsToOrderRecord = (record) => {
+  if (!record?.partner_id?._id) return record;
+  return {
+    ...record,
+    partner_id: {
+      ...record.partner_id,
+      ...attachPartnerRatingFields(record.partner_id),
+    },
+  };
 };
 
 const listCustomerOrders = async (customerId, query = {}) => {
@@ -235,7 +246,9 @@ const listCustomerOrders = async (customerId, query = {}) => {
 
     const { data: rows, totalCount: totalItems } = parseFacetListResult(aggResult, limit);
     const totalPages = Math.max(Math.ceil(totalItems / limit), 1);
-    const records = await attachRefundsToOrderRecords(formatOrderRecords(rows));
+    const records = await attachRefundsToOrderRecords(
+      formatOrderRecords(rows).map(attachPartnerRatingsToOrderRecord)
+    );
 
     return ok(200, {
       message: 'Orders fetched successfully.',

@@ -1,4 +1,5 @@
 const { formatDateOnly } = require("../utils/dateFormatter");
+const { attachPartnerRatingFields } = require("../utils/rating_format");
 
 const QUOTE_STATUSES = ["new", "pending", "accepted", "success", "failed"];
 
@@ -122,6 +123,17 @@ const formatQuoteForApi = (quote) => {
   }
   if (plain.to_date != null && plain.to_date !== "") {
     plain.to_date = formatDateOnly(plain.to_date);
+  }
+
+  if (
+    plain.partner_id &&
+    typeof plain.partner_id === "object" &&
+    plain.partner_id._id != null
+  ) {
+    plain.partner_id = {
+      ...plain.partner_id,
+      ...attachPartnerRatingFields(plain.partner_id),
+    };
   }
 
   return plain;

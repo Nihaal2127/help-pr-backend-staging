@@ -37,7 +37,7 @@ const HOME_ORDER_POPULATE = [
   },
   {
     path: 'partner_id',
-    select: 'name user_id email phone_number profile_url type',
+    select: 'name user_id email phone_number profile_url type average_rating rating_count',
   },
   { path: 'franchise_id', select: 'name city_name state_name' },
 ];

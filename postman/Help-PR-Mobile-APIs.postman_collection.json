@@ -1327,7 +1327,7 @@
               "path": ["api", "mobile", "user", "home"],
               "query": [{ "key": "location", "value": "{{homeLocation}}" }]
             },
-            "description": "**GET /api/mobile/user/home?location=**\n\n- **Auth:** Bearer `{{token}}` (run **Verify OTP** first)\n- **Query `location`:** `pincode,area_name,city_name,state_name` — same line as **Pincodes (search)** e.g. `500032,Gachibowli,Hyderabad,Telangana`\n\n**200** `data`:\n- `services_available` (boolean; `false` when area has no active franchise — `franchise_id`/`franchise_name` null, `categories`/`partners` empty; `orders` still returned)\n- `franchise_id`, `franchise_name`\n- `location` (resolved ids)\n- `categories[]` with nested `services[]` (`partner_count`, `price_range` from **subscribed** partners only; `price`, `payment_type`)\n- `partners[]` (top **20** by `plan_priority` desc; active subscription; `subscription_plan_name`, `categories[]` → `services[]`)\n- `orders.in_progress[]`, `orders.completed[]` — authenticated customer's orders (up to 20 each; excludes refunded payment rollups; not location-scoped)\n\n**Auth:** customer only (`type` 4). **400** invalid location format | **404** location not found"
+            "description": "**GET /api/mobile/user/home?location=**\n\n- **Auth:** Bearer `{{token}}` (run **Verify OTP** first)\n- **Query `location`:** `pincode,area_name,city_name,state_name` — same line as **Pincodes (search)** e.g. `500032,Gachibowli,Hyderabad,Telangana`\n\n**200** `data`:\n- `services_available` (boolean; `false` when area has no active franchise — `franchise_id`/`franchise_name` null, `categories`/`partners` empty; `orders` still returned)\n- `franchise_id`, `franchise_name`\n- `location` (resolved ids)\n- `categories[]` with nested `services[]` (`partner_count`, `price_range` from **subscribed** partners only; `price`, `payment_type`)\n- `partners[]` (top **20** by `plan_priority` desc; active subscription; `subscription_plan_name`, `categories[]` → `services[]`)\n- `orders.in_progress[]` (up to **10**) — sorted by schedule: today-overlap (`from_date`–`to_date` includes today UTC) first, then future dates ascending, then past; tie-break `updated_at` desc; excludes refunded payment rollups; not location-scoped\n- `orders.completed[]` (up to **10**) — sorted by `updated_at` desc; no schedule date filter; same refund/location rules as in-progress\n- Each order has hydrated `category_id`, `service_id`, `partner_id`, `franchise_id` objects (same shape as **GET /api/mobile/user/orders** list) plus `category_name`, `service_name`, `partner_name`, `partner_profile_url`\n\n**Auth:** customer only (`type` 4). **400** invalid location format | **404** location not found"
           },
           "response": []
         },
@@ -1450,6 +1450,83 @@
           "response": []
         },
         {
+          "name": "List all order payments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('All order payments listed', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.records).to.be.an('array');",
+                  "    pm.expect(j.totalItems).to.be.a('number');",
+                  "    pm.expect(j.totalPages).to.be.a('number');",
+                  "    pm.expect(j.currentPage).to.be.a('number');",
+                  "    pm.expect(j.limit).to.be.a('number');",
+                  "  });",
+                  "  const p0 = j?.records?.[0];",
+                  "  if (p0?._id) pm.collectionVariables.set('orderPaymentId', String(p0._id));",
+                  "  if (p0?.order_id) pm.collectionVariables.set('orderId', String(p0.order_id));",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/order-payments?page={{orderPaymentsPage}}&limit={{orderPaymentsLimit}}&from_date={{orderPaymentsFromDate}}&to_date={{orderPaymentsToDate}}&order_id={{orderId}}&status={{orderPaymentRowStatus}}&payment_method={{orderPaymentMethod}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "user", "order-payments"],
+              "query": [
+                { "key": "page", "value": "{{orderPaymentsPage}}" },
+                { "key": "limit", "value": "{{orderPaymentsLimit}}" },
+                {
+                  "key": "from_date",
+                  "value": "{{orderPaymentsFromDate}}",
+                  "description": "Optional — payment created on/after (YYYY-MM-DD, UTC day)",
+                  "disabled": true
+                },
+                {
+                  "key": "to_date",
+                  "value": "{{orderPaymentsToDate}}",
+                  "description": "Optional — payment created on/before (YYYY-MM-DD, UTC day)",
+                  "disabled": true
+                },
+                {
+                  "key": "order_id",
+                  "value": "{{orderId}}",
+                  "description": "Optional — limit to one owned order",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "{{orderPaymentRowStatus}}",
+                  "description": "pending | completed | failed | refunded",
+                  "disabled": true
+                },
+                {
+                  "key": "payment_method",
+                  "value": "{{orderPaymentMethod}}",
+                  "description": "cash | upi | card | online | bank_transfer | other",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**GET /api/mobile/user/order-payments**\n\n- **Auth:** Bearer customer\n- Lists **customer** `order_payment` rows across **all** of the caller's orders (not partner ledger rows)\n- **Pagination:** `page` (default 1), `limit` (default 10, max 50)\n- **Date range:** `from_date`, `to_date` (YYYY-MM-DD, UTC calendar days) — filters on payment `created_at`; one param alone matches that single day\n- **Optional filters:** `order_id` (owned order only), `status` (`pending` | `completed` | `failed` | `refunded`), `payment_method` (`cash` | `upi` | `card` | `online` | `bank_transfer` | `other`)\n\n**200:** `totalItems`, `totalPages`, `currentPage`, `limit`, `records[]` — each row includes an `order` summary (`unique_id`, `payment_status`, `is_paid`, `total_price`, `customer_paid_amount`, `customer_due_amount`, `customer_net_paid`)\n\nSets `{{orderPaymentId}}` and `{{orderId}}` from the first record when present."
+          },
+          "response": []
+        },
+        {
           "name": "Get order details",
           "event": [
             {
@@ -1490,7 +1567,7 @@
           "response": []
         },
         {
-          "name": "List order payments",
+          "name": "List order payments (by order)",
           "event": [
             {
               "listen": "test",
@@ -3255,6 +3332,36 @@
       "value": "10",
       "type": "string",
       "description": "Orders list limit (max 50)"
+    },
+    {
+      "key": "orderPaymentsPage",
+      "value": "1",
+      "type": "string",
+      "description": "Order payments list page (GET /order-payments)"
+    },
+    {
+      "key": "orderPaymentsLimit",
+      "value": "10",
+      "type": "string",
+      "description": "Order payments list limit (max 50)"
+    },
+    {
+      "key": "orderPaymentRowStatus",
+      "value": "",
+      "type": "string",
+      "description": "Payment row status filter: pending | completed | failed | refunded"
+    },
+    {
+      "key": "orderPaymentsFromDate",
+      "value": "",
+      "type": "string",
+      "description": "Order payments from_date filter (YYYY-MM-DD)"
+    },
+    {
+      "key": "orderPaymentsToDate",
+      "value": "",
+      "type": "string",
+      "description": "Order payments to_date filter (YYYY-MM-DD)"
     },
     {
       "key": "orderSearch",

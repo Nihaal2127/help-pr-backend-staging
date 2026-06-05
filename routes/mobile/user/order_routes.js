@@ -3,6 +3,7 @@ const router = express.Router();
 const userAuthMiddleware = require('../../../middleware/mobile/user/user_auth_middleware');
 const { validateOrderIdParam } = require('../../../middleware/mobile/user/order_middleware');
 const {
+  validateListOrderPaymentsQuery,
   validatePaymentIdParam,
   validateCreateOrderPaymentBody,
   validateUpdateOrderPaymentBody,
@@ -13,12 +14,19 @@ const {
   submitOrderReviewHandler,
 } = require('../../../controllers/mobile/user/order_controller');
 const {
+  listAllOrderPaymentsHandler,
   listOrderPaymentsHandler,
   createOrderPaymentHandler,
   updateOrderPaymentHandler,
   deleteOrderPaymentHandler,
 } = require('../../../controllers/mobile/user/order_payment_controller');
 
+router.get(
+  '/order-payments',
+  userAuthMiddleware,
+  validateListOrderPaymentsQuery,
+  listAllOrderPaymentsHandler
+);
 router.get('/orders', userAuthMiddleware, listOrdersHandler);
 router.get(
   '/orders/:orderId/payments',

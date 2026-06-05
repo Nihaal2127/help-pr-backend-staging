@@ -122,10 +122,46 @@ const buildOrderTodayOverlapFilter = () => {
   return buildOrderDateRangeFilter({ from_date: today, to_date: today });
 };
 
+/** Single timestamp field: from_date / to_date inclusive UTC day bounds; one param = that day only. */
+const buildFieldDateRangeFilter = (query, fieldName) => {
+  const core = buildScheduleDateRangeCore(query);
+  if (!core.ok) return core;
+  if (core.noDateParams) {
+    return { ok: true, filter: {} };
+  }
+
+  let { rangeFrom, rangeTo, hasFrom, hasTo, parsedFrom, parsedTo } = core;
+
+  if (hasFrom && !hasTo && parsedFrom) {
+    rangeTo = endOfUtcDay(parsedFrom);
+  } else if (!hasFrom && hasTo && parsedTo) {
+    rangeFrom = startOfUtcDay(parsedTo);
+  }
+
+  if (rangeFrom && rangeTo && rangeTo < rangeFrom) {
+    return {
+      ok: false,
+      message: "To date filter must be on or after from date filter.",
+    };
+  }
+
+  const filter = {};
+  if (rangeFrom && rangeTo) {
+    filter[fieldName] = { $gte: rangeFrom, $lte: rangeTo };
+  } else if (rangeFrom) {
+    filter[fieldName] = { $gte: rangeFrom };
+  } else if (rangeTo) {
+    filter[fieldName] = { $lte: rangeTo };
+  }
+
+  return { ok: true, filter };
+};
+
 module.exports = {
   buildScheduleDateRangeCore,
   buildQuoteDateRangeFilter,
   buildQuoteTodayOverlapFilter,
   buildOrderDateRangeFilter,
   buildOrderTodayOverlapFilter,
+  buildFieldDateRangeFilter,
 };

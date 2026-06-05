@@ -3,6 +3,7 @@ const {
   ALLOWED_CUSTOMER_PAYMENT_METHODS,
   ORDER_PAYMENT_STATUSES,
 } = require('../../../utils/mobile_payment_constants');
+const { buildFieldDateRangeFilter } = require('../../../utils/schedule_date_filters');
 
 const sendError = (res, status, message) =>
   res.status(status).json({
@@ -40,6 +41,47 @@ const validateOptionalDate = (value, fieldName, res) => {
     return false;
   }
   return true;
+};
+
+const validateListOrderPaymentsQuery = (req, res, next) => {
+  const { order_id, status, payment_method } = req.query;
+
+  if (order_id !== undefined && String(order_id).trim() !== '') {
+    if (!mongoose.Types.ObjectId.isValid(String(order_id))) {
+      return sendError(res, 400, 'Invalid order_id.');
+    }
+  }
+
+  if (status !== undefined && String(status).trim() !== '') {
+    const normalized = String(status).trim().toLowerCase();
+    if (!ORDER_PAYMENT_STATUSES.has(normalized)) {
+      return sendError(
+        res,
+        400,
+        'status must be one of: pending, completed, failed, refunded.'
+      );
+    }
+    req.query.status = normalized;
+  }
+
+  if (payment_method !== undefined && String(payment_method).trim() !== '') {
+    const normalized = String(payment_method).trim().toLowerCase();
+    if (!ALLOWED_CUSTOMER_PAYMENT_METHODS.has(normalized)) {
+      return sendError(
+        res,
+        400,
+        `payment_method must be one of: ${Array.from(ALLOWED_CUSTOMER_PAYMENT_METHODS).join(', ')}.`
+      );
+    }
+    req.query.payment_method = normalized;
+  }
+
+  const dateResult = buildFieldDateRangeFilter(req.query, 'created_at');
+  if (!dateResult.ok) {
+    return sendError(res, 400, dateResult.message);
+  }
+
+  next();
 };
 
 const validatePaymentIdParam = (req, res, next) => {
@@ -172,6 +214,7 @@ const validateUpdateOrderPaymentBody = (req, res, next) => {
 };
 
 module.exports = {
+  validateListOrderPaymentsQuery,
   validatePaymentIdParam,
   validateCreateOrderPaymentBody,
   validateUpdateOrderPaymentBody,

@@ -2,6 +2,8 @@
  * Shared MongoDB aggregation stages for order/quote (and similar) getAll list endpoints.
  */
 
+const { attachPartnerRatingFields } = require("./rating_format");
+
 const lookupById = (from, localField, as) => ({
   $lookup: { from, localField, foreignField: "_id", as },
 });
@@ -22,6 +24,8 @@ const buildHydratedUserField = (sourceKey, outputKey) => ({
         phone_number: `$${sourceKey}.phone_number`,
         profile_url: `$${sourceKey}.profile_url`,
         type: `$${sourceKey}.type`,
+        average_rating: `$${sourceKey}.average_rating`,
+        rating_count: `$${sourceKey}.rating_count`,
       },
       null,
     ],
@@ -369,7 +373,7 @@ const getListCollectionNames = (models) => {
 
 const hydrateUserRef = (user) => {
   if (!user || typeof user !== "object" || user._id == null) return null;
-  return {
+  const base = {
     _id: user._id,
     name: user.name,
     user_id: user.user_id,
@@ -378,6 +382,10 @@ const hydrateUserRef = (user) => {
     profile_url: user.profile_url,
     type: user.type,
   };
+  if (user.average_rating !== undefined || user.rating_count !== undefined) {
+    return { ...base, ...attachPartnerRatingFields(user) };
+  }
+  return base;
 };
 
 const hydrateCategoryRef = (category) => {

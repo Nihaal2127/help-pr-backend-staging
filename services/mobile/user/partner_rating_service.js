@@ -4,7 +4,10 @@ const Service = require("../../../models/service");
 const OrderService = require("../../../models/order_services");
 const PartnerServiceRating = require("../../../models/partner_service_rating");
 const { USER_TYPE_PARTNER } = require("../../../constants/user_types");
-const { mapRatingSummary } = require("../../../utils/rating_format");
+const {
+  mapRatingSummary,
+  attachServiceRatingFields,
+} = require("../../../utils/rating_format");
 const {
   resolveFranchiseById,
   loadSubscribedFranchisePartners,
@@ -205,22 +208,86 @@ const enrichPartnerCatalogWithRatings = async (partnerId, categories) => {
       const sid = String(svc.service_id);
       const partnerRow = partnerSvcMap.get(sid);
       const globalRow = globalSvcMap.get(sid);
-      const partnerRatings = mapRatingSummary(partnerRow);
-      const globalRatings = mapRatingSummary(globalRow);
       return {
         ...svc,
-        ...partnerRatings,
-        ratings: partnerRatings,
-        partner_service_average_rating: partnerRatings.average_rating,
-        partner_service_rating_count: partnerRatings.rating_count,
-        service_average_rating: globalRatings.average_rating,
-        service_rating_count: globalRatings.rating_count,
+        ...attachServiceRatingFields(partnerRow, globalRow),
       };
     }),
+  }));
+};
+
+const resolveCatalogServiceId = (svc) => svc?.service_id ?? svc?._id ?? null;
+
+/**
+ * Attach per-service ratings to partner list/home cards (`categories[].services[]`).
+ * Supports list shape (`services[]._id`) and profile shape (`services[].service_id`).
+ */
+const enrichPartnerListRecordsWithServiceRatings = async (records) => {
+  if (!Array.isArray(records) || records.length === 0) {
+    return records;
+  }
+
+  const partnerIds = new Set();
+  const serviceIds = new Set();
+
+  for (const partner of records) {
+    if (!partner?._id) continue;
+    partnerIds.add(String(partner._id));
+    for (const cat of partner.categories || []) {
+      for (const svc of cat.services || []) {
+        const sid = resolveCatalogServiceId(svc);
+        if (sid && mongoose.Types.ObjectId.isValid(String(sid))) {
+          serviceIds.add(String(sid));
+        }
+      }
+    }
+  }
+
+  if (partnerIds.size === 0 || serviceIds.size === 0) {
+    return records;
+  }
+
+  const partnerOids = [...partnerIds].map((id) => new mongoose.Types.ObjectId(id));
+  const serviceOids = [...serviceIds].map((id) => new mongoose.Types.ObjectId(id));
+
+  const [partnerServiceRows, serviceRows] = await Promise.all([
+    PartnerServiceRating.find({
+      partner_id: { $in: partnerOids },
+      service_id: { $in: serviceOids },
+      deleted_at: null,
+    })
+      .select("partner_id service_id average_rating rating_count")
+      .lean(),
+    Service.find({ _id: { $in: serviceOids }, deleted_at: null })
+      .select("average_rating rating_count")
+      .lean(),
+  ]);
+
+  const partnerSvcMap = new Map(
+    partnerServiceRows.map((row) => [`${String(row.partner_id)}:${String(row.service_id)}`, row])
+  );
+  const globalSvcMap = new Map(serviceRows.map((row) => [String(row._id), row]));
+
+  return records.map((partner) => ({
+    ...partner,
+    categories: (partner.categories || []).map((cat) => ({
+      ...cat,
+      services: (cat.services || []).map((svc) => {
+        const sidRaw = resolveCatalogServiceId(svc);
+        if (!sidRaw) return svc;
+        const sid = String(sidRaw);
+        const partnerKey = `${String(partner._id)}:${sid}`;
+        return {
+          ...svc,
+          ...attachServiceRatingFields(partnerSvcMap.get(partnerKey), globalSvcMap.get(sid)),
+        };
+      }),
+    })),
   }));
 };
 
 module.exports = {
   getPartnerRatingsSummary,
   enrichPartnerCatalogWithRatings,
+  enrichPartnerListRecordsWithServiceRatings,
 };

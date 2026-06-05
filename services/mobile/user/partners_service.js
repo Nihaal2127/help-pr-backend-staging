@@ -15,8 +15,9 @@ const {
 } = require('./franchise_partner_scope');
 const {
   enrichPartnerCatalogWithRatings,
+  enrichPartnerListRecordsWithServiceRatings,
 } = require('./partner_rating_service');
-const { mapRatingSummary } = require('../../../utils/rating_format');
+const { attachPartnerRatingFields } = require('../../../utils/rating_format');
 
 const fail = (status, message) => ({ ok: false, status, message });
 const ok = (status, data) => ({ ok: true, status, data });
@@ -276,10 +277,12 @@ const buildFranchisePartnerListRecords = async (franchiseId, options = {}) => {
     effectiveOfferings
   );
 
+  const recordsWithRatings = await enrichPartnerListRecordsWithServiceRatings(records);
+
   return ok(200, {
     franchise_id: franchiseCtx.franchise._id,
     franchise_name: franchiseCtx.franchise.name,
-    records,
+    records: recordsWithRatings,
   });
 };
 
@@ -432,7 +435,7 @@ const getPartnerProfileForCustomer = async (partnerId, franchiseId, userId = nul
       partner._id,
       catalogResult.categories
     );
-    const partnerRatings = mapRatingSummary(partner);
+    const partnerRatings = attachPartnerRatingFields(partner);
 
     return ok(200, {
       message: 'Partner profile fetched successfully.',
@@ -456,7 +459,6 @@ const getPartnerProfileForCustomer = async (partnerId, franchiseId, userId = nul
           no_of_services_completed: completedServicesCount,
           is_saved: isSaved,
           ...partnerRatings,
-          ratings: partnerRatings,
         },
         categories: categoriesWithRatings,
       },

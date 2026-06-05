@@ -164,14 +164,42 @@ const buildFranchiseCategories = async (
   };
 };
 
+const buildResolvedLocation = (franchiseCtx) => ({
+  pincode: franchiseCtx.location.pincode,
+  area_name: franchiseCtx.location.area_name,
+  city_name: franchiseCtx.location.city_name,
+  state_name: franchiseCtx.location.state_name,
+  area_id: franchiseCtx.area._id,
+  city_id: franchiseCtx.area.city_id,
+  state_id: franchiseCtx.area.state_id,
+});
+
 const getHomeForLocation = async ({ location, userId }) => {
   try {
     if (!userId || !mongoose.Types.ObjectId.isValid(String(userId))) {
       return fail(401, 'Invalid token.');
     }
 
-    const franchiseCtx = await resolveFranchiseFromLocation(location);
+    const [franchiseCtx, orders] = await Promise.all([
+      resolveFranchiseFromLocation(location, { requireFranchise: false }),
+      loadCustomerHomeOrders(userId),
+    ]);
     if (!franchiseCtx.ok) return franchiseCtx;
+
+    if (!franchiseCtx.franchise) {
+      return ok(200, {
+        message: 'Home data fetched successfully.',
+        data: {
+          services_available: false,
+          franchise_id: null,
+          franchise_name: null,
+          location: buildResolvedLocation(franchiseCtx),
+          categories: [],
+          partners: [],
+          orders,
+        },
+      });
+    }
 
     const city = await City.findById(franchiseCtx.area.city_id)
       .select('city_service_price')
@@ -195,22 +223,13 @@ const getHomeForLocation = async ({ location, userId }) => {
       catalogResult.effectiveOfferings || []
     );
 
-    const orders = await loadCustomerHomeOrders(userId);
-
     return ok(200, {
       message: 'Home data fetched successfully.',
       data: {
+        services_available: true,
         franchise_id: franchiseCtx.franchise._id,
         franchise_name: franchiseCtx.franchise.name,
-        location: {
-          pincode: franchiseCtx.location.pincode,
-          area_name: franchiseCtx.location.area_name,
-          city_name: franchiseCtx.location.city_name,
-          state_name: franchiseCtx.location.state_name,
-          area_id: franchiseCtx.area._id,
-          city_id: franchiseCtx.area.city_id,
-          state_id: franchiseCtx.area.state_id,
-        },
+        location: buildResolvedLocation(franchiseCtx),
         categories: catalogResult.categories,
         partners,
         orders,

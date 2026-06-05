@@ -22,6 +22,27 @@ const formatDate = (value) => {
   });
 };
 
+const formatAddressLine = (record) => {
+  const info = record.address_info;
+  if (info && typeof info === 'object') {
+    const parts = [
+      info.address,
+      info.landmark,
+      info.area,
+      info.city,
+      info.state,
+      info.pincode,
+    ].filter((part) => part != null && String(part).trim() !== '');
+    if (parts.length > 0) {
+      return parts.join(', ');
+    }
+  }
+  if (record.address != null && String(record.address).trim() !== '') {
+    return String(record.address).trim();
+  }
+  return '—';
+};
+
 const buildServiceRows = (serviceItems) => {
   if (!Array.isArray(serviceItems) || serviceItems.length === 0) {
     return '<tr><td colspan="4">No line items</td></tr>';
@@ -30,7 +51,9 @@ const buildServiceRows = (serviceItems) => {
     .map((item) => {
       const name = item.service_info?.name || item.service_info?.service_id || 'Service';
       const partner = item.partner_info?.name || '—';
-      const price = formatMoney(item.total_price ?? item.service_price ?? 0);
+      const price = formatMoney(
+        item.total_service_charge ?? item.service_price ?? item.total_price ?? 0
+      );
       return `<tr>
         <td>${escapeHtml(name)}</td>
         <td>${escapeHtml(partner)}</td>
@@ -81,12 +104,10 @@ const buildOrderInvoiceHtml = (record) => {
   const customerEmail = record.user_info?.email || '—';
   const customerPhone = record.user_info?.phone_number || '—';
   const franchiseName = record.franchise_info?.name || '—';
-  const address =
-    record.address_info?.address ||
-    record.address ||
-    '—';
+  const address = formatAddressLine(record);
   const category = record.category_info?.name || '—';
   const service = record.service_info?.name || '—';
+  const paymentStatus = record.user_payment_status || record.payment_status || '—';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -111,7 +132,7 @@ const buildOrderInvoiceHtml = (record) => {
     <div><strong>Order ID:</strong> ${escapeHtml(orderId)}</div>
     <div><strong>Order date:</strong> ${formatDate(record.order_date || record.created_at)}</div>
     <div><strong>Status:</strong> ${escapeHtml(record.order_status || '—')}</div>
-    <div><strong>Payment status:</strong> ${escapeHtml(record.payment_status || '—')}</div>
+    <div><strong>Payment status:</strong> ${escapeHtml(paymentStatus)}</div>
     <div><strong>Franchise:</strong> ${escapeHtml(franchiseName)}</div>
   </div>
 

@@ -1,4 +1,8 @@
-const { listCustomerOrders, getCustomerOrderById } = require('../../../services/mobile/user/order_service');
+const {
+  listCustomerOrders,
+  getCustomerOrderById,
+  getCustomerOrderInvoice,
+} = require('../../../services/mobile/user/order_service');
 const { submitOrderReview } = require('../../../services/mobile/user/order_review_service');
 
 const getCallerId = (req) => req.user?.id || req.user?._id;
@@ -62,6 +66,30 @@ const getOrderDetailsHandler = async (req, res) => {
   }
 };
 
+const downloadOrderInvoiceHandler = async (req, res) => {
+  try {
+    const result = await getCustomerOrderInvoice(getCallerId(req), req.params.orderId);
+    if (!result.ok) {
+      return res.status(result.status).json({
+        success: false,
+        status: result.status,
+        message: result.message,
+      });
+    }
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${result.data.filename}"`);
+    return res.status(200).send(result.data.html);
+  } catch (error) {
+    console.error('mobile user download order invoice handler', error.message);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Internal server error.',
+    });
+  }
+};
+
 const submitOrderReviewHandler = async (req, res) => {
   try {
     const result = await submitOrderReview(getCallerId(req), req.params.orderId, req.body);
@@ -92,5 +120,6 @@ const submitOrderReviewHandler = async (req, res) => {
 module.exports = {
   listOrdersHandler,
   getOrderDetailsHandler,
+  downloadOrderInvoiceHandler,
   submitOrderReviewHandler,
 };

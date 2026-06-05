@@ -20,6 +20,7 @@ const {
   buildOrderManagementStatusQueryFilter,
 } = require('../../../enum/order_status_enum');
 const { loadOrderDetailLean } = require('../../order_detail_service');
+const { buildOrderInvoiceHtml } = require('../../../utils/order_invoice_html');
 const { embedOrderDetailForeignKeys } = require('../../../utils/list_aggregation');
 const {
   buildEntityListPipeline,
@@ -287,7 +288,45 @@ const getCustomerOrderById = async (customerId, orderId) => {
   }
 };
 
+const getCustomerOrderInvoice = async (customerId, orderId) => {
+  try {
+    if (!customerId || !mongoose.Types.ObjectId.isValid(String(customerId))) {
+      return fail(401, 'Invalid token.');
+    }
+    if (!orderId || !mongoose.Types.ObjectId.isValid(String(orderId))) {
+      return fail(400, 'Invalid order id.');
+    }
+
+    const order = await Order.findOne({
+      _id: orderId,
+      user_id: new mongoose.Types.ObjectId(String(customerId)),
+      deleted_at: null,
+    });
+
+    if (!order) {
+      return fail(404, 'Order not found.');
+    }
+
+    const record = await loadOrderDetailLean(order._id);
+    if (!record) {
+      return fail(404, 'Order not found.');
+    }
+
+    const html = buildOrderInvoiceHtml(record);
+    const safeId = String(record.unique_id || order._id).replace(/[^\w-]/g, '_');
+
+    return ok(200, {
+      html,
+      filename: `invoice-${safeId}.html`,
+    });
+  } catch (err) {
+    console.error('mobile user get order invoice', err.message);
+    return fail(500, 'Internal server error.');
+  }
+};
+
 module.exports = {
   listCustomerOrders,
   getCustomerOrderById,
+  getCustomerOrderInvoice,
 };

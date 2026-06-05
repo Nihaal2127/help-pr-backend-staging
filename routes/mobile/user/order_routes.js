@@ -11,6 +11,7 @@ const {
 const {
   listOrdersHandler,
   getOrderDetailsHandler,
+  downloadOrderInvoiceHandler,
   submitOrderReviewHandler,
 } = require('../../../controllers/mobile/user/order_controller');
 const {
@@ -55,6 +56,12 @@ router.delete(
   validateOrderIdParam,
   validatePaymentIdParam,
   deleteOrderPaymentHandler
+);
+router.get(
+  '/orders/:orderId/invoice',
+  userAuthMiddleware,
+  validateOrderIdParam,
+  downloadOrderInvoiceHandler
 );
 router.get(
   '/orders/:orderId',

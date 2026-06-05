@@ -1567,6 +1567,39 @@
           "response": []
         },
         {
+          "name": "Download order invoice",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Order invoice downloaded', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.headers.get('Content-Type')).to.include('text/html');",
+                  "  pm.expect(pm.response.text()).to.include('Order Invoice');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "text/html" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/orders/{{orderId}}/invoice",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "user", "orders", "{{orderId}}", "invoice"]
+            },
+            "description": "**GET /api/mobile/user/orders/:orderId/invoice**\n\n- **Auth:** Bearer customer\n- Downloads a printable HTML invoice for one order owned by the caller\n- **Path `orderId`:** order Mongo `_id` (24-char hex)\n- **200:** `text/html` attachment (`invoice-<orderId>.html`) with line items, additional charges, totals, and customer payments\n- Uses the same invoice builder as admin `GET /api/order/invoice/:id`\n\n**404** order not found or not owned by caller | **400** invalid order id"
+          },
+          "response": []
+        },
+        {
           "name": "List order payments (by order)",
           "event": [
             {

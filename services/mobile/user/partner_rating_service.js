@@ -210,6 +210,7 @@ const enrichPartnerCatalogWithRatings = async (partnerId, categories) => {
       return {
         ...svc,
         ...partnerRatings,
+        ratings: partnerRatings,
         partner_service_average_rating: partnerRatings.average_rating,
         partner_service_rating_count: partnerRatings.rating_count,
         service_average_rating: globalRatings.average_rating,

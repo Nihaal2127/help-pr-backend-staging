@@ -120,7 +120,8 @@ const resolveFranchiseForArea = async (area) => {
   return { ok: true, franchise };
 };
 
-const resolveFranchiseFromLocation = async (rawLocation) => {
+const resolveFranchiseFromLocation = async (rawLocation, options = {}) => {
+  const { requireFranchise = true } = options;
   const parsed = parseLocationPayload(rawLocation);
   if (!parsed.ok) return parsed;
 
@@ -128,13 +129,23 @@ const resolveFranchiseFromLocation = async (rawLocation) => {
   if (!areaResult.ok) return areaResult;
 
   const franchiseResult = await resolveFranchiseForArea(areaResult.area);
-  if (!franchiseResult.ok) return franchiseResult;
+  if (!franchiseResult.ok) {
+    if (requireFranchise) return franchiseResult;
+    return {
+      ok: true,
+      franchise: null,
+      area: areaResult.area,
+      location: parsed.location,
+      services_available: false,
+    };
+  }
 
   return {
     ok: true,
     franchise: franchiseResult.franchise,
     area: areaResult.area,
     location: parsed.location,
+    services_available: true,
   };
 };
 

@@ -9,6 +9,7 @@ const { sanitizeInput } = require('../validator/search_keyword_validator');
 const { checkObjectIdExists } = require('../validator/id_validator');
 const { normalizeOrderStatus } = require('../enum/order_status_enum');
 const { fieldLabel } = require('../utils/field_labels');
+const { roundMoney } = require('../utils/order_pricing');
 const getAll = async (req, res) => {
 
   try {
@@ -102,8 +103,37 @@ const getAll = async (req, res) => {
         OrderServices.populate(order_service, populateOptions[index])
       )
     );
+
+    const orderIds = [
+      ...new Set(
+        populatedOrderServices
+          .map((row) => row.order_id)
+          .filter(Boolean)
+          .map((id) => String(id))
+      ),
+    ].map((id) => new mongoose.Types.ObjectId(id));
+
+    const orderPaymentById = new Map();
+    if (orderIds.length > 0) {
+      const orders = await Order.find({
+        _id: { $in: orderIds },
+        deleted_at: null,
+      })
+        .select(
+          'user_payment_status payment_status is_paid customer_net_paid customer_due_amount'
+        )
+        .lean();
+
+      for (const order of orders) {
+        orderPaymentById.set(String(order._id), order);
+      }
+    }
+
     const processedOrderServices = populatedOrderServices.map(order_service => {
       const { ...rest } = order_service;
+      const order = order_service.order_id
+        ? orderPaymentById.get(String(order_service.order_id))
+        : null;
 
       return {
         ...rest,
@@ -113,6 +143,10 @@ const getAll = async (req, res) => {
         service_name: order_service.service_id.name,
         category_id: order_service.category_id._id,
         category_name: order_service.category_id.name,
+        is_paid: order ? Boolean(order.is_paid) : Boolean(rest.is_paid),
+        payment_status: order?.user_payment_status || order?.payment_status || 'unpaid',
+        paid_amount: roundMoney(order?.customer_net_paid ?? 0),
+        pending_amount: roundMoney(order?.customer_due_amount ?? 0),
       };
     })
 

@@ -8,6 +8,7 @@ const Franchise = require("../models/franchise");
 const City = require("../models/city");
 const State = require("../models/state");
 const Area = require("../models/area");
+const Order = require("../models/order");
 const { applyPagination } = require("../utils/pagination");
 const { getQuoteSequenceId } = require("../helper/id_generator");
 const { checkObjectIdExists } = require("../validator/id_validator");
@@ -378,6 +379,7 @@ const getAll = async (req, res) => {
       cities: City,
       states: State,
       areas: Area,
+      orders: Order,
     });
 
     const pipeline = buildEntityListPipeline({
@@ -389,6 +391,7 @@ const getAll = async (req, res) => {
       searchFields: QUOTE_LIST_SEARCH_FIELDS,
       collections,
       includeAreaOnAddress: true,
+      includeOrderLookup: true,
       extraProject: !includeHistory ? { history: 0 } : {},
     });
 

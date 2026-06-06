@@ -23,30 +23,48 @@ const parseReviewLimit = (raw) => {
 };
 
 const assertPartnerInFranchise = async (partnerId, franchiseId) => {
-  const franchiseCtx = await resolveFranchiseById(franchiseId);
-  if (!franchiseCtx.ok) {
-    return fail(franchiseCtx.status, franchiseCtx.message);
-  }
-
   const partnerKey = String(partnerId ?? "").trim();
   if (!partnerKey || !mongoose.Types.ObjectId.isValid(partnerKey)) {
     return fail(400, "partnerId must be a valid ObjectId.");
   }
 
-  const partner = await User.findOne({
+  const franchiseIdRaw =
+    franchiseId !== undefined && franchiseId !== null ? String(franchiseId).trim() : "";
+
+  let franchiseCtx = null;
+  const partnerQuery = {
     _id: partnerKey,
     type: USER_TYPE_PARTNER,
-    franchise_id: franchiseCtx.franchise._id,
     verification_status: 2,
     is_active: true,
     is_blocked: { $ne: true },
     deleted_at: null,
-  })
-    .select("name profile_url user_id average_rating rating_count")
+  };
+
+  if (franchiseIdRaw) {
+    franchiseCtx = await resolveFranchiseById(franchiseIdRaw);
+    if (!franchiseCtx.ok) {
+      return fail(franchiseCtx.status, franchiseCtx.message);
+    }
+    partnerQuery.franchise_id = franchiseCtx.franchise._id;
+  }
+
+  const partner = await User.findOne(partnerQuery)
+    .select("name profile_url user_id average_rating rating_count franchise_id")
     .lean();
 
   if (!partner) {
     return fail(404, "Partner not found.");
+  }
+
+  if (!franchiseCtx) {
+    if (!partner.franchise_id) {
+      return fail(404, "Partner not found.");
+    }
+    franchiseCtx = await resolveFranchiseById(partner.franchise_id);
+    if (!franchiseCtx.ok) {
+      return fail(franchiseCtx.status, franchiseCtx.message);
+    }
   }
 
   const subscribed = await loadSubscribedFranchisePartners(franchiseCtx.franchise._id);
@@ -59,15 +77,7 @@ const assertPartnerInFranchise = async (partnerId, franchiseId) => {
 
 const getPartnerRatingsSummary = async (partnerId, query = {}) => {
   try {
-    const franchiseId = query.franchise_id;
-    if (franchiseId === undefined || franchiseId === null || String(franchiseId).trim() === "") {
-      return fail(400, "franchise_id is required.");
-    }
-    if (!mongoose.Types.ObjectId.isValid(String(franchiseId).trim())) {
-      return fail(400, "franchise_id must be a valid ObjectId.");
-    }
-
-    const partnerResult = await assertPartnerInFranchise(partnerId, franchiseId);
+    const partnerResult = await assertPartnerInFranchise(partnerId, query.franchise_id);
     if (!partnerResult.ok) return partnerResult;
 
     const { partner, franchise } = partnerResult.data;

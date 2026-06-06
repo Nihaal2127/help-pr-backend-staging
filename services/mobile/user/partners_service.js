@@ -382,25 +382,33 @@ const mapPartnerBusinessInfo = (partner) => {
 
 const getPartnerProfileForCustomer = async (partnerId, franchiseId, userId = null) => {
   try {
-    const franchiseCtx = await resolveFranchiseById(franchiseId);
-    if (!franchiseCtx.ok) {
-      return fail(franchiseCtx.status, franchiseCtx.message);
-    }
-
     const partnerKey = String(partnerId ?? '').trim();
     if (!partnerKey || !mongoose.Types.ObjectId.isValid(partnerKey)) {
       return fail(400, 'partnerId must be a valid ObjectId.');
     }
 
-    const partner = await User.findOne({
+    const franchiseIdRaw =
+      franchiseId !== undefined && franchiseId !== null ? String(franchiseId).trim() : '';
+
+    let franchiseCtx = null;
+    const partnerQuery = {
       _id: partnerKey,
       type: USER_TYPE_PARTNER,
-      franchise_id: franchiseCtx.franchise._id,
       verification_status: 2,
       is_active: true,
       is_blocked: { $ne: true },
       deleted_at: null,
-    })
+    };
+
+    if (franchiseIdRaw) {
+      franchiseCtx = await resolveFranchiseById(franchiseIdRaw);
+      if (!franchiseCtx.ok) {
+        return fail(franchiseCtx.status, franchiseCtx.message);
+      }
+      partnerQuery.franchise_id = franchiseCtx.franchise._id;
+    }
+
+    const partner = await User.findOne(partnerQuery)
       .select(
         'name profile_url user_id experience is_business business_info_id state_id city_id area_id created_at average_rating rating_count'
       )
@@ -414,6 +422,16 @@ const getPartnerProfileForCustomer = async (partnerId, franchiseId, userId = nul
 
     if (!partner) {
       return fail(404, 'Partner not found.');
+    }
+
+    if (!franchiseCtx) {
+      if (!partner.franchise_id) {
+        return fail(404, 'Partner not found.');
+      }
+      franchiseCtx = await resolveFranchiseById(partner.franchise_id);
+      if (!franchiseCtx.ok) {
+        return fail(franchiseCtx.status, franchiseCtx.message);
+      }
     }
 
     const subscribed = await loadSubscribedFranchisePartners(franchiseCtx.franchise._id);

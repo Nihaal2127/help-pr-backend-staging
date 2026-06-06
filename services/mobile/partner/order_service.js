@@ -14,13 +14,15 @@ const {
   buildOrderDateRangeFilter,
   buildOrderTodayOverlapFilter,
 } = require('../../../utils/schedule_date_filters');
-const { isValidOrderPaymentStatus } = require('../../../enum/order_payment_status_enum');
+const {
+  isValidOrderPaymentStatus,
+  isValidPartnerPaymentStatus,
+} = require('../../../enum/order_payment_status_enum');
 const {
   ORDER_STATUSES,
   buildOrderManagementStatusQueryFilter,
 } = require('../../../enum/order_status_enum');
 const { loadOrderDetailLean } = require('../../order_detail_service');
-const { buildOrderInvoiceHtml } = require('../../../utils/order_invoice_html');
 const { attachPartnerRatingFields } = require('../../../utils/rating_format');
 const {
   buildEntityListPipeline,
@@ -30,7 +32,7 @@ const {
 } = require('../../../utils/list_aggregation');
 const { attachRefundsToOrderRecords } = require('../../refund_service');
 
-const MOBILE_ORDER_LIST_SEARCH_FIELDS = [
+const MOBILE_PARTNER_ORDER_LIST_SEARCH_FIELDS = [
   'unique_id',
   'user_unique_id',
   'address',
@@ -46,10 +48,6 @@ const MOBILE_ORDER_LIST_SEARCH_FIELDS = [
   '_user.user_id',
   '_user.email',
   '_user.phone_number',
-  '_partner.name',
-  '_partner.user_id',
-  '_partner.email',
-  '_partner.phone_number',
   '_employee.name',
   '_employee.user_id',
   '_created_by.name',
@@ -110,9 +108,9 @@ const attachPartnerRatingsToOrderRecord = (record) => {
   };
 };
 
-const listCustomerOrders = async (customerId, query = {}) => {
+const listPartnerOrders = async (partnerId, query = {}) => {
   try {
-    if (!customerId || !mongoose.Types.ObjectId.isValid(String(customerId))) {
+    if (!partnerId || !mongoose.Types.ObjectId.isValid(String(partnerId))) {
       return fail(401, 'Invalid token.');
     }
 
@@ -122,7 +120,7 @@ const listCustomerOrders = async (customerId, query = {}) => {
 
     const filter = {
       deleted_at: null,
-      user_id: new mongoose.Types.ObjectId(String(customerId)),
+      partner_id: new mongoose.Types.ObjectId(String(partnerId)),
     };
 
     const statusRaw = query.status;
@@ -155,7 +153,7 @@ const listCustomerOrders = async (customerId, query = {}) => {
       filter.is_paid = isPaidResult.value;
     }
 
-    const paymentStatusRaw =
+    const userPaymentStatusRaw =
       query.user_payment_status !== undefined &&
       query.user_payment_status !== null &&
       String(query.user_payment_status).trim() !== ''
@@ -166,19 +164,36 @@ const listCustomerOrders = async (customerId, query = {}) => {
           ? String(query.payment_status).trim().toLowerCase()
           : null;
 
-    if (paymentStatusRaw) {
-      if (!isValidOrderPaymentStatus(paymentStatusRaw)) {
+    if (userPaymentStatusRaw) {
+      if (!isValidOrderPaymentStatus(userPaymentStatusRaw)) {
         return fail(
           409,
           'Invalid user_payment_status/payment_status filter. Use unpaid, paid, partially_paid, refund, partially_refund.'
         );
       }
-      filter.user_payment_status = paymentStatusRaw;
+      filter.user_payment_status = userPaymentStatusRaw;
+    }
+
+    const partnerPaymentStatusRaw =
+      query.partner_payment_status !== undefined &&
+      query.partner_payment_status !== null &&
+      String(query.partner_payment_status).trim() !== ''
+        ? String(query.partner_payment_status).trim().toLowerCase()
+        : null;
+
+    if (partnerPaymentStatusRaw) {
+      if (!isValidPartnerPaymentStatus(partnerPaymentStatusRaw)) {
+        return fail(
+          409,
+          'Invalid partner_payment_status filter. Use unpaid, partially_paid, paid.'
+        );
+      }
+      filter.partner_payment_status = partnerPaymentStatusRaw;
     }
 
     const objectIdFilterKeys = [
       'franchise_id',
-      'partner_id',
+      'user_id',
       'category_id',
       'service_id',
       'city_id',
@@ -211,7 +226,7 @@ const listCustomerOrders = async (customerId, query = {}) => {
       skip,
       limit,
       regex: searchRegex,
-      searchFields: MOBILE_ORDER_LIST_SEARCH_FIELDS,
+      searchFields: MOBILE_PARTNER_ORDER_LIST_SEARCH_FIELDS,
       collections,
       includeRootCityLookup: true,
       includeQuoteLookup: true,
@@ -263,14 +278,14 @@ const listCustomerOrders = async (customerId, query = {}) => {
       },
     });
   } catch (err) {
-    console.error('mobile user list orders', err.message);
+    console.error('mobile partner list orders', err.message);
     return fail(500, 'Internal server error.');
   }
 };
 
-const getCustomerOrderById = async (customerId, orderId) => {
+const getPartnerOrderById = async (partnerId, orderId) => {
   try {
-    if (!customerId || !mongoose.Types.ObjectId.isValid(String(customerId))) {
+    if (!partnerId || !mongoose.Types.ObjectId.isValid(String(partnerId))) {
       return fail(401, 'Invalid token.');
     }
     if (!orderId || !mongoose.Types.ObjectId.isValid(String(orderId))) {
@@ -279,7 +294,7 @@ const getCustomerOrderById = async (customerId, orderId) => {
 
     const order = await Order.findOne({
       _id: orderId,
-      user_id: new mongoose.Types.ObjectId(String(customerId)),
+      partner_id: new mongoose.Types.ObjectId(String(partnerId)),
       deleted_at: null,
     });
 
@@ -297,50 +312,12 @@ const getCustomerOrderById = async (customerId, orderId) => {
       record: embedOrderDetailForeignKeys(record),
     });
   } catch (err) {
-    console.error('mobile user get order details', err.message);
-    return fail(500, 'Internal server error.');
-  }
-};
-
-const getCustomerOrderInvoice = async (customerId, orderId) => {
-  try {
-    if (!customerId || !mongoose.Types.ObjectId.isValid(String(customerId))) {
-      return fail(401, 'Invalid token.');
-    }
-    if (!orderId || !mongoose.Types.ObjectId.isValid(String(orderId))) {
-      return fail(400, 'Invalid order id.');
-    }
-
-    const order = await Order.findOne({
-      _id: orderId,
-      user_id: new mongoose.Types.ObjectId(String(customerId)),
-      deleted_at: null,
-    });
-
-    if (!order) {
-      return fail(404, 'Order not found.');
-    }
-
-    const record = await loadOrderDetailLean(order._id);
-    if (!record) {
-      return fail(404, 'Order not found.');
-    }
-
-    const html = buildOrderInvoiceHtml(record);
-    const safeId = String(record.unique_id || order._id).replace(/[^\w-]/g, '_');
-
-    return ok(200, {
-      html,
-      filename: `invoice-${safeId}.html`,
-    });
-  } catch (err) {
-    console.error('mobile user get order invoice', err.message);
+    console.error('mobile partner get order details', err.message);
     return fail(500, 'Internal server error.');
   }
 };
 
 module.exports = {
-  listCustomerOrders,
-  getCustomerOrderById,
-  getCustomerOrderInvoice,
+  listPartnerOrders,
+  getPartnerOrderById,
 };

@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-mobile-apis-only",
     "name": "Help PR — Mobile APIs only",
-    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** → Register/Login → **Quotes** (accept/reject pending) → Update → Catalog → My services\n\n## Customer (User)\n1. **Login** → **Verify OTP** (dev OTP: `123456`)\n2. **Pincodes (search)** or set `{{homeLocation}}` — e.g. `500032,Gachibowli,Hyderabad,Telangana`\n3. **Home** — categories, services, partners for franchise (Bearer + `location` query)\n4. **Partners** — list → **Get partner profile** (catalog + professional summary) → **Create quote** with `partner_id`\n5. **Addresses** — create / get / update / delete\n6. **Quotes** — create / list / get / update / cancel (`franchise_id` required on create)\n7. **Update** — multipart `profile_photo` + profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.",
+    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** → Register/Login → **Home** (assigned quotes + orders) → **Quotes** (accept/reject pending) → **Orders** (assigned jobs) → Update → Catalog → My services\n\n## Customer (User)\n1. **Login** → **Verify OTP** (dev OTP: `123456`)\n2. **Pincodes (search)** or set `{{homeLocation}}` — e.g. `500032,Gachibowli,Hyderabad,Telangana`\n3. **Home** — categories, services, partners for franchise (Bearer + `location` query)\n4. **Partners** — list → **Get partner profile** (catalog + professional summary) → **Create quote** with `partner_id`\n5. **Addresses** — create / get / update / delete\n6. **Quotes** — create / list / get / update / cancel (`franchise_id` required on create)\n7. **Update** — multipart `profile_photo` + profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -147,7 +147,7 @@
     },
     {
       "name": "Partner",
-      "description": "Partner mobile — `partner_routes.js`, `quote_routes.js`, `my_services_routes.js`. Use **Common → Location** for dropdowns. **Quotes:** list pending assigned quotes → accept or reject.",
+      "description": "Partner mobile — `partner_routes.js`, `quote_routes.js`, `order_routes.js`, `my_services_routes.js`. Use **Common → Location** for dropdowns. **Home:** assigned quotes + orders. **Quotes:** list pending assigned quotes → accept or reject. **Orders:** list and view orders assigned to the logged-in partner.",
       "item": [
         {
           "name": "Register",
@@ -280,6 +280,52 @@
               ]
             },
             "description": "**POST /api/mobile/partner/login**\n\n- No Authorization\n- **Required:** `email`, `password`\n- **Optional:** `device_token` (FCM push token)\n- **200** `data`: `auth_token`, `verification_status` (1 pending, 2 approved, 3 rejected), `verification_status_message`, `rejected_reasone`, `city_name`, …\n\n**401:** `Invalid email.` | `Invalid password.`\n\nRejected partners can log in; catalog/bank/my-services **update** still requires approval."
+          },
+          "response": []
+        },
+        {
+          "name": "Home",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Partner home fetched', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.data).to.be.an('object');",
+                  "    pm.expect(j.data.quotes).to.be.an('object');",
+                  "    pm.expect(j.data.quotes.pending).to.be.an('array');",
+                  "    pm.expect(j.data.quotes.accepted).to.be.an('array');",
+                  "    pm.expect(j.data.orders).to.be.an('object');",
+                  "    pm.expect(j.data.orders.in_progress).to.be.an('array');",
+                  "    pm.expect(j.data.orders.completed).to.be.an('array');",
+                  "  });",
+                  "  const q0 = j?.data?.quotes?.pending?.[0] || j?.data?.quotes?.accepted?.[0];",
+                  "  if (q0?._id) pm.collectionVariables.set('quoteId', String(q0._id));",
+                  "  const o0 = j?.data?.orders?.in_progress?.[0] || j?.data?.orders?.completed?.[0];",
+                  "  if (o0?._id) pm.collectionVariables.set('orderId', String(o0._id));",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/partner/home",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "partner", "home"]
+            },
+            "description": "**GET /api/mobile/partner/home**\n\n- **Auth:** Bearer partner (`type` 2) after **Login**\n- No query params — returns work assigned to the logged-in partner only\n\n**200 `data`:**\n- `quotes.pending[]` — up to **10** pending quotes (`partner_id` = caller), newest first\n- `quotes.accepted[]` — up to **10** accepted quotes, newest first\n- `orders.in_progress[]` — up to **10** in-progress orders; sorted like customer home (today-overlap first, then future, then past)\n- `orders.completed[]` — up to **10** completed orders by `updated_at` desc\n\nQuote rows use the same shape as **GET /api/mobile/partner/quotes**. Order rows are compact cards with customer, category, service, franchise, schedule, and payment rollups.\n\nSets `{{quoteId}}` and `{{orderId}}` from first home items when present."
           },
           "response": []
         },
@@ -846,6 +892,171 @@
                   "path": ["api", "mobile", "partner", "quotes", "{{quoteId}}", "status"]
                 },
                 "description": "**PUT /api/mobile/partner/quotes/:id/status**\n\n- **Auth:** Bearer partner\n- **Body:** `{ \"status\": \"failed\", \"rejection_reason\": \"...\" }` (optional `cancellation_reason`)\n- Only from **pending** → **failed**"
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Orders",
+          "description": "Partner assigned orders. **Auth:** Bearer partner JWT (`type` 2) after **Login**.\n\nReturns orders where `partner_id` = logged-in partner (same list/detail shape as customer **Orders**).",
+          "item": [
+            {
+              "name": "List orders",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Partner orders listed', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "    pm.expect(j.records).to.be.an('array');",
+                      "    pm.expect(j.totalItems).to.be.a('number');",
+                      "    pm.expect(j.todayCount).to.be.a('number');",
+                      "  });",
+                      "  const rec = j?.records?.[0];",
+                      "  if (rec?._id) pm.collectionVariables.set('orderId', String(rec._id));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/orders?page={{ordersPage}}&limit={{ordersLimit}}&status={{orderStatusFilter}}&search={{orderSearch}}&from_date={{orderFromDate}}&to_date={{orderToDate}}&is_paid={{orderIsPaid}}&user_payment_status={{orderPaymentStatus}}&partner_payment_status={{partnerPaymentStatus}}&franchise_id={{franchiseId}}&user_id={{userId}}&category_id={{categoryId}}&service_id={{serviceId}}&city_id={{cityId}}&address_id={{addressId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "orders"],
+                  "query": [
+                    { "key": "page", "value": "{{ordersPage}}" },
+                    { "key": "limit", "value": "{{ordersLimit}}" },
+                    {
+                      "key": "status",
+                      "value": "{{orderStatusFilter}}",
+                      "description": "in-progress | completed | cancelled | refunded — leave empty for all"
+                    },
+                    {
+                      "key": "search",
+                      "value": "{{orderSearch}}",
+                      "description": "Search order id, customer, address, description, quote text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "from_date",
+                      "value": "{{orderFromDate}}",
+                      "description": "YYYY-MM-DD",
+                      "disabled": true
+                    },
+                    {
+                      "key": "to_date",
+                      "value": "{{orderToDate}}",
+                      "description": "YYYY-MM-DD",
+                      "disabled": true
+                    },
+                    {
+                      "key": "is_paid",
+                      "value": "{{orderIsPaid}}",
+                      "description": "true | false",
+                      "disabled": true
+                    },
+                    {
+                      "key": "user_payment_status",
+                      "value": "{{orderPaymentStatus}}",
+                      "description": "Customer rollup: unpaid | paid | partially_paid | refund | partially_refund",
+                      "disabled": true
+                    },
+                    {
+                      "key": "partner_payment_status",
+                      "value": "{{partnerPaymentStatus}}",
+                      "description": "Partner rollup: unpaid | partially_paid | paid",
+                      "disabled": true
+                    },
+                    {
+                      "key": "franchise_id",
+                      "value": "{{franchiseId}}",
+                      "description": "Optional ObjectId filter",
+                      "disabled": true
+                    },
+                    {
+                      "key": "user_id",
+                      "value": "{{userId}}",
+                      "description": "Optional customer ObjectId filter",
+                      "disabled": true
+                    },
+                    {
+                      "key": "category_id",
+                      "value": "{{categoryId}}",
+                      "description": "Optional ObjectId filter",
+                      "disabled": true
+                    },
+                    {
+                      "key": "service_id",
+                      "value": "{{serviceId}}",
+                      "description": "Optional ObjectId filter",
+                      "disabled": true
+                    },
+                    {
+                      "key": "city_id",
+                      "value": "{{cityId}}",
+                      "description": "Optional ObjectId filter",
+                      "disabled": true
+                    },
+                    {
+                      "key": "address_id",
+                      "value": "{{addressId}}",
+                      "description": "Optional ObjectId filter",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "**GET /api/mobile/partner/orders**\n\n- **Auth:** Bearer partner (`type` 2)\n- Lists orders assigned to the authenticated partner (`partner_id`)\n- **Pagination:** `page`, `limit` (max 50)\n- **Search:** `search` (or `q`) on order fields plus linked customer, category, service, city, franchise, and quote text\n- **Filters:** `status`, `from_date`, `to_date`, `is_paid`, `user_payment_status` (or `payment_status`), `partner_payment_status`, and optional ObjectId filters: `franchise_id`, `user_id`, `category_id`, `service_id`, `city_id`, `address_id`\n- **200:** `totalItems`, `todayCount`, `totalPages`, `currentPage`, `limit`, `records[]`"
+              },
+              "response": []
+            },
+            {
+              "name": "Get order details",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Partner order details fetched', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "    pm.expect(j.record).to.be.an('object');",
+                      "    pm.expect(j.record._id).to.be.a('string');",
+                      "  });",
+                      "  if (j?.record?._id) pm.collectionVariables.set('orderId', String(j.record._id));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/orders/{{orderId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "orders", "{{orderId}}"]
+                },
+                "description": "**GET /api/mobile/partner/orders/:orderId**\n\n- **Auth:** Bearer partner — order must be assigned to caller (`partner_id`)\n- **Path `orderId`:** order Mongo `_id` (24-char hex)\n\n**200 `record`:** full order detail (same shape as customer **GET /api/mobile/user/orders/:orderId**) including `service_items[]`, payments, additional charges, refunds when applicable.\n\n**404** order not found or not assigned to partner | **400** invalid order id"
               },
               "response": []
             }
@@ -3442,6 +3653,12 @@
       "value": "",
       "type": "string",
       "description": "Orders payment status: unpaid|paid|partially_paid|refund|partially_refund"
+    },
+    {
+      "key": "partnerPaymentStatus",
+      "value": "",
+      "type": "string",
+      "description": "Partner orders list — partner_payment_status: unpaid|partially_paid|paid"
     },
     {
       "key": "orderId",

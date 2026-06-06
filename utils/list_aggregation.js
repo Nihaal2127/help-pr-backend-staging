@@ -87,6 +87,22 @@ const buildHydratedFranchiseField = () => ({
   },
 });
 
+const buildHydratedOrderField = () => ({
+  order_id: {
+    $cond: [
+      { $ifNull: ["$_order._id", false] },
+      {
+        _id: "$_order._id",
+        unique_id: "$_order.unique_id",
+        order_status: "$_order.order_status",
+        total_price: "$_order.total_price",
+        user_id: "$_order.user_id",
+      },
+      null,
+    ],
+  },
+});
+
 const buildHydratedAddressField = ({ includeArea = false } = {}) => {
   const geoMerge = {
     city_id: {
@@ -248,9 +264,10 @@ const DEFAULT_STRIP_INTERNAL = [
  * @param {number} config.limit
  * @param {RegExp|null} [config.regex]
  * @param {string[]} [config.searchFields]
- * @param {object} config.collections - { users, categories, services, franchise, address, cities, states, areas?, quotes?, orderServices? }
+ * @param {object} config.collections - { users, categories, services, franchise, address, cities, states, areas?, quotes?, orders?, orderServices? }
  * @param {boolean} [config.includeRootCityLookup]
  * @param {boolean} [config.includeQuoteLookup]
+ * @param {boolean} [config.includeOrderLookup]
  * @param {boolean} [config.includeServiceItemsLookup]
  * @param {boolean} [config.includeAreaOnAddress]
  * @param {object} [config.extraAddFields] - merged into hydration $addFields
@@ -268,6 +285,7 @@ const buildEntityListPipeline = (config) => {
     collections,
     includeRootCityLookup = false,
     includeQuoteLookup = false,
+    includeOrderLookup = false,
     includeServiceItemsLookup = false,
     includeAreaOnAddress = false,
     extraAddFields = {},
@@ -285,12 +303,14 @@ const buildEntityListPipeline = (config) => {
     states,
     areas = null,
     quotes = null,
+    orders = null,
     orderServices = null,
   } = collections;
 
   const stripFields = [...(stripInternalFields || DEFAULT_STRIP_INTERNAL)];
   if (includeRootCityLookup) stripFields.push("_city");
   if (includeQuoteLookup) stripFields.push("_quote");
+  if (includeOrderLookup) stripFields.push("_order");
   if (includeAreaOnAddress) stripFields.push("_addr_area");
 
   const displayAddFields = {
@@ -312,6 +332,7 @@ const buildEntityListPipeline = (config) => {
     ...buildHydratedServiceField(),
     ...buildHydratedFranchiseField(),
     ...buildHydratedAddressField({ includeArea: includeAreaOnAddress }),
+    ...(includeOrderLookup ? buildHydratedOrderField() : {}),
     ...extraAddFields,
   };
 
@@ -337,6 +358,9 @@ const buildEntityListPipeline = (config) => {
           lookupById(quotes, "quote_id", "_quote"),
           unwind("$_quote"),
         ]
+      : []),
+    ...(includeOrderLookup && orders
+      ? [lookupById(orders, "order_id", "_order"), unwind("$_order")]
       : []),
     ...(includeServiceItemsLookup && orderServices
       ? [buildServiceItemsLookupStage(orderServices)]

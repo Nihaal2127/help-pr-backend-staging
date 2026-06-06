@@ -1075,7 +1075,8 @@ const roundServiceMoney = (value) =>
 /**
  * User/partner job stats for GET /api/user/get/:id and user getAll.
  * - Status counts: one per order (`order_status`, legacy numeric values).
- * - Customer amounts: order `total_price` / payment rollups (cancelled/refunded excluded from totals).
+ * - Customer amounts: order `total_price` / payment rollups (cancelled/refunded excluded from totals);
+ *   `balance_amount` = sum of `customer_due_amount` (outstanding balance; 0 when fully paid).
  * - Partner amounts: sum `partner_earning` on service lines (refunded orders excluded);
  *   `balance_amount` = sum of `partner_paid_amount` on orders (received payouts).
  */
@@ -1201,7 +1202,7 @@ const getServiceCountData = async (id) => {
                     balance_amount: {
                         $sum: isPartner
                             ? { $ifNull: ['$partner_paid_amount', 0] }
-                            : { $ifNull: ['$customer_net_paid', 0] },
+                            : { $ifNull: ['$customer_due_amount', 0] },
                     },
                     pending_amount: {
                         $sum: isCustomer

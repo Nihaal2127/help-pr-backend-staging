@@ -12,7 +12,10 @@ const {
   PARTNER_DOCUMENT_FILE_FIELDS,
 } = require('../../../middleware/mobile/partner/partner_middleware');
 const partnerAuthMiddleware = require('../../../middleware/mobile/partner/partner_auth_middleware');
+const { requirePartnerAccount } = require('../../../middleware/mobile/partner/quote_middleware');
+const { getHomeHandler } = require('../../../controllers/mobile/partner/home_controller');
 const quoteRoutes = require('./quote_routes');
+const orderRoutes = require('./order_routes');
 const postRoutes = require('./post_routes');
 const { upload } = require('../../../utils/fileUpload');
 const { wrapMulterUpload } = require('../../../utils/multer_error_handler');
@@ -26,6 +29,7 @@ const partnerMultipartUpload = wrapMulterUpload(upload.fields(PARTNER_MULTIPART_
 
 router.post('/register', partnerRegisterMiddleware, register);
 router.post('/login', partnerLoginMiddleware, login);
+router.get('/home', partnerAuthMiddleware, requirePartnerAccount, getHomeHandler);
 router.put(
   '/update',
   partnerAuthMiddleware,
@@ -38,6 +42,7 @@ router.put(
 router.get('/categories', partnerAuthMiddleware, categories);
 router.get('/subscription-plans', partnerAuthMiddleware, listSubscriptionPlans);
 router.use(quoteRoutes);
+router.use(orderRoutes);
 router.use(postRoutes);
 
 module.exports = router;

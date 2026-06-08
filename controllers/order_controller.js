@@ -33,7 +33,7 @@ const {
   touchOrderStatusInfo,
 } = require('../enum/order_status_enum');
 const { assertOrderCanBeMarkedCompleted } = require('../services/order_completion_validation');
-const { sendPushNotification } = require('../service/firebase/push_service');
+const { safeSendPushNotification } = require('../service/firebase/push_service');
 const { generatePaymentLink } = require('./razorpay_controller');
 const { escapeRegExp } = require('../utils/string_helpers');
 const { isMongoObjectIdHex, buildObjectIdQueryFilters } = require('../utils/mongoose_helpers');
@@ -772,7 +772,7 @@ const update = async (req, res) => {
         type: "Order"
       }
       if (deviceToken !== null && deviceToken !== '') {
-        await sendPushNotification({ deviceToken, title, body, data });
+        await safeSendPushNotification({ deviceToken, title, body, data });
       }
     }
     if (notificationSetting?.is_sms_allow) {
@@ -931,7 +931,7 @@ const serviceUpdate = async (req, res) => {
         const title = "Service Cancelled";
         const body = `Service for order #${service.order_unique_id} has been cancelled from your list.`;
         const data = { order_id: service.order_id.toString(), type: "Order" };
-        await sendPushNotification({
+        await safeSendPushNotification({
           deviceToken: oldDeviceToken,
           title,
           body,
@@ -945,7 +945,7 @@ const serviceUpdate = async (req, res) => {
         const title = "New Service Assigned";
         const body = `You have a new service (${serviceData.name}) for order #${service.order_unique_id}.`;
         const data = { order_id: service.order_id.toString(), type: "Order" };
-        await sendPushNotification({
+        await safeSendPushNotification({
           newDeviceToken,
           title,
           body,
@@ -962,7 +962,7 @@ const serviceUpdate = async (req, res) => {
       const serviceData = await Service.findById(service.service_id);
 
       if (deviceToken !== null && deviceToken !== '') {
-        await sendPushNotification({
+        await safeSendPushNotification({
           deviceToken,
           title: "Service Time Updated",
           body: `Time updated for service (${serviceData.name}) of order #${service.order_unique_id}`,
@@ -981,7 +981,7 @@ const serviceUpdate = async (req, res) => {
           type: "Order"
         }
         if (deviceToken !== null && deviceToken !== '') {
-          await sendPushNotification({ deviceToken, title, body, data });
+          await safeSendPushNotification({ deviceToken, title, body, data });
         }
       }
       if (partnerNotifySettings?.is_sms_allow) {
@@ -1000,7 +1000,7 @@ const serviceUpdate = async (req, res) => {
         type: "Order"
       }
       if (deviceToken !== null && deviceToken !== '') {
-        await sendPushNotification({ deviceToken, title, body, data });
+        await safeSendPushNotification({ deviceToken, title, body, data });
       }
     }
     if (userNotifySettings?.is_sms_allow) {
@@ -1130,7 +1130,7 @@ const cancleService = async (req, res) => {
           type: "Order"
         }
         if (deviceToken !== null && deviceToken !== '') {
-          await sendPushNotification({ deviceToken, title, body, data });
+          await safeSendPushNotification({ deviceToken, title, body, data });
         }
       }
       if (notificationSetting?.is_sms_allow) {
@@ -1148,7 +1148,7 @@ const cancleService = async (req, res) => {
         type: "Order"
       }
       if (deviceToken !== null && deviceToken !== '') {
-        await sendPushNotification({ deviceToken, title, body, data });
+        await safeSendPushNotification({ deviceToken, title, body, data });
       }
     }
     if (notificationSettingUser?.is_sms_allow) {
@@ -1260,7 +1260,7 @@ const cancleOrder = async (req, res) => {
           type: "Order"
         };
 
-        return sendPushNotification({
+        return safeSendPushNotification({
           deviceToken,
           title,
           body,
@@ -1283,7 +1283,7 @@ const cancleOrder = async (req, res) => {
         type: "Order"
       }
       if (deviceToken !== null && deviceToken !== '') {
-        await sendPushNotification({ deviceToken, title, body, data });
+        await safeSendPushNotification({ deviceToken, title, body, data });
       }
     }
     if (notificationSetting?.is_sms_allow) {

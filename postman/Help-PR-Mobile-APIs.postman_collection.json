@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-mobile-apis-only",
     "name": "Help PR — Mobile APIs only",
-    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** → Register/Login → **Home** (assigned quotes + orders) → **Quotes** (accept/reject pending) → **Orders** (assigned jobs) → Update → Catalog → My services\n\n## Customer (User)\n1. **Login** → **Verify OTP** (dev OTP: `123456`)\n2. **Pincodes (search)** or set `{{homeLocation}}` — e.g. `500032,Gachibowli,Hyderabad,Telangana`\n3. **Home** — categories, services, partners for franchise (Bearer + `location` query)\n4. **Partners** — list → **Get partner profile** (catalog + professional summary) → **Create quote** with `partner_id`\n5. **Addresses** — create / get / update / delete\n6. **Quotes** — create / list / get / update / cancel (`franchise_id` required on create)\n7. **Update** — multipart `profile_photo` + profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.",
+    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** → Register/Login → **Home** (assigned quotes + orders) → **Quotes** (accept/reject pending) → **Orders** (assigned jobs) → Update → **Bank accounts (list)** → Catalog → My services\n\n## Customer (User)\n1. **Login** → **Verify OTP** (dev OTP: `123456`)\n2. **Pincodes (search)** or set `{{homeLocation}}` — e.g. `500032,Gachibowli,Hyderabad,Telangana`\n3. **Home** — categories, services, partners for franchise (Bearer + `location` query)\n4. **Partners** — list → **Get partner profile** (catalog + professional summary) → **Create quote** with `partner_id`\n5. **Addresses** — create / get / update / delete\n6. **Quotes** — create / list / get / update / cancel (`franchise_id` required on create)\n7. **Update** — multipart `profile_photo` + profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -147,7 +147,7 @@
     },
     {
       "name": "Partner",
-      "description": "Partner mobile — `partner_routes.js`, `quote_routes.js`, `order_routes.js`, `my_services_routes.js`. Use **Common → Location** for dropdowns. **Home:** assigned quotes + orders. **Quotes:** list pending assigned quotes → accept or reject. **Orders:** list and view orders assigned to the logged-in partner.",
+      "description": "Partner mobile — `partner_routes.js`, `quote_routes.js`, `order_routes.js`, `my_services_routes.js`, `bank_account_routes.js`. Use **Common → Location** for dropdowns. **Home:** assigned quotes + orders. **Quotes:** list pending assigned quotes → accept or reject. **Orders:** list and view orders assigned to the logged-in partner. **Bank accounts:** list logged-in partner's accounts only.",
       "item": [
         {
           "name": "Register",
@@ -1241,9 +1241,80 @@
                 "update"
               ]
             },
-            "description": "**PUT /api/mobile/partner/update**\n\n**Auth:** Bearer `{{token}}`\n**Body:** `multipart/form-data` (do not set Content-Type manually)\n\n### Before sending\n1. **Common → Location** → States → Cities → Areas → Pincodes\n2. **Login** (or Register)\n3. While pending: disable `partner_services` and `bank_account` (or clear values)\n4. After approval (`verification_status` = 2): run **Catalog**, then enable catalog + bank fields\n5. Select files: `image`, `aadhar_card` (and optional other verification files)\n\n| Section | Fields |\n|---------|--------|\n| Profile / location | gender, experience, state_id, city_id, area_id, pincode, address, image, name, email, phone_number, date_of_birth, device_token, password, confirm_password |\n| Services (approved) | partner_services |\n| Banks (approved) | bank_account |\n| Documents | aadhar_card, pan_card, driving_license, vehicle_registration, police_verification_certificate |\n\n`partner_documents` JSON is not supported."
+            "description": "**PUT /api/mobile/partner/update**\n\n**Auth:** Bearer `{{token}}`\n**Body:** `multipart/form-data` (do not set Content-Type manually)\n\n### Before sending\n1. **Common → Location** → States → Cities → Areas → Pincodes\n2. **Login** (or Register)\n3. While pending: disable `partner_services` and `bank_account` (or clear values)\n4. After approval (`verification_status` = 2): run **Catalog**, then enable catalog + bank fields\n5. Select files: `image`, `aadhar_card` (and optional other verification files)\n\n| Section | Fields |\n|---------|--------|\n| Profile / location | gender, experience, state_id, city_id, area_id, pincode, address, image, name, email, phone_number, date_of_birth, device_token, password, confirm_password |\n| Services (approved) | partner_services |\n| Banks (approved) | bank_account |\n| Documents | aadhar_card, pan_card, driving_license, vehicle_registration, police_verification_certificate |\n\n`partner_documents` JSON is not supported. To list banks without updating profile, use **Bank accounts → List bank accounts**."
           },
           "response": []
+        },
+        {
+          "name": "Bank accounts",
+          "description": "Bearer required. **List** returns only the logged-in partner's bank accounts (`bank_account_routes.js`). Add or replace accounts via **Update** (`bank_account` field; requires `verification_status` = 2).",
+          "item": [
+            {
+              "name": "List bank accounts",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Bank accounts listed', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "    pm.expect(j.data).to.be.an('array');",
+                      "  });",
+                      "  const rec = j?.data?.[0];",
+                      "  if (rec?._id) pm.collectionVariables.set('partnerBankAccountId', String(rec._id));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/bank-accounts/get?search=",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "partner",
+                    "bank-accounts",
+                    "get"
+                  ],
+                  "query": [
+                    {
+                      "key": "search",
+                      "value": "",
+                      "description": "Optional — filter by bank name, branch, holder name, account number, or IFSC",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "**GET /api/mobile/partner/bank-accounts/get**\n\n- **Auth:** Bearer partner `{{token}}` (`type` 2) after **Login**\n- Returns **only** the logged-in partner's active bank accounts (`deleted_at: null`)\n- No `partner_id` query — scoped from JWT `req.user.id`\n- **200** `data[]`: `_id`, `partner_id`, `bank_name`, `account_holder_name`, `account_number`, `ifsc_code`, `branch_name`, `is_primary`, `created_at`, `updated_at`, `deleted_at`\n- Sorted: primary first, then newest\n- Empty list → `data: []`\n- **401** no/invalid token | **403** not a partner account | **404** partner not found\n- Optional query: `search` (bank name, branch, holder, account number, IFSC)\n- Sets `{{partnerBankAccountId}}` from first row when present"
+              },
+              "response": []
+            }
+          ]
         },
         {
           "name": "Posts",

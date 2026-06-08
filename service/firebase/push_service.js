@@ -57,4 +57,13 @@ if (fs.existsSync(serviceAccountPath)) {
     }
   };
   
-  module.exports = { sendPushNotification };
+  const safeSendPushNotification = async (payload) => {
+    try {
+      return await sendPushNotification(payload);
+    } catch (error) {
+      console.error("Push notification failed:", error.message || error);
+      return null;
+    }
+  };
+
+  module.exports = { sendPushNotification, safeSendPushNotification };

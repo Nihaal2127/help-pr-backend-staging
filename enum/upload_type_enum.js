@@ -4,6 +4,7 @@ const UploadType = new Map([
     [3, 'service'],
     [4, 'user_profile'],
     [5, 'partner_post'],
+    [6, 'order_work_proof'],
   ]);
 
   const getUploadType = (key) => UploadType.get(key) || "";

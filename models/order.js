@@ -41,6 +41,49 @@ var orderSchema = new schema(
       default: [],
     },
 
+    /** Partner job progress: pending → in-progress → completed (independent until completion). */
+    partner_work_status: {
+      type: String,
+      default: "pending",
+      enum: ["pending", "in-progress", "completed"],
+      trim: true,
+    },
+    partner_work_status_info: {
+      type: [
+        {
+          status: {
+            type: String,
+            required: true,
+            trim: true,
+          },
+          updated_at: {
+            type: Date,
+            default: null,
+          },
+          updated_by_id: {
+            type: mongoose.Schema.Types.ObjectId,
+            default: null,
+            ref: "user",
+          },
+          actor_role: {
+            type: String,
+            default: "",
+            trim: true,
+          },
+        },
+      ],
+      default: [],
+    },
+    /** Proof-of-service images uploaded by partner on completion. */
+    work_proof_image_urls: { type: [String], default: [] },
+    work_completion_description: { type: String, default: "", trim: true, maxlength: 500 },
+    work_completed_at: { type: Date, default: null },
+    partner_post_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
+      ref: "partner_post",
+    },
+
     /** Snapshot / legacy display address */
     address: { type: String, default: "", require: true },
     address_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "address" },
@@ -174,6 +217,8 @@ orderSchema.index({ franchise_id: 1 });
 orderSchema.index({ city_id: 1 });
 orderSchema.index({ category_id: 1 });
 orderSchema.index({ order_status: 1 });
+orderSchema.index({ partner_work_status: 1 });
+orderSchema.index({ partner_id: 1, partner_work_status: 1, deleted_at: 1 });
 orderSchema.index({ is_paid: 1 });
 orderSchema.index({ payment_status: 1 });
 orderSchema.index({ user_payment_status: 1 });

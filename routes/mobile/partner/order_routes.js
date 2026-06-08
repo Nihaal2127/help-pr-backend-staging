@@ -4,13 +4,36 @@ const partnerAuthMiddleware = require('../../../middleware/mobile/partner/partne
 const { requirePartnerAccount } = require('../../../middleware/mobile/partner/quote_middleware');
 const { validateOrderIdParam } = require('../../../middleware/mobile/partner/order_middleware');
 const {
+  validateUpdateWorkStatusBody,
+  validateCompleteOrderWorkBody,
+} = require('../../../middleware/mobile/partner/order_work_middleware');
+const {
   listOrdersHandler,
   getOrderDetailsHandler,
+  updateWorkStatusHandler,
+  completeOrderWorkHandler,
 } = require('../../../controllers/mobile/partner/order_controller');
+const { uploadImages } = require('../../../utils/fileUpload');
+const { wrapMulterUpload } = require('../../../utils/multer_error_handler');
+
+const orderProofImagesUpload = wrapMulterUpload(uploadImages.array('images', 4));
 
 router.use(partnerAuthMiddleware, requirePartnerAccount);
 
 router.get('/orders', listOrdersHandler);
+router.put(
+  '/orders/:orderId/work-status',
+  validateOrderIdParam,
+  validateUpdateWorkStatusBody,
+  updateWorkStatusHandler
+);
+router.post(
+  '/orders/:orderId/complete',
+  validateOrderIdParam,
+  orderProofImagesUpload,
+  validateCompleteOrderWorkBody,
+  completeOrderWorkHandler
+);
 router.get('/orders/:orderId', validateOrderIdParam, getOrderDetailsHandler);
 
 module.exports = router;

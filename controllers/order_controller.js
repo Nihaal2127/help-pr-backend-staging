@@ -32,6 +32,10 @@ const {
   getOrderStatusLabel,
   touchOrderStatusInfo,
 } = require('../enum/order_status_enum');
+const {
+  PARTNER_WORK_STATUS_COMPLETED,
+  touchPartnerWorkStatusInfo,
+} = require('../enum/partner_work_status_enum');
 const { assertOrderCanBeMarkedCompleted } = require('../services/order_completion_validation');
 const { safeSendPushNotification } = require('../service/firebase/push_service');
 const { generatePaymentLink } = require('./razorpay_controller');
@@ -742,6 +746,15 @@ const update = async (req, res) => {
 
       touchOrderStatusInfo(updatedOrder, ORDER_STATUS_COMPLETED);
       updatedOrder.order_status = ORDER_STATUS_COMPLETED;
+      if (updatedOrder.partner_work_status !== PARTNER_WORK_STATUS_COMPLETED) {
+        updatedOrder.partner_work_status = PARTNER_WORK_STATUS_COMPLETED;
+        touchPartnerWorkStatusInfo(
+          updatedOrder,
+          PARTNER_WORK_STATUS_COMPLETED,
+          getCallerId(req),
+          'admin'
+        );
+      }
       await OrderService.updateMany(
         {
           _id: { $in: updatedOrder.service_items },

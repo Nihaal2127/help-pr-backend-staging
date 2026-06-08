@@ -136,6 +136,113 @@ const validateOrderLink = async (partnerId, orderId) => {
   });
 };
 
+/** Pre-check before order completion when publish_as_post=true (order may still be in-progress). */
+const assertOrderPostLinkPreconditions = async (partnerId, orderId) => {
+  const partnerResult = await assertPartnerCanPost(partnerId);
+  if (!partnerResult.ok) return partnerResult;
+
+  const orderParsed = parseObjectId(orderId, 'order_id');
+  if (!orderParsed.ok) {
+    return fail(400, orderParsed.message);
+  }
+
+  const { partnerOid, partner } = partnerResult.data;
+
+  const order = await Order.findOne({
+    _id: orderParsed.oid,
+    deleted_at: null,
+  })
+    .select('_id partner_id franchise_id category_id service_id order_status')
+    .lean();
+
+  if (!order) {
+    return fail(404, 'Order not found.');
+  }
+
+  if (String(order.partner_id) !== String(partnerOid)) {
+    return fail(403, 'You can only link posts to your own orders.');
+  }
+
+  if (String(order.franchise_id) !== String(partner.franchise_id)) {
+    return fail(400, 'Order does not belong to your franchise.');
+  }
+
+  const existingPost = await PartnerPost.findOne({
+    order_id: orderParsed.oid,
+    deleted_at: null,
+  })
+    .select('_id')
+    .lean();
+
+  if (existingPost) {
+    return fail(409, 'This order is already linked to another post.');
+  }
+
+  return ok(200, {
+    orderOid: orderParsed.oid,
+    category_id: order.category_id,
+    service_id: order.service_id,
+  });
+};
+
+const parsePostDescription = (value) => {
+  const text = String(value ?? '').trim();
+  if (!text) {
+    return { ok: false, message: 'Description is required.' };
+  }
+  if (text.length > MAX_DESCRIPTION_LENGTH) {
+    return {
+      ok: false,
+      message: `Description must be at most ${MAX_DESCRIPTION_LENGTH} characters.`,
+    };
+  }
+  return { ok: true, text };
+};
+
+/**
+ * Create an order-linked partner post from pre-uploaded image URLs (e.g. order completion flow).
+ * Order must already be completed and not linked to another post.
+ */
+const createOrderPostFromUrls = async (partnerId, orderId, imageUrls, description) => {
+  const partnerResult = await assertPartnerCanPost(partnerId);
+  if (!partnerResult.ok) return partnerResult;
+
+  const orderLink = await validateOrderLink(partnerId, orderId);
+  if (!orderLink.ok) return orderLink;
+
+  const urls = Array.isArray(imageUrls) ? imageUrls.filter(Boolean) : [];
+  if (urls.length < MIN_IMAGES || urls.length > MAX_IMAGES) {
+    return fail(400, `Provide between ${MIN_IMAGES} and ${MAX_IMAGES} images.`);
+  }
+
+  const descParsed = parsePostDescription(description);
+  if (!descParsed.ok) return fail(400, descParsed.message);
+
+  const now = new Date();
+  const post = await PartnerPost.create({
+    partner_id: partnerResult.data.partnerOid,
+    franchise_id: partnerResult.data.partner.franchise_id,
+    post_type: POST_TYPE_ORDER,
+    order_id: orderLink.data.orderOid,
+    category_id: orderLink.data.category_id,
+    service_id: orderLink.data.service_id,
+    legacy_service_name: '',
+    description: descParsed.text,
+    image_urls: urls,
+    status: POST_STATUS_PUBLISHED,
+    share_token: generateShareToken(),
+    likes_count: 0,
+    shares_count: 0,
+    reports_count: 0,
+    created_at: now,
+    updated_at: now,
+    deleted_at: null,
+  });
+
+  const mapped = await mapPostRecords([post.toObject()], { includePartner: false });
+  return ok(201, { post: mapped[0], postId: post._id });
+};
+
 const loadLinkedLabels = async (posts) => {
   const categoryIds = new Set();
   const serviceIds = new Set();
@@ -330,6 +437,8 @@ module.exports = {
   buildShareUrl,
   assertPartnerCanPost,
   validateOrderLink,
+  assertOrderPostLinkPreconditions,
+  createOrderPostFromUrls,
   mapPostRecord,
   mapPostRecords,
   publishedPostFilter,

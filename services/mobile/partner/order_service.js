@@ -22,6 +22,9 @@ const {
   ORDER_STATUSES,
   buildOrderManagementStatusQueryFilter,
 } = require('../../../enum/order_status_enum');
+const {
+  buildPartnerWorkStatusQueryFilter,
+} = require('../../../enum/partner_work_status_enum');
 const { loadOrderDetailLean } = require('../../order_detail_service');
 const { attachPartnerRatingFields } = require('../../../utils/rating_format');
 const {
@@ -189,6 +192,24 @@ const listPartnerOrders = async (partnerId, query = {}) => {
         );
       }
       filter.partner_payment_status = partnerPaymentStatusRaw;
+    }
+
+    const partnerWorkStatusRaw =
+      query.partner_work_status !== undefined &&
+      query.partner_work_status !== null &&
+      String(query.partner_work_status).trim() !== ''
+        ? String(query.partner_work_status).trim().toLowerCase()
+        : null;
+
+    if (partnerWorkStatusRaw) {
+      const workStatusFilter = buildPartnerWorkStatusQueryFilter(partnerWorkStatusRaw);
+      if (!workStatusFilter) {
+        return fail(
+          409,
+          'Invalid partner_work_status filter. Use pending, in-progress, or completed.'
+        );
+      }
+      Object.assign(filter, workStatusFilter);
     }
 
     const objectIdFilterKeys = [

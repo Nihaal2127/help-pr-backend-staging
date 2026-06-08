@@ -125,6 +125,7 @@ const mapMobileHomeOrder = (order) => {
     _id: formatted._id,
     unique_id: formatted.unique_id ?? '',
     order_status: formatted.order_status,
+    partner_work_status: formatted.partner_work_status ?? 'pending',
     order_date: formatted.order_date ?? null,
     from_date: formatted.from_date ?? null,
     to_date: formatted.to_date ?? null,

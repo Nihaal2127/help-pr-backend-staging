@@ -899,7 +899,7 @@
         },
         {
           "name": "Orders",
-          "description": "Partner assigned orders. **Auth:** Bearer partner JWT (`type` 2) after **Login**.\n\nReturns orders where `partner_id` = logged-in partner (same list/detail shape as customer **Orders**).",
+          "description": "Partner assigned orders. **Auth:** Bearer partner JWT (`type` 2) after **Login**.\n\n**Flow:** List order → **Start work** (`PUT .../work-status`) → customer pays in full → **Complete** (`POST .../complete` with proof photos). Optional `publish_as_post=true` creates a user-feed post.",
           "item": [
             {
               "name": "List orders",
@@ -933,7 +933,7 @@
                 "method": "GET",
                 "header": [{ "key": "Accept", "value": "application/json" }],
                 "url": {
-                  "raw": "{{baseUrl}}/api/mobile/partner/orders?page={{ordersPage}}&limit={{ordersLimit}}&status={{orderStatusFilter}}&search={{orderSearch}}&from_date={{orderFromDate}}&to_date={{orderToDate}}&is_paid={{orderIsPaid}}&user_payment_status={{orderPaymentStatus}}&partner_payment_status={{partnerPaymentStatus}}&franchise_id={{franchiseId}}&user_id={{userId}}&category_id={{categoryId}}&service_id={{serviceId}}&city_id={{cityId}}&address_id={{addressId}}",
+                  "raw": "{{baseUrl}}/api/mobile/partner/orders?page={{ordersPage}}&limit={{ordersLimit}}&status={{orderStatusFilter}}&partner_work_status={{partnerWorkStatusFilter}}&search={{orderSearch}}&from_date={{orderFromDate}}&to_date={{orderToDate}}&is_paid={{orderIsPaid}}&user_payment_status={{orderPaymentStatus}}&partner_payment_status={{partnerPaymentStatus}}&franchise_id={{franchiseId}}&user_id={{userId}}&category_id={{categoryId}}&service_id={{serviceId}}&city_id={{cityId}}&address_id={{addressId}}",
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "mobile", "partner", "orders"],
                   "query": [
@@ -943,6 +943,12 @@
                       "key": "status",
                       "value": "{{orderStatusFilter}}",
                       "description": "in-progress | completed | cancelled | refunded — leave empty for all"
+                    },
+                    {
+                      "key": "partner_work_status",
+                      "value": "{{partnerWorkStatusFilter}}",
+                      "description": "pending | in-progress | completed — leave empty for all",
+                      "disabled": true
                     },
                     {
                       "key": "search",
@@ -1018,7 +1024,7 @@
                     }
                   ]
                 },
-                "description": "**GET /api/mobile/partner/orders**\n\n- **Auth:** Bearer partner (`type` 2)\n- Lists orders assigned to the authenticated partner (`partner_id`)\n- **Pagination:** `page`, `limit` (max 50)\n- **Search:** `search` (or `q`) on order fields plus linked customer, category, service, city, franchise, and quote text\n- **Filters:** `status`, `from_date`, `to_date`, `is_paid`, `user_payment_status` (or `payment_status`), `partner_payment_status`, and optional ObjectId filters: `franchise_id`, `user_id`, `category_id`, `service_id`, `city_id`, `address_id`\n- **200:** `totalItems`, `todayCount`, `totalPages`, `currentPage`, `limit`, `records[]`"
+                "description": "**GET /api/mobile/partner/orders**\n\n- **Auth:** Bearer partner (`type` 2)\n- Lists orders assigned to the authenticated partner (`partner_id`)\n- **Pagination:** `page`, `limit` (max 50)\n- **Search:** `search` (or `q`) on order fields plus linked customer, category, service, city, franchise, and quote text\n- **Filters:** `status`, `partner_work_status`, `from_date`, `to_date`, `is_paid`, `user_payment_status` (or `payment_status`), `partner_payment_status`, and optional ObjectId filters: `franchise_id`, `user_id`, `category_id`, `service_id`, `city_id`, `address_id`\n- **200:** `totalItems`, `todayCount`, `totalPages`, `currentPage`, `limit`, `records[]` (includes `partner_work_status`)"
               },
               "response": []
             },
@@ -1056,7 +1062,73 @@
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "mobile", "partner", "orders", "{{orderId}}"]
                 },
-                "description": "**GET /api/mobile/partner/orders/:orderId**\n\n- **Auth:** Bearer partner — order must be assigned to caller (`partner_id`)\n- **Path `orderId`:** order Mongo `_id` (24-char hex)\n\n**200 `record`:** full order detail (same shape as customer **GET /api/mobile/user/orders/:orderId**) including `service_items[]`, payments, additional charges, refunds when applicable.\n\n**404** order not found or not assigned to partner | **400** invalid order id"
+                "description": "**GET /api/mobile/partner/orders/:orderId**\n\n- **Auth:** Bearer partner — order must be assigned to caller (`partner_id`)\n- **Path `orderId`:** order Mongo `_id` (24-char hex)\n\n**200 `record`:** full order detail including `partner_work_status`, `work_proof_image_urls`, `work_completion_description`, `work_completed_at`, `partner_post_id`, `service_items[]`, payments, additional charges, refunds when applicable.\n\n**404** order not found or not assigned to partner | **400** invalid order id"
+              },
+              "response": []
+            },
+            {
+              "name": "Start work (partner_work_status → in-progress)",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "PUT",
+                "header": [
+                  { "key": "Accept", "value": "application/json" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"partner_work_status\": \"in-progress\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/orders/{{orderId}}/work-status",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "orders", "{{orderId}}", "work-status"]
+                },
+                "description": "**PUT /api/mobile/partner/orders/:orderId/work-status**\n\n- **Auth:** Bearer partner\n- Order must be `in-progress` with `partner_work_status` = `pending`\n- Sets `partner_work_status` to `in-progress` (partner started the job)\n\n**200:** `record` with updated order detail"
+              },
+              "response": []
+            },
+            {
+              "name": "Complete order (proof photos + optional feed post)",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "POST",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "description",
+                      "value": "Job completed successfully.",
+                      "type": "text",
+                      "description": "Optional completion notes; required when publish_as_post=true"
+                    },
+                    {
+                      "key": "publish_as_post",
+                      "value": "false",
+                      "type": "text",
+                      "description": "true to create user-feed partner post from proof images"
+                    },
+                    {
+                      "key": "images",
+                      "type": "file",
+                      "src": [],
+                      "description": "1-4 JPEG/PNG proof-of-service images (required)"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/orders/{{orderId}}/complete",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "orders", "{{orderId}}", "complete"]
+                },
+                "description": "**POST /api/mobile/partner/orders/:orderId/complete**\n\n- **Auth:** Bearer partner\n- **Multipart:** 1–4 `images` (proof of service)\n- **Preconditions:**\n  - `partner_work_status` = `in-progress` (call **Start work** first)\n  - Customer fully paid (`user_payment_status` = `paid`)\n- Sets `partner_work_status` and `order_status` to `completed`\n- Saves `work_proof_image_urls`, `work_completed_at`\n- Optional `publish_as_post=true` + `description` creates linked `partner_post` for user feed\n\n**409** if customer has not paid in full | **200:** `record`, optional `post`"
               },
               "response": []
             }
@@ -3652,6 +3724,12 @@
       "value": "",
       "type": "string",
       "description": "Orders list filter: in-progress | completed | cancelled | refunded — empty = all"
+    },
+    {
+      "key": "partnerWorkStatusFilter",
+      "value": "",
+      "type": "string",
+      "description": "Partner orders list filter: pending | in-progress | completed — empty = all"
     },
     {
       "key": "ordersPage",

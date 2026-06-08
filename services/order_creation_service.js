@@ -24,6 +24,10 @@ const {
   DEFAULT_ORDER_STATUS,
   buildOrderStatusInfo,
 } = require("../enum/order_status_enum");
+const {
+  DEFAULT_PARTNER_WORK_STATUS,
+  buildPartnerWorkStatusInfo,
+} = require("../enum/partner_work_status_enum");
 const { resolveOrderFranchiseIdForCreate } = require("../utils/order_access");
 
 const ORDER_TYPE_DEFAULT = 2;
@@ -301,6 +305,8 @@ const createOrderFromBody = async (body, options = {}) => {
     service_items: order_items,
     order_status: DEFAULT_ORDER_STATUS,
     order_status_info: buildOrderStatusInfo(),
+    partner_work_status: DEFAULT_PARTNER_WORK_STATUS,
+    partner_work_status_info: buildPartnerWorkStatusInfo(),
     order_date,
     address,
     type,

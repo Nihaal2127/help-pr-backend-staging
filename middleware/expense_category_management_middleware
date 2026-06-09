@@ -111,12 +111,30 @@ const updateExpenseCategoryManagementMiddleware = (req, res, next) => {
     });
   }
 
-  if (sub_category_name !== undefined && sub_category_name.trim() === "") {
-    return res.status(400).json({
-      success: false,
-      status: 400,
-      message: "Sub category name cannot be empty."
-    });
+  if (sub_category_name !== undefined) {
+    if (Array.isArray(sub_category_name)) {
+      const subCategoryValidation = validateSubCategoryNames(sub_category_name);
+      if (!subCategoryValidation.valid) {
+        return res.status(400).json({
+          success: false,
+          status: 400,
+          message: subCategoryValidation.message
+        });
+      }
+      req.subCategoryNames = subCategoryValidation.names;
+      req.subCategoryUpdateMode = "sync";
+    } else {
+      const trimmed = String(sub_category_name).trim();
+      if (trimmed === "") {
+        return res.status(400).json({
+          success: false,
+          status: 400,
+          message: "Sub category name cannot be empty."
+        });
+      }
+      req.subCategoryNames = [trimmed];
+      req.subCategoryUpdateMode = "single";
+    }
   }
 
   if (description !== undefined && description.trim() === "") {

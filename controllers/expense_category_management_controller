@@ -43,7 +43,8 @@ const parseDateInput = (value) => {
 
 const create = async (req, res) => {
   try {
-    const { franchise_id, category_name, sub_category_name, description } = req.body;
+    const { franchise_id, category_name, description } = req.body;
+    const subCategoryNames = req.subCategoryNames || [];
 
     const franchise = await Franchise.findOne({ _id: franchise_id, deleted_at: null }).lean();
     if (!franchise) {
@@ -75,11 +76,18 @@ const create = async (req, res) => {
     });
     const savedCategory = await category.save();
 
-    const subcategory = new ExpenseSubcategory({
-      category_id: savedCategory._id,
-      sub_category_name
-    });
-    const savedSubcategory = await subcategory.save();
+    const savedSubcategories = await ExpenseSubcategory.insertMany(
+      subCategoryNames.map((sub_category_name) => ({
+        category_id: savedCategory._id,
+        sub_category_name
+      }))
+    );
+
+    const subcategories = savedSubcategories.map((subcategory) => ({
+      subcategory_id: subcategory._id,
+      sub_category_name: subcategory.sub_category_name
+    }));
+    const firstSubcategory = subcategories[0] || null;
 
     return res.status(201).json({
       success: true,
@@ -90,8 +98,9 @@ const create = async (req, res) => {
         franchise_id: savedCategory.franchise_id,
         category_name: savedCategory.category_name,
         description: savedCategory.description,
-        sub_category_name: savedSubcategory.sub_category_name,
-        subcategory_id: savedSubcategory._id,
+        subcategories,
+        sub_category_name: firstSubcategory ? firstSubcategory.sub_category_name : null,
+        subcategory_id: firstSubcategory ? firstSubcategory.subcategory_id : null,
         created_at: savedCategory.created_at,
         updated_at: savedCategory.updated_at
       }

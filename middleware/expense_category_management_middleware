@@ -1,5 +1,29 @@
 const mongoose = require("mongoose");
 
+const parseSubCategoryNames = (value) => {
+  if (value === undefined || value === null) return [];
+
+  const items = Array.isArray(value) ? value : [value];
+  return items
+    .map((item) => String(item).trim())
+    .filter((item) => item !== "");
+};
+
+const validateSubCategoryNames = (value) => {
+  const names = parseSubCategoryNames(value);
+
+  if (names.length === 0) {
+    return { valid: false, message: "Sub category name is required." };
+  }
+
+  const uniqueNames = new Set(names.map((name) => name.toLowerCase()));
+  if (uniqueNames.size !== names.length) {
+    return { valid: false, message: "Duplicate sub category names are not allowed." };
+  }
+
+  return { valid: true, names };
+};
+
 const validateExpenseCategoryIdParam = (req, res, next) => {
   const { id } = req.params;
   if (!id || String(id).trim() === "") {
@@ -47,13 +71,15 @@ const createExpenseCategoryManagementMiddleware = (req, res, next) => {
     });
   }
 
-  if (!sub_category_name || sub_category_name.trim() === "") {
+  const subCategoryValidation = validateSubCategoryNames(sub_category_name);
+  if (!subCategoryValidation.valid) {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: "Sub category name is required."
+      message: subCategoryValidation.message
     });
   }
+  req.subCategoryNames = subCategoryValidation.names;
 
   if (!description || description.trim() === "") {
     return res.status(400).json({
@@ -107,5 +133,7 @@ const updateExpenseCategoryManagementMiddleware = (req, res, next) => {
 module.exports = {
   validateExpenseCategoryIdParam,
   createExpenseCategoryManagementMiddleware,
-  updateExpenseCategoryManagementMiddleware
+  updateExpenseCategoryManagementMiddleware,
+  parseSubCategoryNames,
+  validateSubCategoryNames
 };

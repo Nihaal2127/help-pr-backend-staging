@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-all-apis-merged",
     "name": "Help PR — All APIs (single collection)",
-    "description": "**Single Postman collection** for `help-pr-backend-staging`. Import only this file.\n\n**Generated:** 2026-05-20 via `node postman/merge-all-collections.mjs`\n\n**Sources merged (8) from `postman/archive/`:**\n- `archive/Help-PR-Orders-Module.postman_collection.json`\n- `archive/Help-PR-Order-Charges-Payments.postman_collection.json`\n- `archive/Help-PR-Partner-Franchise-Dropdowns.postman_collection.json`\n- `archive/content-expense-expense-category-management.postman_collection (1).json`\n- `archive/Area-Management.postman_collection.json`\n- `archive/Help-PR-Area-Franchise-Subscription-UserTypes.postman_collection.json`\n- `archive/Help-PR-Area-Franchise-Subscription.postman_collection.json`\n- `archive/Help-PR-Admin-Dashboard.postman_collection.json`\n- Built-in: Partner payout (4 requests)\n- Built-in: Order refunds (4 requests)\n\n**Dedup:** Same HTTP method + path template (+ getCount `type` in body) → one request; higher-priority source wins.\n\n**Setup:** Set `baseUrl`. Run **00 — Auth → Login** to set `accessToken` / `token`.\n\n**Docs:** `docs/ORDER_MODULE_FRONTEND.md`, `docs/ORDER_GETALL_API_CHANGES.md`, `docs/PARTNER_PAYOUT_FRONTEND.md`, `docs/REFUND_API.md`, `docs/REFUND_FRONTEND.md`, `postman/Help-PR-Refunds.postman_collection.json`\n\n**Mobile:** folder **Mobile → Partner** / **Mobile → User** — run `node postman/build-mobile-folder.mjs` to refresh.",
+    "description": "**Single Postman collection** for `help-pr-backend-staging`. Import only this file.\n\n**Generated:** 2026-05-20 via `node postman/merge-all-collections.mjs`\n\n**Sources merged (8) from `postman/archive/`:**\n- `archive/Help-PR-Orders-Module.postman_collection.json`\n- `archive/Help-PR-Order-Charges-Payments.postman_collection.json`\n- `archive/Help-PR-Partner-Franchise-Dropdowns.postman_collection.json`\n- `archive/content-expense-expense-category-management.postman_collection (1).json`\n- `archive/Area-Management.postman_collection.json`\n- `archive/Help-PR-Area-Franchise-Subscription-UserTypes.postman_collection.json`\n- `archive/Help-PR-Area-Franchise-Subscription.postman_collection.json`\n- `archive/Help-PR-Admin-Dashboard.postman_collection.json`\n- Built-in: Partner payout (4 requests)\n- Built-in: Order refunds (4 requests)\n- Built-in: Partners browse — admin `GET /api/partners` (2 requests)\n\n**Dedup:** Same HTTP method + path template (+ getCount `type` in body) → one request; higher-priority source wins.\n\n**Setup:** Set `baseUrl`. Run **00 — Auth → Login** to set `accessToken` / `token`.\n\n**Docs:** `docs/ORDER_MODULE_FRONTEND.md`, `docs/ORDER_GETALL_API_CHANGES.md`, `docs/PARTNER_PAYOUT_FRONTEND.md`, `docs/REFUND_API.md`, `docs/REFUND_FRONTEND.md`, `postman/Help-PR-Refunds.postman_collection.json`\n\n**Mobile:** folder **Mobile → Partner** / **Mobile → User** — run `node postman/build-mobile-folder.mjs` to refresh.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -12158,6 +12158,171 @@
             "url": "{{base_url}}/api/getPartnerServiceCount"
           },
           "description": "\n\n_Source: Help-PR-Area-Franchise-Subscription.postman_collection.json → Count_"
+        }
+      ]
+    },
+    {
+      "name": "42 — Partners browse",
+      "description": "**/api/partners** — Admin dashboard partner catalog browse (same partner cards + profile catalog as customer mobile `GET /api/mobile/user/partners`).\n\n**Access:** Super admin (5) & staff (6) — `franchise_id` **required** on list. Franchise admin (1) & employee (3) — own franchise only; `franchise_id` optional (defaults to caller franchise); wrong franchise → **403**. Partner (2) & customer (4) → **403**.\n\n**Auth:** `Bearer {{accessToken}}` (run **00 — Auth → Login**).\n\n**Flow:** 1 list → 2 get partner profile\n\n**Variables:** Set `franchiseId` from franchise APIs · list sets `partnerMongoId` from `data.partners[0]._id`",
+      "item": [
+        {
+          "name": "1. Partners (list)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Partners listed', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.data?.partners).to.be.an('array');",
+                  "  });",
+                  "  const p0 = j?.data?.partners?.[0];",
+                  "  if (p0?._id) pm.collectionVariables.set('partnerMongoId', String(p0._id));",
+                  "  if (j?.data?.franchise_id) pm.collectionVariables.set('franchiseId', String(j.data.franchise_id));",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/partners?franchise_id={{franchiseId}}&page={{page}}&limit={{limit}}&search=&plan_name=&category_id={{category_id}}&service_id={{service_id}}&min_price=&max_price=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "partners"
+              ],
+              "query": [
+                {
+                  "key": "franchise_id",
+                  "value": "{{franchiseId}}",
+                  "description": "Required for super admin/staff. Optional for franchise admin/employee (defaults to caller franchise)."
+                },
+                {
+                  "key": "page",
+                  "value": "{{page}}",
+                  "description": "Default 1"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}",
+                  "description": "Default 10, max 50"
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": "Partner name substring (alias: q)",
+                  "disabled": true
+                },
+                {
+                  "key": "plan_name",
+                  "value": "",
+                  "description": "basic | silver | gold | platinum",
+                  "disabled": true
+                },
+                {
+                  "key": "category_id",
+                  "value": "{{category_id}}",
+                  "description": "Filter partners offering this category; scopes price_range",
+                  "disabled": true
+                },
+                {
+                  "key": "service_id",
+                  "value": "{{service_id}}",
+                  "description": "Filter partners offering this service; single price per partner",
+                  "disabled": true
+                },
+                {
+                  "key": "min_price",
+                  "value": "",
+                  "description": "Min partner_service.price",
+                  "disabled": true
+                },
+                {
+                  "key": "max_price",
+                  "value": "",
+                  "description": "Max partner_service.price",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**GET /api/partners**\n\nAdmin partner browse list — same filters and response shape as **Mobile → User → Partners (list)**.\n\n| Query | Required | Notes |\n|-------|----------|--------|\n| `franchise_id` | Super/staff: yes · Franchise staff: optional | Franchise ObjectId (`{{franchiseId}}`) |\n| `page` | No | Default 1 (`{{page}}`) |\n| `limit` | No | Default 10, max 50 (`{{limit}}`) |\n| `search` or `q` | No | Partner name |\n| `plan_name` | No | basic \\| silver \\| gold \\| platinum |\n| `category_id` | No | Filter + scope `price_range` to category |\n| `service_id` | No | Filter + single `price` per partner |\n| `min_price` / `max_price` | No | Price band |\n\n**Eligibility:** verified partner (`verification_status` 2), active subscription, active plan — same as mobile.\n\n**200:** `totalItems`, `totalPages`, `currentPage`, `limit`, `data.franchise_id`, `data.franchise_name`, `data.partners[]` (plan_priority desc, ratings, categories/services, `price` or `price_range`).\n\nTest script sets `partnerMongoId` from first partner for **Get partner profile**."
+          },
+          "description": "\n\n_Source: builtin:partners_browse → Admin partners list_"
+        },
+        {
+          "name": "2. Get partner profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Partner profile', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.data?.partner).to.be.an('object');",
+                  "    pm.expect(j.data?.categories).to.be.an('array');",
+                  "  });",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/partners/{{partnerMongoId}}?franchise_id={{franchiseId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "partners",
+                "{{partnerMongoId}}"
+              ],
+              "query": [
+                {
+                  "key": "franchise_id",
+                  "value": "{{franchiseId}}",
+                  "description": "Optional. Omit to resolve from partner record; pass when browsing within a franchise context."
+                }
+              ]
+            },
+            "description": "**GET /api/partners/:partnerId**\n\nAdmin partner detail + full service catalog — same payload as **Mobile → User → Get partner profile** (minus customer `is_saved`).\n\n| Param / query | Required | Notes |\n|---------------|----------|--------|\n| `partnerId` | Yes | Partner Mongo `_id` (`{{partnerMongoId}}` from list) |\n| `franchise_id` | No | Optional franchise scope (`{{franchiseId}}`) |\n\n**200 `data.partner`:** name, profile, `experience` / `professional_summary`, subscription plan, optional `business_info`, `location`, `joined_at`, `completed_services_count`, **`average_rating`**, **`rating_count`**, **`ratings`**\n\n**200 `data.categories[].services[]`:** partner + global service ratings, `description`, `price`, `tax`, `payment_type`, `minimum_deposit`, `is_accept_request`\n\n**403** if partner is outside caller franchise scope · **404** if not found / not eligible."
+          },
+          "description": "\n\n_Source: builtin:partners_browse → Admin partner profile_"
         }
       ]
     },

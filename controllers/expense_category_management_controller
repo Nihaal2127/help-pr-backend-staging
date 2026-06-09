@@ -41,6 +41,81 @@ const parseDateInput = (value) => {
   return parsed;
 };
 
+const formatSubcategoryRecords = (subcategories) =>
+  subcategories.map((subcategory) => ({
+    subcategory_id: subcategory._id,
+    sub_category_name: subcategory.sub_category_name
+  }));
+
+const fetchSubcategoriesForCategory = async (categoryId) =>
+  ExpenseSubcategory.find({ category_id: categoryId, deleted_at: null })
+    .sort({ created_at: 1 })
+    .lean();
+
+const syncSubcategories = async (categoryId, names) => {
+  const now = new Date();
+  const existing = await ExpenseSubcategory.find({
+    category_id: categoryId,
+    deleted_at: null
+  }).lean();
+
+  const existingByLowerName = new Map();
+  for (const subcategory of existing) {
+    const key = subcategory.sub_category_name.toLowerCase();
+    if (!existingByLowerName.has(key)) {
+      existingByLowerName.set(key, subcategory);
+    }
+  }
+
+  const toKeepIds = new Set();
+  for (const name of names) {
+    const existingSubcategory = existingByLowerName.get(name.toLowerCase());
+    if (existingSubcategory) {
+      toKeepIds.add(String(existingSubcategory._id));
+      if (existingSubcategory.sub_category_name !== name) {
+        await ExpenseSubcategory.updateOne(
+          { _id: existingSubcategory._id },
+          { $set: { sub_category_name: name, updated_at: now } }
+        );
+      }
+    } else {
+      const created = await ExpenseSubcategory.create({
+        category_id: categoryId,
+        sub_category_name: name
+      });
+      toKeepIds.add(String(created._id));
+    }
+  }
+
+  const toDelete = existing.filter((subcategory) => !toKeepIds.has(String(subcategory._id)));
+  if (toDelete.length > 0) {
+    await ExpenseSubcategory.updateMany(
+      { _id: { $in: toDelete.map((subcategory) => subcategory._id) } },
+      { $set: { deleted_at: now, updated_at: now } }
+    );
+  }
+};
+
+const updateFirstSubcategory = async (categoryId, name) => {
+  const now = new Date();
+  let subcategory = await ExpenseSubcategory.findOne({
+    category_id: categoryId,
+    deleted_at: null
+  }).sort({ created_at: 1 });
+
+  if (!subcategory) {
+    subcategory = new ExpenseSubcategory({
+      category_id: categoryId,
+      sub_category_name: name
+    });
+  } else {
+    subcategory.sub_category_name = name;
+    subcategory.updated_at = now;
+  }
+
+  await subcategory.save();
+};
+
 const create = async (req, res) => {
   try {
     const { franchise_id, category_name, description } = req.body;
@@ -326,17 +401,9 @@ const getById = async (req, res) => {
       });
     }
 
-    const subcategories = await ExpenseSubcategory.find({
-      category_id: category._id,
-      deleted_at: null
-    })
-      .sort({ created_at: 1 })
-      .lean();
-
-    const formattedSubcategories = subcategories.map((subcategory) => ({
-      subcategory_id: subcategory._id,
-      sub_category_name: subcategory.sub_category_name
-    }));
+    const formattedSubcategories = formatSubcategoryRecords(
+      await fetchSubcategoriesForCategory(category._id)
+    );
     const firstSubcategory = formattedSubcategories[0] || null;
 
     return res.status(200).json({
@@ -368,6 +435,8 @@ const update = async (req, res) => {
   try {
     const { id } = req.params;
     const { franchise_id, category_name, sub_category_name, description } = req.body;
+    const subCategoryNames = req.subCategoryNames;
+    const subCategoryUpdateMode = req.subCategoryUpdateMode;
 
     const category = await ExpenseCategory.findOne({ _id: id, deleted_at: null });
 
@@ -416,23 +485,18 @@ const update = async (req, res) => {
     category.updated_at = new Date();
     const updatedCategory = await category.save();
 
-    let subcategory = await ExpenseSubcategory.findOne({
-      category_id: updatedCategory._id,
-      deleted_at: null
-    });
-
     if (sub_category_name !== undefined) {
-      if (!subcategory) {
-        subcategory = new ExpenseSubcategory({
-          category_id: updatedCategory._id,
-          sub_category_name
-        });
+      if (subCategoryUpdateMode === "sync") {
+        await syncSubcategories(updatedCategory._id, subCategoryNames);
       } else {
-        subcategory.sub_category_name = sub_category_name;
-        subcategory.updated_at = new Date();
+        await updateFirstSubcategory(updatedCategory._id, subCategoryNames[0]);
       }
-      await subcategory.save();
     }
+
+    const formattedSubcategories = formatSubcategoryRecords(
+      await fetchSubcategoriesForCategory(updatedCategory._id)
+    );
+    const firstSubcategory = formattedSubcategories[0] || null;
 
     return res.status(200).json({
       success: true,
@@ -443,8 +507,9 @@ const update = async (req, res) => {
         franchise_id: updatedCategory.franchise_id,
         category_name: updatedCategory.category_name,
         description: updatedCategory.description,
-        sub_category_name: subcategory ? subcategory.sub_category_name : null,
-        subcategory_id: subcategory ? subcategory._id : null,
+        subcategories: formattedSubcategories,
+        sub_category_name: firstSubcategory ? firstSubcategory.sub_category_name : null,
+        subcategory_id: firstSubcategory ? firstSubcategory.subcategory_id : null,
         created_at: updatedCategory.created_at,
         updated_at: updatedCategory.updated_at
       }

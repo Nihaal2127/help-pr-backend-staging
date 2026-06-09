@@ -1,12 +1,25 @@
 const mongoose = require('mongoose');
 const User = require('../models/user');
+const Franchise = require('../models/franchise');
 const { USER_TYPE_PARTNER } = require('../constants/user_types');
 const {
   listFranchisePartnersPaginated,
   getPartnerProfileForCustomer,
+  parsePartnersListQuery,
+  paginatePartnerRecords,
+  buildFranchisePartnerListRecords,
 } = require('./mobile/user/partners_service');
 
 const fail = (status, message) => ({ ok: false, status, message });
+const ok = (status, data) => ({ ok: true, status, data });
+
+const comparePlanPriorityDesc = (priorityA, priorityB) => {
+  const a = Number(priorityA);
+  const b = Number(priorityB);
+  const aVal = Number.isFinite(a) ? a : -1;
+  const bVal = Number.isFinite(b) ? b : -1;
+  return bVal - aVal;
+};
 
 const extractScopedFranchiseId = (scopeFilter = {}) => {
   const franchiseId = scopeFilter.franchise_id;
@@ -48,13 +61,67 @@ const resolveListFranchiseId = (scopeResult, queryFranchiseId) => {
       ? String(queryFranchiseId).trim()
       : '';
   if (!queryRaw) {
-    return fail(400, 'franchise_id is required.');
+    return { ok: true, allFranchises: true };
   }
   if (!mongoose.Types.ObjectId.isValid(queryRaw)) {
     return fail(400, 'franchise_id must be a valid ObjectId.');
   }
 
   return { ok: true, franchiseId: queryRaw };
+};
+
+const listAllFranchisesPartnersPaginated = async (query) => {
+  try {
+    const parsed = parsePartnersListQuery(query);
+    if (!parsed.ok) return fail(parsed.status, parsed.message);
+
+    const franchises = await Franchise.find({ deleted_at: null }).select('_id name').lean();
+
+    const merged = [];
+    for (const franchise of franchises) {
+      const built = await buildFranchisePartnerListRecords(franchise._id);
+      if (!built.ok) continue;
+
+      const builtData = built.data || {};
+      const records = Array.isArray(builtData.records) ? builtData.records : [];
+
+      for (const record of records) {
+        merged.push({
+          ...record,
+          franchise_id: builtData.franchise_id ?? franchise._id,
+          franchise_name: builtData.franchise_name ?? franchise.name ?? null,
+        });
+      }
+    }
+
+    merged.sort((a, b) => {
+      const byPlan = comparePlanPriorityDesc(a.plan_priority, b.plan_priority);
+      if (byPlan !== 0) return byPlan;
+      const byName = String(a.name ?? '').localeCompare(String(b.name ?? ''));
+      if (byName !== 0) return byName;
+      return String(a.franchise_name ?? '').localeCompare(String(b.franchise_name ?? ''));
+    });
+
+    const paginated = paginatePartnerRecords(merged, {
+      filters: parsed.filters,
+      serviceId: parsed.serviceId,
+      categoryId: parsed.categoryId,
+      page: parsed.page,
+      limit: parsed.limit,
+    });
+
+    return ok(200, {
+      message: 'Partners fetched successfully.',
+      data: {
+        franchise_id: null,
+        franchise_name: null,
+        ...paginated,
+      },
+    });
+  } catch (err) {
+    console.error('listAllFranchisesPartnersPaginated', err.message);
+    return fail(500, 'Internal server error.');
+  }
 };
 
 const listPartnersForAdmin = async (scopeResult, query) => {
@@ -64,6 +131,9 @@ const listPartnersForAdmin = async (scopeResult, query) => {
   }
   if (franchiseResolved.empty) {
     return emptyPartnersListPayload(query);
+  }
+  if (franchiseResolved.allFranchises) {
+    return listAllFranchisesPartnersPaginated(query);
   }
 
   return listFranchisePartnersPaginated({

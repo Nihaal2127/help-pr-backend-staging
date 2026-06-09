@@ -164,7 +164,6 @@ const getAll = async (req, res) => {
       },
       {
         $addFields: {
-          first_subcategory: { $arrayElemAt: ["$subcategories", 0] },
           sub_category_name: {
             $ifNull: [{ $arrayElemAt: ["$subcategories.sub_category_name", 0] }, null]
           }
@@ -234,7 +233,7 @@ const getAll = async (req, res) => {
               }
             },
             { category_name: { $regex: search, $options: "i" } },
-            { sub_category_name: { $regex: search, $options: "i" } },
+            { "subcategories.sub_category_name": { $regex: search, $options: "i" } },
             {
               $expr: {
                 $regexMatch: {
@@ -268,8 +267,18 @@ const getAll = async (req, res) => {
                 franchise_id: 1,
                 category_name: 1,
                 description: 1,
+                subcategories: {
+                  $map: {
+                    input: "$subcategories",
+                    as: "sub",
+                    in: {
+                      subcategory_id: "$$sub._id",
+                      sub_category_name: "$$sub.sub_category_name"
+                    }
+                  }
+                },
                 sub_category_name: 1,
-                subcategory_id: "$first_subcategory._id",
+                subcategory_id: { $arrayElemAt: ["$subcategories._id", 0] },
                 created_at: 1,
                 updated_at: 1
               }
@@ -317,10 +326,18 @@ const getById = async (req, res) => {
       });
     }
 
-    const subcategory = await ExpenseSubcategory.findOne({
+    const subcategories = await ExpenseSubcategory.find({
       category_id: category._id,
       deleted_at: null
-    }).lean();
+    })
+      .sort({ created_at: 1 })
+      .lean();
+
+    const formattedSubcategories = subcategories.map((subcategory) => ({
+      subcategory_id: subcategory._id,
+      sub_category_name: subcategory.sub_category_name
+    }));
+    const firstSubcategory = formattedSubcategories[0] || null;
 
     return res.status(200).json({
       success: true,
@@ -331,8 +348,9 @@ const getById = async (req, res) => {
         franchise_id: category.franchise_id,
         category_name: category.category_name,
         description: category.description,
-        sub_category_name: subcategory ? subcategory.sub_category_name : null,
-        subcategory_id: subcategory ? subcategory._id : null,
+        subcategories: formattedSubcategories,
+        sub_category_name: firstSubcategory ? firstSubcategory.sub_category_name : null,
+        subcategory_id: firstSubcategory ? firstSubcategory.subcategory_id : null,
         created_at: category.created_at,
         updated_at: category.updated_at
       }

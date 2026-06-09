@@ -12163,7 +12163,7 @@
     },
     {
       "name": "42 — Partners browse",
-      "description": "**/api/partners** — Admin dashboard partner catalog browse (same partner cards + profile catalog as customer mobile `GET /api/mobile/user/partners`).\n\n**Access:** Super admin (5) & staff (6) — `franchise_id` **required** on list. Franchise admin (1) & employee (3) — own franchise only; `franchise_id` optional (defaults to caller franchise); wrong franchise → **403**. Partner (2) & customer (4) → **403**.\n\n**Auth:** `Bearer {{accessToken}}` (run **00 — Auth → Login**).\n\n**Flow:** 1 list → 2 get partner profile\n\n**Variables:** Set `franchiseId` from franchise APIs · list sets `partnerMongoId` from `data.partners[0]._id`",
+      "description": "**/api/partners** — Admin dashboard partner catalog browse (same partner cards + profile catalog as customer mobile `GET /api/mobile/user/partners`).\n\n**Access:** Super admin (5) & staff (6) — `franchise_id` **optional** on list (omit → all franchises; each partner includes `franchise_id` / `franchise_name`). Franchise admin (1) & employee (3) — own franchise only; `franchise_id` optional (defaults to caller franchise); wrong franchise → **403**. Partner (2) & customer (4) → **403**.\n\n**Auth:** `Bearer {{accessToken}}` (run **00 — Auth → Login**).\n\n**Flow:** 1 list → 2 get partner profile\n\n**Variables:** Set `franchiseId` from franchise APIs (optional for super/staff) · list sets `partnerMongoId` from `data.partners[0]._id`",
       "item": [
         {
           "name": "1. Partners (list)",
@@ -12214,7 +12214,7 @@
                 {
                   "key": "franchise_id",
                   "value": "{{franchiseId}}",
-                  "description": "Required for super admin/staff. Optional for franchise admin/employee (defaults to caller franchise)."
+                  "description": "Optional for super admin/staff (omit → all franchises). Optional for franchise admin/employee (defaults to caller franchise)."
                 },
                 {
                   "key": "page",
@@ -12264,7 +12264,7 @@
                 }
               ]
             },
-            "description": "**GET /api/partners**\n\nAdmin partner browse list — same filters and response shape as **Mobile → User → Partners (list)**.\n\n| Query | Required | Notes |\n|-------|----------|--------|\n| `franchise_id` | Super/staff: yes · Franchise staff: optional | Franchise ObjectId (`{{franchiseId}}`) |\n| `page` | No | Default 1 (`{{page}}`) |\n| `limit` | No | Default 10, max 50 (`{{limit}}`) |\n| `search` or `q` | No | Partner name |\n| `plan_name` | No | basic \\| silver \\| gold \\| platinum |\n| `category_id` | No | Filter + scope `price_range` to category |\n| `service_id` | No | Filter + single `price` per partner |\n| `min_price` / `max_price` | No | Price band |\n\n**Eligibility:** verified partner (`verification_status` 2), active subscription, active plan — same as mobile.\n\n**200:** `totalItems`, `totalPages`, `currentPage`, `limit`, `data.franchise_id`, `data.franchise_name`, `data.partners[]` (plan_priority desc, ratings, categories/services, `price` or `price_range`).\n\nTest script sets `partnerMongoId` from first partner for **Get partner profile**."
+            "description": "**GET /api/partners**\n\nAdmin partner browse list — same filters and response shape as **Mobile → User → Partners (list)**.\n\n| Query | Required | Notes |\n|-------|----------|--------|\n| `franchise_id` | No | Super/staff: omit → **all franchises** (each partner has `franchise_id` / `franchise_name`; root `data.franchise_id` null). Pass `{{franchiseId}}` to scope one franchise. Franchise staff: optional (defaults to caller franchise) |\n| `page` | No | Default 1 (`{{page}}`) |\n| `limit` | No | Default 10, max 50 (`{{limit}}`) |\n| `search` or `q` | No | Partner name |\n| `plan_name` | No | basic \\| silver \\| gold \\| platinum |\n| `category_id` | No | Filter + scope `price_range` to category |\n| `service_id` | No | Filter + single `price` per partner |\n| `min_price` / `max_price` | No | Price band |\n\n**Eligibility:** verified partner (`verification_status` 2), active subscription, active plan — same as mobile.\n\n**200:** `totalItems`, `totalPages`, `currentPage`, `limit`, `data.franchise_id`, `data.franchise_name`, `data.partners[]` (plan_priority desc, ratings, categories/services, `price` or `price_range`).\n\nTest script sets `partnerMongoId` from first partner for **Get partner profile**."
           },
           "description": "\n\n_Source: builtin:partners_browse → Admin partners list_"
         },

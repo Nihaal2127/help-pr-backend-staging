@@ -1,0 +1,675 @@
+const mongoose = require('mongoose');
+const PartnerSubscription = require('../../../models/partner_subscription');
+const SubscriptionPlan = require('../../../models/subscription_plan');
+const PartnerSubscriptionChange = require('../../../models/partner_subscription_change');
+const PartnerWalletLedger = require('../../../models/partner_wallet_ledger');
+const User = require('../../../models/user');
+const { getWalletAggregatesForPartners } = require('../../partner_payout_service');
+const {
+    roundAmount,
+    computeExpiresAt,
+    computeProration,
+    validateUpgradePaymentSplit,
+} = require('../../../utils/subscription_proration');
+
+const USER_TYPE_PARTNER = 2;
+
+class SubscriptionChangeError extends Error {
+    constructor(status, message) {
+        super(message);
+        this.status = status;
+    }
+}
+
+const fail = (status, message, extra = {}) => ({ ok: false, status, message, ...extra });
+const ok = (status, data) => ({ ok: true, status, data });
+
+const parseObjectId = (raw, fieldName = 'id') => {
+    if (raw instanceof mongoose.Types.ObjectId) {
+        return { ok: true, oid: raw };
+    }
+    const s = raw !== undefined && raw !== null ? String(raw).trim() : '';
+    if (!s || !/^[a-fA-F0-9]{24}$/.test(s)) {
+        return { ok: false, message: `${fieldName} must be a valid ObjectId.` };
+    }
+    return { ok: true, oid: new mongoose.Types.ObjectId(s) };
+};
+
+const parsePagination = (query, defaultLimit = 10, maxLimit = 50) => {
+    let page = parseInt(query.page, 10);
+    let limit = parseInt(query.limit, 10);
+    if (!Number.isFinite(page) || page < 1) page = 1;
+    if (!Number.isFinite(limit) || limit < 1) limit = defaultLimit;
+    if (limit > maxLimit) limit = maxLimit;
+    return { page, limit, skip: (page - 1) * limit };
+};
+
+const loadPartnerUser = async (partnerOid) =>
+    User.findOne({
+        _id: partnerOid,
+        type: USER_TYPE_PARTNER,
+        deleted_at: null,
+    })
+        .select('_id name email franchise_id verification_status is_blocked')
+        .lean();
+
+const assertPartnerAccount = (partner) => {
+    if (!partner) {
+        return fail(403, 'Only partner accounts can access this resource.');
+    }
+    return null;
+};
+
+const assertEligibleForChange = (partner) => {
+    const accountError = assertPartnerAccount(partner);
+    if (accountError) return accountError;
+    if (partner.is_blocked === true) {
+        return fail(403, 'Your account is blocked. Please contact support.');
+    }
+    if (Number(partner.verification_status) !== 2) {
+        return fail(
+            403,
+            'Subscription changes are available after your account is verified and approved.'
+        );
+    }
+    return null;
+};
+
+const loadActivePlan = async (planOid) =>
+    SubscriptionPlan.findOne({
+        _id: planOid,
+        deleted_at: null,
+        is_active: true,
+    }).lean();
+
+const resolveCurrentPlan = async (subscription) => {
+    if (
+        subscription.subscription_plan_id &&
+        typeof subscription.subscription_plan_id === 'object'
+    ) {
+        const plan = subscription.subscription_plan_id;
+        if (plan.deleted_at != null) {
+            return null;
+        }
+        return plan;
+    }
+    if (!subscription.subscription_plan_id) {
+        return null;
+    }
+    return SubscriptionPlan.findOne({
+        _id: subscription.subscription_plan_id,
+        deleted_at: null,
+    }).lean();
+};
+
+const loadActiveSubscription = async (partnerOid) => {
+    const now = new Date();
+    return PartnerSubscription.findOne({
+        partner_id: partnerOid,
+        status: 'active',
+        deleted_at: null,
+        $or: [{ expires_at: null }, { expires_at: { $gt: now } }],
+    })
+        .sort({ updated_at: -1, created_at: -1 })
+        .populate('subscription_plan_id')
+        .lean();
+};
+
+const getWalletBalance = async (partnerOid, session = null) => {
+    if (session) {
+        return getWalletBalanceInSession(partnerOid, session);
+    }
+    const map = await getWalletAggregatesForPartners([partnerOid]);
+    const row = map.get(String(partnerOid));
+    return row ? roundAmount(row.total_wallet_amount) : 0;
+};
+
+const getWalletBalanceInSession = async (partnerOid, session) => {
+    const rows = await PartnerWalletLedger.aggregate([
+        {
+            $match: {
+                partner_id: new mongoose.Types.ObjectId(String(partnerOid)),
+                deleted_at: null,
+            },
+        },
+        {
+            $group: {
+                _id: null,
+                total_credit: {
+                    $sum: {
+                        $cond: [{ $eq: ['$transaction_type', 'credit'] }, '$amount', 0],
+                    },
+                },
+                total_debit: {
+                    $sum: {
+                        $cond: [{ $eq: ['$transaction_type', 'debit'] }, '$amount', 0],
+                    },
+                },
+            },
+        },
+    ]).session(session);
+
+    const credit = rows[0]?.total_credit ?? 0;
+    const debit = rows[0]?.total_debit ?? 0;
+    return roundAmount(credit - debit);
+};
+
+const formatPlanSummary = (plan) => {
+    if (!plan) {
+        return null;
+    }
+    return {
+        _id: plan._id,
+        plan_name: plan.plan_name,
+        plan_description: plan.plan_description,
+        price: plan.price,
+        duration: plan.duration,
+        duration_type: plan.duration_type,
+        priority: plan.priority,
+    };
+};
+
+const formatChangeRecord = (row) => ({
+    _id: row._id,
+    change_type: row.change_type,
+    from_plan: formatPlanSummary(row.from_plan_id),
+    to_plan: formatPlanSummary(row.to_plan_id),
+    days_used: row.days_used,
+    days_total: row.days_total,
+    consumed_value: row.consumed_value,
+    remaining_value: row.remaining_value,
+    amount_to_pay: row.amount_to_pay,
+    wallet_amount: row.wallet_amount,
+    cash_amount: row.cash_amount,
+    wallet_credit: row.wallet_credit,
+    payment_method: row.payment_method,
+    status: row.status,
+    applied_at: row.applied_at,
+    created_at: row.created_at,
+});
+
+const buildChangeContext = async (partnerId, targetPlanId) => {
+    const pPartner = parseObjectId(partnerId, 'partner_id');
+    if (!pPartner.ok) return fail(400, pPartner.message);
+
+    const pTarget = parseObjectId(targetPlanId, 'target_plan_id');
+    if (!pTarget.ok) return fail(400, pTarget.message);
+
+    const partner = await loadPartnerUser(pPartner.oid);
+    const eligibilityError = assertEligibleForChange(partner);
+    if (eligibilityError) return eligibilityError;
+
+    const subscription = await loadActiveSubscription(pPartner.oid);
+    if (!subscription || !subscription.subscription_plan_id) {
+        return fail(404, 'No active subscription found.');
+    }
+
+    const currentPlan = await resolveCurrentPlan(subscription);
+    if (!currentPlan) {
+        return fail(404, 'Current subscription plan is not available.');
+    }
+
+    const newPlan = await loadActivePlan(pTarget.oid);
+    if (!newPlan) {
+        return fail(404, 'Target subscription plan not found, inactive, or deleted.');
+    }
+
+    const proration = computeProration({
+        currentPlan,
+        newPlan,
+        startedAt: subscription.started_at,
+    });
+
+    if (proration.change_type === 'same') {
+        return fail(400, 'You are already on this subscription plan.');
+    }
+    if (proration.change_type === 'lateral') {
+        return fail(400, 'This plan change is not allowed.');
+    }
+
+    return ok(200, {
+        partner,
+        subscription,
+        currentPlan,
+        newPlan,
+        proration,
+    });
+};
+
+const getSubscriptionSummary = async (partnerId) => {
+    try {
+        const pPartner = parseObjectId(partnerId, 'partner_id');
+        if (!pPartner.ok) return fail(400, pPartner.message);
+
+        const partner = await loadPartnerUser(pPartner.oid);
+        const accountError = assertPartnerAccount(partner);
+        if (accountError) return accountError;
+
+        const subscription = await loadActiveSubscription(pPartner.oid);
+        const walletBalance = await getWalletBalance(pPartner.oid);
+
+        if (!subscription) {
+            return ok(200, {
+                message: 'No active subscription found.',
+                data: {
+                    subscription: null,
+                    wallet_balance: walletBalance,
+                    days_used: 0,
+                    days_total: 0,
+                },
+            });
+        }
+
+        const plan = await resolveCurrentPlan(subscription);
+        const proration = plan
+            ? computeProration({
+                  currentPlan: plan,
+                  newPlan: plan,
+                  startedAt: subscription.started_at,
+              })
+            : { days_used: 0, days_total: 0 };
+
+        return ok(200, {
+            message: 'Partner subscription fetched successfully.',
+            data: {
+                subscription: {
+                    _id: subscription._id,
+                    started_at: subscription.started_at,
+                    expires_at: subscription.expires_at,
+                    status: subscription.status,
+                    plan: formatPlanSummary(plan),
+                },
+                wallet_balance: walletBalance,
+                days_used: proration.days_used,
+                days_total: proration.days_total,
+            },
+        });
+    } catch (err) {
+        console.error('getSubscriptionSummary', err.message);
+        return fail(500, 'Internal server error.');
+    }
+};
+
+const previewChange = async (partnerId, targetPlanId) => {
+    try {
+        const ctx = await buildChangeContext(partnerId, targetPlanId);
+        if (!ctx.ok) return ctx;
+
+        const { currentPlan, newPlan, proration } = ctx.data;
+        const walletBalance = await getWalletBalance(ctx.data.partner._id);
+
+        return ok(200, {
+            message: 'Subscription change preview generated successfully.',
+            data: {
+                change_type: proration.change_type,
+                current_plan: formatPlanSummary(currentPlan),
+                target_plan: formatPlanSummary(newPlan),
+                days_used: proration.days_used,
+                days_total: proration.days_total,
+                days_remaining: proration.days_remaining,
+                daily_rate: proration.daily_rate,
+                consumed_value: proration.consumed_value,
+                remaining_value: proration.remaining_value,
+                gross_new_plan_price: proration.gross_new_plan_price,
+                amount_to_pay: proration.amount_to_pay,
+                wallet_credit: proration.wallet_credit,
+                new_period_days: proration.new_period_days,
+                new_expires_at: proration.new_expires_at,
+                wallet_balance: walletBalance,
+            },
+        });
+    } catch (err) {
+        console.error('previewChange', err.message);
+        return fail(500, 'Internal server error.');
+    }
+};
+
+const listChangeHistory = async (partnerId, query = {}) => {
+    try {
+        const pPartner = parseObjectId(partnerId, 'partner_id');
+        if (!pPartner.ok) return fail(400, pPartner.message);
+
+        const partner = await loadPartnerUser(pPartner.oid);
+        const accountError = assertPartnerAccount(partner);
+        if (accountError) return accountError;
+
+        const { page, limit, skip } = parsePagination(query);
+        const filter = {
+            partner_id: pPartner.oid,
+            status: 'completed',
+            deleted_at: null,
+        };
+
+        const [records, totalCount] = await Promise.all([
+            PartnerSubscriptionChange.find(filter)
+                .populate('from_plan_id', 'plan_name price duration duration_type priority')
+                .populate('to_plan_id', 'plan_name price duration duration_type priority')
+                .sort({ created_at: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            PartnerSubscriptionChange.countDocuments(filter),
+        ]);
+
+        const totalPages = Math.ceil(totalCount / limit) || 0;
+
+        return ok(200, {
+            message: 'Subscription change history fetched successfully.',
+            data: {
+                totalItems: totalCount,
+                totalPages,
+                currentPage: page,
+                limit,
+                records: records.map(formatChangeRecord),
+            },
+        });
+    } catch (err) {
+        console.error('listChangeHistory', err.message);
+        return fail(500, 'Internal server error.');
+    }
+};
+
+const applySubscriptionUpdate = async (subscriptionId, newPlanId, asOf, session) => {
+    const plan = await SubscriptionPlan.findById(newPlanId).session(session).lean();
+    if (!plan) {
+        throw new SubscriptionChangeError(404, 'Target subscription plan not found.');
+    }
+    const endDate = computeExpiresAt(asOf, plan);
+
+    const updated = await PartnerSubscription.findOneAndUpdate(
+        { _id: subscriptionId, deleted_at: null, status: 'active' },
+        {
+            $set: {
+                subscription_plan_id: newPlanId,
+                started_at: asOf,
+                expires_at: endDate,
+                status: 'active',
+                updated_at: asOf,
+            },
+        },
+        { new: true, session }
+    ).lean();
+
+    if (!updated) {
+        throw new SubscriptionChangeError(404, 'Active subscription not found.');
+    }
+
+    return { updated, plan };
+};
+
+const createWalletLedgerEntry = async (
+    {
+        partnerId,
+        franchiseId,
+        transactionType,
+        amount,
+        description,
+        paymentMethod,
+        subscriptionChangeId,
+    },
+    session
+) => {
+    const now = new Date();
+    const [row] = await PartnerWalletLedger.create(
+        [
+            {
+                partner_id: partnerId,
+                franchise_id: franchiseId || null,
+                transaction_type: transactionType,
+                amount: roundAmount(amount),
+                date: now,
+                description,
+                payment_method: paymentMethod || null,
+                subscription_change_id: subscriptionChangeId,
+                created_at: now,
+                updated_at: now,
+            },
+        ],
+        { session }
+    );
+    return row;
+};
+
+const executeChangeInTransaction = async ({
+    partner,
+    subscription,
+    currentPlan,
+    newPlan,
+    proration,
+    paymentValidation,
+}) => {
+    const session = await mongoose.startSession();
+    let result;
+
+    try {
+        await session.withTransaction(async () => {
+            const pending = await PartnerSubscriptionChange.findOne({
+                partner_id: partner._id,
+                status: 'pending',
+                deleted_at: null,
+            })
+                .session(session)
+                .select('_id');
+
+            if (pending) {
+                throw new SubscriptionChangeError(
+                    409,
+                    'A subscription change is already in progress. Please try again shortly.'
+                );
+            }
+
+            const now = new Date();
+            const freshBalance = await getWalletBalance(partner._id, session);
+
+            if (proration.change_type === 'upgrade') {
+                const revalidated = validateUpgradePaymentSplit({
+                    amountToPay: proration.amount_to_pay,
+                    walletAmount: paymentValidation.wallet,
+                    cashAmount: paymentValidation.cash,
+                    walletBalance: freshBalance,
+                });
+                if (!revalidated.ok) {
+                    throw new SubscriptionChangeError(400, revalidated.message);
+                }
+                paymentValidation.wallet = revalidated.wallet;
+                paymentValidation.cash = revalidated.cash;
+                paymentValidation.payment_method = revalidated.payment_method;
+            }
+
+            const [changeDoc] = await PartnerSubscriptionChange.create(
+                [
+                    {
+                        partner_id: partner._id,
+                        from_plan_id: currentPlan._id,
+                        to_plan_id: newPlan._id,
+                        change_type: proration.change_type,
+                        days_used: proration.days_used,
+                        days_total: proration.days_total,
+                        consumed_value: proration.consumed_value,
+                        remaining_value: proration.remaining_value,
+                        gross_new_plan_price: proration.gross_new_plan_price,
+                        amount_to_pay:
+                            proration.change_type === 'upgrade' ? proration.amount_to_pay : 0,
+                        wallet_amount:
+                            proration.change_type === 'upgrade' ? paymentValidation.wallet : 0,
+                        cash_amount:
+                            proration.change_type === 'upgrade' ? paymentValidation.cash : 0,
+                        wallet_credit:
+                            proration.change_type === 'downgrade' ? proration.wallet_credit : 0,
+                        payment_method:
+                            proration.change_type === 'upgrade'
+                                ? paymentValidation.payment_method
+                                : 'not_required',
+                        payment_status: 'completed',
+                        status: 'pending',
+                        applied_at: null,
+                        created_at: now,
+                        updated_at: now,
+                    },
+                ],
+                { session }
+            );
+
+            let walletLedgerDebitId = null;
+            let walletLedgerCreditId = null;
+
+            if (proration.change_type === 'downgrade' && proration.wallet_credit > 0) {
+                const creditRow = await createWalletLedgerEntry(
+                    {
+                        partnerId: partner._id,
+                        franchiseId: partner.franchise_id,
+                        transactionType: 'credit',
+                        amount: proration.wallet_credit,
+                        description: `Subscription downgrade credit (${currentPlan.plan_name} → ${newPlan.plan_name})`,
+                        paymentMethod: 'subscription_downgrade',
+                        subscriptionChangeId: changeDoc._id,
+                    },
+                    session
+                );
+                walletLedgerCreditId = creditRow._id;
+            }
+
+            if (proration.change_type === 'upgrade' && paymentValidation.wallet > 0) {
+                const debitRow = await createWalletLedgerEntry(
+                    {
+                        partnerId: partner._id,
+                        franchiseId: partner.franchise_id,
+                        transactionType: 'debit',
+                        amount: paymentValidation.wallet,
+                        description: `Subscription upgrade payment (${currentPlan.plan_name} → ${newPlan.plan_name})`,
+                        paymentMethod: 'wallet',
+                        subscriptionChangeId: changeDoc._id,
+                    },
+                    session
+                );
+                walletLedgerDebitId = debitRow._id;
+            }
+
+            const { updated, plan: updatedPlan } = await applySubscriptionUpdate(
+                subscription._id,
+                newPlan._id,
+                now,
+                session
+            );
+
+            changeDoc.status = 'completed';
+            changeDoc.applied_at = now;
+            changeDoc.updated_at = now;
+            changeDoc.wallet_ledger_debit_id = walletLedgerDebitId;
+            changeDoc.wallet_ledger_credit_id = walletLedgerCreditId;
+            await changeDoc.save({ session });
+
+            result = {
+                changeDoc: changeDoc.toObject(),
+                updatedSubscription: updated,
+                updatedPlan,
+            };
+        });
+    } finally {
+        await session.endSession();
+    }
+
+    return result;
+};
+
+const applyChange = async (partnerId, body) => {
+    try {
+        const { target_plan_id, wallet_amount = 0, cash_amount = 0 } = body;
+
+        const ctx = await buildChangeContext(partnerId, target_plan_id);
+        if (!ctx.ok) return ctx;
+
+        const { partner, subscription, currentPlan, newPlan, proration } = ctx.data;
+
+        if (proration.change_type === 'downgrade') {
+            const walletPay = roundAmount(wallet_amount);
+            const cashPay = roundAmount(cash_amount);
+            if (walletPay > 0 || cashPay > 0) {
+                return fail(400, 'Payment is not required for a downgrade.');
+            }
+        }
+
+        let paymentValidation = { wallet: 0, cash: 0, payment_method: 'not_required' };
+
+        if (proration.change_type === 'upgrade') {
+            const walletBalance = await getWalletBalance(partner._id);
+            paymentValidation = validateUpgradePaymentSplit({
+                amountToPay: proration.amount_to_pay,
+                walletAmount: wallet_amount,
+                cashAmount: cash_amount,
+                walletBalance,
+            });
+            if (!paymentValidation.ok) {
+                return fail(400, paymentValidation.message);
+            }
+        }
+
+        const txResult = await executeChangeInTransaction({
+            partner,
+            subscription,
+            currentPlan,
+            newPlan,
+            proration,
+            paymentValidation,
+        });
+
+        const newWalletBalance = await getWalletBalance(partner._id);
+
+        if (proration.change_type === 'downgrade') {
+            return ok(200, {
+                message: 'Subscription downgraded successfully.',
+                data: {
+                    subscription: {
+                        _id: txResult.updatedSubscription._id,
+                        started_at: txResult.updatedSubscription.started_at,
+                        expires_at: txResult.updatedSubscription.expires_at,
+                        status: txResult.updatedSubscription.status,
+                        plan: formatPlanSummary(txResult.updatedPlan),
+                    },
+                    change: {
+                        _id: txResult.changeDoc._id,
+                        change_type: 'downgrade',
+                        wallet_credit: proration.wallet_credit,
+                        payment_method: 'not_required',
+                    },
+                    wallet_balance: newWalletBalance,
+                },
+            });
+        }
+
+        return ok(200, {
+            message: 'Subscription upgraded successfully.',
+            data: {
+                subscription: {
+                    _id: txResult.updatedSubscription._id,
+                    started_at: txResult.updatedSubscription.started_at,
+                    expires_at: txResult.updatedSubscription.expires_at,
+                    status: txResult.updatedSubscription.status,
+                    plan: formatPlanSummary(txResult.updatedPlan),
+                },
+                change: {
+                    _id: txResult.changeDoc._id,
+                    change_type: 'upgrade',
+                    amount_to_pay: proration.amount_to_pay,
+                    wallet_amount: paymentValidation.wallet,
+                    cash_amount: paymentValidation.cash,
+                    payment_method: paymentValidation.payment_method,
+                },
+                wallet_balance: newWalletBalance,
+            },
+        });
+    } catch (err) {
+        if (err instanceof SubscriptionChangeError) {
+            return fail(err.status, err.message);
+        }
+        console.error('applyChange', err.message);
+        return fail(500, 'Internal server error.');
+    }
+};
+
+module.exports = {
+    getSubscriptionSummary,
+    previewChange,
+    applyChange,
+    listChangeHistory,
+};

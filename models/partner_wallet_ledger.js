@@ -47,6 +47,11 @@ const partnerWalletLedgerSchema = new mongoose.Schema(
             ref: 'order_payment',
             default: null,
         },
+        subscription_change_id: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'partner_subscription_change',
+            default: null,
+        },
         created_at: { type: Date, default: Date.now },
         updated_at: { type: Date, default: Date.now },
         deleted_at: { type: Date, default: null },
@@ -81,6 +86,7 @@ partnerWalletLedgerSchema.index(
 partnerWalletLedgerSchema.index({ partner_id: 1, date: -1, deleted_at: 1 });
 partnerWalletLedgerSchema.index({ franchise_id: 1, deleted_at: 1 });
 partnerWalletLedgerSchema.index({ order_id: 1, deleted_at: 1 });
+partnerWalletLedgerSchema.index({ subscription_change_id: 1, deleted_at: 1 });
 
 module.exports = mongoose.model('partner_wallet_ledger', partnerWalletLedgerSchema);
 module.exports.TRANSACTION_TYPES = TRANSACTION_TYPES;

@@ -664,8 +664,242 @@
         },
         {
           "name": "Subscription",
-          "description": "Bearer required. **GET /subscription-plans** — all active subscription plans (`deleted_at` null).",
+          "description": "Bearer required. **GET /subscription** — current plan + wallet balance. **GET /subscription-plans** — catalog. **POST /subscription/change/preview** and **POST /subscription/change** — upgrade (wallet + cash) or downgrade (wallet credit).",
           "item": [
+            {
+              "name": "List change history",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/subscription/changes?page=1&limit=10",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "partner",
+                    "subscription",
+                    "changes"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "10"
+                    }
+                  ]
+                },
+                "description": "**GET /api/mobile/partner/subscription/changes**\n\n- **Auth:** Bearer `{{token}}`\n- **Query:** `page` (default 1), `limit` (default 10, max 50)\n- **200** `data.records[]`: completed upgrades/downgrades with proration and payment split"
+              },
+              "response": []
+            },
+            {
+              "name": "Get current subscription",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/subscription",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "partner",
+                    "subscription"
+                  ]
+                },
+                "description": "**GET /api/mobile/partner/subscription**\n\n- **Auth:** Bearer `{{token}}`\n- **200** `data`: `subscription` (plan, dates, status), `wallet_balance`, `days_used`, `days_total`"
+              },
+              "response": []
+            },
+            {
+              "name": "Preview plan change",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"target_plan_id\": \"{{targetSubscriptionPlanId}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/subscription/change/preview",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "partner",
+                    "subscription",
+                    "change",
+                    "preview"
+                  ]
+                },
+                "description": "**POST /api/mobile/partner/subscription/change/preview**\n\n- **Body:** `target_plan_id` (ObjectId from **List plans**)\n- **200** `data`: `change_type` (upgrade|downgrade), proration breakdown, `amount_to_pay` or `wallet_credit`, `wallet_balance`"
+              },
+              "response": []
+            },
+            {
+              "name": "Apply plan change (upgrade)",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"target_plan_id\": \"{{targetSubscriptionPlanId}}\",\n  \"wallet_amount\": {{upgradeWalletAmount}},\n  \"cash_amount\": {{upgradeCashAmount}}\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/subscription/change",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "partner",
+                    "subscription",
+                    "change"
+                  ]
+                },
+                "description": "**POST /api/mobile/partner/subscription/change**\n\n**Upgrade:** `wallet_amount` + `cash_amount` must equal `amount_to_pay` from preview. Omitted amounts default to 0.\n\n**Downgrade:** send only `target_plan_id` (no payment). Unused value credited to wallet; new plan period starts immediately."
+              },
+              "response": []
+            },
+            {
+              "name": "Apply plan change (downgrade)",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"target_plan_id\": \"{{targetSubscriptionPlanId}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/subscription/change",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "partner",
+                    "subscription",
+                    "change"
+                  ]
+                },
+                "description": "**POST /api/mobile/partner/subscription/change** — downgrade only (`target_plan_id` lower tier). No `wallet_amount` / `cash_amount`."
+              },
+              "response": []
+            },
             {
               "name": "List plans",
               "event": [
@@ -3412,6 +3646,24 @@
       "value": "",
       "type": "string",
       "description": "From Subscription → List plans — 24-hex ObjectId"
+    },
+    {
+      "key": "targetSubscriptionPlanId",
+      "value": "",
+      "type": "string",
+      "description": "Target plan for upgrade/downgrade preview and apply"
+    },
+    {
+      "key": "upgradeWalletAmount",
+      "value": "0",
+      "type": "string",
+      "description": "Wallet portion for upgrade (must match preview amount_to_pay with cash)"
+    },
+    {
+      "key": "upgradeCashAmount",
+      "value": "0",
+      "type": "string",
+      "description": "Cash portion for upgrade"
     },
     {
       "key": "partnerServiceId",

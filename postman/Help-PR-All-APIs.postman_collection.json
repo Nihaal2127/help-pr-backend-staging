@@ -5032,8 +5032,146 @@
     },
     {
       "name": "14 — Partner subscription",
-      "description": "**/api/partner-subscription** — 15 request(s). Duplicates merged across source collections.",
+      "description": "**/api/partner-subscription** (admin) and **/api/mobile/partner/subscription** (partner app upgrade/downgrade).",
       "item": [
+        {
+          "name": "Mobile — get current subscription",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/partner/subscription",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "partner",
+                "subscription"
+              ]
+            },
+            "description": "**GET /api/mobile/partner/subscription** — current plan, wallet balance, days used."
+          }
+        },
+        {
+          "name": "Mobile — preview plan change",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"target_plan_id\": \"{{targetSubscriptionPlanId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/partner/subscription/change/preview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "partner",
+                "subscription",
+                "change",
+                "preview"
+              ]
+            },
+            "description": "**POST /api/mobile/partner/subscription/change/preview**"
+          }
+        },
+        {
+          "name": "Mobile — apply plan change",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"target_plan_id\": \"{{targetSubscriptionPlanId}}\",\n  \"wallet_amount\": {{upgradeWalletAmount}},\n  \"cash_amount\": {{upgradeCashAmount}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/partner/subscription/change",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "partner",
+                "subscription",
+                "change"
+              ]
+            },
+            "description": "**POST /api/mobile/partner/subscription/change** — upgrade (wallet + cash) or downgrade (`target_plan_id` only)."
+          }
+        },
+        {
+          "name": "Mobile — list change history",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/partner/subscription/changes?page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "partner",
+                "subscription",
+                "changes"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "**GET /api/mobile/partner/subscription/changes**"
+          }
+        },
         {
           "name": "Create partner subscription",
           "request": {
@@ -7266,11 +7404,24 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/api/order/financial-payments/getAll?page=1&limit=20",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "order", "financial-payments", "getAll"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "order",
+                "financial-payments",
+                "getAll"
+              ],
               "query": [
-                { "key": "page", "value": "1" },
-                { "key": "limit", "value": "20" }
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
               ]
             },
             "description": "**GET /api/order/financial-payments/getAll** — Financial — Order Payments grid (one row per order).\n\n**Doc:** `docs/FINANCIAL_ORDER_PAYMENTS_API.md`\n\n**Fields:** order_unique_id, user_name, partner_name, service_name, service_date, total_amount, commission/tax %, customer/partner paid & pending, payment statuses, order_status.\n\n**Filters:** franchise_id, order_status, customer_payment_status, partner_payment_status, search, from_date, to_date, sort_by, sort_order."
@@ -7290,8 +7441,16 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/api/order/financial-payments/get/{{orderId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "order", "financial-payments", "get", "{{orderId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "order",
+                "financial-payments",
+                "get",
+                "{{orderId}}"
+              ]
             },
             "description": "**GET /api/order/financial-payments/get/:id** — Same shape as one list row; `:id` = order `_id`."
           },
@@ -8089,20 +8248,63 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/api/order/financial-payments/getAll?page=1&limit=20&franchise_id={{franchiseId}}&order_status=&customer_payment_status=&partner_payment_status=&search=&from_date=&to_date=&sort_by=created_at&sort_order=desc",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "order", "financial-payments", "getAll"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "order",
+                "financial-payments",
+                "getAll"
+              ],
               "query": [
-                { "key": "page", "value": "1" },
-                { "key": "limit", "value": "20" },
-                { "key": "franchise_id", "value": "{{franchiseId}}", "description": "Super/staff: optional. Franchise staff: own franchise only." },
-                { "key": "order_status", "value": "", "description": "in_progress | completed | cancelled | refunded" },
-                { "key": "customer_payment_status", "value": "" },
-                { "key": "partner_payment_status", "value": "" },
-                { "key": "search", "value": "", "description": "Free-text: order_unique_id, customer name, partner name, service name" },
-                { "key": "from_date", "value": "" },
-                { "key": "to_date", "value": "" },
-                { "key": "sort_by", "value": "created_at" },
-                { "key": "sort_order", "value": "desc" }
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "franchise_id",
+                  "value": "{{franchiseId}}",
+                  "description": "Super/staff: optional. Franchise staff: own franchise only."
+                },
+                {
+                  "key": "order_status",
+                  "value": "",
+                  "description": "in_progress | completed | cancelled | refunded"
+                },
+                {
+                  "key": "customer_payment_status",
+                  "value": ""
+                },
+                {
+                  "key": "partner_payment_status",
+                  "value": ""
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": "Free-text: order_unique_id, customer name, partner name, service name"
+                },
+                {
+                  "key": "from_date",
+                  "value": ""
+                },
+                {
+                  "key": "to_date",
+                  "value": ""
+                },
+                {
+                  "key": "sort_by",
+                  "value": "created_at"
+                },
+                {
+                  "key": "sort_order",
+                  "value": "desc"
+                }
               ]
             },
             "description": "**GET /api/order/financial-payments/getAll** — Financial grid: one row per order (SR No, Order ID, user/partner/service, amounts, payment statuses)."
@@ -8122,8 +8324,16 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/api/order/financial-payments/get/{{orderId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "order", "financial-payments", "get", "{{orderId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "order",
+                "financial-payments",
+                "get",
+                "{{orderId}}"
+              ]
             },
             "description": "**GET /api/order/financial-payments/get/:id** — Same fields as one list row. Set `orderId` from list `order_id` / `_id`."
           },
@@ -8134,18 +8344,35 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
-              { "key": "Content-Type", "value": "application/json", "type": "text" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"type\": \"financial-order-payments\",\n  \"franchise_id\": \"{{franchiseId}}\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/getCount",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "getCount"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getCount"
+              ]
             },
             "description": "**POST /api/getCount** type **4** — `total_completed_orders`, `total_in_progress_orders`, `total_partner_pending_amount`, `total_user_pending_amount`. Aliases: `financials`, `order-payment`."
           },
@@ -12379,7 +12606,7 @@
                     ],
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"name\": \"Ravi Kumar\",\n  \"date_of_birth\": \"1995-06-15\",\n  \"phone_number\": \"+919876543210\",\n  \"email\": \"partner.mobile+1779343573155@example.com\",\n  \"password\": \"123456\"\n}",
+                      "raw": "{\n  \"name\": \"Ravi Kumar\",\n  \"date_of_birth\": \"1995-06-15\",\n  \"phone_number\": \"+919876543210\",\n  \"email\": \"partner.mobile+1781003008034@example.com\",\n  \"password\": \"123456\"\n}",
                       "options": {
                         "raw": {
                           "language": "json"
@@ -13486,7 +13713,7 @@
                     ],
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"name\": \"Plumbing repair\",\n  \"desc\": \"Standard plumbing service\",\n  \"price\": 499,\n  \"category_id\": \"{{category_id}}\",\n  \"city_ids\": [\"{{city_id}}\"],\n  \"state_ids\": [\"{{state_id}}\"],\n  \"image_url\": \"https://example.com/service.jpg\",\n  \"is_active\": true\n}",
+                      "raw": "{\n  \"name\": \"Plumbing repair\",\n  \"desc\": \"Standard plumbing service\",\n  \"category_id\": \"{{category_id}}\",\n  \"city_ids\": [\"{{city_id}}\"],\n  \"state_ids\": [\"{{state_id}}\"],\n  \"image_url\": \"https://example.com/service.jpg\",\n  \"is_active\": true\n}",
                       "options": {
                         "raw": {
                           "language": "json"
@@ -13704,7 +13931,7 @@
                     ],
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"name\": \"Imported single\",\n  \"desc\": \"Desc\",\n  \"price\": 199,\n  \"category_id\": \"{{category_id}}\",\n  \"city_ids\": [\"{{city_id}}\"],\n  \"state_ids\": [\"{{state_id}}\"],\n  \"image_url\": \"https://example.com/img.jpg\",\n  \"is_active\": true\n}",
+                      "raw": "{\n  \"name\": \"Imported single\",\n  \"desc\": \"Desc\",\n  \"category_id\": \"{{category_id}}\",\n  \"city_ids\": [\"{{city_id}}\"],\n  \"state_ids\": [\"{{state_id}}\"],\n  \"image_url\": \"https://example.com/img.jpg\",\n  \"is_active\": true\n}",
                       "options": {
                         "raw": {
                           "language": "json"
@@ -13802,7 +14029,7 @@
                         "type": "text"
                       }
                     ],
-                    "description": "**Request body (JSON)** — Required by `createServiceRequestMiddleware`: `name`, `desc`, `image_url`, `category_id` (existing Category ObjectId), `tax`, `commission`, `minimum_deposit` (non-negative numbers), `payment_type` (e.g. `per_hour`, `per_day`, `per_month`, `per_consultancy`). Optional: `price` (defaults 0), `city_ids`, `state_ids` (arrays). Route sets `is_request=true` → `approval_status: \"pending\"`, `requested_by` = JWT user, `is_active` false by default.\n\n**Response (200)** — `{ \"success\": true, \"status\": 200, \"message\": \"Service created successfully.\", \"record\": { ...Service } }`.\n\n**Response (400)** — missing required field messages from middleware or invalid ids.\n\nAlternate: `multipart/form-data` with `image` file per `serviceCreateParser` (still send other fields as form text).",
+                    "description": "**Request body (JSON)** — Required by `createServiceRequestMiddleware`: `name`, `desc`, `image_url`, `category_id` (existing Category ObjectId), `tax`, `commission`, `minimum_deposit` (non-negative numbers), `payment_type` (e.g. `per_hour`, `per_day`, `per_month`, `per_consultancy`). Optional: `city_ids`, `state_ids` (arrays). Route sets `is_request=true` → `approval_status: \"pending\"`, `requested_by` = JWT user, `is_active` false by default.\n\n**Response (200)** — `{ \"success\": true, \"status\": 200, \"message\": \"Service created successfully.\", \"record\": { ...Service } }`.\n\n**Response (400)** — missing required field messages from middleware or invalid ids.\n\nAlternate: `multipart/form-data` with `image` file per `serviceCreateParser` (still send other fields as form text).",
                     "url": {
                       "raw": "{{baseUrl}}/api/service/create-request",
                       "host": [
@@ -13816,7 +14043,7 @@
                     },
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"name\": \"Requested Service\",\n  \"desc\": \"Service description for approvers\",\n  \"image_url\": \"https://example.com/svc.png\",\n  \"category_id\": \"{{categoryObjectId}}\",\n  \"price\": 0,\n  \"tax\": 0,\n  \"commission\": 0,\n  \"payment_type\": \"per_hour\",\n  \"minimum_deposit\": 0,\n  \"city_ids\": [],\n  \"state_ids\": []\n}",
+                      "raw": "{\n  \"name\": \"Requested Service\",\n  \"desc\": \"Service description for approvers\",\n  \"image_url\": \"https://example.com/svc.png\",\n  \"category_id\": \"{{categoryObjectId}}\",\n  \"tax\": 0,\n  \"commission\": 0,\n  \"payment_type\": \"per_hour\",\n  \"minimum_deposit\": 0,\n  \"city_ids\": [],\n  \"state_ids\": []\n}",
                       "options": {
                         "raw": {
                           "language": "json"
@@ -13851,7 +14078,7 @@
                       "_postman_previewlanguage": "json",
                       "header": [],
                       "cookie": [],
-                      "body": "{\n  \"success\": true,\n  \"status\": 200,\n  \"message\": \"Service created successfully.\",\n  \"record\": {\n    \"_id\": \"64a700000000000000000020\",\n    \"name\": \"Requested Service\",\n    \"desc\": \"Service description for approvers\",\n    \"price\": 0,\n    \"tax\": 0,\n    \"commission\": 0,\n    \"payment_type\": \"per_hour\",\n    \"minimum_deposit\": 0,\n    \"category_id\": \"64a700000000000000000001\",\n    \"image_url\": \"https://example.com/svc.png\",\n    \"is_active\": false,\n    \"is_request\": true,\n    \"approval_status\": \"pending\",\n    \"requested_by\": \"64a700000000000000000099\"\n  }\n}"
+                      "body": "{\n  \"success\": true,\n  \"status\": 200,\n  \"message\": \"Service created successfully.\",\n  \"record\": {\n    \"_id\": \"64a700000000000000000020\",\n    \"name\": \"Requested Service\",\n    \"desc\": \"Service description for approvers\",\n    \"tax\": 0,\n    \"commission\": 0,\n    \"payment_type\": \"per_hour\",\n    \"minimum_deposit\": 0,\n    \"category_id\": \"64a700000000000000000001\",\n    \"image_url\": \"https://example.com/svc.png\",\n    \"is_active\": false,\n    \"is_request\": true,\n    \"approval_status\": \"pending\",\n    \"requested_by\": \"64a700000000000000000099\"\n  }\n}"
                     }
                   ],
                   "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → My Franchise → Services_"
@@ -14001,11 +14228,6 @@
                           "key": "desc",
                           "value": "Updated description",
                           "type": "text"
-                        },
-                        {
-                          "key": "price",
-                          "value": "1200",
-                          "type": "text"
                         }
                       ]
                     }
@@ -14052,11 +14274,6 @@
                         {
                           "key": "category_id",
                           "value": "{{categoryObjectId}}",
-                          "type": "text"
-                        },
-                        {
-                          "key": "price",
-                          "value": "999",
                           "type": "text"
                         },
                         {
@@ -14833,7 +15050,7 @@
               ]
             },
             {
-              "name": "10 — Partner subscription",
+              "name": "10 — Partner subscription (admin)",
               "description": "**8** request(s)",
               "item": [
                 {
@@ -14954,6 +15171,150 @@
                     }
                   },
                   "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 03 — Franchise Management_"
+                }
+              ]
+            },
+            {
+              "name": "10b — Subscription upgrade / downgrade",
+              "description": "**4** request(s)",
+              "item": [
+                {
+                  "name": "Mobile — apply plan change",
+                  "request": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"target_plan_id\": \"{{targetSubscriptionPlanId}}\",\n  \"wallet_amount\": {{upgradeWalletAmount}},\n  \"cash_amount\": {{upgradeCashAmount}}\n}"
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/subscription/change",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "subscription",
+                        "change"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/partner/subscription/change** — upgrade (wallet + cash) or downgrade (`target_plan_id` only)."
+                  }
+                },
+                {
+                  "name": "Mobile — get current subscription",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/subscription",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "subscription"
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/subscription** — current plan, wallet balance, days used."
+                  }
+                },
+                {
+                  "name": "Mobile — list change history",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/subscription/changes?page=1&limit=10",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "subscription",
+                        "changes"
+                      ],
+                      "query": [
+                        {
+                          "key": "page",
+                          "value": "1"
+                        },
+                        {
+                          "key": "limit",
+                          "value": "10"
+                        }
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/subscription/changes**"
+                  }
+                },
+                {
+                  "name": "Mobile — preview plan change",
+                  "request": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"target_plan_id\": \"{{targetSubscriptionPlanId}}\"\n}"
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/subscription/change/preview",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "subscription",
+                        "change",
+                        "preview"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/partner/subscription/change/preview**"
+                  }
                 }
               ]
             },
@@ -15204,7 +15565,7 @@
             },
             {
               "name": "13 — Orders & quotes",
-              "description": "**31** request(s)",
+              "description": "**32** request(s)",
               "item": [
                 {
                   "name": "1. Get all orders",
@@ -15363,6 +15724,71 @@
                   },
                   "response": [],
                   "description": "\n\n_Source: Help-PR-Orders-Module.postman_collection.json_"
+                },
+                {
+                  "name": "2a. Financial payments list",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{accessToken}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/order/financial-payments/getAll?page=1&limit=20",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "order",
+                        "financial-payments",
+                        "getAll"
+                      ],
+                      "query": [
+                        {
+                          "key": "page",
+                          "value": "1"
+                        },
+                        {
+                          "key": "limit",
+                          "value": "20"
+                        }
+                      ]
+                    },
+                    "description": "**GET /api/order/financial-payments/getAll** — Financial — Order Payments grid (one row per order).\n\n**Doc:** `docs/FINANCIAL_ORDER_PAYMENTS_API.md`\n\n**Fields:** order_unique_id, user_name, partner_name, service_name, service_date, total_amount, commission/tax %, customer/partner paid & pending, payment statuses, order_status.\n\n**Filters:** franchise_id, order_status, customer_payment_status, partner_payment_status, search, from_date, to_date, sort_by, sort_order."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "2b. Financial payment detail",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{accessToken}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/order/financial-payments/get/{{orderId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "order",
+                        "financial-payments",
+                        "get",
+                        "{{orderId}}"
+                      ]
+                    },
+                    "description": "**GET /api/order/financial-payments/get/:id** — Same shape as one list row; `:id` = order `_id`."
+                  },
+                  "response": []
                 },
                 {
                   "name": "3. Create order",

@@ -56,6 +56,7 @@ function flattenItems(items, folderPath = [], skipMobile = false) {
 }
 
 function classifyPartner(pathNorm) {
+  if (pathNorm.includes('/api/mobile/partner/subscription')) return 'partner_subscription_mobile';
   if (pathNorm.includes('/api/mobile/partner')) return 'register';
   if (pathNorm.includes('/api/partner_service')) return 'partner_service';
   if (pathNorm.includes('/api/partner_category')) return 'partner_category';
@@ -123,7 +124,8 @@ const PARTNER_FOLDER_LABELS = {
   partner_service: '07 — Partner services',
   documents: '08 — Documents',
   bank_account: '09 — Bank account',
-  partner_subscription: '10 — Partner subscription',
+  partner_subscription: '10 — Partner subscription (admin)',
+  partner_subscription_mobile: '10b — Subscription upgrade / downgrade',
   subscription_plan: '11 — Subscription plans',
   address: '12 — Address',
   orders: '13 — Orders & quotes',
@@ -285,6 +287,7 @@ function main() {
     'documents',
     'bank_account',
     'partner_subscription',
+    'partner_subscription_mobile',
     'subscription_plan',
     'address',
     'orders',

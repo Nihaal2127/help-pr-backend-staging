@@ -49,6 +49,7 @@ const expenseManagementRoutes = require('./routes/expense_management_routes');
 const partnerPayoutRoutes = require('./routes/partner_payout_routes');
 const refundRoutes = require('./routes/refund_routes');
 const partnerPostRoutes = require('./routes/partner_post_routes');
+const partnersRoutes = require('./routes/partners_routes');
 const { chatRoutes, registerChatSocket } = require('./src/modules/chat');
 const { setChatIo } = require('./src/modules/chat/sockets/chatEmitter');
 const mobileRoutes = require('./routes/mobile');
@@ -146,6 +147,7 @@ app.use('/api/expense-management', expenseManagementRoutes);
 app.use('/api/partner_payout', partnerPayoutRoutes);
 app.use('/api/refund', refundRoutes);
 app.use('/api/partner-post', partnerPostRoutes);
+app.use('/api/partners', partnersRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/mobile', mobileRoutes);
 

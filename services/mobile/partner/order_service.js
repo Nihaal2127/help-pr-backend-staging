@@ -34,6 +34,7 @@ const {
   embedOrderDetailForeignKeys,
 } = require('../../../utils/list_aggregation');
 const { attachRefundsToOrderRecords } = require('../../refund_service');
+const { attachPartnerOrderSummary } = require('../../../utils/partner_order_summary');
 
 const MOBILE_PARTNER_ORDER_LIST_SEARCH_FIELDS = [
   'unique_id',
@@ -330,7 +331,7 @@ const getPartnerOrderById = async (partnerId, orderId) => {
 
     return ok(200, {
       message: 'Order details fetched successfully.',
-      record: embedOrderDetailForeignKeys(record),
+      record: attachPartnerOrderSummary(embedOrderDetailForeignKeys(record)),
     });
   } catch (err) {
     console.error('mobile partner get order details', err.message);

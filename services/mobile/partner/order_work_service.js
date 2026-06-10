@@ -20,6 +20,7 @@ const {
 const { assertOrderCanBeMarkedCompleted } = require('../../order_completion_validation');
 const { loadOrderDetailLean } = require('../../order_detail_service');
 const { embedOrderDetailForeignKeys } = require('../../../utils/list_aggregation');
+const { attachPartnerOrderSummary } = require('../../../utils/partner_order_summary');
 const {
   MIN_IMAGES,
   MAX_IMAGES,
@@ -117,7 +118,7 @@ const updatePartnerWorkStatus = async (partnerId, orderId, body) => {
     const record = await loadOrderDetailLean(order._id);
     return ok(200, {
       message: 'Partner work status updated successfully.',
-      record: embedOrderDetailForeignKeys(record),
+      record: attachPartnerOrderSummary(embedOrderDetailForeignKeys(record)),
     });
   } catch (err) {
     console.error('mobile partner update work status', err.message);
@@ -239,7 +240,7 @@ const completePartnerOrderWork = async (partnerId, orderId, body, files) => {
       : 'Order completed successfully.';
     return ok(200, {
       message: responseMessage,
-      record: embedOrderDetailForeignKeys(record),
+      record: attachPartnerOrderSummary(embedOrderDetailForeignKeys(record)),
       post,
       post_error: postError,
     });

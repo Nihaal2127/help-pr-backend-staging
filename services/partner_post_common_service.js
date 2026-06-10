@@ -3,6 +3,7 @@ const { attachPartnerRatingFields } = require('../utils/rating_format');
 const { v4: uuidv4 } = require('uuid');
 const PartnerPost = require('../models/partner_post');
 const PartnerPostLike = require('../models/partner_post_like');
+const PartnerPostSave = require('../models/partner_post_save');
 const User = require('../models/user');
 const Order = require('../models/order');
 const Category = require('../models/category');
@@ -286,6 +287,21 @@ const loadLikedPostIds = async (userId, postIds) => {
   return new Set(likes.map((l) => String(l.post_id)));
 };
 
+const loadSavedPostIds = async (userId, postIds) => {
+  if (!userId || postIds.length === 0) {
+    return new Set();
+  }
+
+  const saves = await PartnerPostSave.find({
+    user_id: new mongoose.Types.ObjectId(String(userId)),
+    post_id: { $in: postIds.map((id) => new mongoose.Types.ObjectId(String(id))) },
+  })
+    .select('post_id')
+    .lean();
+
+  return new Set(saves.map((s) => String(s.post_id)));
+};
+
 const loadPartnerSummaries = async (partnerIds) => {
   if (partnerIds.length === 0) {
     return new Map();
@@ -335,6 +351,7 @@ const mapPostRecord = (post, options = {}) => {
   const {
     userId = null,
     likedPostIds = new Set(),
+    savedPostIds = new Set(),
     partnerById = new Map(),
     categoryById = new Map(),
     serviceById = new Map(),
@@ -361,6 +378,7 @@ const mapPostRecord = (post, options = {}) => {
 
   if (userId) {
     record.is_liked = likedPostIds.has(String(post._id));
+    record.is_saved = savedPostIds.has(String(post._id));
   }
 
   if (includePartner && post.partner_id) {
@@ -383,8 +401,9 @@ const mapPostRecords = async (posts, options = {}) => {
   const postIds = posts.map((p) => p._id);
   const partnerIds = [...new Set(posts.map((p) => String(p.partner_id)).filter(Boolean))];
 
-  const [likedPostIds, partnerById, labelMaps] = await Promise.all([
+  const [likedPostIds, savedPostIds, partnerById, labelMaps] = await Promise.all([
     loadLikedPostIds(userId, postIds),
+    loadSavedPostIds(userId, postIds),
     includePartner ? loadPartnerSummaries(partnerIds.map((id) => new mongoose.Types.ObjectId(id))) : Promise.resolve(new Map()),
     loadLinkedLabels(posts),
   ]);
@@ -393,6 +412,7 @@ const mapPostRecords = async (posts, options = {}) => {
     mapPostRecord(post, {
       userId,
       likedPostIds,
+      savedPostIds,
       partnerById,
       categoryById: labelMaps.categoryById,
       serviceById: labelMaps.serviceById,

@@ -20663,6 +20663,80 @@
                   "response": []
                 },
                 {
+                  "name": "Liked posts",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/posts/liked?page=1&limit=10",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "posts",
+                        "liked"
+                      ],
+                      "query": [
+                        {
+                          "key": "page",
+                          "value": "1"
+                        },
+                        {
+                          "key": "limit",
+                          "value": "10"
+                        }
+                      ]
+                    },
+                    "description": "**GET /api/mobile/user/posts/liked** — customer's liked posts, newest like first. No `franchise_id`."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Saved posts",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/posts/saved?page=1&limit=10",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "posts",
+                        "saved"
+                      ],
+                      "query": [
+                        {
+                          "key": "page",
+                          "value": "1"
+                        },
+                        {
+                          "key": "limit",
+                          "value": "10"
+                        }
+                      ]
+                    },
+                    "description": "**GET /api/mobile/user/posts/saved** — customer's saved posts, newest save first. No `franchise_id`."
+                  },
+                  "response": []
+                },
+                {
                   "name": "Get post",
                   "request": {
                     "method": "GET",
@@ -20751,6 +20825,62 @@
                       ]
                     },
                     "description": "**POST /api/mobile/user/posts/:postId/like** — toggle."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Save post",
+                  "request": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/posts/{{postId}}/save",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "posts",
+                        "{{postId}}",
+                        "save"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/user/posts/:postId/save** — idempotent. **201** first save; **200** if already saved. No request body."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Unsave post",
+                  "request": {
+                    "method": "DELETE",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/posts/{{postId}}/save",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "posts",
+                        "{{postId}}",
+                        "save"
+                      ]
+                    },
+                    "description": "**DELETE /api/mobile/user/posts/:postId/save** — **404** if not saved."
                   },
                   "response": []
                 },

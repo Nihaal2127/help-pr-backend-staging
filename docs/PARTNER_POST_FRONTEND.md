@@ -124,12 +124,28 @@ Optional query: `franchise_id` for franchise scope validation.
 | Action | Method | Path | Response highlights |
 |--------|--------|------|---------------------|
 | Like / unlike | `POST` | `/posts/:postId/like` | `{ is_liked, likes_count }` |
+| Save | `POST` | `/posts/:postId/save` | `{ is_saved, saved_at }` — idempotent |
+| Unsave | `DELETE` | `/posts/:postId/save` | `{ is_saved: false }` |
 | Share | `POST` | `/posts/:postId/share` | `{ share_url, share_token, shares_count }` |
 | Report | `POST` | `/posts/:postId/report` | Body: `{ reason, details? }` |
 
 **Report reasons:** `spam`, `inappropriate`, `misleading`, `other`. One report per user per post (**409** if duplicate).
 
-### 4.5 Deep link (cold start)
+Save / unsave mirror saved partners: **no request body** on POST; **201** on first save, **200** if already saved; **404** on DELETE if not saved.
+
+### 4.5 My liked & saved posts
+
+```
+GET /api/mobile/user/posts/liked?page=1&limit=10
+GET /api/mobile/user/posts/saved?page=1&limit=10
+```
+
+- **No `franchise_id`** — returns the customer’s collection across franchises.
+- Only **published** posts are included (hidden or deleted posts are omitted).
+- Sorted by most recently liked / saved.
+- Each record uses the same shape as the feed, plus `liked_at` or `saved_at`, and `is_liked` / `is_saved` set accordingly.
+
+### 4.6 Deep link (cold start)
 
 ```
 GET /api/mobile/user/posts/share/:shareToken
@@ -155,6 +171,7 @@ No auth. Returns `{ post, share_url }` for app handoff / link preview. Full like
   "shares_count": 3,
   "reports_count": 0,
   "is_liked": true,
+  "is_saved": false,
   "share_token": "abc123...",
   "share_url": "helppr://post/abc123...",
   "created_at": "2026-06-02T10:00:00.000Z",
@@ -198,6 +215,9 @@ Requires back-office JWT (`type` 1, 3, 5, or 6).
 | Partner profile → Work tab | `GET /partners/:id/posts` |
 | Post detail | `GET /posts/:id` |
 | Like button | `POST /posts/:id/like` |
+| Save bookmark | `POST /posts/:id/save` / `DELETE /posts/:id/save` |
+| My liked posts | `GET /posts/liked` |
+| My saved posts | `GET /posts/saved` |
 | Share sheet | `POST /posts/:id/share` → native share with `share_url` |
 | Report modal | `POST /posts/:id/report` |
 | Partner add work | `POST /partner/posts` multipart |

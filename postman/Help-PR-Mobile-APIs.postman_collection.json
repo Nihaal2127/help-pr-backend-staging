@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-mobile-apis-only",
     "name": "Help PR — Mobile APIs only",
-    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** → Register/Login → **Home** (assigned quotes + orders) → **Quotes** (accept/reject pending) → **Orders** (assigned jobs) → Update → **Bank accounts (list)** → Catalog → My services\n\n## Customer (User)\n1. **Login** → **Verify OTP** (dev OTP: `123456`)\n2. **Pincodes (search)** or set `{{homeLocation}}` — e.g. `500032,Gachibowli,Hyderabad,Telangana`\n3. **Home** — categories, services, partners for franchise (Bearer + `location` query)\n4. **Partners** — list → **Get partner profile** (catalog + professional summary) → **Create quote** with `partner_id`\n5. **Addresses** — create / get / update / delete\n6. **Quotes** — create / list / get / update / cancel (`franchise_id` required on create)\n7. **Update** — multipart `profile_photo` + profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.",
+    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** → Register/Login → **Home** (assigned quotes + orders) → **Quotes** (accept/reject pending) → **Orders** (assigned jobs) → Update → **Bank accounts (list)** → Catalog → My services\n\n## Customer (User)\n1. **Login** → **Verify OTP** (dev OTP: `123456`)\n2. **Pincodes (search)** or set `{{homeLocation}}` — e.g. `500032,Gachibowli,Hyderabad,Telangana`\n3. **Home** — categories, services, partners for franchise (Bearer + `location` query)\n4. **Partners** — list → **Get partner profile** (catalog + professional summary) → **Create quote** with `partner_id`\n5. **Addresses** — create / get / update / delete\n6. **Quotes** — create / list / get / update / cancel (`franchise_id` required on create)\n7. **Posts** — feed, liked/saved lists, like, save, share, report\n8. **Update** — multipart `profile_photo` + profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -3530,49 +3530,162 @@
         },
         {
           "name": "Posts",
-          "description": "Customer post feed, gallery, like, share, report — `post_routes.js`. See `docs/PARTNER_POST_FRONTEND.md`.",
+          "description": "Customer post feed, gallery, liked/saved lists, like, save, share, report — `post_routes.js`. See `docs/PARTNER_POST_FRONTEND.md`.\n\n**Suggested order:** **Home** (sets `{{franchiseId}}`) → **Feed** (sets `{{postId}}`) → **Like post** / **Save post** → **Liked posts** / **Saved posts**.",
           "item": [
             {
               "name": "Feed",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Feed listed', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "    pm.expect(j.data?.records).to.be.an('array');",
+                      "  });",
+                      "  const rec = j?.data?.records?.[0];",
+                      "  if (rec?._id) pm.collectionVariables.set('postId', String(rec._id));",
+                      "  if (rec?.share_token) pm.collectionVariables.set('postShareToken', String(rec.share_token));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
               "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
                 "method": "GET",
                 "header": [{ "key": "Accept", "value": "application/json" }],
                 "url": {
-                  "raw": "{{baseUrl}}/api/mobile/user/posts/feed?franchise_id={{franchiseId}}&page=1&limit=10",
+                  "raw": "{{baseUrl}}/api/mobile/user/posts/feed?franchise_id={{franchiseId}}&page={{postsPage}}&limit={{postsLimit}}",
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "mobile", "user", "posts", "feed"],
                   "query": [
                     { "key": "franchise_id", "value": "{{franchiseId}}" },
-                    { "key": "page", "value": "1" },
-                    { "key": "limit", "value": "10" }
+                    { "key": "page", "value": "{{postsPage}}" },
+                    { "key": "limit", "value": "{{postsLimit}}" }
                   ]
                 },
-                "description": "**GET /api/mobile/user/posts/feed** — run Home first for `{{franchiseId}}`."
+                "description": "**GET /api/mobile/user/posts/feed**\n\nRun **Home** first for `{{franchiseId}}`.\n\n| Query | Required | Notes |\n|-------|----------|--------|\n| `franchise_id` | Yes | Franchise ObjectId |\n| `page` | No | Default 1 (`{{postsPage}}`) |\n| `limit` | No | Default 10, max 50 (`{{postsLimit}}`) |\n\nEach record includes `partner`, `linked`, `is_liked`, `is_saved`, counts, and `share_url`. Sets `{{postId}}` and `{{postShareToken}}` from the first row."
               },
               "response": []
             },
             {
               "name": "Partner profile posts",
               "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
                 "method": "GET",
                 "header": [{ "key": "Accept", "value": "application/json" }],
                 "url": {
-                  "raw": "{{baseUrl}}/api/mobile/user/partners/{{quotePartnerId}}/posts?franchise_id={{franchiseId}}&page=1&limit=10",
+                  "raw": "{{baseUrl}}/api/mobile/user/partners/{{quotePartnerId}}/posts?franchise_id={{franchiseId}}&page={{postsPage}}&limit={{postsLimit}}",
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "mobile", "user", "partners", "{{quotePartnerId}}", "posts"],
                   "query": [
                     { "key": "franchise_id", "value": "{{franchiseId}}" },
-                    { "key": "page", "value": "1" },
-                    { "key": "limit", "value": "10" }
+                    { "key": "page", "value": "{{postsPage}}" },
+                    { "key": "limit", "value": "{{postsLimit}}" }
                   ]
                 },
-                "description": "**GET /api/mobile/user/partners/:partnerId/posts**"
+                "description": "**GET /api/mobile/user/partners/:partnerId/posts**\n\nPartner work gallery. Same post shape as feed (without nested `partner` on each card). Optional `franchise_id` for scope validation."
+              },
+              "response": []
+            },
+            {
+              "name": "Liked posts",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Liked posts listed', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "    pm.expect(j.data?.records).to.be.an('array');",
+                      "  });",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/posts/liked?page={{postsPage}}&limit={{postsLimit}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "posts", "liked"],
+                  "query": [
+                    { "key": "page", "value": "{{postsPage}}" },
+                    { "key": "limit", "value": "{{postsLimit}}" }
+                  ]
+                },
+                "description": "**GET /api/mobile/user/posts/liked**\n\nCustomer's liked posts across franchises. **No `franchise_id`.**\n\n| Query | Notes |\n|-------|--------|\n| `page` | Default 1 (`{{postsPage}}`) |\n| `limit` | Default 10, max 50 (`{{postsLimit}}`) |\n\nOnly **published** posts are returned. Sorted by most recently liked. Each record includes `liked_at`, `is_liked: true`, `is_saved`, `partner`, and `linked`."
+              },
+              "response": []
+            },
+            {
+              "name": "Saved posts",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Saved posts listed', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "    pm.expect(j.data?.records).to.be.an('array');",
+                      "  });",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/posts/saved?page={{postsPage}}&limit={{postsLimit}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "posts", "saved"],
+                  "query": [
+                    { "key": "page", "value": "{{postsPage}}" },
+                    { "key": "limit", "value": "{{postsLimit}}" }
+                  ]
+                },
+                "description": "**GET /api/mobile/user/posts/saved**\n\nCustomer's saved posts across franchises. **No `franchise_id`.**\n\n| Query | Notes |\n|-------|--------|\n| `page` | Default 1 (`{{postsPage}}`) |\n| `limit` | Default 10, max 50 (`{{postsLimit}}`) |\n\nOnly **published** posts are returned. Sorted by most recently saved. Each record includes `saved_at`, `is_saved: true`, `is_liked`, `partner`, and `linked`."
               },
               "response": []
             },
             {
               "name": "Get post",
               "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
                 "method": "GET",
                 "header": [{ "key": "Accept", "value": "application/json" }],
                 "url": {
@@ -3581,7 +3694,7 @@
                   "path": ["api", "mobile", "user", "posts", "{{postId}}"],
                   "query": [{ "key": "franchise_id", "value": "{{franchiseId}}" }]
                 },
-                "description": "**GET /api/mobile/user/posts/:postId**"
+                "description": "**GET /api/mobile/user/posts/:postId**\n\nSingle post detail. Optional `franchise_id` for franchise scope validation. Includes `is_liked` and `is_saved`."
               },
               "response": []
             },
@@ -3603,6 +3716,10 @@
             {
               "name": "Like post",
               "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
                 "method": "POST",
                 "header": [{ "key": "Accept", "value": "application/json" }],
                 "url": {
@@ -3610,13 +3727,150 @@
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "mobile", "user", "posts", "{{postId}}", "like"]
                 },
-                "description": "**POST /api/mobile/user/posts/:postId/like** — toggle."
+                "description": "**POST /api/mobile/user/posts/:postId/like**\n\nToggle like/unlike. No request body.\n\n**200 `data`:** `{ post_id, is_liked, likes_count }`"
               },
               "response": []
             },
             {
+              "name": "Save post",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Save post', function () {",
+                      "    pm.expect([200, 201]).to.include(pm.response.code);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "    pm.expect(j.data?.is_saved).to.eql(true);",
+                      "  });",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Accept", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/posts/{{postId}}/save",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "posts", "{{postId}}", "save"]
+                },
+                "description": "**POST /api/mobile/user/posts/:postId/save**\n\n| Input | Required | Notes |\n|-------|----------|--------|\n| Path `postId` | Yes | `{{postId}}` — from **Feed** or **Get post** |\n| Request body | **No** | API does not read the body. `{}` is a Postman placeholder only. |\n| `Authorization` | Yes | Customer Bearer `{{token}}` |\n\nPost must be **published**.\n\n**Responses**\n- **201** first save\n- **200** already saved (idempotent)\n- **404** post not found\n\n```json\n{\n  \"success\": true,\n  \"status\": 201,\n  \"message\": \"Post saved successfully.\",\n  \"data\": {\n    \"post_id\": \"...\",\n    \"franchise_id\": \"...\",\n    \"is_saved\": true,\n    \"saved_at\": \"2026-06-02T10:00:00.000Z\"\n  }\n}\n```"
+              },
+              "response": [
+                {
+                  "name": "201 Post saved",
+                  "originalRequest": {
+                    "method": "POST",
+                    "header": [{ "key": "Accept", "value": "application/json" }],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/posts/{{postId}}/save",
+                      "host": ["{{baseUrl}}"],
+                      "path": ["api", "mobile", "user", "posts", "{{postId}}", "save"]
+                    }
+                  },
+                  "status": "Created",
+                  "code": 201,
+                  "_postman_previewlanguage": "json",
+                  "header": [{ "key": "Content-Type", "value": "application/json" }],
+                  "body": "{\n  \"success\": true,\n  \"status\": 201,\n  \"message\": \"Post saved successfully.\",\n  \"data\": {\n    \"post_id\": \"665f00000000000000000001\",\n    \"franchise_id\": \"665f00000000000000000002\",\n    \"is_saved\": true,\n    \"saved_at\": \"2026-06-02T10:00:00.000Z\"\n  }\n}"
+                },
+                {
+                  "name": "200 Already saved",
+                  "originalRequest": {
+                    "method": "POST",
+                    "header": [{ "key": "Accept", "value": "application/json" }],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/posts/{{postId}}/save",
+                      "host": ["{{baseUrl}}"],
+                      "path": ["api", "mobile", "user", "posts", "{{postId}}", "save"]
+                    }
+                  },
+                  "status": "OK",
+                  "code": 200,
+                  "_postman_previewlanguage": "json",
+                  "header": [{ "key": "Content-Type", "value": "application/json" }],
+                  "body": "{\n  \"success\": true,\n  \"status\": 200,\n  \"message\": \"Post already saved.\",\n  \"data\": {\n    \"post_id\": \"665f00000000000000000001\",\n    \"franchise_id\": \"665f00000000000000000002\",\n    \"is_saved\": true,\n    \"saved_at\": \"2026-06-02T09:00:00.000Z\"\n  }\n}"
+                }
+              ]
+            },
+            {
+              "name": "Unsave post",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Unsave post', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "    pm.expect(j.data?.is_saved).to.eql(false);",
+                      "  });",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "DELETE",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/posts/{{postId}}/save",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "posts", "{{postId}}", "save"]
+                },
+                "description": "**DELETE /api/mobile/user/posts/:postId/save**\n\n| Input | Required | Notes |\n|-------|----------|--------|\n| Path `postId` | Yes | `{{postId}}` |\n| Request body | **No** | DELETE has no payload |\n| `Authorization` | Yes | Customer Bearer `{{token}}` |\n\n**Responses**\n- **200** removed from saved list\n- **404** post was not saved\n\n```json\n{\n  \"success\": true,\n  \"status\": 200,\n  \"message\": \"Post removed from saved list.\",\n  \"data\": {\n    \"post_id\": \"...\",\n    \"is_saved\": false\n  }\n}\n```"
+              },
+              "response": [
+                {
+                  "name": "200 Removed",
+                  "originalRequest": {
+                    "method": "DELETE",
+                    "header": [{ "key": "Accept", "value": "application/json" }],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/posts/{{postId}}/save",
+                      "host": ["{{baseUrl}}"],
+                      "path": ["api", "mobile", "user", "posts", "{{postId}}", "save"]
+                    }
+                  },
+                  "status": "OK",
+                  "code": 200,
+                  "_postman_previewlanguage": "json",
+                  "header": [{ "key": "Content-Type", "value": "application/json" }],
+                  "body": "{\n  \"success\": true,\n  \"status\": 200,\n  \"message\": \"Post removed from saved list.\",\n  \"data\": {\n    \"post_id\": \"665f00000000000000000001\",\n    \"is_saved\": false\n  }\n}"
+                }
+              ]
+            },
+            {
               "name": "Share post",
               "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
                 "method": "POST",
                 "header": [{ "key": "Accept", "value": "application/json" }],
                 "url": {
@@ -3624,13 +3878,17 @@
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "mobile", "user", "posts", "{{postId}}", "share"]
                 },
-                "description": "**POST /api/mobile/user/posts/:postId/share** — returns share_url."
+                "description": "**POST /api/mobile/user/posts/:postId/share**\n\nRecords a share and returns `{ share_url, share_token, shares_count }`. No request body."
               },
               "response": []
             },
             {
               "name": "Report post",
               "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
                 "method": "POST",
                 "header": [
                   { "key": "Content-Type", "value": "application/json" },
@@ -3646,7 +3904,7 @@
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "mobile", "user", "posts", "{{postId}}", "report"]
                 },
-                "description": "**POST /api/mobile/user/posts/:postId/report**"
+                "description": "**POST /api/mobile/user/posts/:postId/report**\n\n**Body:** `{ reason, details? }` — reasons: `spam`, `inappropriate`, `misleading`, `other`. **409** if already reported."
               },
               "response": []
             }
@@ -4235,10 +4493,22 @@
       "description": "Recent reviews limit for GET partners/:partnerId/ratings (max 20)"
     },
     {
+      "key": "postsPage",
+      "value": "1",
+      "type": "string",
+      "description": "Page for user post feed / liked / saved lists"
+    },
+    {
+      "key": "postsLimit",
+      "value": "10",
+      "type": "string",
+      "description": "Limit for user post feed / liked / saved lists (max 50)"
+    },
+    {
       "key": "postId",
       "value": "",
       "type": "string",
-      "description": "Partner post Mongo _id"
+      "description": "Partner post Mongo _id — set by Feed or partner Create post"
     },
     {
       "key": "postShareToken",

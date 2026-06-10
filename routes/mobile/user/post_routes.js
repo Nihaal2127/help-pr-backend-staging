@@ -11,9 +11,13 @@ const {
 const {
   listFeedHandler,
   listPartnerPostsHandler,
+  listLikedPostsHandler,
+  listSavedPostsHandler,
   getPostHandler,
   resolveShareTokenHandler,
   toggleLikeHandler,
+  savePostHandler,
+  unsavePostHandler,
   sharePostHandler,
   reportPostHandler,
 } = require('../../../controllers/mobile/user/post_controller');
@@ -21,6 +25,8 @@ const {
 router.get('/posts/share/:shareToken', validateShareTokenParam, resolveShareTokenHandler);
 
 router.get('/posts/feed', userAuthMiddleware, validateFranchiseIdQuery, listFeedHandler);
+router.get('/posts/liked', userAuthMiddleware, listLikedPostsHandler);
+router.get('/posts/saved', userAuthMiddleware, listSavedPostsHandler);
 router.get(
   '/partners/:partnerId/posts',
   userAuthMiddleware,
@@ -30,6 +36,8 @@ router.get(
 );
 router.get('/posts/:postId', userAuthMiddleware, validatePostIdParam, getPostHandler);
 router.post('/posts/:postId/like', userAuthMiddleware, validatePostIdParam, toggleLikeHandler);
+router.post('/posts/:postId/save', userAuthMiddleware, validatePostIdParam, savePostHandler);
+router.delete('/posts/:postId/save', userAuthMiddleware, validatePostIdParam, unsavePostHandler);
 router.post('/posts/:postId/share', userAuthMiddleware, validatePostIdParam, sharePostHandler);
 router.post(
   '/posts/:postId/report',

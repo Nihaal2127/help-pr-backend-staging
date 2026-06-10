@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const PartnerPost = require('../../../models/partner_post');
 const PartnerPostLike = require('../../../models/partner_post_like');
+const PartnerPostSave = require('../../../models/partner_post_save');
 const PartnerPostShare = require('../../../models/partner_post_share');
 const PartnerPostReport = require('../../../models/partner_post_report');
 const User = require('../../../models/user');
@@ -276,6 +277,180 @@ const recordPostShare = async (userId, postId) => {
   });
 };
 
+const paginateUserPostBookmarks = async (
+  userId,
+  query,
+  { collectionModel, timestampField, emptyMessage, successMessage }
+) => {
+  const page = parsePositiveInt(query.page, DEFAULT_PAGE);
+  const limit = Math.min(parsePositiveInt(query.limit, DEFAULT_LIMIT), MAX_LIMIT);
+  const skip = (page - 1) * limit;
+  const userOid = new mongoose.Types.ObjectId(String(userId));
+
+  const rows = await collectionModel
+    .find({ user_id: userOid })
+    .sort({ created_at: -1 })
+    .lean();
+
+  if (rows.length === 0) {
+    return ok(200, {
+      message: emptyMessage,
+      data: {
+        records: [],
+        totalItems: 0,
+        totalPages: 0,
+        currentPage: page,
+        limit,
+      },
+    });
+  }
+
+  const postIds = rows.map((row) => row.post_id);
+  const posts = await PartnerPost.find(publishedPostFilter({ _id: { $in: postIds } })).lean();
+  const postById = new Map(posts.map((post) => [String(post._id), post]));
+
+  const ordered = [];
+  for (const row of rows) {
+    const post = postById.get(String(row.post_id));
+    if (post) {
+      ordered.push({ post, at: row.created_at });
+    }
+  }
+
+  const totalItems = ordered.length;
+  const totalPages = Math.ceil(totalItems / limit) || 0;
+  const slice = ordered.slice(skip, skip + limit);
+  const records = await mapPostRecords(
+    slice.map((entry) => entry.post),
+    { userId, includePartner: true }
+  );
+
+  records.forEach((record, index) => {
+    record[timestampField] = slice[index].at;
+  });
+
+  return ok(200, {
+    message: successMessage,
+    data: {
+      records,
+      totalItems,
+      totalPages,
+      currentPage: page,
+      limit,
+    },
+  });
+};
+
+const listLikedPosts = async (userId, query) => {
+  try {
+    return await paginateUserPostBookmarks(userId, query, {
+      collectionModel: PartnerPostLike,
+      timestampField: 'liked_at',
+      emptyMessage: 'Liked posts fetched successfully.',
+      successMessage: 'Liked posts fetched successfully.',
+    });
+  } catch (err) {
+    console.error('listLikedPosts', err.message);
+    return fail(500, 'Internal server error.');
+  }
+};
+
+const listSavedPosts = async (userId, query) => {
+  try {
+    return await paginateUserPostBookmarks(userId, query, {
+      collectionModel: PartnerPostSave,
+      timestampField: 'saved_at',
+      emptyMessage: 'Saved posts fetched successfully.',
+      successMessage: 'Saved posts fetched successfully.',
+    });
+  } catch (err) {
+    console.error('listSavedPosts', err.message);
+    return fail(500, 'Internal server error.');
+  }
+};
+
+const savePostForCustomer = async (userId, postId) => {
+  try {
+    const postResult = await findPublishedPostById(postId);
+    if (!postResult.ok) return postResult;
+
+    const { post, postOid } = postResult.data;
+    const userOid = new mongoose.Types.ObjectId(String(userId));
+
+    const existing = await PartnerPostSave.findOne({
+      user_id: userOid,
+      post_id: postOid,
+    }).lean();
+
+    if (existing) {
+      return ok(200, {
+        message: 'Post already saved.',
+        data: {
+          post_id: postOid,
+          franchise_id: existing.franchise_id ?? post.franchise_id,
+          is_saved: true,
+          saved_at: existing.created_at,
+        },
+      });
+    }
+
+    const saved = await PartnerPostSave.create({
+      user_id: userOid,
+      post_id: postOid,
+      franchise_id: post.franchise_id,
+      created_at: new Date(),
+    });
+
+    return ok(201, {
+      message: 'Post saved successfully.',
+      data: {
+        post_id: postOid,
+        franchise_id: post.franchise_id,
+        is_saved: true,
+        saved_at: saved.created_at,
+      },
+    });
+  } catch (err) {
+    if (err?.code === 11000) {
+      return ok(200, {
+        message: 'Post already saved.',
+        data: { post_id: postId, is_saved: true },
+      });
+    }
+    console.error('savePostForCustomer', err.message);
+    return fail(500, 'Internal server error.');
+  }
+};
+
+const unsavePostForCustomer = async (userId, postId) => {
+  try {
+    const postParsed = parseObjectId(postId, 'post_id');
+    if (!postParsed.ok) {
+      return fail(400, postParsed.message);
+    }
+
+    const removed = await PartnerPostSave.deleteOne({
+      user_id: new mongoose.Types.ObjectId(String(userId)),
+      post_id: postParsed.oid,
+    });
+
+    if (removed.deletedCount === 0) {
+      return fail(404, 'Saved post not found.');
+    }
+
+    return ok(200, {
+      message: 'Post removed from saved list.',
+      data: {
+        post_id: postParsed.oid,
+        is_saved: false,
+      },
+    });
+  } catch (err) {
+    console.error('unsavePostForCustomer', err.message);
+    return fail(500, 'Internal server error.');
+  }
+};
+
 const reportPost = async (userId, postId, body) => {
   const postResult = await findPublishedPostById(postId);
   if (!postResult.ok) return postResult;
@@ -321,9 +496,13 @@ const reportPost = async (userId, postId, body) => {
 module.exports = {
   listPostsFeed,
   listPartnerProfilePosts,
+  listLikedPosts,
+  listSavedPosts,
   getPostDetail,
   resolvePostByShareToken,
   togglePostLike,
+  savePostForCustomer,
+  unsavePostForCustomer,
   recordPostShare,
   reportPost,
 };

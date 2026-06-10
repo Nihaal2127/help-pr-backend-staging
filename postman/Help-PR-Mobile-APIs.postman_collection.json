@@ -1297,7 +1297,7 @@
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "mobile", "partner", "orders", "{{orderId}}"]
                 },
-                "description": "**GET /api/mobile/partner/orders/:orderId**\n\n- **Auth:** Bearer partner — order must be assigned to caller (`partner_id`)\n- **Path `orderId`:** order Mongo `_id` (24-char hex)\n\n**200 `record`:** full order detail including `partner_work_status`, `work_proof_image_urls`, `work_completion_description`, `work_completed_at`, `partner_post_id`, `service_items[]`, payments, additional charges, refunds when applicable.\n\n**404** order not found or not assigned to partner | **400** invalid order id"
+                "description": "**GET /api/mobile/partner/orders/:orderId**\n\n- **Auth:** Bearer partner — order must be assigned to caller (`partner_id`)\n- **Path `orderId`:** order Mongo `_id` (24-char hex)\n\n**200 `record`:** full order detail including `partner_summary` (partner earnings rollup), `partner_work_status`, `work_proof_image_urls`, `service_items[]`, `additional_charges[]`, payments, refunds when applicable. Use `partner_summary` for money UI; extra charges: partner `amount`, not `total_amount`.\n\n**404** order not found or not assigned to partner | **400** invalid order id"
               },
               "response": []
             },

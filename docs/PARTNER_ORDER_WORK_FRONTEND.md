@@ -95,12 +95,30 @@ Use these fields from order detail (`GET /orders/:orderId`):
 | `in-progress` | `paid` | `in-progress` | **Complete job** — photo picker + optional “Share to feed” toggle |
 | `completed` | `paid` | `completed` | Done — show `work_proof_image_urls`, link to post if any |
 
-Helpful payment fields on the same record:
+Use **`partner_summary`** for all partner money UI (on **GET order detail**, **start work**, **complete**, and `order.partner_summary` after additional-charge CRUD). Do **not** show `total_price` as partner earnings.
 
-- `user_payment_status` — `unpaid` \| `partially_paid` \| `paid` \| `refund` \| `partially_refund`
-- `customer_due_amount` — remaining amount (0 when fully paid)
-- `total_price` — full order amount
-- `is_paid` — boolean rollup (prefer `user_payment_status` for UI)
+```json
+"partner_summary": {
+  "service_earning": 24,
+  "additional_charges_earning": 512,
+  "total_earning": 536,
+  "paid_amount": 1,
+  "due_amount": 535,
+  "payment_status": "partially_paid",
+  "customer_order_total": 648.56,
+  "customer_due_amount": 644.66,
+  "customer_payment_status": "partially_paid"
+}
+```
+
+| Block | Fields | Notes |
+|-------|--------|-------|
+| **Your earnings** | `total_earning`, `paid_amount`, `due_amount`, `payment_status` | Base service + extra charges only |
+| **Service** | `service_earning` | Same as `service_items[0].partner_earning` |
+| **Extra charges** | `additional_charges_earning` + `additional_charges[]` | Use each row’s **`amount`** (your charge), not `total_amount` (customer billed incl. tax & commission) |
+| **Customer payment** | `customer_*` | For “waiting for payment” / **Complete** gate (`customer_payment_status === "paid"`) |
+
+When adding charges (`POST .../additional-charges`), send **`amount`** — your portion. Server adds commission + tax for the customer bill.
 
 Customer payments are recorded on the **user app** (`POST /api/mobile/user/orders/:orderId/payments`). The partner app only **reads** payment status.
 
@@ -145,6 +163,7 @@ GET /api/mobile/partner/orders/:orderId
 | `work_completion_description` | string | Optional notes from complete request |
 | `work_completed_at` | ISO date | When partner completed |
 | `partner_post_id` | string \| null | Linked feed post if created |
+| `partner_summary` | object | Partner earnings rollup — use for money UI (see §4) |
 
 Plus existing fields: `service_items[]`, `order_payments`, `additional_charges`, payment breakdown, etc.
 

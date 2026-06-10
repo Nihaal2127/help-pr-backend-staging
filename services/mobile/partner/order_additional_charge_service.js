@@ -7,6 +7,7 @@ const {
   updateAdditionalCharge,
   deleteAdditionalCharge,
 } = require('../../order_additional_charge_service');
+const { buildPartnerOrderSummaryFromRollup } = require('../../../utils/partner_order_summary');
 
 const fail = (status, message) => ({ ok: false, status, message });
 const ok = (status, data) => ({ ok: true, status, data });
@@ -23,6 +24,7 @@ const formatOrderPricingSummary = (order) => ({
   additional_charges_commission: order.additional_charges_commission,
   additional_charges_tax: order.additional_charges_tax,
   additional_charges_total: order.additional_charges_total,
+  partner_summary: buildPartnerOrderSummaryFromRollup(order),
 });
 
 const loadPartnerOrder = async (partnerId, orderId) => {

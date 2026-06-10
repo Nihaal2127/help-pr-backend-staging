@@ -7,12 +7,15 @@ const {
   updateAdditionalCharge,
   deleteAdditionalCharge,
 } = require('../../order_additional_charge_service');
-const { buildPartnerOrderSummaryFromRollup } = require('../../../utils/partner_order_summary');
+const {
+  buildPartnerOrderSummaryFromOrderDoc,
+  formatPartnerAdditionalCharge,
+} = require('../../../utils/partner_order_summary');
 
 const fail = (status, message) => ({ ok: false, status, message });
 const ok = (status, data) => ({ ok: true, status, data });
 
-const formatOrderPricingSummary = (order) => ({
+const formatOrderPricingSummary = async (order) => ({
   payment_status: order.payment_status,
   user_payment_status: order.user_payment_status,
   is_paid: order.is_paid,
@@ -24,7 +27,7 @@ const formatOrderPricingSummary = (order) => ({
   additional_charges_commission: order.additional_charges_commission,
   additional_charges_tax: order.additional_charges_tax,
   additional_charges_total: order.additional_charges_total,
-  partner_summary: buildPartnerOrderSummaryFromRollup(order),
+  partner_summary: await buildPartnerOrderSummaryFromOrderDoc(order),
 });
 
 const loadPartnerOrder = async (partnerId, orderId) => {
@@ -55,7 +58,7 @@ const reloadOrderForPricing = async (orderId) => {
 
 const reloadOrderSummary = async (orderId) => {
   const order = await reloadOrderForPricing(orderId);
-  return order ? formatOrderPricingSummary(order) : null;
+  return order ? await formatOrderPricingSummary(order) : null;
 };
 
 const listPartnerOrderAdditionalCharges = async (partnerId, orderId) => {
@@ -63,11 +66,18 @@ const listPartnerOrderAdditionalCharges = async (partnerId, orderId) => {
     const access = await loadPartnerOrder(partnerId, orderId);
     if (!access.ok) return access;
 
-    const rows = await listActiveChargesByOrder(access.data.order._id);
+    const order = await reloadOrderForPricing(access.data.order._id);
+    if (!order) {
+      return fail(404, 'Order not found.');
+    }
+
+    const rows = await listActiveChargesByOrder(order._id);
+    const partnerSummary = await buildPartnerOrderSummaryFromOrderDoc(order);
 
     return ok(200, {
       message: 'Additional charges fetched.',
-      records: rows,
+      records: rows.map(formatPartnerAdditionalCharge),
+      partner_summary: partnerSummary,
     });
   } catch (err) {
     console.error('mobile partner list order additional charges', err.message);
@@ -86,11 +96,13 @@ const createPartnerOrderAdditionalCharge = async (partnerId, orderId, body) => {
     }
 
     const doc = await createAdditionalCharge(order, body);
+    const orderSummary = await reloadOrderSummary(order._id);
 
     return ok(201, {
       message: 'Additional charge added and order total updated.',
-      record: doc.toObject(),
-      order: await reloadOrderSummary(order._id),
+      record: formatPartnerAdditionalCharge(doc),
+      order: orderSummary,
+      partner_summary: orderSummary?.partner_summary ?? null,
     });
   } catch (err) {
     console.error('mobile partner create order additional charge', err.message);
@@ -130,11 +142,13 @@ const updatePartnerOrderAdditionalCharge = async (partnerId, orderId, chargeId, 
     if (!loaded.ok) return loaded;
 
     const row = await updateAdditionalCharge(loaded.data.order, loaded.data.charge, body);
+    const orderSummary = await reloadOrderSummary(loaded.data.order._id);
 
     return ok(200, {
       message: 'Charge updated and order total refreshed.',
-      record: row.toObject(),
-      order: await reloadOrderSummary(loaded.data.order._id),
+      record: formatPartnerAdditionalCharge(row),
+      order: orderSummary,
+      partner_summary: orderSummary?.partner_summary ?? null,
     });
   } catch (err) {
     console.error('mobile partner update order additional charge', err.message);
@@ -148,10 +162,12 @@ const deletePartnerOrderAdditionalCharge = async (partnerId, orderId, chargeId) 
     if (!loaded.ok) return loaded;
 
     await deleteAdditionalCharge(loaded.data.charge);
+    const orderSummary = await reloadOrderSummary(loaded.data.order._id);
 
     return ok(200, {
       message: 'Charge removed and order total refreshed.',
-      order: await reloadOrderSummary(loaded.data.order._id),
+      order: orderSummary,
+      partner_summary: orderSummary?.partner_summary ?? null,
     });
   } catch (err) {
     console.error('mobile partner delete order additional charge', err.message);

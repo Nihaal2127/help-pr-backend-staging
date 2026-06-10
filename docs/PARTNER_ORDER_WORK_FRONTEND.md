@@ -190,7 +190,7 @@ DELETE /api/mobile/partner/orders/:orderId/additional-charges/:chargeId
 | `payment_method` | No | `cash` \| `upi` \| `card` \| `online` \| `bank_transfer` \| `other` (default `other`) |
 | `charge_type` | No | e.g. `material`, `transport`, `labour`, `misc` (default `misc`) |
 
-**201 / 200 response** includes updated `order` rollup: `total_price`, `user_payment_status`, `customer_due_amount`, `additional_charges_subtotal`, `additional_charges_commission`, `additional_charges_tax`, `additional_charges_total`, etc.
+**Responses** include top-level **`partner_summary`** (same shape as order detail). Create/update also return **`record`** with `partner_amount` / `customer_billed_total` on each charge. List **GET** returns `records[]` + `partner_summary`. Mutations also include `order` pricing rollup (`total_price`, `user_payment_status`, `additional_charges_subtotal`, etc.).
 
 **Invalid `payment_method`** values are stored as `other` (same as admin). **404** if the order is not assigned to the partner or the charge id does not belong to the order.
 

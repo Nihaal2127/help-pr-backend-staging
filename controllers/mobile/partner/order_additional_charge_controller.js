@@ -26,6 +26,7 @@ const listOrderAdditionalChargesHandler = async (req, res) => {
       status: 200,
       message: result.data.message,
       records: result.data.records,
+      partner_summary: result.data.partner_summary,
     });
   } catch (error) {
     console.error('mobile partner list order additional charges handler', error.message);
@@ -58,6 +59,7 @@ const createOrderAdditionalChargeHandler = async (req, res) => {
       message: result.data.message,
       record: result.data.record,
       order: result.data.order,
+      partner_summary: result.data.partner_summary,
     });
   } catch (error) {
     console.error('mobile partner create order additional charge handler', error.message);
@@ -91,6 +93,7 @@ const updateOrderAdditionalChargeHandler = async (req, res) => {
       message: result.data.message,
       record: result.data.record,
       order: result.data.order,
+      partner_summary: result.data.partner_summary,
     });
   } catch (error) {
     console.error('mobile partner update order additional charge handler', error.message);
@@ -122,6 +125,7 @@ const deleteOrderAdditionalChargeHandler = async (req, res) => {
       status: 200,
       message: result.data.message,
       order: result.data.order,
+      partner_summary: result.data.partner_summary,
     });
   } catch (error) {
     console.error('mobile partner delete order additional charge handler', error.message);

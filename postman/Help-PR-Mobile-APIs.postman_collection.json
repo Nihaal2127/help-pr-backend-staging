@@ -1315,7 +1315,7 @@
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "mobile", "partner", "orders", "{{orderId}}", "additional-charges"]
                 },
-                "description": "**GET /api/mobile/partner/orders/:orderId/additional-charges**\n\n- **Auth:** Bearer partner — order assigned to caller\n- **200:** `records[]` active charge rows for the order\n\nAlso included on **Get order details** (`record.additional_charges`)."
+                "description": "**GET /api/mobile/partner/orders/:orderId/additional-charges**\n\n- **Auth:** Bearer partner — order assigned to caller\n- **200:** `records[]` (each with `partner_amount`, `customer_billed_total`) + `partner_summary`\n\nAlso included on **Get order details** (`record.additional_charges`)."
               },
               "response": []
             },
@@ -1354,7 +1354,7 @@
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "mobile", "partner", "orders", "{{orderId}}", "additional-charges"]
                 },
-                "description": "**POST /api/mobile/partner/orders/:orderId/additional-charges**\n\n- **Auth:** Bearer partner — order must be assigned to caller\n- **Required:** `amount` (≥ 0)\n- **Optional:** `label`, `description`, `payment_method` (`cash`|`upi`|`card`|`online`|`bank_transfer`|`other`; invalid → `other`), `charge_type`\n- Same pricing + rollup behavior as **POST /api/order-additional-charges/create**\n\n**201:** `record`, `order` pricing summary"
+                "description": "**POST /api/mobile/partner/orders/:orderId/additional-charges**\n\n- **Auth:** Bearer partner — order must be assigned to caller\n- **Required:** `amount` (≥ 0, partner portion)\n- **Optional:** `label`, `description`, `payment_method`, `charge_type`\n\n**201:** `record` (with `partner_amount`), `partner_summary`, `order` pricing rollup"
               },
               "response": []
             },
@@ -1379,7 +1379,7 @@
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "mobile", "partner", "orders", "{{orderId}}", "additional-charges", "{{additionalChargeId}}"]
                 },
-                "description": "**PUT /api/mobile/partner/orders/:orderId/additional-charges/:chargeId**\n\n- Partial body; recalculates order totals (same as admin **PUT /api/order-additional-charges/update/:id**)\n- Charge must belong to the path `orderId`"
+                "description": "**PUT /api/mobile/partner/orders/:orderId/additional-charges/:chargeId**\n\n- Partial body; recalculates order totals\n- **200:** `record`, `partner_summary`, `order` rollup"
               },
               "response": []
             },
@@ -1397,7 +1397,7 @@
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "mobile", "partner", "orders", "{{orderId}}", "additional-charges", "{{additionalChargeId}}"]
                 },
-                "description": "**DELETE /api/mobile/partner/orders/:orderId/additional-charges/:chargeId**\n\n- Soft-deletes charge and refreshes order `total_price` / payment status (same as admin delete)"
+                "description": "**DELETE /api/mobile/partner/orders/:orderId/additional-charges/:chargeId**\n\n- Soft-deletes charge and refreshes order totals\n- **200:** `partner_summary`, `order` rollup"
               },
               "response": []
             },

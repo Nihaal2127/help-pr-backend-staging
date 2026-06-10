@@ -33,15 +33,14 @@ const buildPartnerOrderSummary = (record) => {
   };
 };
 
-/** Same shape from order rollups (e.g. after additional-charge CRUD). */
-const buildPartnerOrderSummaryFromRollup = (order) => {
-  if (!order || typeof order !== 'object') return null;
-
-  const additionalChargesEarning = roundMoney(order.additional_charges_subtotal);
+const buildPartnerSummaryPayload = ({
+  serviceEarning,
+  additionalChargesEarning,
+  order,
+}) => {
   const paidAmount = roundMoney(order.partner_paid_amount);
   const dueAmount = roundMoney(order.partner_due_amount);
-  const totalEarning = roundMoney(paidAmount + dueAmount);
-  const serviceEarning = roundMoney(Math.max(0, totalEarning - additionalChargesEarning));
+  const totalEarning = roundMoney(serviceEarning + additionalChargesEarning);
 
   return {
     service_earning: serviceEarning,
@@ -57,6 +56,65 @@ const buildPartnerOrderSummaryFromRollup = (order) => {
   };
 };
 
+const resolveServiceEarningFromOrderDoc = async (order) => {
+  const serviceId = order?.service_items?.[0];
+  if (!serviceId) return 0;
+
+  const OrderService = require('../models/order_services');
+  const line = await OrderService.findOne({
+    _id: serviceId,
+    deleted_at: null,
+  })
+    .select('partner_earning total_service_charge service_price')
+    .lean();
+
+  return roundMoney(
+    line?.partner_earning ?? line?.total_service_charge ?? line?.service_price ?? 0
+  );
+};
+
+/** Order document after pricing sync (additional-charge routes). */
+const buildPartnerOrderSummaryFromOrderDoc = async (order) => {
+  if (!order || typeof order !== 'object') return null;
+
+  const serviceEarning = await resolveServiceEarningFromOrderDoc(order);
+  const additionalChargesEarning = roundMoney(order.additional_charges_subtotal ?? 0);
+
+  return buildPartnerSummaryPayload({
+    serviceEarning,
+    additionalChargesEarning,
+    order,
+  });
+};
+
+/** Sync fallback when service line is unavailable. */
+const buildPartnerOrderSummaryFromRollup = (order) => {
+  if (!order || typeof order !== 'object') return null;
+
+  const additionalChargesEarning = roundMoney(order.additional_charges_subtotal);
+  const paidAmount = roundMoney(order.partner_paid_amount);
+  const dueAmount = roundMoney(order.partner_due_amount);
+  const totalEarning = roundMoney(paidAmount + dueAmount);
+  const serviceEarning = roundMoney(Math.max(0, totalEarning - additionalChargesEarning));
+
+  return buildPartnerSummaryPayload({
+    serviceEarning,
+    additionalChargesEarning,
+    order,
+  });
+};
+
+/** Partner-facing row for additional charge list/detail. */
+const formatPartnerAdditionalCharge = (row) => {
+  if (!row || typeof row !== 'object') return row;
+  const plain = typeof row.toObject === 'function' ? row.toObject() : { ...row };
+  return {
+    ...plain,
+    partner_amount: roundMoney(plain.amount),
+    customer_billed_total: roundMoney(plain.total_amount),
+  };
+};
+
 const attachPartnerOrderSummary = (record) => {
   if (!record || typeof record !== 'object') return record;
   return { ...record, partner_summary: buildPartnerOrderSummary(record) };
@@ -64,6 +122,8 @@ const attachPartnerOrderSummary = (record) => {
 
 module.exports = {
   buildPartnerOrderSummary,
+  buildPartnerOrderSummaryFromOrderDoc,
   buildPartnerOrderSummaryFromRollup,
   attachPartnerOrderSummary,
+  formatPartnerAdditionalCharge,
 };

@@ -70,10 +70,13 @@ Partners **cannot** set `order_status` directly. They only move `partner_work_st
 2. PUT  /api/mobile/partner/orders/:orderId/work-status
        → Partner starts job (pending → in-progress)
 
-3. GET  /api/mobile/partner/orders/:orderId   (poll / refresh)
+3. POST /api/mobile/partner/orders/:orderId/additional-charges   (optional)
+       → Add transport / material / misc charges (same fields + pricing as admin web)
+
+4. GET  /api/mobile/partner/orders/:orderId   (poll / refresh)
        → Wait until user_payment_status === "paid"
 
-4. POST /api/mobile/partner/orders/:orderId/complete
+5. POST /api/mobile/partner/orders/:orderId/complete
        → Upload 1–4 proof images; optionally publish to customer feed
 ```
 
@@ -147,7 +150,36 @@ Plus existing fields: `service_items[]`, `order_payments`, `additional_charges`,
 
 ---
 
-### 5.3 Start work
+### 5.3 Additional service charges (partner CRUD)
+
+Partners can add, update, or remove extra charges on **their assigned orders** (same pricing rules and side effects as admin `/api/order-additional-charges`: commission + tax on each line; server recalculates `total_price`, `user_payment_status`, partner wallet caps, etc.).
+
+```
+GET    /api/mobile/partner/orders/:orderId/additional-charges
+POST   /api/mobile/partner/orders/:orderId/additional-charges
+PUT    /api/mobile/partner/orders/:orderId/additional-charges/:chargeId
+DELETE /api/mobile/partner/orders/:orderId/additional-charges/:chargeId
+```
+
+**Create body (JSON):**
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| `amount` | Yes | Number ≥ 0 (partner portion, pre-commission/tax) |
+| `label` | No | Short title, e.g. "Transport" |
+| `description` | No | Longer note |
+| `payment_method` | No | `cash` \| `upi` \| `card` \| `online` \| `bank_transfer` \| `other` (default `other`) |
+| `charge_type` | No | e.g. `material`, `transport`, `labour`, `misc` (default `misc`) |
+
+**201 / 200 response** includes updated `order` rollup: `total_price`, `user_payment_status`, `customer_due_amount`, `additional_charges_subtotal`, `additional_charges_commission`, `additional_charges_tax`, `additional_charges_total`, etc.
+
+**Invalid `payment_method`** values are stored as `other` (same as admin). **404** if the order is not assigned to the partner or the charge id does not belong to the order.
+
+Charges are also visible on **GET order detail** (`additional_charges` array). Admin web routes (`/api/order/update`, `/api/order-additional-charges`) are unchanged.
+
+---
+
+### 5.4 Start work
 
 ```
 PUT /api/mobile/partner/orders/:orderId/work-status
@@ -189,7 +221,7 @@ Content-Type: application/json
 
 ---
 
-### 5.4 Complete order (+ optional feed post)
+### 5.5 Complete order (+ optional feed post)
 
 ```
 POST /api/mobile/partner/orders/:orderId/complete
@@ -355,6 +387,10 @@ Back-office can still complete orders via **`PUT /api/order/update/:id`** with `
 | Step | Method | Path |
 |------|--------|------|
 | Load order | GET | `/api/mobile/partner/orders/:orderId` |
+| List charges | GET | `/api/mobile/partner/orders/:orderId/additional-charges` |
+| Add charge | POST | `/api/mobile/partner/orders/:orderId/additional-charges` |
+| Update charge | PUT | `/api/mobile/partner/orders/:orderId/additional-charges/:chargeId` |
+| Remove charge | DELETE | `/api/mobile/partner/orders/:orderId/additional-charges/:chargeId` |
 | Start work | PUT | `/api/mobile/partner/orders/:orderId/work-status` |
 | Complete + optional post | POST | `/api/mobile/partner/orders/:orderId/complete` |
 | Post later (optional) | POST | `/api/mobile/partner/posts` |

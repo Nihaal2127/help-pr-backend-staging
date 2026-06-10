@@ -12606,7 +12606,7 @@
                     ],
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"name\": \"Ravi Kumar\",\n  \"date_of_birth\": \"1995-06-15\",\n  \"phone_number\": \"+919876543210\",\n  \"email\": \"partner.mobile+1781003008034@example.com\",\n  \"password\": \"123456\"\n}",
+                      "raw": "{\n  \"name\": \"Ravi Kumar\",\n  \"date_of_birth\": \"1995-06-15\",\n  \"phone_number\": \"+919876543210\",\n  \"email\": \"partner.mobile+1781076037708@example.com\",\n  \"password\": \"123456\"\n}",
                       "options": {
                         "raw": {
                           "language": "json"
@@ -17729,6 +17729,1677 @@
                   "description": "\n\n_Source: content-expense-expense-category-management.postman_collection (1).json → 07 — User management → Partner_"
                 }
               ]
+            },
+            {
+              "name": "Catalog",
+              "description": "Bearer required. Run **after** Update sets location (`franchise_id`). **GET /categories** returns each category with nested `services`.",
+              "item": [
+                {
+                  "name": "Categories",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  const rec = j?.data?.[0];",
+                          "  if (rec?._id) pm.collectionVariables.set('categoryId', String(rec._id));",
+                          "  const svc0 = rec?.services?.[0];",
+                          "  const svc1 = rec?.services?.[1];",
+                          "  if (svc0?._id) pm.collectionVariables.set('serviceId', String(svc0._id));",
+                          "  if (svc1?._id) pm.collectionVariables.set('serviceId2', String(svc1._id));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/categories",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "categories"
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/categories**\n\n- **400** if no `franchise_id` — complete location on Update first\n- **200** `data[]`: `_id`, `name`, `desc`, `image_url`, `services[]` (`_id`, `name`, `desc`, `tax`, `image_url`, `category_id`)\n- Sets `{{categoryId}}`, `{{serviceId}}`, `{{serviceId2}}` from first category's services"
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
+              "name": "My services",
+              "description": "Bearer required. Partner's **saved** catalog. Each service includes `is_active` (local on/off). **PATCH status** and **PUT** require `verification_status` = 2 (approved). Run **List** first to set `{{partnerServiceId}}`. Run **Catalog** to refresh `{{categoryId}}` / `{{serviceId}}` for **Update**.",
+              "item": [
+                {
+                  "name": "List my services",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  const cat = j?.data?.[0];",
+                          "  if (cat?.category_id) {",
+                          "    pm.collectionVariables.set('myServiceCategoryId', String(cat.category_id));",
+                          "    pm.collectionVariables.set('categoryId', String(cat.category_id));",
+                          "  }",
+                          "  const svc = cat?.services?.[0];",
+                          "  if (svc?._id) pm.collectionVariables.set('partnerServiceId', String(svc._id));",
+                          "  if (svc?.service_id) {",
+                          "    pm.collectionVariables.set('myServiceServiceId', String(svc.service_id));",
+                          "    pm.collectionVariables.set('serviceId', String(svc.service_id));",
+                          "  }",
+                          "  if (svc?.price != null) pm.collectionVariables.set('myServicePrice', String(svc.price));",
+                          "  if (svc?.description) pm.collectionVariables.set('myServiceDescription', String(svc.description));",
+                          "  if (svc?.is_active !== undefined) pm.collectionVariables.set('myServiceIsActive', String(svc.is_active));",
+                          "  const allSvcs = (j?.data || []).flatMap((c) => c?.services || []);",
+                          "  if (allSvcs[1]?._id) pm.collectionVariables.set('partnerServiceId2', String(allSvcs[1]._id));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/my-services",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "my-services"
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/my-services**\n\n- **Auth:** Bearer `{{token}}`\n- **200** `data[]`: grouped by category — `category_id`, `category_name`, `services[]` with `_id` (partner_service row), `service_id`, `service_name`, `description`, `price`, `is_active`, `is_accept_request`, `tax`, `payment_type`, `minimum_deposit`, …\n- Empty catalog → `data: []`\n- Sets `{{partnerServiceId}}`, `{{partnerServiceId2}}` (second row, for bulk status), `{{myServiceCategoryId}}`, `{{myServiceServiceId}}`, `{{myServicePrice}}`, `{{myServiceDescription}}`, `{{myServiceIsActive}}`"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Patch service status (single)",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  if (j?.data?.is_active !== undefined) {",
+                          "    pm.collectionVariables.set('myServiceIsActive', String(j.data.is_active));",
+                          "  }",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "PATCH",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"is_active\": false\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/my-services/{{partnerServiceId}}/status",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "my-services",
+                        "{{partnerServiceId}}",
+                        "status"
+                      ]
+                    },
+                    "description": "**PATCH /api/mobile/partner/my-services/:id/status**\n\n- **Auth:** Bearer — partner must be **approved** (`verification_status` 2)\n- **Path:** `id` = partner_service row `_id` from **List my services** (`{{partnerServiceId}}`)\n- **Body:** `{ \"is_active\": true | false }` (boolean or `\"true\"` / `\"false\"`)\n- **200:** `{ success, status, message, data: { _id, is_active } }`\n- **403** if not approved | **404** if row not found"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Patch service status (bulk)",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  const first = j?.data?.updated?.[0];",
+                          "  if (first?.is_active !== undefined) {",
+                          "    pm.collectionVariables.set('myServiceIsActive', String(first.is_active));",
+                          "  }",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "PATCH",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"updates\": [\n    {\n      \"_id\": \"{{partnerServiceId}}\",\n      \"is_active\": true\n    },\n    {\n      \"_id\": \"{{partnerServiceId2}}\",\n      \"is_active\": false\n    }\n  ]\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/my-services/status",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "my-services",
+                        "status"
+                      ]
+                    },
+                    "description": "**PATCH /api/mobile/partner/my-services/status**\n\n- **Auth:** Bearer — partner must be **approved** (`verification_status` 2)\n- **Body:** `updates` non-empty array; each item **required:** `_id` (partner_service row), `is_active` (true | false)\n- **200:** `{ success, status, message, data: { updated: [{ _id, is_active }, ...] } }`\n- **400** duplicate `_id` in request | **403** if not approved | **404** if any row not found\n\nRun **List my services** first. For a single-row catalog, use one object in `updates` or set `{{partnerServiceId2}}` to a second row id."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Update my services",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  const cat = j?.data?.[0];",
+                          "  const svc = cat?.services?.[0];",
+                          "  if (svc?._id) pm.collectionVariables.set('partnerServiceId', String(svc._id));",
+                          "  if (svc?.price != null) pm.collectionVariables.set('myServicePrice', String(svc.price));",
+                          "  if (svc?.description) pm.collectionVariables.set('myServiceDescription', String(svc.description));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "PUT",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"services\": [\n    {\n      \"_id\": \"{{partnerServiceId}}\",\n      \"category_id\": \"{{categoryId}}\",\n      \"service_id\": \"{{serviceId}}\",\n      \"price\": {{myServicePrice}},\n      \"description\": \"{{myServiceDescription}}\"\n    }\n  ]\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/my-services",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "my-services"
+                      ]
+                    },
+                    "description": "**PUT /api/mobile/partner/my-services**\n\n- **Auth:** Bearer — partner must be **approved** (`verification_status` 2)\n- **Body:** `services` array; each item **required:** `_id` (partner_service row from List), `category_id`, `service_id`, `price`, `description`\n- **200:** updated grouped `data[]` + message\n- **403** if not approved | **404** if `_id` not found | **409** duplicate `service_id` on another row\n\nRun **List my services** first. Use **Catalog → Categories** to change `categoryId` / `serviceId` dropdown values."
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
+              "name": "Subscription",
+              "description": "Bearer required. **GET /subscription** — current plan + wallet balance. **GET /subscription-plans** — catalog. **POST /subscription/change/preview** and **POST /subscription/change** — upgrade (wallet + cash) or downgrade (wallet credit).",
+              "item": [
+                {
+                  "name": "List change history",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/subscription/changes?page=1&limit=10",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "subscription",
+                        "changes"
+                      ],
+                      "query": [
+                        {
+                          "key": "page",
+                          "value": "1"
+                        },
+                        {
+                          "key": "limit",
+                          "value": "10"
+                        }
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/subscription/changes**\n\n- **Auth:** Bearer `{{token}}`\n- **Query:** `page` (default 1), `limit` (default 10, max 50)\n- **200** `data.records[]`: completed upgrades/downgrades with proration and payment split"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get current subscription",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/subscription",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "subscription"
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/subscription**\n\n- **Auth:** Bearer `{{token}}`\n- **200** `data`: `subscription` (plan, dates, status), `wallet_balance`, `days_used`, `days_total`"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Preview plan change",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"target_plan_id\": \"{{targetSubscriptionPlanId}}\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/subscription/change/preview",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "subscription",
+                        "change",
+                        "preview"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/partner/subscription/change/preview**\n\n- **Body:** `target_plan_id` (ObjectId from **List plans**)\n- **200** `data`: `change_type` (upgrade|downgrade), proration breakdown, `amount_to_pay` or `wallet_credit`, `wallet_balance`"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Apply plan change (upgrade)",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"target_plan_id\": \"{{targetSubscriptionPlanId}}\",\n  \"wallet_amount\": {{upgradeWalletAmount}},\n  \"cash_amount\": {{upgradeCashAmount}}\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/subscription/change",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "subscription",
+                        "change"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/partner/subscription/change**\n\n**Upgrade:** `wallet_amount` + `cash_amount` must equal `amount_to_pay` from preview. Omitted amounts default to 0.\n\n**Downgrade:** send only `target_plan_id` (no payment). Unused value credited to wallet; new plan period starts immediately."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Apply plan change (downgrade)",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"target_plan_id\": \"{{targetSubscriptionPlanId}}\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/subscription/change",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "subscription",
+                        "change"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/partner/subscription/change** — downgrade only (`target_plan_id` lower tier). No `wallet_amount` / `cash_amount`."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "List plans",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  const rec = j?.data?.[0];",
+                          "  if (rec?._id) pm.collectionVariables.set('subscriptionPlanId', String(rec._id));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/subscription-plans",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "subscription-plans"
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/subscription-plans**\n\n- **Auth:** Bearer `{{token}}` (run **Login** or **Register** first)\n- **200** `data[]`: `_id`, `plan_name` (basic | silver | gold | platinum), `plan_description`, `price`, `duration`, `duration_type`, `priority`, `is_active`, timestamps\n- Plans with `deleted_at` null only (includes inactive plans; filter client-side if needed)\n- Sets `{{subscriptionPlanId}}` from first plan in list"
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
+              "name": "Quotes",
+              "description": "Partner quote actions (Phase 2). **Auth:** Bearer partner JWT (`type` 2) after **Login**.\n\n**Flow:** Customer creates quote with `partner_id` → **pending** → partner **List** → **Accept** (`accepted`) or **Reject** (`failed`).\n\nUse the same `{{quoteId}}` as customer flow (customer **Create quote** sets it) or pick from **List quotes**.",
+              "item": [
+                {
+                  "name": "List quotes",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Partner quotes listed', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.records).to.be.an('array');",
+                          "  });",
+                          "  const rec = j?.records?.[0];",
+                          "  if (rec?._id) pm.collectionVariables.set('quoteId', String(rec._id));",
+                          "  if (rec?.status) pm.collectionVariables.set('quoteStatus', String(rec.status));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/quotes?page={{quotesPage}}&limit={{quotesLimit}}&status={{quoteStatusFilter}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "quotes"
+                      ],
+                      "query": [
+                        {
+                          "key": "page",
+                          "value": "{{quotesPage}}"
+                        },
+                        {
+                          "key": "limit",
+                          "value": "{{quotesLimit}}"
+                        },
+                        {
+                          "key": "status",
+                          "value": "{{quoteStatusFilter}}",
+                          "description": "Default server filter: pending + accepted when empty"
+                        }
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/quotes**\n\n- **Auth:** Bearer partner (`type` 2)\n- Returns quotes where `partner_id` = logged-in partner\n- Default statuses: **pending**, **accepted** (when `status` query omitted)\n- **200:** `totalItems`, `totalPages`, `currentPage`, `limit`, `records[]`"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get quote by id",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Partner quote fetched', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "  });",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/quotes/{{quoteId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "quotes",
+                        "{{quoteId}}"
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/quotes/:id**\n\n- **Auth:** Bearer partner — must be assigned on quote (`partner_id`)"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Accept quote",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Quote accepted', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.data?.status).to.eql('accepted');",
+                          "  });",
+                          "  if (j?.data?.status) pm.collectionVariables.set('quoteStatus', String(j.data.status));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "PUT",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"status\": \"accepted\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/quotes/{{quoteId}}/status",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "quotes",
+                        "{{quoteId}}",
+                        "status"
+                      ]
+                    },
+                    "description": "**PUT /api/mobile/partner/quotes/:id/status**\n\n- **Auth:** Bearer partner\n- **Body:** `{ \"status\": \"accepted\" }`\n- Only from **pending** → **accepted**\n- Customer can then proceed to deposit / convert (Phase 3)"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Reject quote",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Quote rejected', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.data?.status).to.eql('failed');",
+                          "  });",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "PUT",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"status\": \"failed\",\n  \"rejection_reason\": \"{{quoteRejectionReason}}\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/quotes/{{quoteId}}/status",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "quotes",
+                        "{{quoteId}}",
+                        "status"
+                      ]
+                    },
+                    "description": "**PUT /api/mobile/partner/quotes/:id/status**\n\n- **Auth:** Bearer partner\n- **Body:** `{ \"status\": \"failed\", \"rejection_reason\": \"...\" }` (optional `cancellation_reason`)\n- Only from **pending** → **failed**"
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
+              "name": "Orders",
+              "description": "Partner assigned orders. **Auth:** Bearer partner JWT (`type` 2) after **Login**.\n\n**Flow:** List order → optional **Additional charges** (`POST .../additional-charges`, same rules as admin web) → **Start work** (`PUT .../work-status`) → customer pays in full → **Complete** (`POST .../complete` with proof photos). Optional `publish_as_post=true` creates a user-feed post.",
+              "item": [
+                {
+                  "name": "List orders",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Partner orders listed', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.records).to.be.an('array');",
+                          "    pm.expect(j.totalItems).to.be.a('number');",
+                          "    pm.expect(j.todayCount).to.be.a('number');",
+                          "  });",
+                          "  const rec = j?.records?.[0];",
+                          "  if (rec?._id) pm.collectionVariables.set('orderId', String(rec._id));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/orders?page={{ordersPage}}&limit={{ordersLimit}}&status={{orderStatusFilter}}&partner_work_status={{partnerWorkStatusFilter}}&search={{orderSearch}}&from_date={{orderFromDate}}&to_date={{orderToDate}}&is_paid={{orderIsPaid}}&user_payment_status={{orderPaymentStatus}}&partner_payment_status={{partnerPaymentStatus}}&franchise_id={{franchiseId}}&user_id={{userId}}&category_id={{categoryId}}&service_id={{serviceId}}&city_id={{cityId}}&address_id={{addressId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "orders"
+                      ],
+                      "query": [
+                        {
+                          "key": "page",
+                          "value": "{{ordersPage}}"
+                        },
+                        {
+                          "key": "limit",
+                          "value": "{{ordersLimit}}"
+                        },
+                        {
+                          "key": "status",
+                          "value": "{{orderStatusFilter}}",
+                          "description": "in-progress | completed | cancelled | refunded — leave empty for all"
+                        },
+                        {
+                          "key": "partner_work_status",
+                          "value": "{{partnerWorkStatusFilter}}",
+                          "description": "pending | in-progress | completed — leave empty for all",
+                          "disabled": true
+                        },
+                        {
+                          "key": "search",
+                          "value": "{{orderSearch}}",
+                          "description": "Search order id, customer, address, description, quote text",
+                          "disabled": true
+                        },
+                        {
+                          "key": "from_date",
+                          "value": "{{orderFromDate}}",
+                          "description": "YYYY-MM-DD",
+                          "disabled": true
+                        },
+                        {
+                          "key": "to_date",
+                          "value": "{{orderToDate}}",
+                          "description": "YYYY-MM-DD",
+                          "disabled": true
+                        },
+                        {
+                          "key": "is_paid",
+                          "value": "{{orderIsPaid}}",
+                          "description": "true | false",
+                          "disabled": true
+                        },
+                        {
+                          "key": "user_payment_status",
+                          "value": "{{orderPaymentStatus}}",
+                          "description": "Customer rollup: unpaid | paid | partially_paid | refund | partially_refund",
+                          "disabled": true
+                        },
+                        {
+                          "key": "partner_payment_status",
+                          "value": "{{partnerPaymentStatus}}",
+                          "description": "Partner rollup: unpaid | partially_paid | paid",
+                          "disabled": true
+                        },
+                        {
+                          "key": "franchise_id",
+                          "value": "{{franchiseId}}",
+                          "description": "Optional ObjectId filter",
+                          "disabled": true
+                        },
+                        {
+                          "key": "user_id",
+                          "value": "{{userId}}",
+                          "description": "Optional customer ObjectId filter",
+                          "disabled": true
+                        },
+                        {
+                          "key": "category_id",
+                          "value": "{{categoryId}}",
+                          "description": "Optional ObjectId filter",
+                          "disabled": true
+                        },
+                        {
+                          "key": "service_id",
+                          "value": "{{serviceId}}",
+                          "description": "Optional ObjectId filter",
+                          "disabled": true
+                        },
+                        {
+                          "key": "city_id",
+                          "value": "{{cityId}}",
+                          "description": "Optional ObjectId filter",
+                          "disabled": true
+                        },
+                        {
+                          "key": "address_id",
+                          "value": "{{addressId}}",
+                          "description": "Optional ObjectId filter",
+                          "disabled": true
+                        }
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/orders**\n\n- **Auth:** Bearer partner (`type` 2)\n- Lists orders assigned to the authenticated partner (`partner_id`)\n- **Pagination:** `page`, `limit` (max 50)\n- **Search:** `search` (or `q`) on order fields plus linked customer, category, service, city, franchise, and quote text\n- **Filters:** `status`, `partner_work_status`, `from_date`, `to_date`, `is_paid`, `user_payment_status` (or `payment_status`), `partner_payment_status`, and optional ObjectId filters: `franchise_id`, `user_id`, `category_id`, `service_id`, `city_id`, `address_id`\n- **200:** `totalItems`, `todayCount`, `totalPages`, `currentPage`, `limit`, `records[]` (includes `partner_work_status`)"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get order details",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Partner order details fetched', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.record).to.be.an('object');",
+                          "    pm.expect(j.record._id).to.be.a('string');",
+                          "  });",
+                          "  if (j?.record?._id) pm.collectionVariables.set('orderId', String(j.record._id));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/orders/{{orderId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "orders",
+                        "{{orderId}}"
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/orders/:orderId**\n\n- **Auth:** Bearer partner — order must be assigned to caller (`partner_id`)\n- **Path `orderId`:** order Mongo `_id` (24-char hex)\n\n**200 `record`:** full order detail including `partner_work_status`, `work_proof_image_urls`, `work_completion_description`, `work_completed_at`, `partner_post_id`, `service_items[]`, payments, additional charges, refunds when applicable.\n\n**404** order not found or not assigned to partner | **400** invalid order id"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "List additional charges",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/orders/{{orderId}}/additional-charges",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "orders",
+                        "{{orderId}}",
+                        "additional-charges"
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/orders/:orderId/additional-charges**\n\n- **Auth:** Bearer partner — order assigned to caller\n- **200:** `records[]` active charge rows for the order\n\nAlso included on **Get order details** (`record.additional_charges`)."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Create additional charge",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  if (j?.record?._id) pm.collectionVariables.set('additionalChargeId', String(j.record._id));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"amount\": 150,\n  \"label\": \"Transport\",\n  \"description\": \"Extra visit for materials\",\n  \"payment_method\": \"upi\",\n  \"charge_type\": \"transport\"\n}"
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/orders/{{orderId}}/additional-charges",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "orders",
+                        "{{orderId}}",
+                        "additional-charges"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/partner/orders/:orderId/additional-charges**\n\n- **Auth:** Bearer partner — order must be assigned to caller\n- **Required:** `amount` (≥ 0)\n- **Optional:** `label`, `description`, `payment_method` (`cash`|`upi`|`card`|`online`|`bank_transfer`|`other`; invalid → `other`), `charge_type`\n- Same pricing + rollup behavior as **POST /api/order-additional-charges/create**\n\n**201:** `record`, `order` pricing summary"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Update additional charge",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "PUT",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"amount\": 200,\n  \"label\": \"Transport (updated)\",\n  \"description\": \"Updated note\",\n  \"payment_method\": \"cash\",\n  \"charge_type\": \"transport\"\n}"
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/orders/{{orderId}}/additional-charges/{{additionalChargeId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "orders",
+                        "{{orderId}}",
+                        "additional-charges",
+                        "{{additionalChargeId}}"
+                      ]
+                    },
+                    "description": "**PUT /api/mobile/partner/orders/:orderId/additional-charges/:chargeId**\n\n- Partial body; recalculates order totals (same as admin **PUT /api/order-additional-charges/update/:id**)\n- Charge must belong to the path `orderId`"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Delete additional charge",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "DELETE",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/orders/{{orderId}}/additional-charges/{{additionalChargeId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "orders",
+                        "{{orderId}}",
+                        "additional-charges",
+                        "{{additionalChargeId}}"
+                      ]
+                    },
+                    "description": "**DELETE /api/mobile/partner/orders/:orderId/additional-charges/:chargeId**\n\n- Soft-deletes charge and refreshes order `total_price` / payment status\n- **409** if order is not `in-progress`"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Start work (partner_work_status → in-progress)",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "PUT",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"partner_work_status\": \"in-progress\"\n}"
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/orders/{{orderId}}/work-status",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "orders",
+                        "{{orderId}}",
+                        "work-status"
+                      ]
+                    },
+                    "description": "**PUT /api/mobile/partner/orders/:orderId/work-status**\n\n- **Auth:** Bearer partner\n- Order must be `in-progress` with `partner_work_status` = `pending`\n- Sets `partner_work_status` to `in-progress` (partner started the job)\n\n**200:** `record` with updated order detail"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Complete order (proof photos + optional feed post)",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "formdata",
+                      "formdata": [
+                        {
+                          "key": "description",
+                          "value": "Job completed successfully.",
+                          "type": "text",
+                          "description": "Optional completion notes; required when publish_as_post=true"
+                        },
+                        {
+                          "key": "publish_as_post",
+                          "value": "false",
+                          "type": "text",
+                          "description": "true to create user-feed partner post from proof images"
+                        },
+                        {
+                          "key": "images",
+                          "type": "file",
+                          "src": [],
+                          "description": "1-4 JPEG/PNG proof-of-service images (required)"
+                        }
+                      ]
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/orders/{{orderId}}/complete",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "orders",
+                        "{{orderId}}",
+                        "complete"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/partner/orders/:orderId/complete**\n\n- **Auth:** Bearer partner\n- **Multipart:** 1–4 `images` (proof of service)\n- **Preconditions:**\n  - `partner_work_status` = `in-progress` (call **Start work** first)\n  - Customer fully paid (`user_payment_status` = `paid`)\n- Sets `partner_work_status` and `order_status` to `completed`\n- Saves `work_proof_image_urls`, `work_completed_at`\n- Optional `publish_as_post=true` + `description` creates linked `partner_post` for user feed\n\n**409** if customer has not paid in full | **200:** `record`, optional `post`"
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
+              "name": "Bank accounts",
+              "description": "Bearer required. **List** returns only the logged-in partner's bank accounts (`bank_account_routes.js`). Add or replace accounts via **Update** (`bank_account` field; requires `verification_status` = 2).",
+              "item": [
+                {
+                  "name": "List bank accounts",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Bank accounts listed', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.data).to.be.an('array');",
+                          "  });",
+                          "  const rec = j?.data?.[0];",
+                          "  if (rec?._id) pm.collectionVariables.set('partnerBankAccountId', String(rec._id));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/bank-accounts/get?search=",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "bank-accounts",
+                        "get"
+                      ],
+                      "query": [
+                        {
+                          "key": "search",
+                          "value": "",
+                          "description": "Optional — filter by bank name, branch, holder name, account number, or IFSC",
+                          "disabled": true
+                        }
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/bank-accounts/get**\n\n- **Auth:** Bearer partner `{{token}}` (`type` 2) after **Login**\n- Returns **only** the logged-in partner's active bank accounts (`deleted_at: null`)\n- No `partner_id` query — scoped from JWT `req.user.id`\n- **200** `data[]`: `_id`, `partner_id`, `bank_name`, `account_holder_name`, `account_number`, `ifsc_code`, `branch_name`, `is_primary`, `created_at`, `updated_at`, `deleted_at`\n- Sorted: primary first, then newest\n- Empty list → `data: []`\n- **401** no/invalid token | **403** not a partner account | **404** partner not found\n- Optional query: `search` (bank name, branch, holder, account number, IFSC)\n- Sets `{{partnerBankAccountId}}` from first row when present"
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
+              "name": "Posts",
+              "description": "Partner portfolio posts — `post_routes.js`. Requires verified partner. See `docs/PARTNER_POST_FRONTEND.md`.",
+              "item": [
+                {
+                  "name": "Order options",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/posts/order-options?page=1&limit=10",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "posts",
+                        "order-options"
+                      ],
+                      "query": [
+                        {
+                          "key": "page",
+                          "value": "1"
+                        },
+                        {
+                          "key": "limit",
+                          "value": "10"
+                        }
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/posts/order-options**"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Create post (legacy work)",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  if (j?.data?._id) pm.collectionVariables.set('postId', String(j.data._id));",
+                          "  if (j?.data?.share_token) pm.collectionVariables.set('postShareToken', String(j.data.share_token));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "formdata",
+                      "formdata": [
+                        {
+                          "key": "post_type",
+                          "value": "legacy_work",
+                          "type": "text"
+                        },
+                        {
+                          "key": "legacy_service_name",
+                          "value": "Home painting before joining app",
+                          "type": "text"
+                        },
+                        {
+                          "key": "description",
+                          "value": "Sample legacy work post from Postman.",
+                          "type": "text"
+                        },
+                        {
+                          "key": "images",
+                          "type": "file",
+                          "src": [],
+                          "description": "Add 1-4 JPEG/PNG files"
+                        }
+                      ]
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/posts",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "posts"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/partner/posts** — multipart, 1-4 images."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "List own posts",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/posts?page=1&limit=10",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "posts"
+                      ],
+                      "query": [
+                        {
+                          "key": "page",
+                          "value": "1"
+                        },
+                        {
+                          "key": "limit",
+                          "value": "10"
+                        }
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/posts**"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get post",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/posts/{{postId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "posts",
+                        "{{postId}}"
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/posts/:postId**"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Delete post",
+                  "request": {
+                    "method": "DELETE",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/posts/{{postId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "posts",
+                        "{{postId}}"
+                      ]
+                    },
+                    "description": "**DELETE /api/mobile/partner/posts/:postId**"
+                  },
+                  "response": []
+                }
+              ]
             }
           ]
         },
@@ -18130,6 +19801,1027 @@
                     }
                   },
                   "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 13 — Support Center (tickets)_"
+                }
+              ]
+            },
+            {
+              "name": "Addresses",
+              "description": "Saved delivery addresses. Run **Common → Location** first for dropdown IDs. Bearer required (run **Verify OTP**).",
+              "item": [
+                {
+                  "name": "List addresses",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Addresses listed', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.data).to.be.an('array');",
+                          "  });",
+                          "  const rec = j?.data?.[0];",
+                          "  if (rec?._id) {",
+                          "    pm.collectionVariables.set('addressId', String(rec._id));",
+                          "    if (rec.state_id) pm.collectionVariables.set('stateId', String(rec.state_id));",
+                          "    if (rec.city_id) pm.collectionVariables.set('cityId', String(rec.city_id));",
+                          "    if (rec.area_id) pm.collectionVariables.set('areaId', String(rec.area_id));",
+                          "    if (rec.pincode) pm.collectionVariables.set('pincode', String(rec.pincode));",
+                          "    if (rec.address) pm.collectionVariables.set('customerAddressLine', String(rec.address));",
+                          "  }",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/addresses/get",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "addresses",
+                        "get"
+                      ]
+                    },
+                    "description": "**GET /api/mobile/user/addresses/get**\n\n- **Auth:** Bearer `{{token}}`\n- **200** `data[]`: active addresses only (`deleted_at: null` in response; soft-deleted rows are omitted)\n- Fields: `_id`, `state_id`, `city_id`, `area_id`, `pincode`, `address`, `state_name`, `city_name`, `area_name`, `address_status`, `deleted_at`, `created_at`, `updated_at`\n- Sets `{{addressId}}` from first row"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Create address",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Address created', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "  });",
+                          "  if (j?.data?._id) pm.collectionVariables.set('addressId', String(j.data._id));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"state_id\": \"{{stateId}}\",\n  \"city_id\": \"{{cityId}}\",\n  \"area_id\": \"{{areaId}}\",\n  \"pincode\": \"{{pincode}}\",\n  \"address\": \"{{customerAddressLine}}\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/addresses/create",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "addresses",
+                        "create"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/user/addresses/create**\n\n- **Auth:** Bearer\n- **Required:** `state_id`, `city_id`, `area_id`, `pincode` (from **Common → Pincodes** dropdown), `address` (text)\n- `pincode` may be string `\"560001\"` or object `{ \"pincode\": \"560001\" }`\n- **First address** also copies location into `users` table"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Update address",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Address updated', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "  });",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "PUT",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"state_id\": \"{{stateId}}\",\n  \"city_id\": \"{{cityId}}\",\n  \"area_id\": \"{{areaId}}\",\n  \"pincode\": \"{{pincode}}\",\n  \"address\": \"{{customerAddressLine}}\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/addresses/update/{{addressId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "addresses",
+                        "update",
+                        "{{addressId}}"
+                      ]
+                    },
+                    "description": "**PUT /api/mobile/user/addresses/update/:id**\n\n- **Auth:** Bearer\n- Path: `{{addressId}}` from Get or Create\n- All fields required only if final value is empty (request value or existing saved value)\n- If updating location, send all four: `state_id`, `city_id`, `area_id`, `pincode` together"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Delete address",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Address deleted', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "  });",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "DELETE",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/addresses/delete/{{addressId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "addresses",
+                        "delete",
+                        "{{addressId}}"
+                      ]
+                    },
+                    "description": "**DELETE /api/mobile/user/addresses/delete/:id**\n\n- **Auth:** Bearer\n- Soft-deletes the address (row hidden from Get; `deleted_at` set in DB)"
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
+              "name": "Quotes",
+              "description": "Customer quote requests (Phase 1). **Auth:** Bearer customer JWT (`type` 4) after **Verify OTP**.\n\n**Prerequisites:** **Home** (`{{franchiseId}}`, `{{categoryId}}`, `{{serviceId}}`), **Addresses → Create** (`{{addressId}}`). For **with partner**, run **Partners (list)** first (`{{quotePartnerId}}`).\n\n**Two create types (same endpoint):**\n| Type | `partner_id` | Initial status |\n|------|----------------|----------------|\n| Without partner | omit or `\"\"` | **new** (franchise/admin can assign later) |\n| With partner | valid partner ObjectId | **pending** (partner can accept) |\n\nPartner flow: **Partner → Quotes → Accept**.",
+              "item": [
+                {
+                  "name": "Create quote (without partner)",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Quote created (new)', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.data?.status).to.eql('new');",
+                          "  });",
+                          "  const rec = j?.data;",
+                          "  if (rec?._id) pm.collectionVariables.set('quoteId', String(rec._id));",
+                          "  if (rec?.quote_sequence_id) pm.collectionVariables.set('quoteSequenceId', String(rec.quote_sequence_id));",
+                          "  if (rec?.status) pm.collectionVariables.set('quoteStatus', String(rec.status));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"franchise_id\": \"{{franchiseId}}\",\n  \"category_id\": \"{{categoryId}}\",\n  \"service_id\": \"{{serviceId}}\",\n  \"address_id\": \"{{addressId}}\",\n  \"total_service_charge\": {{quoteTotalServiceCharge}},\n  \"from_date\": \"{{quoteFromDate}}\",\n  \"to_date\": \"{{quoteToDate}}\",\n  \"work_hours_per_day\": {{quoteWorkHoursPerDay}},\n  \"total_work_hours\": {{quoteTotalWorkHours}},\n  \"work_start_time\": \"{{quoteWorkStartTime}}\",\n  \"work_end_time\": \"{{quoteWorkEndTime}}\",\n  \"quote_description\": \"{{quoteDescription}}\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/quotes/create",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "quotes",
+                        "create"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/user/quotes/create** — no partner\n\n- **No `partner_id` in body** → quote status **new**, `partner_id` null\n- **Pricing:** `total_service_charge` / `total_price` are **0** until a partner is assigned (**Update** with `partner_id` → server sets charge from `partner_service.price`)\n- Do not send `total_service_charge` on this flow\n- Franchise admin sees quote under `franchise_id`; partner assigned later via **Update** or admin"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Create quote (with partner)",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Quote created (pending)', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.data?.status).to.eql('pending');",
+                          "  });",
+                          "  const rec = j?.data;",
+                          "  if (rec?._id) pm.collectionVariables.set('quoteId', String(rec._id));",
+                          "  if (rec?.quote_sequence_id) pm.collectionVariables.set('quoteSequenceId', String(rec.quote_sequence_id));",
+                          "  if (rec?.status) pm.collectionVariables.set('quoteStatus', String(rec.status));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"franchise_id\": \"{{franchiseId}}\",\n  \"category_id\": \"{{categoryId}}\",\n  \"service_id\": \"{{serviceId}}\",\n  \"address_id\": \"{{addressId}}\",\n  \"partner_id\": \"{{quotePartnerId}}\",\n  \"total_service_charge\": {{quoteTotalServiceCharge}},\n  \"from_date\": \"{{quoteFromDate}}\",\n  \"to_date\": \"{{quoteToDate}}\",\n  \"work_hours_per_day\": {{quoteWorkHoursPerDay}},\n  \"total_work_hours\": {{quoteTotalWorkHours}},\n  \"work_start_time\": \"{{quoteWorkStartTime}}\",\n  \"work_end_time\": \"{{quoteWorkEndTime}}\",\n  \"quote_description\": \"{{quoteDescription}}\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/quotes/create",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "quotes",
+                        "create"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/user/quotes/create** — with partner\n\n- **Required:** `partner_id` (run **Partners (list)** or **Home** to set `{{quotePartnerId}}`)\n- **`total_service_charge` optional:** resolved from that partner's `partner_service.price` when omitted\n- Status **pending**; partner can **Accept** under **Partner → Quotes**"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "List quotes",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Quotes listed', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.records).to.be.an('array');",
+                          "    pm.expect(j.totalItems).to.be.a('number');",
+                          "    pm.expect(j.todayCount).to.be.a('number');",
+                          "    pm.expect(j.todayCount).to.be.at.most(j.totalItems);",
+                          "  });",
+                          "  const rec = j?.records?.[0];",
+                          "  if (rec?._id) pm.collectionVariables.set('quoteId', String(rec._id));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/quotes?page={{quotesPage}}&limit={{quotesLimit}}&status={{quoteStatusFilter}}&search={{quoteSearch}}&from_date={{quoteListFromDate}}&to_date={{quoteListToDate}}&franchise_id={{franchiseId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "quotes"
+                      ],
+                      "query": [
+                        {
+                          "key": "page",
+                          "value": "{{quotesPage}}"
+                        },
+                        {
+                          "key": "limit",
+                          "value": "{{quotesLimit}}"
+                        },
+                        {
+                          "key": "status",
+                          "value": "{{quoteStatusFilter}}",
+                          "description": "new | pending | accepted | success | failed — leave empty for all"
+                        },
+                        {
+                          "key": "search",
+                          "value": "{{quoteSearch}}",
+                          "disabled": true,
+                          "description": "Optional — quote_sequence_id, quote_description, cancellation_reason, rejection_reason (alias: q)"
+                        },
+                        {
+                          "key": "from_date",
+                          "value": "{{quoteListFromDate}}",
+                          "disabled": true,
+                          "description": "Optional schedule overlap filter (YYYY-MM-DD)"
+                        },
+                        {
+                          "key": "to_date",
+                          "value": "{{quoteListToDate}}",
+                          "disabled": true,
+                          "description": "Optional schedule overlap filter (YYYY-MM-DD)"
+                        },
+                        {
+                          "key": "franchise_id",
+                          "value": "{{franchiseId}}",
+                          "description": "Optional franchise filter"
+                        }
+                      ]
+                    },
+                    "description": "**GET /api/mobile/user/quotes**\n\n- **Auth:** Bearer customer\n- Lists quotes for authenticated customer only\n- **Pagination:** `page`, `limit` (max 50)\n- **Search:** `search` (or `q`) on `quote_sequence_id`, `quote_description`, `cancellation_reason`, `rejection_reason`\n- **Date range:** `from_date`, `to_date` (YYYY-MM-DD) — quotes whose schedule window overlaps the range (same as admin quote list)\n- **Filters:** optional `status`, optional `franchise_id`\n- **200:** `totalItems` (all matching filters), `todayCount` (subset whose schedule overlaps **today** UTC, same filters), `totalPages`, `currentPage`, `limit`, `records[]`"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get quote by id",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Quote fetched', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "  });",
+                          "  if (j?.data?.status) pm.collectionVariables.set('quoteStatus', String(j.data.status));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/quotes/{{quoteId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "quotes",
+                        "{{quoteId}}"
+                      ]
+                    },
+                    "description": "**GET /api/mobile/user/quotes/:id**\n\n- **Auth:** Bearer customer — own quotes only\n- **200** `data`: quote detail with populated refs + partner service enrichment"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Update quote",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Quote updated', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "  });",
+                          "  if (j?.data?.status) pm.collectionVariables.set('quoteStatus', String(j.data.status));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "PUT",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"partner_id\": \"{{quotePartnerId}}\",\n  \"quote_description\": \"{{quoteDescription}}\",\n  \"from_date\": \"{{quoteFromDate}}\",\n  \"to_date\": \"{{quoteToDate}}\",\n  \"work_hours_per_day\": {{quoteWorkHoursPerDay}},\n  \"total_work_hours\": {{quoteTotalWorkHours}},\n  \"work_start_time\": \"{{quoteWorkStartTime}}\",\n  \"work_end_time\": \"{{quoteWorkEndTime}}\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/quotes/{{quoteId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "quotes",
+                        "{{quoteId}}"
+                      ]
+                    },
+                    "description": "**PUT /api/mobile/user/quotes/:id**\n\n- **Auth:** Bearer customer\n- Allowed only while status is **new** or **pending**\n- **Cannot update:** `total_service_charge`, `service_price`, `status`, `franchise_id`\n- Assigning `partner_id` on a **new** quote moves status to **pending**\n- Send only fields to change"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Cancel quote",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Quote cancelled', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "  });",
+                          "  if (j?.data?.status) pm.collectionVariables.set('quoteStatus', String(j.data.status));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "PUT",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"cancellation_reason\": \"{{quoteCancellationReason}}\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/quotes/{{quoteId}}/cancel",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "quotes",
+                        "{{quoteId}}",
+                        "cancel"
+                      ]
+                    },
+                    "description": "**PUT /api/mobile/user/quotes/:id/cancel**\n\n- **Auth:** Bearer customer\n- Sets status to **failed** with optional `cancellation_reason`\n- Not allowed on terminal quotes (`success` / `failed`)"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Convert to order (deposit payment)",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Quote converted to order', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.data?.quote?.status).to.eql('success');",
+                          "  });",
+                          "  if (j?.data?.order?._id) pm.collectionVariables.set('orderId', String(j.data.order._id));",
+                          "  if (j?.data?.quote?.status) pm.collectionVariables.set('quoteStatus', String(j.data.quote.status));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"amount\": {{quoteDepositAmount}},\n  \"payment_method\": \"{{quotePaymentMethod}}\",\n  \"payment_status\": \"completed\",\n  \"transaction_reference\": \"{{quoteTransactionReference}}\",\n  \"notes\": \"{{quotePaymentNotes}}\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/quotes/{{quoteId}}/convert-to-order",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "quotes",
+                        "{{quoteId}}",
+                        "convert-to-order"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/user/quotes/:id/convert-to-order**\n\n- **Auth:** Bearer customer\n- Quote must be in **accepted** status and belong to logged-in customer\n- **Required:** `amount`, `payment_method`\n- **Allowed `payment_method`:** `cash` | `upi` | `card` | `online` | `bank_transfer` | `other`\n- `amount` must be >= quote `minimum_deposit_amount`\n- Creates order from quote and records customer `order_payment` row"
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
+              "name": "Posts",
+              "description": "Customer post feed, gallery, like, share, report — `post_routes.js`. See `docs/PARTNER_POST_FRONTEND.md`.",
+              "item": [
+                {
+                  "name": "Feed",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/posts/feed?franchise_id={{franchiseId}}&page=1&limit=10",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "posts",
+                        "feed"
+                      ],
+                      "query": [
+                        {
+                          "key": "franchise_id",
+                          "value": "{{franchiseId}}"
+                        },
+                        {
+                          "key": "page",
+                          "value": "1"
+                        },
+                        {
+                          "key": "limit",
+                          "value": "10"
+                        }
+                      ]
+                    },
+                    "description": "**GET /api/mobile/user/posts/feed** — run Home first for `{{franchiseId}}`."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Partner profile posts",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/partners/{{quotePartnerId}}/posts?franchise_id={{franchiseId}}&page=1&limit=10",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "partners",
+                        "{{quotePartnerId}}",
+                        "posts"
+                      ],
+                      "query": [
+                        {
+                          "key": "franchise_id",
+                          "value": "{{franchiseId}}"
+                        },
+                        {
+                          "key": "page",
+                          "value": "1"
+                        },
+                        {
+                          "key": "limit",
+                          "value": "10"
+                        }
+                      ]
+                    },
+                    "description": "**GET /api/mobile/user/partners/:partnerId/posts**"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get post",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/posts/{{postId}}?franchise_id={{franchiseId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "posts",
+                        "{{postId}}"
+                      ],
+                      "query": [
+                        {
+                          "key": "franchise_id",
+                          "value": "{{franchiseId}}"
+                        }
+                      ]
+                    },
+                    "description": "**GET /api/mobile/user/posts/:postId**"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Resolve share token (public)",
+                  "request": {
+                    "auth": {
+                      "type": "noauth"
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/posts/share/{{postShareToken}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "posts",
+                        "share",
+                        "{{postShareToken}}"
+                      ]
+                    },
+                    "description": "**GET /api/mobile/user/posts/share/:shareToken** — no auth."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Like post",
+                  "request": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/posts/{{postId}}/like",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "posts",
+                        "{{postId}}",
+                        "like"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/user/posts/:postId/like** — toggle."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Share post",
+                  "request": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/posts/{{postId}}/share",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "posts",
+                        "{{postId}}",
+                        "share"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/user/posts/:postId/share** — returns share_url."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Report post",
+                  "request": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"reason\": \"spam\",\n  \"details\": \"Optional details from Postman.\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/posts/{{postId}}/report",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "posts",
+                        "{{postId}}",
+                        "report"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/user/posts/:postId/report**"
+                  },
+                  "response": []
                 }
               ]
             }

@@ -13,6 +13,11 @@ const {
   ORDER_STATUS_COMPLETED,
   buildOrderManagementStatusQueryFilter,
 } = require('../../../enum/order_status_enum');
+const {
+  PARTNER_WORK_STATUS_PENDING,
+  PARTNER_WORK_STATUS_IN_PROGRESS,
+  buildPartnerWorkStatusQueryFilter,
+} = require('../../../enum/partner_work_status_enum');
 
 const HOME_ORDERS_PER_STATUS_LIMIT = 10;
 
@@ -168,7 +173,15 @@ const listCompletedHomeOrders = async (partnerId) => {
   return rows.map(mapMobileHomeOrder);
 };
 
-const listInProgressHomeOrders = async (partnerId) => {
+const buildPendingPartnerWorkStatusQueryFilter = () => ({
+  $or: [
+    { partner_work_status: PARTNER_WORK_STATUS_PENDING },
+    { partner_work_status: { $exists: false } },
+    { partner_work_status: null },
+  ],
+});
+
+const listInProgressHomeOrdersByWorkStatus = async (partnerId, partnerWorkStatusFilter) => {
   const statusFilter = buildOrderManagementStatusQueryFilter(ORDER_STATUS_IN_PROGRESS);
   if (!statusFilter) {
     return [];
@@ -182,6 +195,7 @@ const listInProgressHomeOrders = async (partnerId) => {
     partner_id: partnerOid,
     deleted_at: null,
     ...statusFilter,
+    ...partnerWorkStatusFilter,
   })
     .populate(HOME_ORDER_POPULATE)
     .lean();
@@ -193,13 +207,23 @@ const listInProgressHomeOrders = async (partnerId) => {
   return sorted.map(mapMobileHomeOrder);
 };
 
+const listLiveHomeOrders = async (partnerId) =>
+  listInProgressHomeOrdersByWorkStatus(
+    partnerId,
+    buildPartnerWorkStatusQueryFilter(PARTNER_WORK_STATUS_IN_PROGRESS)
+  );
+
+const listInProgressHomeOrders = async (partnerId) =>
+  listInProgressHomeOrdersByWorkStatus(partnerId, buildPendingPartnerWorkStatusQueryFilter());
+
 const loadPartnerHomeOrders = async (partnerId) => {
-  const [in_progress, completed] = await Promise.all([
+  const [live, in_progress, completed] = await Promise.all([
+    listLiveHomeOrders(partnerId),
     listInProgressHomeOrders(partnerId),
     listCompletedHomeOrders(partnerId),
   ]);
 
-  return { in_progress, completed };
+  return { live, in_progress, completed };
 };
 
 module.exports = {

@@ -300,12 +300,13 @@
                   "    pm.expect(j.data.quotes.pending).to.be.an('array');",
                   "    pm.expect(j.data.quotes.accepted).to.be.an('array');",
                   "    pm.expect(j.data.orders).to.be.an('object');",
+                  "    pm.expect(j.data.orders.live).to.be.an('array');",
                   "    pm.expect(j.data.orders.in_progress).to.be.an('array');",
                   "    pm.expect(j.data.orders.completed).to.be.an('array');",
                   "  });",
                   "  const q0 = j?.data?.quotes?.pending?.[0] || j?.data?.quotes?.accepted?.[0];",
                   "  if (q0?._id) pm.collectionVariables.set('quoteId', String(q0._id));",
-                  "  const o0 = j?.data?.orders?.in_progress?.[0] || j?.data?.orders?.completed?.[0];",
+                  "  const o0 = j?.data?.orders?.live?.[0] || j?.data?.orders?.in_progress?.[0] || j?.data?.orders?.completed?.[0];",
                   "  if (o0?._id) pm.collectionVariables.set('orderId', String(o0._id));",
                   "} catch (e) {}"
                 ],
@@ -325,7 +326,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "mobile", "partner", "home"]
             },
-            "description": "**GET /api/mobile/partner/home**\n\n- **Auth:** Bearer partner (`type` 2) after **Login**\n- No query params — returns work assigned to the logged-in partner only\n\n**200 `data`:**\n- `quotes.pending[]` — up to **10** pending quotes (`partner_id` = caller), newest first\n- `quotes.accepted[]` — up to **10** accepted quotes, newest first\n- `orders.in_progress[]` — up to **10** in-progress orders; sorted like customer home (today-overlap first, then future, then past)\n- `orders.completed[]` — up to **10** completed orders by `updated_at` desc\n\nQuote rows use the same shape as **GET /api/mobile/partner/quotes**. Order rows are compact cards with customer, category, service, franchise, schedule, and payment rollups.\n\nSets `{{quoteId}}` and `{{orderId}}` from first home items when present."
+            "description": "**GET /api/mobile/partner/home**\n\n- **Auth:** Bearer partner (`type` 2) after **Login**\n- No query params — returns work assigned to the logged-in partner only\n\n**200 `data`:**\n- `quotes.pending[]` — up to **10** pending quotes (`partner_id` = caller), newest first\n- `quotes.accepted[]` — up to **10** accepted quotes, newest first\n- `orders.live[]` — up to **10** orders with `order_status` = `in-progress` and `partner_work_status` = `in-progress`; sorted like customer home (today-overlap first, then future, then past)\n- `orders.in_progress[]` — up to **10** orders with `order_status` = `in-progress` and `partner_work_status` = `pending`; same schedule sort as `live`\n- `orders.completed[]` — up to **10** completed orders by `updated_at` desc\n\nQuote rows use the same shape as **GET /api/mobile/partner/quotes**. Order rows are compact cards with customer, category, service, franchise, schedule, and payment rollups.\n\nSets `{{quoteId}}` and `{{orderId}}` from first home items when present."
           },
           "response": []
         },

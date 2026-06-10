@@ -1,19 +1,14 @@
 const mongoose = require("mongoose");
 const Order = require("../models/order");
 const OrderAdditionalCharge = require("../models/order_additional_charge");
-const { recalculateOrderTotals } = require("../utils/order_financials");
-const { computeAdditionalChargeLine } = require("../utils/order_pricing");
 const { assertOrderModifyAccess } = require("../utils/order_access");
 const { fieldLabel } = require("../utils/field_labels");
-
-const ALLOWED_METHODS = new Set([
-  "cash",
-  "upi",
-  "card",
-  "online",
-  "bank_transfer",
-  "other",
-]);
+const {
+  listActiveChargesByOrder,
+  createAdditionalCharge,
+  updateAdditionalCharge,
+  deleteAdditionalCharge,
+} = require("../services/order_additional_charge_service");
 
 const create = async (req, res) => {
   try {
@@ -64,34 +59,13 @@ const create = async (req, res) => {
       });
     }
 
-    const method =
-      payment_method && ALLOWED_METHODS.has(String(payment_method).toLowerCase())
-        ? String(payment_method).toLowerCase()
-        : "other";
-
-    const taxPercent = Number(order.tax_percent) || 0;
-    const commissionPercent = Number(order.commission_percent) || 0;
-    const chargeLine = computeAdditionalChargeLine(
+    const doc = await createAdditionalCharge(order, {
+      label,
+      description,
       amount,
-      taxPercent,
-      commissionPercent
-    );
-
-    const doc = new OrderAdditionalCharge({
-      order_id: order._id,
-      label: label || "",
-      description: description || "",
-      amount: chargeLine.amount,
-      commission_percent: chargeLine.commission_percent,
-      commission_amount: chargeLine.commission_amount,
-      tax_percent: chargeLine.tax_percent,
-      tax_amount: chargeLine.tax_amount,
-      total_amount: chargeLine.total_amount,
-      payment_method: method,
-      charge_type: charge_type || "misc",
+      payment_method,
+      charge_type,
     });
-    await doc.save();
-    await recalculateOrderTotals(order._id);
 
     return res.status(201).json({
       success: true,
@@ -138,10 +112,7 @@ const listByOrder = async (req, res) => {
       });
     }
 
-    const rows = await OrderAdditionalCharge.find({
-      order_id: orderId,
-      deleted_at: null,
-    }).sort({ created_at: -1 });
+    const rows = await listActiveChargesByOrder(orderId);
 
     return res.status(200).json({
       success: true,
@@ -200,44 +171,27 @@ const update = async (req, res) => {
     }
 
     const { label, description, amount, payment_method, charge_type } = req.body;
-    if (label !== undefined) row.label = label;
-    if (description !== undefined) row.description = description;
-    if (amount !== undefined) {
-      if (Number(amount) < 0) {
-        return res.status(400).json({
-          success: false,
-          status: 400,
-          message: "amount must be >= 0.",
-        });
-      }
-      const taxPercent = Number(order.tax_percent) || 0;
-      const commissionPercent = Number(order.commission_percent) || 0;
-      const chargeLine = computeAdditionalChargeLine(
-        amount,
-        taxPercent,
-        commissionPercent
-      );
-      row.amount = chargeLine.amount;
-      row.commission_percent = chargeLine.commission_percent;
-      row.commission_amount = chargeLine.commission_amount;
-      row.tax_percent = chargeLine.tax_percent;
-      row.tax_amount = chargeLine.tax_amount;
-      row.total_amount = chargeLine.total_amount;
+    if (amount !== undefined && Number(amount) < 0) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: "amount must be >= 0.",
+      });
     }
-    if (payment_method !== undefined) {
-      const m = String(payment_method).toLowerCase();
-      row.payment_method = ALLOWED_METHODS.has(m) ? m : "other";
-    }
-    if (charge_type !== undefined) row.charge_type = charge_type;
-    row.updated_at = new Date();
-    await row.save();
-    await recalculateOrderTotals(row.order_id);
+
+    const updated = await updateAdditionalCharge(order, row, {
+      label,
+      description,
+      amount,
+      payment_method,
+      charge_type,
+    });
 
     return res.status(200).json({
       success: true,
       status: 200,
       message: "Charge updated and order total refreshed.",
-      record: row,
+      record: updated,
     });
   } catch (error) {
     console.error("order_additional_charge update:", error);
@@ -289,11 +243,7 @@ const remove = async (req, res) => {
       });
     }
 
-    row.deleted_at = new Date();
-    row.updated_at = new Date();
-    await row.save();
-    const orderId = row.order_id;
-    await recalculateOrderTotals(orderId);
+    await deleteAdditionalCharge(row);
 
     return res.status(200).json({
       success: true,

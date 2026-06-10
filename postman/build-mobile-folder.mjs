@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const COLLECTION_FILE = path.join(__dirname, 'Help-PR-All-APIs.postman_collection.json');
+const MOBILE_ONLY_FILE = path.join(__dirname, 'Help-PR-Mobile-APIs.postman_collection.json');
 
 function urlToPathString(url) {
   if (!url) return '';
@@ -236,6 +237,41 @@ function dedupeEntries(entries) {
   return out;
 }
 
+function collectFolderRequests(folder) {
+  const out = [];
+  for (const entry of folder.item || []) {
+    if (entry.request) out.push(entry.request);
+    if (entry.item) out.push(...collectFolderRequests(entry));
+  }
+  return out;
+}
+
+function folderHasMobilePath(folder, segment) {
+  return collectFolderRequests(folder).some((req) =>
+    normalizePath(urlToPathString(req.url)).includes(segment)
+  );
+}
+
+/** Folders from Help-PR-Mobile-APIs override generated groups for dedicated mobile routes. */
+function mergeMobileOnlyFolders(builtFolders, rootName, pathSegment) {
+  if (!fs.existsSync(MOBILE_ONLY_FILE)) return builtFolders;
+
+  const mobileOnly = JSON.parse(fs.readFileSync(MOBILE_ONLY_FILE, 'utf8'));
+  const root = (mobileOnly.item || []).find((i) => i.name === rootName);
+  if (!root?.item?.length) return builtFolders;
+
+  const mobileFolders = root.item.filter((folder) =>
+    folderHasMobilePath(folder, pathSegment)
+  );
+  if (!mobileFolders.length) return builtFolders;
+
+  const byName = new Map(builtFolders.map((folder) => [folder.name, folder]));
+  for (const folder of mobileFolders) {
+    byName.set(folder.name, structuredClone(folder));
+  }
+  return Array.from(byName.values());
+}
+
 function main() {
   const collection = JSON.parse(fs.readFileSync(COLLECTION_FILE, 'utf8'));
   const flat = flattenItems(collection.item, [], true);
@@ -317,14 +353,22 @@ function main() {
     name: 'Partner',
     description:
       '**Partner mobile app** — Run **01 → Register (mobile app)** first (no auth). Then use `Bearer {{token}}` for onboarding. Login (`/api/auth/login`) works after admin sets `is_active: true`.',
-    item: buildGroupedFolder(PARTNER_FOLDER_LABELS, partnerByGroup, partnerOrder),
+    item: mergeMobileOnlyFolders(
+      buildGroupedFolder(PARTNER_FOLDER_LABELS, partnerByGroup, partnerOrder),
+      'Partner',
+      '/api/mobile/partner'
+    ),
   };
 
   const userFolder = {
     name: 'User',
     description:
       '**Customer / end-user mobile app** — Auth, profile, orders, payments. Dedicated `POST /api/mobile/user/register` to be added when implemented.',
-    item: buildGroupedFolder(USER_FOLDER_LABELS, userByGroup, userOrder),
+    item: mergeMobileOnlyFolders(
+      buildGroupedFolder(USER_FOLDER_LABELS, userByGroup, userOrder),
+      'User',
+      '/api/mobile/user'
+    ),
   };
 
   if (!userFolder.item.length) {

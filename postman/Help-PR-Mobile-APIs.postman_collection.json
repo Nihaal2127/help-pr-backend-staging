@@ -1133,7 +1133,7 @@
         },
         {
           "name": "Orders",
-          "description": "Partner assigned orders. **Auth:** Bearer partner JWT (`type` 2) after **Login**.\n\n**Flow:** List order → **Start work** (`PUT .../work-status`) → customer pays in full → **Complete** (`POST .../complete` with proof photos). Optional `publish_as_post=true` creates a user-feed post.",
+          "description": "Partner assigned orders. **Auth:** Bearer partner JWT (`type` 2) after **Login**.\n\n**Flow:** List order → optional **Additional charges** (`POST .../additional-charges`, same rules as admin web) → **Start work** (`PUT .../work-status`) → customer pays in full → **Complete** (`POST .../complete` with proof photos). Optional `publish_as_post=true` creates a user-feed post.",
           "item": [
             {
               "name": "List orders",
@@ -1297,6 +1297,106 @@
                   "path": ["api", "mobile", "partner", "orders", "{{orderId}}"]
                 },
                 "description": "**GET /api/mobile/partner/orders/:orderId**\n\n- **Auth:** Bearer partner — order must be assigned to caller (`partner_id`)\n- **Path `orderId`:** order Mongo `_id` (24-char hex)\n\n**200 `record`:** full order detail including `partner_work_status`, `work_proof_image_urls`, `work_completion_description`, `work_completed_at`, `partner_post_id`, `service_items[]`, payments, additional charges, refunds when applicable.\n\n**404** order not found or not assigned to partner | **400** invalid order id"
+              },
+              "response": []
+            },
+            {
+              "name": "List additional charges",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/orders/{{orderId}}/additional-charges",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "orders", "{{orderId}}", "additional-charges"]
+                },
+                "description": "**GET /api/mobile/partner/orders/:orderId/additional-charges**\n\n- **Auth:** Bearer partner — order assigned to caller\n- **200:** `records[]` active charge rows for the order\n\nAlso included on **Get order details** (`record.additional_charges`)."
+              },
+              "response": []
+            },
+            {
+              "name": "Create additional charge",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  if (j?.record?._id) pm.collectionVariables.set('additionalChargeId', String(j.record._id));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "POST",
+                "header": [
+                  { "key": "Accept", "value": "application/json" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"amount\": 150,\n  \"label\": \"Transport\",\n  \"description\": \"Extra visit for materials\",\n  \"payment_method\": \"upi\",\n  \"charge_type\": \"transport\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/orders/{{orderId}}/additional-charges",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "orders", "{{orderId}}", "additional-charges"]
+                },
+                "description": "**POST /api/mobile/partner/orders/:orderId/additional-charges**\n\n- **Auth:** Bearer partner — order must be assigned to caller\n- **Required:** `amount` (≥ 0)\n- **Optional:** `label`, `description`, `payment_method` (`cash`|`upi`|`card`|`online`|`bank_transfer`|`other`; invalid → `other`), `charge_type`\n- Same pricing + rollup behavior as **POST /api/order-additional-charges/create**\n\n**201:** `record`, `order` pricing summary"
+              },
+              "response": []
+            },
+            {
+              "name": "Update additional charge",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "PUT",
+                "header": [
+                  { "key": "Accept", "value": "application/json" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"amount\": 200,\n  \"label\": \"Transport (updated)\",\n  \"description\": \"Updated note\",\n  \"payment_method\": \"cash\",\n  \"charge_type\": \"transport\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/orders/{{orderId}}/additional-charges/{{additionalChargeId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "orders", "{{orderId}}", "additional-charges", "{{additionalChargeId}}"]
+                },
+                "description": "**PUT /api/mobile/partner/orders/:orderId/additional-charges/:chargeId**\n\n- Partial body; recalculates order totals (same as admin **PUT /api/order-additional-charges/update/:id**)\n- Charge must belong to the path `orderId`"
+              },
+              "response": []
+            },
+            {
+              "name": "Delete additional charge",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "DELETE",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/orders/{{orderId}}/additional-charges/{{additionalChargeId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "orders", "{{orderId}}", "additional-charges", "{{additionalChargeId}}"]
+                },
+                "description": "**DELETE /api/mobile/partner/orders/:orderId/additional-charges/:chargeId**\n\n- Soft-deletes charge and refreshes order `total_price` / payment status (same as admin delete)"
               },
               "response": []
             },
@@ -4065,7 +4165,13 @@
       "key": "orderId",
       "value": "",
       "type": "string",
-      "description": "Order Mongo _id — set from completed order list for review"
+      "description": "Order Mongo _id — set from partner/customer order list or detail"
+    },
+    {
+      "key": "additionalChargeId",
+      "value": "",
+      "type": "string",
+      "description": "order_additional_charge Mongo _id — set from Create additional charge"
     },
     {
       "key": "orderServiceItemId",

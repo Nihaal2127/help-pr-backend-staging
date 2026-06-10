@@ -13,6 +13,17 @@ const {
   updateWorkStatusHandler,
   completeOrderWorkHandler,
 } = require('../../../controllers/mobile/partner/order_controller');
+const {
+  listOrderAdditionalChargesHandler,
+  createOrderAdditionalChargeHandler,
+  updateOrderAdditionalChargeHandler,
+  deleteOrderAdditionalChargeHandler,
+} = require('../../../controllers/mobile/partner/order_additional_charge_controller');
+const {
+  validateChargeIdParam,
+  validateCreateAdditionalChargeBody,
+  validateUpdateAdditionalChargeBody,
+} = require('../../../middleware/mobile/partner/order_additional_charge_middleware');
 const { uploadImages } = require('../../../utils/fileUpload');
 const { wrapMulterUpload } = require('../../../utils/multer_error_handler');
 
@@ -33,6 +44,30 @@ router.post(
   orderProofImagesUpload,
   validateCompleteOrderWorkBody,
   completeOrderWorkHandler
+);
+router.get(
+  '/orders/:orderId/additional-charges',
+  validateOrderIdParam,
+  listOrderAdditionalChargesHandler
+);
+router.post(
+  '/orders/:orderId/additional-charges',
+  validateOrderIdParam,
+  validateCreateAdditionalChargeBody,
+  createOrderAdditionalChargeHandler
+);
+router.put(
+  '/orders/:orderId/additional-charges/:chargeId',
+  validateOrderIdParam,
+  validateChargeIdParam,
+  validateUpdateAdditionalChargeBody,
+  updateOrderAdditionalChargeHandler
+);
+router.delete(
+  '/orders/:orderId/additional-charges/:chargeId',
+  validateOrderIdParam,
+  validateChargeIdParam,
+  deleteOrderAdditionalChargeHandler
 );
 router.get('/orders/:orderId', validateOrderIdParam, getOrderDetailsHandler);
 

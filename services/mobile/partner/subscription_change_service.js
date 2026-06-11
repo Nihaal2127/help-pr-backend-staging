@@ -21,6 +21,34 @@ class SubscriptionChangeError extends Error {
     }
 }
 
+const isDuplicateKeyError = (err) =>
+    err != null && (err.code === 11000 || err.code === 11001);
+
+const mapExecutionError = (err) => {
+    if (err instanceof SubscriptionChangeError) {
+        return err;
+    }
+    if (isDuplicateKeyError(err)) {
+        return new SubscriptionChangeError(
+            409,
+            'A subscription change is already in progress. Please try again shortly.'
+        );
+    }
+    return err;
+};
+
+const endMongoSession = async (session) => {
+    if (!session) return;
+    try {
+        await session.endSession();
+    } catch (endErr) {
+        console.error('subscription change session end', endErr.message);
+    }
+};
+
+const resolveChangePaymentStatus = (amountToPay) =>
+    roundAmount(amountToPay) > 0 ? 'completed' : 'not_required';
+
 const fail = (status, message, extra = {}) => ({ ok: false, status, message, ...extra });
 const ok = (status, data) => ({ ok: true, status, data });
 
@@ -418,7 +446,7 @@ const createWalletLedgerEntry = async (
                 transaction_type: transactionType,
                 amount: roundAmount(amount),
                 date: now,
-                description,
+                description: String(description).trim(),
                 payment_method: paymentMethod || null,
                 subscription_change_id: subscriptionChangeId,
                 created_at: now,
@@ -459,9 +487,9 @@ const executeChangeInTransaction = async ({
             }
 
             const now = new Date();
-            const freshBalance = await getWalletBalance(partner._id, session);
 
             if (proration.amount_to_pay > 0) {
+                const freshBalance = await getWalletBalance(partner._id, session);
                 const revalidated = validateUpgradePaymentSplit({
                     amountToPay: proration.amount_to_pay,
                     walletAmount: paymentValidation.wallet,
@@ -493,7 +521,7 @@ const executeChangeInTransaction = async ({
                         cash_amount: paymentValidation.cash,
                         wallet_credit: proration.wallet_credit,
                         payment_method: paymentValidation.payment_method,
-                        payment_status: 'completed',
+                        payment_status: resolveChangePaymentStatus(proration.amount_to_pay),
                         status: 'pending',
                         applied_at: null,
                         created_at: now,
@@ -513,7 +541,7 @@ const executeChangeInTransaction = async ({
                         franchiseId: partner.franchise_id,
                         transactionType: 'credit',
                         amount: proration.wallet_credit,
-                        description: `Subscription downgrade credit (${currentPlan.plan_name} → ${newPlan.plan_name})`,
+                        description: `Subscription downgrade credit (${currentPlan.plan_name} to ${newPlan.plan_name})`,
                         paymentMethod: 'subscription_downgrade',
                         subscriptionChangeId: changeDoc._id,
                     },
@@ -531,7 +559,7 @@ const executeChangeInTransaction = async ({
                         franchiseId: partner.franchise_id,
                         transactionType: 'debit',
                         amount: paymentValidation.wallet,
-                        description: `Subscription ${debitLabel} (${currentPlan.plan_name} → ${newPlan.plan_name})`,
+                        description: `Subscription ${debitLabel} (${currentPlan.plan_name} to ${newPlan.plan_name})`,
                         paymentMethod: 'wallet',
                         subscriptionChangeId: changeDoc._id,
                     },
@@ -547,21 +575,38 @@ const executeChangeInTransaction = async ({
                 session
             );
 
-            changeDoc.status = 'completed';
-            changeDoc.applied_at = now;
-            changeDoc.updated_at = now;
-            changeDoc.wallet_ledger_debit_id = walletLedgerDebitId;
-            changeDoc.wallet_ledger_credit_id = walletLedgerCreditId;
-            await changeDoc.save({ session });
+            const completedChange = await PartnerSubscriptionChange.findOneAndUpdate(
+                { _id: changeDoc._id, deleted_at: null },
+                {
+                    $set: {
+                        status: 'completed',
+                        applied_at: now,
+                        updated_at: now,
+                        wallet_ledger_debit_id: walletLedgerDebitId,
+                        wallet_ledger_credit_id: walletLedgerCreditId,
+                    },
+                },
+                { new: true, session }
+            ).lean();
+
+            if (!completedChange) {
+                throw new SubscriptionChangeError(500, 'Failed to finalize subscription change.');
+            }
 
             result = {
-                changeDoc: changeDoc.toObject(),
+                changeDoc: completedChange,
                 updatedSubscription: updated,
                 updatedPlan,
             };
         });
+    } catch (err) {
+        throw mapExecutionError(err);
     } finally {
-        await session.endSession();
+        await endMongoSession(session);
+    }
+
+    if (!result) {
+        throw new SubscriptionChangeError(500, 'Subscription change could not be completed.');
     }
 
     return result;
@@ -652,7 +697,7 @@ const applyChange = async (partnerId, body) => {
         if (err instanceof SubscriptionChangeError) {
             return fail(err.status, err.message);
         }
-        console.error('applyChange', err.message);
+        console.error('applyChange', err.message, err.stack || '');
         return fail(500, 'Internal server error.');
     }
 };

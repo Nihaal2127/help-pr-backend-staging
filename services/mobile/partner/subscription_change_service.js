@@ -71,10 +71,15 @@ const formatBlockingPendingDetails = (row) => {
     };
 };
 
-const buildInProgressError = async (partnerId, session = null, source = 'active_pending') => {
+const buildInProgressError = async (
+    partnerId,
+    session = null,
+    source = 'active_pending',
+    keyDetails = null
+) => {
     const blocking = await findBlockingPendingChangeWithRetry(
         partnerId,
-        source === 'duplicate_pending_index' ? null : session
+        source === 'duplicate_pending_index' || source === 'duplicate_key' ? null : session
     );
     return new SubscriptionChangeError(
         409,
@@ -83,6 +88,7 @@ const buildInProgressError = async (partnerId, session = null, source = 'active_
             reason: source,
             blocking_change: formatBlockingPendingDetails(blocking),
             retryable: !blocking,
+            ...(keyDetails || {}),
         }
     );
 };
@@ -94,6 +100,12 @@ const resolveDuplicateKeyReason = (err) => {
     }
     if (pattern.partner_id) {
         return 'duplicate_pending_index';
+    }
+    if (pattern.order_payment_id) {
+        return 'duplicate_wallet_order_payment_index';
+    }
+    if (pattern._id) {
+        return 'duplicate_change_id';
     }
     return 'duplicate_key';
 };
@@ -116,7 +128,11 @@ const mapExecutionError = async (err, partnerId, session = null) => {
                 }
             );
         }
-        return buildInProgressError(partnerId, session, reason);
+        const keyDetails = {
+            key_pattern: err.keyPattern || null,
+            key_value: err.keyValue || null,
+        };
+        return buildInProgressError(partnerId, session, reason, keyDetails);
     }
     return err;
 };
@@ -126,7 +142,10 @@ const isRetryableInProgressError = (err) =>
     err.status === 409 &&
     (err.details?.reason === 'duplicate_pending_index' ||
         err.details?.reason === 'active_pending' ||
-        err.details?.reason === 'subscription_plan_conflict') &&
+        err.details?.reason === 'subscription_plan_conflict' ||
+        err.details?.reason === 'duplicate_key' ||
+        err.details?.reason === 'duplicate_wallet_order_payment_index' ||
+        err.details?.reason === 'duplicate_change_id') &&
     !err.details?.blocking_change;
 
 const resolveIdempotentApply = async (partnerId, newPlan, proration) => {
@@ -656,23 +675,22 @@ const createWalletLedgerEntry = async (
     session
 ) => {
     const now = new Date();
-    const [row] = await PartnerWalletLedger.create(
-        [
-            {
-                partner_id: partnerId,
-                franchise_id: franchiseId || null,
-                transaction_type: transactionType,
-                amount: roundAmount(amount),
-                date: now,
-                description: String(description).trim(),
-                payment_method: paymentMethod || null,
-                subscription_change_id: subscriptionChangeId,
-                created_at: now,
-                updated_at: now,
-            },
-        ],
-        { session }
-    );
+    const ledgerDoc = {
+        partner_id: partnerId,
+        franchise_id: franchiseId || null,
+        transaction_type: transactionType,
+        amount: roundAmount(amount),
+        date: now,
+        description: String(description).trim(),
+        payment_method: paymentMethod || null,
+        created_at: now,
+        updated_at: now,
+    };
+    if (subscriptionChangeId) {
+        ledgerDoc.subscription_change_id = subscriptionChangeId;
+    }
+    // Omit order_payment_id — null values collide on DocumentDB wallet unique indexes.
+    const [row] = await PartnerWalletLedger.create([ledgerDoc], { session });
     return row;
 };
 

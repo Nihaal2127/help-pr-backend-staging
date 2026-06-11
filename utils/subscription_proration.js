@@ -49,7 +49,8 @@ const resolveChangeType = (currentPlan, newPlan) => {
     const pCur = currentPlan.priority;
     const pNew = newPlan.priority;
     if (pCur != null && pNew != null && pCur !== pNew) {
-        return pNew < pCur ? 'upgrade' : 'downgrade';
+        // Higher priority number = higher tier (see comparePlanPriorityDesc / franchise partner sorting).
+        return pNew > pCur ? 'upgrade' : 'downgrade';
     }
 
     const priceCur = Number(currentPlan.price) || 0;

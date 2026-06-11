@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-all-apis-merged",
     "name": "Help PR — All APIs (single collection)",
-    "description": "**Single Postman collection** for `help-pr-backend-staging`. Import only this file.\n\n**Generated:** 2026-05-20 via `node postman/merge-all-collections.mjs`\n\n**Sources merged (8) from `postman/archive/`:**\n- `archive/Help-PR-Orders-Module.postman_collection.json`\n- `archive/Help-PR-Order-Charges-Payments.postman_collection.json`\n- `archive/Help-PR-Partner-Franchise-Dropdowns.postman_collection.json`\n- `archive/content-expense-expense-category-management.postman_collection (1).json`\n- `archive/Area-Management.postman_collection.json`\n- `archive/Help-PR-Area-Franchise-Subscription-UserTypes.postman_collection.json`\n- `archive/Help-PR-Area-Franchise-Subscription.postman_collection.json`\n- `archive/Help-PR-Admin-Dashboard.postman_collection.json`\n- Built-in: Partner payout (4 requests)\n- Built-in: Order refunds (4 requests)\n- Built-in: Partners browse — admin `GET /api/partners` (2 requests)\n\n**Dedup:** Same HTTP method + path template (+ getCount `type` in body) → one request; higher-priority source wins.\n\n**Setup:** Set `baseUrl`. Run **00 — Auth → Login** to set `accessToken` / `token`.\n\n**Docs:** `docs/ORDER_MODULE_FRONTEND.md`, `docs/ORDER_GETALL_API_CHANGES.md`, `docs/PARTNER_PAYOUT_FRONTEND.md`, `docs/REFUND_API.md`, `docs/REFUND_FRONTEND.md`, `postman/Help-PR-Refunds.postman_collection.json`\n\n**Mobile:** folder **Mobile → Partner** / **Mobile → User** — run `node postman/build-mobile-folder.mjs` to refresh.",
+    "description": "**Single Postman collection** for `help-pr-backend-staging`. Import only this file.\n\n**Generated:** 2026-05-20 via `node postman/merge-all-collections.mjs`\n\n**Sources merged (8) from `postman/archive/`:**\n- `archive/Help-PR-Orders-Module.postman_collection.json`\n- `archive/Help-PR-Order-Charges-Payments.postman_collection.json`\n- `archive/Help-PR-Partner-Franchise-Dropdowns.postman_collection.json`\n- `archive/content-expense-expense-category-management.postman_collection (1).json`\n- `archive/Area-Management.postman_collection.json`\n- `archive/Help-PR-Area-Franchise-Subscription-UserTypes.postman_collection.json`\n- `archive/Help-PR-Area-Franchise-Subscription.postman_collection.json`\n- `archive/Help-PR-Admin-Dashboard.postman_collection.json`\n- Built-in: Partner payout (4 requests)\n- Built-in: Order refunds (4 requests)\n- Built-in: Partners browse — admin `GET /api/partners` (2 requests)\n- Built-in: Partner post management — admin `/api/partner-post` (4 requests)\n\n**Dedup:** Same HTTP method + path template (+ getCount `type` in body) → one request; higher-priority source wins.\n\n**Setup:** Set `baseUrl`. Run **00 — Auth → Login** to set `accessToken` / `token`.\n\n**Docs:** `docs/ORDER_MODULE_FRONTEND.md`, `docs/ORDER_GETALL_API_CHANGES.md`, `docs/PARTNER_PAYOUT_FRONTEND.md`, `docs/PARTNER_POST_FRONTEND.md`, `docs/REFUND_API.md`, `docs/REFUND_FRONTEND.md`, `postman/Help-PR-Refunds.postman_collection.json`\n\n**Mobile:** folder **Mobile → Partner** / **Mobile → User** — run `node postman/build-mobile-folder.mjs` to refresh.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -12554,6 +12554,283 @@
       ]
     },
     {
+      "name": "43 — Partner post management",
+      "description": "**/api/partner-post** — Admin back-office moderation for partner portfolio posts (user-feed work samples).\n\n**Frontend doc:** `docs/PARTNER_POST_FRONTEND.md` §6\n\n**Access:** Super admin (5), staff (6), franchise admin (1), employee (3) — back-office JWT only. Partner (2) & customer (4) → **403**.\n\n**Auth:** `Bearer {{accessToken}}` (run **00 — Auth → Login**).\n\n**Flow:** 1 getAll (browse posts) → 2 reports (moderation queue) → 3 moderate post → 4 update report\n\n**Variables:** `partnerPostId` from getAll/reports · `partnerPostReportId` from reports · optional `franchiseId` / `partnerMongoId` filters on getAll",
+      "item": [
+        {
+          "name": "1. Get all posts",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Posts listed', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.records).to.be.an('array');",
+                  "  });",
+                  "  const p0 = j?.records?.[0];",
+                  "  if (p0?._id) pm.collectionVariables.set('partnerPostId', String(p0._id));",
+                  "  if (p0?.partner_id) pm.collectionVariables.set('partnerMongoId', String(p0.partner_id));",
+                  "  if (p0?.franchise_id) pm.collectionVariables.set('franchiseId', String(p0.franchise_id));",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/partner-post/getAll?page={{page}}&limit={{limit}}&status=&partner_id={{partnerMongoId}}&franchise_id={{franchiseId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "partner-post",
+                "getAll"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}",
+                  "description": "Default 1"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}",
+                  "description": "Default 10, max 100"
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "Optional: published | hidden | removed"
+                },
+                {
+                  "key": "partner_id",
+                  "value": "{{partnerMongoId}}",
+                  "description": "Optional partner Mongo _id"
+                },
+                {
+                  "key": "franchise_id",
+                  "value": "{{franchiseId}}",
+                  "description": "Optional franchise Mongo _id"
+                }
+              ]
+            },
+            "description": "**GET /api/partner-post/getAll** — Paginated list of partner posts for admin moderation.\n\n| Query | Required | Notes |\n|-------|----------|--------|\n| `page` | No | Default 1 (`{{page}}`) |\n| `limit` | No | Default 10, max 100 (`{{limit}}`) |\n| `status` | No | `published` \\| `hidden` \\| `removed` |\n| `partner_id` | No | Partner Mongo `_id` (`{{partnerMongoId}}`) |\n| `franchise_id` | No | Franchise Mongo `_id` (`{{franchiseId}}`) |\n\n**200:** `success`, `records[]` (post + nested `partner`), `totalItems`, `totalPages`, `currentPage`, `limit`.\n\nTest script sets `partnerPostId` from first record."
+          },
+          "description": "\n\n_Source: builtin:partner_post_management → Get all posts_"
+        },
+        {
+          "name": "2. List reports (moderation queue)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Reports listed', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.records).to.be.an('array');",
+                  "  });",
+                  "  const r0 = j?.records?.[0];",
+                  "  if (r0?._id) pm.collectionVariables.set('partnerPostReportId', String(r0._id));",
+                  "  if (r0?.post?._id) pm.collectionVariables.set('partnerPostId', String(r0.post._id));",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/partner-post/reports?page={{page}}&limit={{limit}}&status=pending",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "partner-post",
+                "reports"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}",
+                  "description": "Default 1"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}",
+                  "description": "Default 10, max 100"
+                },
+                {
+                  "key": "status",
+                  "value": "pending",
+                  "description": "pending (default) | reviewed | dismissed"
+                }
+              ]
+            },
+            "description": "**GET /api/partner-post/reports** — Customer-reported posts for admin review.\n\n| Query | Required | Notes |\n|-------|----------|--------|\n| `page` | No | Default 1 |\n| `limit` | No | Default 10, max 100 |\n| `status` | No | Default `pending`; also `reviewed` \\| `dismissed` |\n\n**200 `records[]`:** report `_id`, `reason`, `details`, `status`, `reporter` summary, nested `post` (description, status, images, partner).\n\nTest script sets `partnerPostReportId` and `partnerPostId` from first row."
+          },
+          "description": "\n\n_Source: builtin:partner_post_management → List reports_"
+        },
+        {
+          "name": "3. Moderate post",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Post moderated', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.record).to.be.an('object');",
+                  "  });",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"hidden\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/partner-post/moderate/{{partnerPostId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "partner-post",
+                "moderate",
+                "{{partnerPostId}}"
+              ]
+            },
+            "description": "**PUT /api/partner-post/moderate/:postId** — Hide, republish, or remove a post.\n\n| Field | Required | Notes |\n|-------|----------|--------|\n| `status` | Yes | `published` \\| `hidden` \\| `removed` |\n\n**Path:** `postId` = partner post Mongo `_id` (`{{partnerPostId}}` from getAll or reports).\n\n**200:** `record` — updated post with partner summary.\n\n**404** if post not found or soft-deleted."
+          },
+          "description": "\n\n_Source: builtin:partner_post_management → Moderate post_"
+        },
+        {
+          "name": "4. Update report status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Report updated', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.record).to.be.an('object');",
+                  "  });",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"reviewed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/partner-post/reports/{{partnerPostReportId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "partner-post",
+                "reports",
+                "{{partnerPostReportId}}"
+              ]
+            },
+            "description": "**PUT /api/partner-post/reports/:reportId** — Mark a customer report as reviewed or dismissed.\n\n| Field | Required | Notes |\n|-------|----------|--------|\n| `status` | Yes | `reviewed` \\| `dismissed` (not `pending`) |\n\n**Path:** `reportId` = report Mongo `_id` (`{{partnerPostReportId}}` from **List reports**).\n\n**200:** `record` — updated report document.\n\n**404** if report not found."
+          },
+          "description": "\n\n_Source: builtin:partner_post_management → Update report status_"
+        }
+      ]
+    },
+    {
       "name": "Mobile",
       "description": "**Mobile apps** — **Partner** (service provider) and **User** (customer). Set `{{baseUrl}}`. Regenerated via `node postman/build-mobile-folder.mjs`.",
       "item": [
@@ -21368,6 +21645,20 @@
     {
       "key": "keyword",
       "value": ""
+    },
+    {
+      "key": "partnerPostId",
+      "value": "",
+      "type": "string",
+      "enabled": true,
+      "description": "Partner post document _id (admin moderation)."
+    },
+    {
+      "key": "partnerPostReportId",
+      "value": "",
+      "type": "string",
+      "enabled": true,
+      "description": "Partner post report document _id (admin moderation queue)."
     }
   ]
 }

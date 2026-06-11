@@ -104,6 +104,9 @@ const resolveDuplicateKeyReason = (err) => {
     if (pattern.order_payment_id) {
         return 'duplicate_wallet_order_payment_index';
     }
+    if (pattern.order_id) {
+        return 'duplicate_wallet_order_index';
+    }
     if (pattern._id) {
         return 'duplicate_change_id';
     }
@@ -145,6 +148,7 @@ const isRetryableInProgressError = (err) =>
         err.details?.reason === 'subscription_plan_conflict' ||
         err.details?.reason === 'duplicate_key' ||
         err.details?.reason === 'duplicate_wallet_order_payment_index' ||
+        err.details?.reason === 'duplicate_wallet_order_index' ||
         err.details?.reason === 'duplicate_change_id') &&
     !err.details?.blocking_change;
 
@@ -689,7 +693,7 @@ const createWalletLedgerEntry = async (
     if (subscriptionChangeId) {
         ledgerDoc.subscription_change_id = subscriptionChangeId;
     }
-    // Omit order_payment_id — null values collide on DocumentDB wallet unique indexes.
+    // Omit order_id / order_payment_id — null values collide on DocumentDB legacy unique indexes.
     const [row] = await PartnerWalletLedger.create([ledgerDoc], { session });
     return row;
 };

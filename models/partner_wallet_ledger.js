@@ -29,18 +29,15 @@ const partnerWalletLedgerSchema = new mongoose.Schema(
         order_id: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'order',
-            default: null,
         },
-        order_unique_id: { type: String, default: null, trim: true },
-        /** Legacy link to archived financial_order collection; always null for new credits. */
+        order_unique_id: { type: String, trim: true },
+        /** Legacy link to archived financial_order collection; omit when unused. */
         financial_order_id: {
             type: mongoose.Schema.Types.ObjectId,
-            default: null,
         },
         payout_id: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'partner_payout',
-            default: null,
         },
         order_payment_id: {
             type: mongoose.Schema.Types.ObjectId,
@@ -49,7 +46,6 @@ const partnerWalletLedgerSchema = new mongoose.Schema(
         subscription_change_id: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'partner_subscription_change',
-            default: null,
         },
         created_at: { type: Date, default: Date.now },
         updated_at: { type: Date, default: Date.now },

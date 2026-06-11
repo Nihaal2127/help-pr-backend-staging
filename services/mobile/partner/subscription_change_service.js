@@ -15,6 +15,11 @@ const {
 const USER_TYPE_PARTNER = 2;
 /** Pending rows older than this are treated as orphaned (failed/crashed apply). */
 const PENDING_CHANGE_STALE_MS = 60 * 1000;
+const APPLY_CHANGE_MAX_ATTEMPTS = 3;
+const DUPLICATE_KEY_LOOKUP_ATTEMPTS = 4;
+const DUPLICATE_KEY_LOOKUP_DELAY_MS = 75;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 class SubscriptionChangeError extends Error {
     constructor(status, message, details = null) {
@@ -41,6 +46,19 @@ const findBlockingPendingChange = async (partnerId, session = null) => {
     return query;
 };
 
+const findBlockingPendingChangeWithRetry = async (partnerId, session = null) => {
+    for (let attempt = 0; attempt < DUPLICATE_KEY_LOOKUP_ATTEMPTS; attempt++) {
+        const row = await findBlockingPendingChange(partnerId, session);
+        if (row) {
+            return row;
+        }
+        if (attempt < DUPLICATE_KEY_LOOKUP_ATTEMPTS - 1) {
+            await sleep(DUPLICATE_KEY_LOOKUP_DELAY_MS * (attempt + 1));
+        }
+    }
+    return null;
+};
+
 const formatBlockingPendingDetails = (row) => {
     if (!row) return null;
     return {
@@ -54,13 +72,17 @@ const formatBlockingPendingDetails = (row) => {
 };
 
 const buildInProgressError = async (partnerId, session = null, source = 'active_pending') => {
-    const blocking = await findBlockingPendingChange(partnerId, session);
+    const blocking = await findBlockingPendingChangeWithRetry(
+        partnerId,
+        source === 'duplicate_pending_index' ? null : session
+    );
     return new SubscriptionChangeError(
         409,
         'A subscription change is already in progress. Please try again shortly.',
         {
             reason: source,
             blocking_change: formatBlockingPendingDetails(blocking),
+            retryable: !blocking,
         }
     );
 };
@@ -70,9 +92,106 @@ const mapExecutionError = async (err, partnerId, session = null) => {
         return err;
     }
     if (isDuplicateKeyError(err)) {
+        console.warn(
+            'subscription change duplicate key',
+            err.keyPattern || null,
+            err.keyValue || null
+        );
         return buildInProgressError(partnerId, session, 'duplicate_pending_index');
     }
     return err;
+};
+
+const isRetryableInProgressError = (err) =>
+    err instanceof SubscriptionChangeError &&
+    err.status === 409 &&
+    (err.details?.reason === 'duplicate_pending_index' ||
+        err.details?.reason === 'active_pending') &&
+    !err.details?.blocking_change;
+
+const resolveIdempotentApply = async (partnerId, newPlan, proration) => {
+    const subscription = await loadActiveSubscription(partnerId);
+    if (!subscription) {
+        return null;
+    }
+
+    const currentPlanRef = subscription.subscription_plan_id;
+    const currentPlanId =
+        currentPlanRef && typeof currentPlanRef === 'object' ? currentPlanRef._id : currentPlanRef;
+    if (!currentPlanId || String(currentPlanId) !== String(newPlan._id)) {
+        return null;
+    }
+
+    const plan = await resolveCurrentPlan(subscription);
+    const recentChange = await PartnerSubscriptionChange.findOne({
+        partner_id: partnerId,
+        to_plan_id: newPlan._id,
+        status: 'completed',
+        deleted_at: null,
+    })
+        .sort({ applied_at: -1, created_at: -1 })
+        .lean();
+    const walletBalance = await getWalletBalance(partnerId);
+
+    return {
+        subscription,
+        plan: plan || newPlan,
+        recentChange,
+        walletBalance,
+        proration,
+    };
+};
+
+const buildApplySuccessResponse = (
+    proration,
+    paymentValidation,
+    txResult,
+    walletBalance,
+    idempotentChange = null
+) => {
+    const changeDoc = txResult?.changeDoc || idempotentChange;
+    const updatedSubscription = txResult?.updatedSubscription;
+    const updatedPlan = txResult?.updatedPlan;
+
+    const subscriptionPayload = updatedSubscription
+        ? {
+              _id: updatedSubscription._id,
+              started_at: updatedSubscription.started_at,
+              expires_at: updatedSubscription.expires_at,
+              status: updatedSubscription.status,
+              plan: formatPlanSummary(updatedPlan),
+          }
+        : {
+              _id: idempotentChange?.subscription?._id,
+              started_at: idempotentChange?.subscription?.started_at,
+              expires_at: idempotentChange?.subscription?.expires_at,
+              status: idempotentChange?.subscription?.status,
+              plan: formatPlanSummary(idempotentChange?.plan),
+          };
+
+    const changePayload = {
+        _id: changeDoc?._id || null,
+        change_type: proration.change_type,
+        amount_to_pay: proration.amount_to_pay,
+        wallet_amount: paymentValidation.wallet,
+        cash_amount: paymentValidation.cash,
+        payment_method: paymentValidation.payment_method,
+    };
+    if (proration.change_type === 'downgrade') {
+        changePayload.wallet_credit = proration.wallet_credit;
+    }
+
+    return ok(200, {
+        message:
+            proration.change_type === 'downgrade'
+                ? 'Subscription downgraded successfully.'
+                : 'Subscription upgraded successfully.',
+        data: {
+            subscription: subscriptionPayload,
+            change: changePayload,
+            wallet_balance: walletBalance,
+        },
+    });
 };
 
 const endMongoSession = async (session) => {
@@ -692,63 +811,66 @@ const applyChange = async (partnerId, body) => {
             }
         }
 
-        const txResult = await executeChangeInTransaction({
-            partner,
-            subscription,
-            currentPlan,
-            newPlan,
-            proration,
-            paymentValidation,
-        });
+        let txResult = null;
+        let lastInProgressError = null;
 
-        const newWalletBalance = await getWalletBalance(partner._id);
+        for (let attempt = 1; attempt <= APPLY_CHANGE_MAX_ATTEMPTS; attempt++) {
+            try {
+                await releaseStalePendingChanges(partner._id);
+                txResult = await executeChangeInTransaction({
+                    partner,
+                    subscription,
+                    currentPlan,
+                    newPlan,
+                    proration,
+                    paymentValidation,
+                });
+                lastInProgressError = null;
+                break;
+            } catch (err) {
+                if (!(err instanceof SubscriptionChangeError) || err.status !== 409) {
+                    throw err;
+                }
 
-        if (proration.change_type === 'downgrade') {
-            return ok(200, {
-                message: 'Subscription downgraded successfully.',
-                data: {
-                    subscription: {
-                        _id: txResult.updatedSubscription._id,
-                        started_at: txResult.updatedSubscription.started_at,
-                        expires_at: txResult.updatedSubscription.expires_at,
-                        status: txResult.updatedSubscription.status,
-                        plan: formatPlanSummary(txResult.updatedPlan),
-                    },
-                    change: {
-                        _id: txResult.changeDoc._id,
-                        change_type: 'downgrade',
-                        amount_to_pay: proration.amount_to_pay,
-                        wallet_amount: paymentValidation.wallet,
-                        cash_amount: paymentValidation.cash,
-                        wallet_credit: proration.wallet_credit,
-                        payment_method: paymentValidation.payment_method,
-                    },
-                    wallet_balance: newWalletBalance,
-                },
-            });
+                const idempotent = await resolveIdempotentApply(partner._id, newPlan, proration);
+                if (idempotent) {
+                    return buildApplySuccessResponse(
+                        proration,
+                        paymentValidation,
+                        null,
+                        idempotent.walletBalance,
+                        {
+                            subscription: idempotent.subscription,
+                            plan: idempotent.plan,
+                            _id: idempotent.recentChange?._id,
+                        }
+                    );
+                }
+
+                if (isRetryableInProgressError(err) && attempt < APPLY_CHANGE_MAX_ATTEMPTS) {
+                    lastInProgressError = err;
+                    await sleep(100 * attempt);
+                    continue;
+                }
+
+                throw err;
+            }
         }
 
-        return ok(200, {
-            message: 'Subscription upgraded successfully.',
-            data: {
-                subscription: {
-                    _id: txResult.updatedSubscription._id,
-                    started_at: txResult.updatedSubscription.started_at,
-                    expires_at: txResult.updatedSubscription.expires_at,
-                    status: txResult.updatedSubscription.status,
-                    plan: formatPlanSummary(txResult.updatedPlan),
-                },
-                change: {
-                    _id: txResult.changeDoc._id,
-                    change_type: 'upgrade',
-                    amount_to_pay: proration.amount_to_pay,
-                    wallet_amount: paymentValidation.wallet,
-                    cash_amount: paymentValidation.cash,
-                    payment_method: paymentValidation.payment_method,
-                },
-                wallet_balance: newWalletBalance,
-            },
-        });
+        if (!txResult) {
+            throw (
+                lastInProgressError ||
+                new SubscriptionChangeError(500, 'Subscription change could not be completed.')
+            );
+        }
+
+        const newWalletBalance = await getWalletBalance(partner._id);
+        return buildApplySuccessResponse(
+            proration,
+            paymentValidation,
+            txResult,
+            newWalletBalance
+        );
     } catch (err) {
         if (err instanceof SubscriptionChangeError) {
             return fail(

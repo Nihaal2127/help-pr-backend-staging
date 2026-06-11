@@ -545,9 +545,239 @@ const getFinancialOrderPaymentById = async (req, orderId) => {
     }
 };
 
+const shapePartnerMobileFinancialRecord = (row, srNo) => {
+    const full = shapeFinancialOverviewRecord(row, srNo);
+    return {
+        sr_no: full.sr_no,
+        _id: full._id,
+        order_id: full.order_id,
+        order_unique_id: full.order_unique_id,
+        user_name: full.user_name,
+        service_name: full.service_name,
+        service_date: full.service_date,
+        total_earning: full.total_partner_amount,
+        paid_amount: full.paid_to_partner,
+        pending_amount: full.pending_to_partner,
+        payment_status: full.partner_payment_status,
+        order_status: full.order_status,
+        order_status_canonical: full.order_status_canonical,
+        created_at: full.created_at,
+        updated_at: full.updated_at,
+    };
+};
+
+const buildPartnerFinancialPaymentsTotals = async (baseFilter = {}) => {
+    const match = { deleted_at: null, ...baseFilter };
+    const collections = getListCollectionNames({
+        orderServices: require('../models/order_services'),
+    });
+
+    const result = await Order.aggregate([
+        { $match: match },
+        ...buildPartnerPendingLookupStages(collections.orderServices),
+        {
+            $group: {
+                _id: null,
+                total_orders: { $sum: 1 },
+                total_partner_amount: { $sum: '$_partner_entitlement' },
+                total_paid_to_partner: {
+                    $sum: { $ifNull: ['$partner_paid_amount', 0] },
+                },
+                total_pending_to_partner: { $sum: '$_partner_pending' },
+                total_completed_orders: {
+                    $sum: {
+                        $cond: [
+                            {
+                                $in: [
+                                    '$order_status',
+                                    [ORDER_STATUS_COMPLETED, 'completed', 3],
+                                ],
+                            },
+                            1,
+                            0,
+                        ],
+                    },
+                },
+                total_in_progress_orders: {
+                    $sum: {
+                        $cond: [
+                            {
+                                $in: [
+                                    '$order_status',
+                                    [
+                                        ORDER_STATUS_IN_PROGRESS,
+                                        'in_progress',
+                                        'in-progress',
+                                        1,
+                                        2,
+                                    ],
+                                ],
+                            },
+                            1,
+                            0,
+                        ],
+                    },
+                },
+            },
+        },
+    ]);
+
+    const row = result[0] || {};
+    return {
+        total_orders: row.total_orders || 0,
+        total_partner_amount: roundMoney(row.total_partner_amount),
+        total_paid_to_partner: roundMoney(row.total_paid_to_partner),
+        total_pending_to_partner: roundMoney(row.total_pending_to_partner),
+        total_completed_orders: row.total_completed_orders || 0,
+        total_in_progress_orders: row.total_in_progress_orders || 0,
+    };
+};
+
+const buildPartnerFinancialListBaseFilter = (partnerOid, query = {}) => {
+    const statusFilterResult = resolveFinancialListOrderStatusFilter(query.order_status);
+    if (!statusFilterResult.ok) {
+        return statusFilterResult;
+    }
+
+    if (
+        query.partner_payment_status &&
+        !isValidPartnerPaymentStatus(String(query.partner_payment_status).trim().toLowerCase())
+    ) {
+        return {
+            ok: false,
+            message: 'Invalid partner payment status. Use: unpaid, partially_paid, paid.',
+        };
+    }
+
+    const dateRangeResult = buildOrderDateRangeFilter(query);
+    if (!dateRangeResult.ok) {
+        return dateRangeResult;
+    }
+
+    const baseFilter = {
+        partner_id: partnerOid,
+        ...dateRangeResult.filter,
+        ...statusFilterResult.filter,
+    };
+
+    if (query.partner_payment_status) {
+        baseFilter.partner_payment_status = String(query.partner_payment_status).trim().toLowerCase();
+    }
+
+    return { ok: true, baseFilter };
+};
+
+const listPartnerFinancialOrderPayments = async (partnerOid, query = {}, searchRegex = null) => {
+    try {
+        const baseResult = buildPartnerFinancialListBaseFilter(partnerOid, query);
+        if (!baseResult.ok) {
+            return fail(400, baseResult.message);
+        }
+
+        const page = parseInt(query.page, 10) || 1;
+        const limit = parseInt(query.limit, 10) || 10;
+        const skip = (page - 1) * limit;
+
+        const baseFilter = { deleted_at: null, ...baseResult.baseFilter };
+        const { sort: sortStage, collation } = buildListSort(query);
+        const collections = getListCollectionNames({
+            users: User,
+            services: Service,
+            orderServices: require('../models/order_services'),
+        });
+
+        const pipeline = buildFinancialOverviewPipeline({
+            baseFilter,
+            searchRegex,
+            sortStage,
+            skip,
+            limit,
+            collections,
+        });
+
+        let agg = Order.aggregate(pipeline);
+        if (collation) {
+            agg = agg.collation(collation);
+        }
+
+        const [result, totals] = await Promise.all([agg.exec(), buildPartnerFinancialPaymentsTotals(baseFilter)]);
+
+        const { data: rows, totalCount, totalPages } = parseFacetListResult(result, limit);
+        const records = rows.map((row, index) =>
+            shapePartnerMobileFinancialRecord(row, skip + index + 1)
+        );
+
+        return ok(200, {
+            message: 'Partner order payments fetched successfully.',
+            source: 'order',
+            totalItems: totalCount,
+            totalPages,
+            currentPage: page,
+            totals,
+            records,
+        });
+    } catch (err) {
+        console.error('listPartnerFinancialOrderPayments', err);
+        return fail(500, 'Internal server error.');
+    }
+};
+
+const getPartnerFinancialOrderPaymentById = async (partnerOid, orderId) => {
+    try {
+        if (!mongoose.Types.ObjectId.isValid(orderId)) {
+            return fail(400, 'Invalid order id.');
+        }
+
+        const order = await Order.findOne({
+            _id: orderId,
+            partner_id: partnerOid,
+            deleted_at: null,
+        }).lean();
+        if (!order) {
+            return fail(404, 'Order not found.');
+        }
+
+        await syncOrderPaymentStatus(order._id);
+
+        const collections = getListCollectionNames({
+            users: User,
+            services: Service,
+            orderServices: require('../models/order_services'),
+        });
+
+        const pipeline = buildFinancialOverviewPipeline({
+            baseFilter: { _id: order._id, partner_id: partnerOid, deleted_at: null },
+            searchRegex: null,
+            sortStage: { created_at: -1 },
+            skip: 0,
+            limit: 1,
+            collections,
+        });
+
+        const result = await Order.aggregate(pipeline).exec();
+        const row = result[0]?.data?.[0];
+        if (!row) {
+            return fail(404, 'Order not found.');
+        }
+
+        return ok(200, {
+            message: 'Partner order payment fetched successfully.',
+            source: 'order',
+            record: shapePartnerMobileFinancialRecord(row, 1),
+        });
+    } catch (err) {
+        console.error('getPartnerFinancialOrderPaymentById', err);
+        return fail(500, 'Internal server error.');
+    }
+};
+
 module.exports = {
     listFinancialOrderPayments,
     getFinancialOrderPaymentById,
     buildFinancialOrderPaymentsCountFromOrders,
     shapeFinancialOverviewRecord,
+    listPartnerFinancialOrderPayments,
+    getPartnerFinancialOrderPaymentById,
+    buildPartnerFinancialPaymentsTotals,
+    shapePartnerMobileFinancialRecord,
 };

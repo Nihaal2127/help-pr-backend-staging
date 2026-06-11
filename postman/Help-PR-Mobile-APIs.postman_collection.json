@@ -1724,6 +1724,108 @@
           ]
         },
         {
+          "name": "Financial & Wallet",
+          "description": "Partner earnings overview (per-order pending/paid) and wallet balance + ledger. Same order-derived logic as admin `GET /api/order/financial-payments/getAll`. See `docs/PARTNER_FINANCIAL_MOBILE.md`.",
+          "item": [
+            {
+              "name": "List order payments",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/financial-payments?page=1&limit=10&from_date=&to_date=&order_status=&partner_payment_status=&search=&sort_by=created_at&sort_order=desc",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "financial-payments"],
+                  "query": [
+                    { "key": "page", "value": "1" },
+                    { "key": "limit", "value": "10" },
+                    { "key": "from_date", "value": "", "description": "Order schedule / order_date range (YYYY-MM-DD)" },
+                    { "key": "to_date", "value": "", "description": "Order schedule / order_date range (YYYY-MM-DD)" },
+                    { "key": "order_status", "value": "", "description": "in_progress | completed | cancelled | refunded" },
+                    { "key": "partner_payment_status", "value": "", "description": "unpaid | partially_paid | paid" },
+                    { "key": "search", "value": "", "description": "order_unique_id, customer name, service name" },
+                    { "key": "sort_by", "value": "created_at" },
+                    { "key": "sort_order", "value": "desc" }
+                  ]
+                },
+                "description": "**GET /api/mobile/partner/financial-payments** — Per-order partner earnings (paid / pending). Includes `totals` for the full filtered set (not just current page)."
+              },
+              "response": []
+            },
+            {
+              "name": "Get order payment detail",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/financial-payments/{{orderId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "financial-payments", "{{orderId}}"]
+                },
+                "description": "**GET /api/mobile/partner/financial-payments/:orderId** — One order row; `:orderId` = order Mongo `_id`."
+              },
+              "response": []
+            },
+            {
+              "name": "Get wallet summary",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/wallet?from_date=&to_date=&transaction_type=",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "wallet"],
+                  "query": [
+                    { "key": "from_date", "value": "", "description": "Optional — period totals on ledger date" },
+                    { "key": "to_date", "value": "", "description": "Optional — period totals on ledger date" },
+                    { "key": "transaction_type", "value": "", "description": "Optional — credit | debit" }
+                  ]
+                },
+                "description": "**GET /api/mobile/partner/wallet** — Current `wallet_balance` + optional filtered `totals` (credits, debits, net_change)."
+              },
+              "response": []
+            },
+            {
+              "name": "List wallet transactions",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+                },
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/wallet/transactions?page=1&limit=10&from_date=&to_date=&transaction_type=&search=",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "partner", "wallet", "transactions"],
+                  "query": [
+                    { "key": "page", "value": "1" },
+                    { "key": "limit", "value": "10" },
+                    { "key": "from_date", "value": "" },
+                    { "key": "to_date", "value": "" },
+                    { "key": "transaction_type", "value": "", "description": "credit | debit" },
+                    { "key": "search", "value": "", "description": "description, order_unique_id, payment_method" }
+                  ]
+                },
+                "description": "**GET /api/mobile/partner/wallet/transactions** — Paginated wallet ledger with `wallet_balance`, filtered `totals`, and `records[]`."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
           "name": "Posts",
           "description": "Partner portfolio posts — `post_routes.js`. Requires verified partner. See `docs/PARTNER_POST_FRONTEND.md`.",
           "item": [

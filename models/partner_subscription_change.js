@@ -54,7 +54,16 @@ const partnerSubscriptionChangeSchema = new mongoose.Schema(
             enum: PAYMENT_STATUSES,
             default: 'not_required',
         },
-        razorpay_payment_link_id: { type: String, default: null, trim: true },
+        razorpay_payment_link_id: {
+            type: String,
+            default: null,
+            trim: true,
+            set: (value) => {
+                if (value === undefined || value === null) return null;
+                const trimmed = String(value).trim();
+                return trimmed === '' ? null : trimmed;
+            },
+        },
         transaction_reference: { type: String, default: null, trim: true },
         wallet_ledger_debit_id: {
             type: mongoose.Schema.Types.ObjectId,
@@ -82,23 +91,16 @@ const partnerSubscriptionChangeSchema = new mongoose.Schema(
 
 partnerSubscriptionChangeSchema.index({ partner_id: 1, created_at: -1 });
 partnerSubscriptionChangeSchema.index({ partner_id: 1, status: 1, deleted_at: 1 });
-partnerSubscriptionChangeSchema.index(
-    { partner_id: 1 },
-    {
-        unique: true,
-        partialFilterExpression: {
-            status: 'pending',
-            deleted_at: null,
-        },
-    }
-);
+// No unique index on pending — DocumentDB/Lambda races caused E11000 with no visible row.
+// Concurrency is handled in subscription_change_service via optimistic subscription update.
+/** Only non-empty Razorpay link ids are unique (null/omitted rows are not indexed). */
 partnerSubscriptionChangeSchema.index(
     { razorpay_payment_link_id: 1 },
     {
         unique: true,
         partialFilterExpression: {
-            razorpay_payment_link_id: { $type: 'string' },
             deleted_at: null,
+            razorpay_payment_link_id: { $gt: '' },
         },
     }
 );

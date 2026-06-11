@@ -177,7 +177,7 @@ DOWNGRADE: amount_to_pay = max(0, new_plan.price − remaining_value)
 | 400 | Same plan, invalid payment split, payment sent when `amount_to_pay` is 0 |
 | 403 | Blocked account, unverified (preview/apply), not a partner |
 | 404 | No active subscription, plan not found |
-| 409 | Another change still `pending` (retry shortly) |
+| 409 | Another change still `pending` (retry after ~1 minute; stale `pending` rows auto-expire) |
 | 500 | Server / transaction failure |
 
 ---

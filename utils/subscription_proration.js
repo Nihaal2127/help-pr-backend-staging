@@ -95,7 +95,8 @@ const computeProration = ({ currentPlan, newPlan, startedAt, asOf = new Date() }
     if (changeType === 'upgrade') {
         amountToPay = roundAmount(Math.max(0, P_new - remainingValue));
     } else if (changeType === 'downgrade') {
-        walletCredit = remainingValue;
+        amountToPay = roundAmount(Math.max(0, P_new - remainingValue));
+        walletCredit = roundAmount(Math.max(0, remainingValue - P_new));
     }
 
     const newPeriodDays = planValidityDays(newPlan, asOf);
@@ -137,7 +138,7 @@ const validateUpgradePaymentSplit = ({ amountToPay, walletAmount, cashAmount, wa
 
     if (due <= PAYMENT_TOLERANCE) {
         if (wallet > PAYMENT_TOLERANCE || cash > PAYMENT_TOLERANCE) {
-            return { ok: false, message: 'No payment is required for this upgrade.' };
+            return { ok: false, message: 'No payment is required for this subscription change.' };
         }
         return { ok: true, wallet: 0, cash: 0, payment_method: 'not_required' };
     }

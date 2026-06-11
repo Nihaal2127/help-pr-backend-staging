@@ -41,16 +41,35 @@ const planValidityDays = (plan, referenceStart = new Date()) => {
     return Math.max(1, days);
 };
 
+/** Canonical tier ladder — matches subscription_plan PLAN_NAMES order. */
+const PLAN_TIER_RANK = {
+    basic: 1,
+    silver: 2,
+    gold: 3,
+    platinum: 4,
+};
+
+const planTierRank = (plan) => {
+    const name = plan?.plan_name != null ? String(plan.plan_name).trim().toLowerCase() : '';
+    return PLAN_TIER_RANK[name] ?? null;
+};
+
 const resolveChangeType = (currentPlan, newPlan) => {
     if (String(currentPlan._id) === String(newPlan._id)) {
         return 'same';
     }
 
+    const tierCur = planTierRank(currentPlan);
+    const tierNew = planTierRank(newPlan);
+    if (tierCur != null && tierNew != null && tierCur !== tierNew) {
+        return tierNew > tierCur ? 'upgrade' : 'downgrade';
+    }
+
     const pCur = currentPlan.priority;
     const pNew = newPlan.priority;
     if (pCur != null && pNew != null && pCur !== pNew) {
-        // Higher priority number = higher tier (see comparePlanPriorityDesc / franchise partner sorting).
-        return pNew > pCur ? 'upgrade' : 'downgrade';
+        // DB convention: lower priority number = higher tier (platinum=1 … basic=4).
+        return pNew < pCur ? 'upgrade' : 'downgrade';
     }
 
     const priceCur = Number(currentPlan.price) || 0;

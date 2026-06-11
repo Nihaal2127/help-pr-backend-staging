@@ -45,7 +45,6 @@ const partnerWalletLedgerSchema = new mongoose.Schema(
         order_payment_id: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'order_payment',
-            default: null,
         },
         subscription_change_id: {
             type: mongoose.Schema.Types.ObjectId,
@@ -59,27 +58,29 @@ const partnerWalletLedgerSchema = new mongoose.Schema(
     { timestamps: false }
 );
 
-/** One active credit per partner order_payment (payment-to-partner wallet model). */
+/** One active credit per order_payment row (order-payment wallet model only). */
 partnerWalletLedgerSchema.index(
     { order_payment_id: 1, transaction_type: 1 },
     {
         unique: true,
+        name: 'wallet_order_payment_credit_unique',
         partialFilterExpression: {
             deleted_at: null,
-            order_payment_id: { $type: 'objectId' },
             transaction_type: 'credit',
+            order_payment_id: { $exists: true, $type: 'objectId' },
         },
     }
 );
-/** Payout withdrawals and legacy partner-payment debits. */
+/** One active debit per order_payment row (partner remittance / payout model). */
 partnerWalletLedgerSchema.index(
     { order_payment_id: 1, transaction_type: 1 },
     {
         unique: true,
+        name: 'wallet_order_payment_debit_unique',
         partialFilterExpression: {
             deleted_at: null,
-            order_payment_id: { $type: 'objectId' },
             transaction_type: 'debit',
+            order_payment_id: { $exists: true, $type: 'objectId' },
         },
     }
 );

@@ -87,17 +87,36 @@ const buildInProgressError = async (partnerId, session = null, source = 'active_
     );
 };
 
+const resolveDuplicateKeyReason = (err) => {
+    const pattern = err?.keyPattern || {};
+    if (pattern.razorpay_payment_link_id) {
+        return 'duplicate_razorpay_payment_link_id';
+    }
+    if (pattern.partner_id) {
+        return 'duplicate_pending_index';
+    }
+    return 'duplicate_key';
+};
+
 const mapExecutionError = async (err, partnerId, session = null) => {
     if (err instanceof SubscriptionChangeError) {
         return err;
     }
     if (isDuplicateKeyError(err)) {
-        console.warn(
-            'subscription change duplicate key',
-            err.keyPattern || null,
-            err.keyValue || null
-        );
-        return buildInProgressError(partnerId, session, 'duplicate_pending_index');
+        const reason = resolveDuplicateKeyReason(err);
+        console.warn('subscription change duplicate key', reason, err.keyPattern, err.keyValue);
+        if (reason === 'duplicate_razorpay_payment_link_id') {
+            return new SubscriptionChangeError(
+                500,
+                'Subscription change could not be saved due to a payment link index conflict. Please contact support.',
+                {
+                    reason,
+                    key_pattern: err.keyPattern || null,
+                    key_value: err.keyValue || null,
+                }
+            );
+        }
+        return buildInProgressError(partnerId, session, reason);
     }
     return err;
 };
@@ -106,7 +125,8 @@ const isRetryableInProgressError = (err) =>
     err instanceof SubscriptionChangeError &&
     err.status === 409 &&
     (err.details?.reason === 'duplicate_pending_index' ||
-        err.details?.reason === 'active_pending') &&
+        err.details?.reason === 'active_pending' ||
+        err.details?.reason === 'subscription_plan_conflict') &&
     !err.details?.blocking_change;
 
 const resolveIdempotentApply = async (partnerId, newPlan, proration) => {
@@ -578,15 +598,28 @@ const listChangeHistory = async (partnerId, query = {}) => {
     }
 };
 
-const applySubscriptionUpdate = async (subscriptionId, newPlanId, asOf, session) => {
+const applySubscriptionUpdate = async (
+    subscriptionId,
+    newPlanId,
+    expectedCurrentPlanId,
+    asOf,
+    session
+) => {
     const plan = await SubscriptionPlan.findById(newPlanId).session(session).lean();
     if (!plan) {
         throw new SubscriptionChangeError(404, 'Target subscription plan not found.');
     }
     const endDate = computeExpiresAt(asOf, plan);
 
+    const filter = {
+        _id: subscriptionId,
+        deleted_at: null,
+        status: 'active',
+        subscription_plan_id: expectedCurrentPlanId,
+    };
+
     const updated = await PartnerSubscription.findOneAndUpdate(
-        { _id: subscriptionId, deleted_at: null, status: 'active' },
+        filter,
         {
             $set: {
                 subscription_plan_id: newPlanId,
@@ -600,7 +633,11 @@ const applySubscriptionUpdate = async (subscriptionId, newPlanId, asOf, session)
     ).lean();
 
     if (!updated) {
-        throw new SubscriptionChangeError(404, 'Active subscription not found.');
+        throw new SubscriptionChangeError(
+            409,
+            'Subscription plan changed before update could be applied. Please retry.',
+            { reason: 'subscription_plan_conflict' }
+        );
     }
 
     return { updated, plan };
@@ -677,33 +714,7 @@ const executeChangeInTransaction = async ({
                 paymentValidation.payment_method = revalidated.payment_method;
             }
 
-            const [changeDoc] = await PartnerSubscriptionChange.create(
-                [
-                    {
-                        partner_id: partner._id,
-                        from_plan_id: currentPlan._id,
-                        to_plan_id: newPlan._id,
-                        change_type: proration.change_type,
-                        days_used: proration.days_used,
-                        days_total: proration.days_total,
-                        consumed_value: proration.consumed_value,
-                        remaining_value: proration.remaining_value,
-                        gross_new_plan_price: proration.gross_new_plan_price,
-                        amount_to_pay: proration.amount_to_pay,
-                        wallet_amount: paymentValidation.wallet,
-                        cash_amount: paymentValidation.cash,
-                        wallet_credit: proration.wallet_credit,
-                        payment_method: paymentValidation.payment_method,
-                        payment_status: resolveChangePaymentStatus(proration.amount_to_pay),
-                        status: 'pending',
-                        applied_at: null,
-                        created_at: now,
-                        updated_at: now,
-                    },
-                ],
-                { session }
-            );
-
+            const changeId = new mongoose.Types.ObjectId();
             let walletLedgerDebitId = null;
             let walletLedgerCreditId = null;
 
@@ -716,7 +727,7 @@ const executeChangeInTransaction = async ({
                         amount: proration.wallet_credit,
                         description: `Subscription downgrade credit (${currentPlan.plan_name} to ${newPlan.plan_name})`,
                         paymentMethod: 'subscription_downgrade',
-                        subscriptionChangeId: changeDoc._id,
+                        subscriptionChangeId: changeId,
                     },
                     session
                 );
@@ -734,7 +745,7 @@ const executeChangeInTransaction = async ({
                         amount: paymentValidation.wallet,
                         description: `Subscription ${debitLabel} (${currentPlan.plan_name} to ${newPlan.plan_name})`,
                         paymentMethod: 'wallet',
-                        subscriptionChangeId: changeDoc._id,
+                        subscriptionChangeId: changeId,
                     },
                     session
                 );
@@ -744,30 +755,45 @@ const executeChangeInTransaction = async ({
             const { updated, plan: updatedPlan } = await applySubscriptionUpdate(
                 subscription._id,
                 newPlan._id,
+                currentPlan._id,
                 now,
                 session
             );
 
-            const completedChange = await PartnerSubscriptionChange.findOneAndUpdate(
-                { _id: changeDoc._id, deleted_at: null },
-                {
-                    $set: {
+            const [completedChange] = await PartnerSubscriptionChange.create(
+                [
+                    {
+                        _id: changeId,
+                        partner_id: partner._id,
+                        from_plan_id: currentPlan._id,
+                        to_plan_id: newPlan._id,
+                        change_type: proration.change_type,
+                        days_used: proration.days_used,
+                        days_total: proration.days_total,
+                        consumed_value: proration.consumed_value,
+                        remaining_value: proration.remaining_value,
+                        gross_new_plan_price: proration.gross_new_plan_price,
+                        amount_to_pay: proration.amount_to_pay,
+                        wallet_amount: paymentValidation.wallet,
+                        cash_amount: paymentValidation.cash,
+                        wallet_credit: proration.wallet_credit,
+                        payment_method: paymentValidation.payment_method,
+                        payment_status: resolveChangePaymentStatus(proration.amount_to_pay),
                         status: 'completed',
                         applied_at: now,
-                        updated_at: now,
                         wallet_ledger_debit_id: walletLedgerDebitId,
                         wallet_ledger_credit_id: walletLedgerCreditId,
+                        razorpay_payment_link_id: null,
+                        transaction_reference: null,
+                        created_at: now,
+                        updated_at: now,
                     },
-                },
-                { new: true, session }
-            ).lean();
-
-            if (!completedChange) {
-                throw new SubscriptionChangeError(500, 'Failed to finalize subscription change.');
-            }
+                ],
+                { session }
+            );
 
             result = {
-                changeDoc: completedChange,
+                changeDoc: completedChange.toObject(),
                 updatedSubscription: updated,
                 updatedPlan,
             };

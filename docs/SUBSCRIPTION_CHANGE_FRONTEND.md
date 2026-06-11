@@ -13,8 +13,8 @@ Partners can **upgrade** or **downgrade** their subscription tier from the mobil
 
 | Action | Payment | Wallet |
 |--------|---------|--------|
-| **Upgrade** | `wallet_amount` + `cash_amount` = `amount_to_pay` (no Razorpay v1) | Wallet portion debited |
-| **Downgrade** | None | Unused value **credited** to partner wallet |
+| **Upgrade** | `wallet_amount` + `cash_amount` = `amount_to_pay` when due (no Razorpay v1) | Wallet portion debited |
+| **Downgrade** | Same as upgrade when `amount_to_pay` > 0 | Credit **surplus** (`wallet_credit`) when unused value exceeds new plan price |
 
 **Requirements**
 
@@ -90,7 +90,9 @@ POST /api/mobile/partner/subscription/change/preview
 }
 ```
 
-**Downgrade:** `wallet_credit` > 0, `amount_to_pay` = 0.
+**Downgrade (credit):** `wallet_credit` > 0, `amount_to_pay` = 0 — unused value exceeds new plan price.
+
+**Downgrade (payment due):** `amount_to_pay` > 0, `wallet_credit` = 0 — new plan price exceeds unused value (e.g. late in billing period).
 
 ---
 
@@ -112,13 +114,13 @@ POST /api/mobile/partner/subscription/change
 
 `wallet_amount + cash_amount` must equal `amount_to_pay` from preview (± ₹0.01).
 
-**Downgrade body**
+**Downgrade body (no payment due)**
 
 ```json
 { "target_plan_id": "..." }
 ```
 
-Do not send payment fields on downgrade.
+**Downgrade body (payment due)** — same shape as upgrade; amounts must match preview `amount_to_pay`.
 
 **200 `data`**
 
@@ -156,10 +158,15 @@ consumed_value  = days_used × daily_rate
 remaining_value = current_plan.price − consumed_value
 
 UPGRADE:   amount_to_pay = max(0, new_plan.price − remaining_value)
-DOWNGRADE: wallet_credit = remaining_value
+           wallet_credit = 0
+
+DOWNGRADE: amount_to_pay = max(0, new_plan.price − remaining_value)
+           wallet_credit = max(0, remaining_value − new_plan.price)
 ```
 
 **Excess remaining on upgrade** (remaining > new plan price): surplus is **forfeited**; `amount_to_pay = 0`.
+
+**Excess remaining on downgrade** (remaining > new plan price): surplus is **credited** to wallet; `amount_to_pay = 0`.
 
 ---
 
@@ -167,7 +174,7 @@ DOWNGRADE: wallet_credit = remaining_value
 
 | Status | When |
 |--------|------|
-| 400 | Same plan, invalid payment split, payment on downgrade |
+| 400 | Same plan, invalid payment split, payment sent when `amount_to_pay` is 0 |
 | 403 | Blocked account, unverified (preview/apply), not a partner |
 | 404 | No active subscription, plan not found |
 | 409 | Another change still `pending` (retry shortly) |

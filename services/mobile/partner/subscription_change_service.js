@@ -461,7 +461,7 @@ const executeChangeInTransaction = async ({
             const now = new Date();
             const freshBalance = await getWalletBalance(partner._id, session);
 
-            if (proration.change_type === 'upgrade') {
+            if (proration.amount_to_pay > 0) {
                 const revalidated = validateUpgradePaymentSplit({
                     amountToPay: proration.amount_to_pay,
                     walletAmount: paymentValidation.wallet,
@@ -488,18 +488,11 @@ const executeChangeInTransaction = async ({
                         consumed_value: proration.consumed_value,
                         remaining_value: proration.remaining_value,
                         gross_new_plan_price: proration.gross_new_plan_price,
-                        amount_to_pay:
-                            proration.change_type === 'upgrade' ? proration.amount_to_pay : 0,
-                        wallet_amount:
-                            proration.change_type === 'upgrade' ? paymentValidation.wallet : 0,
-                        cash_amount:
-                            proration.change_type === 'upgrade' ? paymentValidation.cash : 0,
-                        wallet_credit:
-                            proration.change_type === 'downgrade' ? proration.wallet_credit : 0,
-                        payment_method:
-                            proration.change_type === 'upgrade'
-                                ? paymentValidation.payment_method
-                                : 'not_required',
+                        amount_to_pay: proration.amount_to_pay,
+                        wallet_amount: paymentValidation.wallet,
+                        cash_amount: paymentValidation.cash,
+                        wallet_credit: proration.wallet_credit,
+                        payment_method: paymentValidation.payment_method,
                         payment_status: 'completed',
                         status: 'pending',
                         applied_at: null,
@@ -529,14 +522,16 @@ const executeChangeInTransaction = async ({
                 walletLedgerCreditId = creditRow._id;
             }
 
-            if (proration.change_type === 'upgrade' && paymentValidation.wallet > 0) {
+            if (paymentValidation.wallet > 0) {
+                const debitLabel =
+                    proration.change_type === 'downgrade' ? 'downgrade payment' : 'upgrade payment';
                 const debitRow = await createWalletLedgerEntry(
                     {
                         partnerId: partner._id,
                         franchiseId: partner.franchise_id,
                         transactionType: 'debit',
                         amount: paymentValidation.wallet,
-                        description: `Subscription upgrade payment (${currentPlan.plan_name} → ${newPlan.plan_name})`,
+                        description: `Subscription ${debitLabel} (${currentPlan.plan_name} → ${newPlan.plan_name})`,
                         paymentMethod: 'wallet',
                         subscriptionChangeId: changeDoc._id,
                     },
@@ -581,17 +576,9 @@ const applyChange = async (partnerId, body) => {
 
         const { partner, subscription, currentPlan, newPlan, proration } = ctx.data;
 
-        if (proration.change_type === 'downgrade') {
-            const walletPay = roundAmount(wallet_amount);
-            const cashPay = roundAmount(cash_amount);
-            if (walletPay > 0 || cashPay > 0) {
-                return fail(400, 'Payment is not required for a downgrade.');
-            }
-        }
-
         let paymentValidation = { wallet: 0, cash: 0, payment_method: 'not_required' };
 
-        if (proration.change_type === 'upgrade') {
+        if (proration.amount_to_pay > 0) {
             const walletBalance = await getWalletBalance(partner._id);
             paymentValidation = validateUpgradePaymentSplit({
                 amountToPay: proration.amount_to_pay,
@@ -629,8 +616,11 @@ const applyChange = async (partnerId, body) => {
                     change: {
                         _id: txResult.changeDoc._id,
                         change_type: 'downgrade',
+                        amount_to_pay: proration.amount_to_pay,
+                        wallet_amount: paymentValidation.wallet,
+                        cash_amount: paymentValidation.cash,
                         wallet_credit: proration.wallet_credit,
-                        payment_method: 'not_required',
+                        payment_method: paymentValidation.payment_method,
                     },
                     wallet_balance: newWalletBalance,
                 },

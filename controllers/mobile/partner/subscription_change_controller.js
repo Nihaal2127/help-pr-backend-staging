@@ -6,6 +6,7 @@ const sendServiceResult = (res, result) => {
             success: false,
             status: result.status,
             message: result.message,
+            ...(result.details ? { details: result.details } : {}),
         });
     }
     return res.status(result.status).json({

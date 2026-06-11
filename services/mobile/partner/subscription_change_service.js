@@ -13,26 +13,64 @@ const {
 } = require('../../../utils/subscription_proration');
 
 const USER_TYPE_PARTNER = 2;
+/** Pending rows older than this are treated as orphaned (failed/crashed apply). */
+const PENDING_CHANGE_STALE_MS = 60 * 1000;
 
 class SubscriptionChangeError extends Error {
-    constructor(status, message) {
+    constructor(status, message, details = null) {
         super(message);
         this.status = status;
+        this.details = details;
     }
 }
 
 const isDuplicateKeyError = (err) =>
     err != null && (err.code === 11000 || err.code === 11001);
 
-const mapExecutionError = (err) => {
+const findBlockingPendingChange = async (partnerId, session = null) => {
+    const query = PartnerSubscriptionChange.findOne({
+        partner_id: partnerId,
+        status: 'pending',
+        deleted_at: null,
+    })
+        .select('_id partner_id status created_at applied_at wallet_ledger_credit_id wallet_ledger_debit_id')
+        .lean();
+    if (session) {
+        query.session(session);
+    }
+    return query;
+};
+
+const formatBlockingPendingDetails = (row) => {
+    if (!row) return null;
+    return {
+        change_id: row._id,
+        status: row.status,
+        created_at: row.created_at,
+        applied_at: row.applied_at,
+        wallet_ledger_credit_id: row.wallet_ledger_credit_id,
+        wallet_ledger_debit_id: row.wallet_ledger_debit_id,
+    };
+};
+
+const buildInProgressError = async (partnerId, session = null, source = 'active_pending') => {
+    const blocking = await findBlockingPendingChange(partnerId, session);
+    return new SubscriptionChangeError(
+        409,
+        'A subscription change is already in progress. Please try again shortly.',
+        {
+            reason: source,
+            blocking_change: formatBlockingPendingDetails(blocking),
+        }
+    );
+};
+
+const mapExecutionError = async (err, partnerId, session = null) => {
     if (err instanceof SubscriptionChangeError) {
         return err;
     }
     if (isDuplicateKeyError(err)) {
-        return new SubscriptionChangeError(
-            409,
-            'A subscription change is already in progress. Please try again shortly.'
-        );
+        return buildInProgressError(partnerId, session, 'duplicate_pending_index');
     }
     return err;
 };
@@ -48,6 +86,30 @@ const endMongoSession = async (session) => {
 
 const resolveChangePaymentStatus = (amountToPay) =>
     roundAmount(amountToPay) > 0 ? 'completed' : 'not_required';
+
+const releaseStalePendingChanges = async (partnerId, session = null) => {
+    const cutoff = new Date(Date.now() - PENDING_CHANGE_STALE_MS);
+    const query = PartnerSubscriptionChange.updateMany(
+        {
+            partner_id: partnerId,
+            status: 'pending',
+            deleted_at: null,
+            applied_at: null,
+            created_at: { $lt: cutoff },
+        },
+        {
+            $set: {
+                status: 'expired',
+                updated_at: new Date(),
+            },
+        }
+    );
+    if (session) {
+        query.session(session);
+    }
+    const result = await query;
+    return result.modifiedCount || 0;
+};
 
 const fail = (status, message, extra = {}) => ({ ok: false, status, message, ...extra });
 const ok = (status, data) => ({ ok: true, status, data });
@@ -471,19 +533,11 @@ const executeChangeInTransaction = async ({
 
     try {
         await session.withTransaction(async () => {
-            const pending = await PartnerSubscriptionChange.findOne({
-                partner_id: partner._id,
-                status: 'pending',
-                deleted_at: null,
-            })
-                .session(session)
-                .select('_id');
+            await releaseStalePendingChanges(partner._id, session);
 
+            const pending = await findBlockingPendingChange(partner._id, session);
             if (pending) {
-                throw new SubscriptionChangeError(
-                    409,
-                    'A subscription change is already in progress. Please try again shortly.'
-                );
+                throw await buildInProgressError(partner._id, session, 'active_pending');
             }
 
             const now = new Date();
@@ -600,7 +654,7 @@ const executeChangeInTransaction = async ({
             };
         });
     } catch (err) {
-        throw mapExecutionError(err);
+        throw await mapExecutionError(err, partner._id, session);
     } finally {
         await endMongoSession(session);
     }
@@ -620,6 +674,8 @@ const applyChange = async (partnerId, body) => {
         if (!ctx.ok) return ctx;
 
         const { partner, subscription, currentPlan, newPlan, proration } = ctx.data;
+
+        await releaseStalePendingChanges(partner._id);
 
         let paymentValidation = { wallet: 0, cash: 0, payment_method: 'not_required' };
 
@@ -695,7 +751,11 @@ const applyChange = async (partnerId, body) => {
         });
     } catch (err) {
         if (err instanceof SubscriptionChangeError) {
-            return fail(err.status, err.message);
+            return fail(
+                err.status,
+                err.message,
+                err.details ? { details: err.details } : {}
+            );
         }
         console.error('applyChange', err.message, err.stack || '');
         return fail(500, 'Internal server error.');

@@ -57,6 +57,7 @@ OPTIONAL — franchise scope
   settings-role                 13  (aliases: settings_role, settingsrole)
   order-management              14  (aliases: order_management, orders)
   partner-post-management       16  (aliases: partner_post_management, partner-posts, partner_posts)
+  partner-portfolio-management  17  (aliases: partner_portfolio_management, partners-browse, partners_browse)
   settings-offers               15  (aliases: settings_offers, offers-management)
 
   You may also send "type" as a string of digits (e.g. "11") — it is parsed as a number.
@@ -130,6 +131,12 @@ FRANCHISE PARAMETER — WHAT CHANGES PER "type"
       Franchise admin / employee: always scoped to their franchise.
       Partner / customer: 403.
 
+  17 partner-portfolio-management
+      Same franchise/role scope as GET /api/partners and GET /api/partners/getCounts.
+      Super admin / staff: all eligible partners, or filter with franchise / franchise_id.
+      Franchise admin / employee: always scoped to their franchise.
+      Partner / customer: 403.
+
 --------------------------------------------------------------------------------
 FINANCIAL ORDER PAYMENTS (TYPE 4) — "record" KEYS (four dashboard cards)
 --------------------------------------------------------------------------------
@@ -186,6 +193,26 @@ PARTNER-POST-MANAGEMENT (TYPE 16) — "record" KEYS (six dashboard cards)
     { "type": "partner-post-management", "franchise_id": "<ObjectId>", "partner_id": "<optional>" }
 
   See docs/PARTNER_POST_ADMIN_FRONTEND.md §5.
+
+--------------------------------------------------------------------------------
+PARTNER-PORTFOLIO-MANAGEMENT (TYPE 17) — "record" KEYS (five dashboard cards)
+--------------------------------------------------------------------------------
+
+  Eligible partners: same pool as GET /api/partners (verified, active subscription,
+  active plan, franchise-scoped).
+
+  total       All eligible partners in scope
+  basic       plan_name = basic   (same as GET /api/partners?plan_name=basic)
+  silver      plan_name = silver
+  gold        plan_name = gold
+  platinum    plan_name = platinum
+
+  Standalone (same buckets):
+    GET /api/partners/getCounts?franchise_id=<optional>
+
+  Example:
+    POST /api/getCount
+    { "type": "partner-portfolio-management", "franchise_id": "<ObjectId>" }
 
 --------------------------------------------------------------------------------
 MY-FRANCHISE (TYPE 10) — HOW "record" FIELDS ARE COMPUTED
@@ -281,11 +308,14 @@ EXAMPLE REQUESTS
     { "type": "user-management", "franchise_id": "<24-char ObjectId>" }
 
 --------------------------------------------------------------------------------
-RELATED ENDPOINT (quotes only)
+RELATED STANDALONE getCounts ENDPOINTS
 --------------------------------------------------------------------------------
 
   GET /api/quote/getCounts?franchise_id=<optional ObjectId>
   Same five buckets as quote-management on POST /api/getCount; query param, not body.
+
+  GET /api/partners/getCounts?franchise_id=<optional ObjectId>
+  Same five buckets as partner-portfolio-management (type 17) on POST /api/getCount.
 
 ================================================================================
 File: docs/GET_COUNT_API_FRONTEND.txt — keep in sync if API changes.

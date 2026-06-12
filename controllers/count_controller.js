@@ -24,6 +24,8 @@ const {
 const { checkObjectIdExists } = require('../validator/id_validator');
 const { resolveOrderListScope } = require('../utils/order_access');
 const { resolveQuoteListScope } = require('../utils/quote_access');
+const { resolvePartnersListScope } = require('../utils/partners_access');
+const { getPartnersBrowseCounts } = require('../services/partners_admin_service');
 const {
   ORDER_STATUS_IN_PROGRESS,
   ORDER_STATUS_COMPLETED,
@@ -175,6 +177,10 @@ const resolveCountType = (type) => {
         partner_post_management: 16,
         'partner-posts': 16,
         partner_posts: 16,
+        'partner-portfolio-management': 17,
+        partner_portfolio_management: 17,
+        'partners-browse': 17,
+        partners_browse: 17,
         'settings-offers': 15,
         settings_offers: 15,
         'offers-management': 15,
@@ -1050,6 +1056,31 @@ const getCountData = async (req, res) => {
             const countsResult = await getPostCounts(req, {
                 franchise_id: franchiseQuery,
                 partner_id: partnerIdFromQuery,
+            });
+            if (!countsResult.ok) {
+                return res.status(countsResult.status).json({
+                    success: false,
+                    status: countsResult.status,
+                    message: countsResult.message,
+                });
+            }
+            Object.assign(response, countsResult.data.counts);
+        } else if (resolvedType === 17) {
+            // Partners browse — same franchise/role scope as GET /api/partners/getCounts
+            const franchiseQuery = franchiseScopeOid ? franchiseScopeOid.toString() : undefined;
+            const scopeResult = await resolvePartnersListScope(req, {
+                franchiseIdFromQuery: franchiseQuery,
+            });
+            if (!scopeResult.ok) {
+                return res.status(scopeResult.status).json({
+                    success: false,
+                    status: scopeResult.status,
+                    message: scopeResult.message,
+                });
+            }
+
+            const countsResult = await getPartnersBrowseCounts(scopeResult, {
+                franchise_id: franchiseQuery,
             });
             if (!countsResult.ok) {
                 return res.status(countsResult.status).json({

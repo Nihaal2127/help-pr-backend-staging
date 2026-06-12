@@ -8,6 +8,7 @@ const {
   validatePartnerProfileQuery,
 } = require('../middleware/partners_middleware');
 const {
+  getPartnersCountsHandler,
   listPartnersHandler,
   getPartnerProfileHandler,
 } = require('../controllers/partners_controller');
@@ -15,6 +16,7 @@ const {
 router.use(rateLimiter);
 router.use(authMiddleware, requireBackoffice);
 
+router.get('/getCounts', getPartnersCountsHandler);
 router.get('/', listPartnersHandler);
 router.get(
   '/:partnerId',

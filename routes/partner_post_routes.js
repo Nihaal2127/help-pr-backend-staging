@@ -10,6 +10,7 @@ const {
   validateUpdateReportBody,
 } = require('../middleware/partner_post_middleware');
 const {
+  getPostCountsHandler,
   listReportsHandler,
   getAllPostsHandler,
   moderatePostHandler,
@@ -19,6 +20,7 @@ const {
 router.use(rateLimiter);
 router.use(authMiddleware, requireBackoffice);
 
+router.get('/getCounts', getPostCountsHandler);
 router.get('/reports', listReportsHandler);
 router.get('/getAll', getAllPostsHandler);
 router.put(

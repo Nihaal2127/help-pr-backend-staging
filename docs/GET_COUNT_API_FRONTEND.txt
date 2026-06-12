@@ -56,6 +56,8 @@ OPTIONAL — franchise scope
   partner-management            12
   settings-role                 13  (aliases: settings_role, settingsrole)
   order-management              14  (aliases: order_management, orders)
+  partner-post-management       16  (aliases: partner_post_management, partner-posts, partner_posts)
+  settings-offers               15  (aliases: settings_offers, offers-management)
 
   You may also send "type" as a string of digits (e.g. "11") — it is parsed as a number.
 
@@ -121,6 +123,13 @@ FRANCHISE PARAMETER — WHAT CHANGES PER "type"
       Franchise admin / employee: always scoped to their franchise.
       Partner / customer: 403.
 
+  16 partner-post-management
+      Same franchise/role scope as GET /api/partner-post/getCounts.
+      Super admin / staff: all posts/reports, or filter with franchise / franchise_id.
+      Optional partner_id (body or query) narrows to one partner.
+      Franchise admin / employee: always scoped to their franchise.
+      Partner / customer: 403.
+
 --------------------------------------------------------------------------------
 FINANCIAL ORDER PAYMENTS (TYPE 4) — "record" KEYS (four dashboard cards)
 --------------------------------------------------------------------------------
@@ -152,6 +161,31 @@ ORDER-MANAGEMENT (TYPE 14) — "record" KEYS (four dashboard cards)
   List filter (same buckets): GET /api/order/getAll?order_status=refunded
   Aliases: pending → in-progress; refund → refunded; numeric 1–4 per migration doc.
   Buckets are mutually exclusive (refunded tab wins when payment rollup shows refund).
+
+--------------------------------------------------------------------------------
+PARTNER-POST-MANAGEMENT (TYPE 16) — "record" KEYS (six dashboard cards)
+--------------------------------------------------------------------------------
+
+  Post status (partner_post.status, deleted_at null):
+
+  published     Live posts — same bucket as GET /api/partner-post/getAll?status=published
+  hidden        Admin-hidden posts
+  removed       Admin-removed posts
+
+  Report status (partner_post_report.status, parent post in scope):
+
+  pending       Customer reports awaiting review — GET /api/partner-post/reports?status=pending
+  reviewed      Reports marked handled
+  dismissed     Reports closed with no post action
+
+  Standalone (same buckets):
+    GET /api/partner-post/getCounts?franchise_id=<optional>&partner_id=<optional>
+
+  Example:
+    POST /api/getCount
+    { "type": "partner-post-management", "franchise_id": "<ObjectId>", "partner_id": "<optional>" }
+
+  See docs/PARTNER_POST_ADMIN_FRONTEND.md §5.
 
 --------------------------------------------------------------------------------
 MY-FRANCHISE (TYPE 10) — HOW "record" FIELDS ARE COMPUTED

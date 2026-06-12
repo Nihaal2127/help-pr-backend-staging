@@ -1,9 +1,38 @@
 const {
+  getPostCounts,
   listReports,
   listAllPosts,
   moderatePost,
   updateReportStatus,
 } = require('../services/partner_post_service');
+
+const getPostCountsHandler = async (req, res) => {
+  try {
+    const result = await getPostCounts(req, req.query);
+
+    if (!result.ok) {
+      return res.status(result.status).json({
+        success: false,
+        status: result.status,
+        message: result.message,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: result.data.message,
+      record: result.data.counts,
+    });
+  } catch (error) {
+    console.error('admin partner post getCounts', error.message);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Internal server error.',
+    });
+  }
+};
 
 const listReportsHandler = async (req, res) => {
   try {
@@ -126,6 +155,7 @@ const updateReportHandler = async (req, res) => {
 };
 
 module.exports = {
+  getPostCountsHandler,
   listReportsHandler,
   getAllPostsHandler,
   moderatePostHandler,

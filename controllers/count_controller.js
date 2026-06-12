@@ -48,6 +48,7 @@ const {
     countFranchiseScopedRequestedCatalog,
 } = require('../utils/franchise_catalog_dashboard_counts');
 const { loadFranchiseCallerScope } = require('../utils/franchise_user_scope');
+const { getPostCounts } = require('../services/partner_post_service');
 
 const pickFirstNonEmpty = (...values) => {
     for (const value of values) {
@@ -170,6 +171,10 @@ const resolveCountType = (type) => {
         'order-management': 14,
         order_management: 14,
         orders: 14,
+        'partner-post-management': 16,
+        partner_post_management: 16,
+        'partner-posts': 16,
+        partner_posts: 16,
         'settings-offers': 15,
         settings_offers: 15,
         'offers-management': 15,
@@ -1035,6 +1040,25 @@ const getCountData = async (req, res) => {
             response.completed = completed;
             response.cancelled = cancelled;
             response.refunded = refunded;
+        } else if (resolvedType === 16) {
+            // Partner post management — same scope as GET /api/partner-post/getCounts
+            const franchiseQuery = franchiseScopeOid ? franchiseScopeOid.toString() : undefined;
+            const partnerIdFromQuery = pickFirstNonEmpty(
+                req.body?.partner_id,
+                req.query?.partner_id
+            );
+            const countsResult = await getPostCounts(req, {
+                franchise_id: franchiseQuery,
+                partner_id: partnerIdFromQuery,
+            });
+            if (!countsResult.ok) {
+                return res.status(countsResult.status).json({
+                    success: false,
+                    status: countsResult.status,
+                    message: countsResult.message,
+                });
+            }
+            Object.assign(response, countsResult.data.counts);
         } else if (resolvedType === 15) {
             // Settings → Offers (settings-offers page)
             const offerBase = { deleted_at: null };

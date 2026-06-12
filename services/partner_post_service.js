@@ -6,7 +6,11 @@ const {
   normalizePostStatus,
   normalizeReportStatus,
   REPORT_STATUS_PENDING,
+  POST_STATUS_PUBLISHED,
+  POST_STATUS_HIDDEN,
+  POST_STATUS_REMOVED,
 } = require('../enum/post_report_reason_enum');
+const { resolvePartnerPostListScope } = require('../utils/partner_post_access');
 const {
   fail,
   ok,
@@ -19,6 +23,82 @@ const {
 } = require('./partner_post_common_service');
 
 const MAX_ADMIN_LIMIT = 100;
+
+const buildPostListScopeFilter = async (req, query = {}) => {
+  const scopeResult = await resolvePartnerPostListScope(req, {
+    franchiseIdFromQuery: query.franchise_id,
+  });
+  if (!scopeResult.ok) {
+    return { ok: false, status: scopeResult.status, message: scopeResult.message };
+  }
+
+  const filter = { deleted_at: null, ...scopeResult.filter };
+
+  if (query.partner_id) {
+    const parsed = parseObjectId(query.partner_id, 'partner_id');
+    if (!parsed.ok) {
+      return { ok: false, status: 400, message: parsed.message };
+    }
+    filter.partner_id = parsed.oid;
+  }
+
+  return { ok: true, filter };
+};
+
+const countReportStatusesForPostFilter = async (postFilter) => {
+  const postMatch = Object.fromEntries(
+    Object.entries(postFilter).map(([key, value]) => [`post.${key}`, value])
+  );
+
+  const rows = await PartnerPostReport.aggregate([
+    {
+      $lookup: {
+        from: PartnerPost.collection.name,
+        localField: 'post_id',
+        foreignField: '_id',
+        as: 'post',
+      },
+    },
+    { $unwind: '$post' },
+    { $match: postMatch },
+    { $group: { _id: '$status', count: { $sum: 1 } } },
+  ]);
+
+  const byStatus = Object.fromEntries(rows.map((row) => [row._id, row.count]));
+  return {
+    pending: byStatus.pending ?? 0,
+    reviewed: byStatus.reviewed ?? 0,
+    dismissed: byStatus.dismissed ?? 0,
+  };
+};
+
+const getPostCounts = async (req, query = {}) => {
+  const filterResult = await buildPostListScopeFilter(req, query);
+  if (!filterResult.ok) {
+    return fail(filterResult.status, filterResult.message);
+  }
+
+  const postFilter = filterResult.filter;
+
+  const [published, hidden, removed, reportCounts] = await Promise.all([
+    PartnerPost.countDocuments({ ...postFilter, status: POST_STATUS_PUBLISHED }),
+    PartnerPost.countDocuments({ ...postFilter, status: POST_STATUS_HIDDEN }),
+    PartnerPost.countDocuments({ ...postFilter, status: POST_STATUS_REMOVED }),
+    countReportStatusesForPostFilter(postFilter),
+  ]);
+
+  return ok(200, {
+    message: 'Post counts fetched successfully.',
+    counts: {
+      published,
+      hidden,
+      removed,
+      pending: reportCounts.pending,
+      reviewed: reportCounts.reviewed,
+      dismissed: reportCounts.dismissed,
+    },
+  });
+};
 
 const listReports = async (query) => {
   const page = parsePositiveInt(query.page, DEFAULT_PAGE);
@@ -205,6 +285,7 @@ const updateReportStatus = async (reportId, body) => {
 };
 
 module.exports = {
+  getPostCounts,
   listReports,
   listAllPosts,
   moderatePost,

@@ -2,8 +2,7 @@ const mongoose = require('mongoose');
 const { loadPartnerHomeOrders } = require('./home_orders_service');
 const { loadPartnerHomeQuotes } = require('./home_quotes_service');
 
-const fail = (status, message) => ({ ok: false, status, message });
-const ok = (status, data) => ({ ok: true, status, data });
+const { fail, ok } = require('../../../utils/mobile_service_result');
 
 const getPartnerHome = async (partnerId) => {
   try {

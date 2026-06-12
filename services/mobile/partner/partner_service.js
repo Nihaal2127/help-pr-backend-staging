@@ -22,9 +22,9 @@ const {
   normalizeUserPhone,
   checkUserContactUniqueness,
 } = require('../../../utils/user_contact_uniqueness');
+const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
+const { fail, okWithData, okPass } = require('../../../utils/mobile_service_result');
 const DEFAULT_PARTNER_PLAN_NAME = 'basic';
-
-const USER_TYPE_PARTNER = 2;
 const REGISTRATION_TYPE_NORMAL = 1;
 
 const PARTNER_DOCUMENT_FILE_FIELDS = [
@@ -560,9 +560,9 @@ const assertBankAccountNumberAvailable = async (partnerOid, accountNumber) => {
     partner_id: { $ne: partnerOid },
   }).lean();
   if (takenByOther) {
-    return { ok: false, status: 409, message: 'Account number already exists.' };
+    return fail(409, 'Account number already exists.');
   }
-  return { ok: true };
+  return okPass();
 };
 
 const applyPrimaryBankAccountFlags = (accounts) => {
@@ -579,9 +579,9 @@ const applyPrimaryBankAccountFlags = (accounts) => {
 };
 
 async function upsertPartnerBankAccountForPartner(partnerId, normalizedBankAccount) {
-  if (!normalizedBankAccount) return { ok: true };
+  if (!normalizedBankAccount) return okPass();
   const bankAccountNumber = String(normalizedBankAccount.account_number || '').trim();
-  if (!bankAccountNumber) return { ok: true };
+  if (!bankAccountNumber) return okPass();
 
   const partnerOid =
     partnerId instanceof mongoose.Types.ObjectId
@@ -635,12 +635,12 @@ async function upsertPartnerBankAccountForPartner(partnerId, normalizedBankAccou
       deleted_at: null,
     });
   }
-  return { ok: true };
+  return okPass();
 }
 
 async function replacePartnerBankAccountsForPartner(partnerId, normalizedAccounts) {
   if (!Array.isArray(normalizedAccounts) || normalizedAccounts.length === 0) {
-    return { ok: true };
+    return okPass();
   }
 
   const partnerOid =
@@ -652,10 +652,10 @@ async function replacePartnerBankAccountsForPartner(partnerId, normalizedAccount
   for (const acc of normalizedAccounts) {
     const bankAccountNumber = String(acc.account_number || '').trim();
     if (!bankAccountNumber) {
-      return { ok: false, status: 400, message: 'Account number is required.' };
+      return fail(400, 'Account number is required.');
     }
     if (seenNumbers.has(bankAccountNumber)) {
-      return { ok: false, status: 400, message: 'Duplicate account number in bank accounts.' };
+      return fail(400, 'Duplicate account number in bank accounts.');
     }
     seenNumbers.add(bankAccountNumber);
     const availability = await assertBankAccountNumberAvailable(partnerOid, bankAccountNumber);
@@ -685,7 +685,7 @@ async function replacePartnerBankAccountsForPartner(partnerId, normalizedAccount
     }))
   );
 
-  return { ok: true };
+  return okPass();
 }
 
 const registerPartner = async ({ name, email, phone_number, password, date_of_birth }) => {
@@ -755,28 +755,20 @@ const registerPartner = async ({ name, email, phone_number, password, date_of_bi
 const loginPartner = async ({ email, password, device_token }) => {
   const user = await User.findOne({ email, deleted_at: null }).select('+password');
   if (!user) {
-    return { ok: false, status: 401, message: 'Invalid email.' };
+    return fail(401, 'Invalid email.');
   }
 
   if (Number(user.type) !== USER_TYPE_PARTNER) {
-    return {
-      ok: false,
-      status: 403,
-      message: 'This account is not a partner. Use the correct app to sign in.',
-    };
+    return fail(403, 'This account is not a partner. Use the correct app to sign in.');
   }
 
   if (user.is_blocked === true) {
-    return {
-      ok: false,
-      status: 403,
-      message: 'Your account is blocked. Please contact support.',
-    };
+    return fail(403, 'Your account is blocked. Please contact support.');
   }
 
   const isPasswordMatch = await user.comparePassword(password);
   if (!isPasswordMatch) {
-    return { ok: false, status: 401, message: 'Invalid password.' };
+    return fail(401, 'Invalid password.');
   }
 
   const token = user.generateAuthToken();
@@ -794,10 +786,7 @@ const loginPartner = async ({ email, password, device_token }) => {
   };
   delete data.password;
 
-  return {
-    ok: true,
-    data,
-  };
+  return okWithData(data);
 };
 
 const assignFranchiseIdFromLocation = async (user) => {
@@ -813,7 +802,7 @@ const assignFranchiseIdFromLocation = async (user) => {
     String(cityId).trim() === '' ||
     String(areaId).trim() === ''
   ) {
-    return { ok: true };
+    return okPass();
   }
 
   if (
@@ -821,7 +810,7 @@ const assignFranchiseIdFromLocation = async (user) => {
     !mongoose.Types.ObjectId.isValid(String(cityId)) ||
     !mongoose.Types.ObjectId.isValid(String(areaId))
   ) {
-    return { ok: true };
+    return okPass();
   }
 
   const stateOid = new mongoose.Types.ObjectId(String(stateId));
@@ -840,15 +829,11 @@ const assignFranchiseIdFromLocation = async (user) => {
     .lean();
 
   if (!franchise) {
-    return {
-      ok: false,
-      status: 400,
-      message: 'No franchise available for this location.',
-    };
+    return fail(400, 'No franchise available for this location.');
   }
 
   user.franchise_id = franchise._id;
-  return { ok: true };
+  return okPass();
 };
 
 const VERIFICATION_STATUS_MESSAGES = {
@@ -924,7 +909,7 @@ const updatePartner = async ({ partnerId, body, files, section = PARTNER_UPDATE_
     section === PARTNER_UPDATE_SECTION.ALL || section === PARTNER_UPDATE_SECTION.BANKS;
   const user = await User.findOne({ _id: partnerId, type: USER_TYPE_PARTNER, deleted_at: null });
   if (!user) {
-    return { ok: false, status: 404, message: 'Partner not found.' };
+    return fail(404, 'Partner not found.');
   }
 
   const isVerificationApproved = Number(user.verification_status) === 2;
@@ -962,11 +947,7 @@ const updatePartner = async ({ partnerId, body, files, section = PARTNER_UPDATE_
       !updateData.pincode ||
       String(updateData.pincode).trim() === ''
     ) {
-      return {
-        ok: false,
-        status: 400,
-        message: 'Address, state, city, and pincode are required to add a new address.',
-      };
+      return fail(400, 'Address, state, city, and pincode are required to add a new address.');
     }
     await createAddressRecord({
       userId: user._id,
@@ -1084,7 +1065,7 @@ const updatePartner = async ({ partnerId, body, files, section = PARTNER_UPDATE_
         addressStatus: updateData.address_status,
       });
     } else if (hasAddressStatusPayload && targetAddressId) {
-      return { ok: false, status: 404, message: 'Address not found for this user.' };
+      return fail(404, 'Address not found for this user.');
     }
   }
 
@@ -1100,7 +1081,7 @@ const updatePartner = async ({ partnerId, body, files, section = PARTNER_UPDATE_
     updateData.ifsc_code !== undefined;
 
   if (!isVerificationApproved && (hasBankPayload || hasCatalogPayload)) {
-    return { ok: false, status: 403, message: restrictedUntilApprovedMessage };
+    return fail(403, restrictedUntilApprovedMessage);
   }
 
   const shouldRunCatalog = runBasic && hasCatalogPayload;
@@ -1133,19 +1114,19 @@ const updatePartner = async ({ partnerId, body, files, section = PARTNER_UPDATE_
     if (shouldRunBanks) {
       const { accounts, isArrayPayload } = resolvePartnerBankInputFromBody(updateData);
       if (isArrayPayload && accounts.length === 0) {
-        return { ok: false, status: 400, message: 'At least one bank account is required.' };
+        return fail(400, 'At least one bank account is required.');
       }
       const bankResult = isArrayPayload
         ? await replacePartnerBankAccountsForPartner(updatedUser._id, accounts)
         : await upsertPartnerBankAccountForPartner(updatedUser._id, accounts[0] ?? null);
       if (!bankResult.ok) {
-        return { ok: false, status: bankResult.status, message: bankResult.message };
+        return fail(bankResult.status, bankResult.message);
       }
     }
   }
 
   const data = await buildPartnerResponseData(updatedUser._id);
-  return { ok: true, data };
+  return okWithData(data);
 };
 
 module.exports = {

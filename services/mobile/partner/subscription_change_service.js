@@ -12,7 +12,7 @@ const {
     validateUpgradePaymentSplit,
 } = require('../../../utils/subscription_proration');
 
-const USER_TYPE_PARTNER = 2;
+const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
 /** Pending rows older than this are treated as orphaned (failed/crashed apply). */
 const PENDING_CHANGE_STALE_MS = 60 * 1000;
 const APPLY_CHANGE_MAX_ATTEMPTS = 3;
@@ -273,8 +273,7 @@ const releaseStalePendingChanges = async (partnerId, session = null) => {
     return result.modifiedCount || 0;
 };
 
-const fail = (status, message, extra = {}) => ({ ok: false, status, message, ...extra });
-const ok = (status, data) => ({ ok: true, status, data });
+const { fail, ok } = require('../../../utils/mobile_service_result');
 
 const parseObjectId = (raw, fieldName = 'id') => {
     if (raw instanceof mongoose.Types.ObjectId) {

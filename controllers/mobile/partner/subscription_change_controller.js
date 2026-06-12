@@ -1,84 +1,36 @@
 const subscriptionChangeService = require('../../../services/mobile/partner/subscription_change_service');
+const {
+  getCallerId,
+  wrapMobileHandler,
+  sendServiceResult,
+} = require('../../../utils/mobile_controller_helpers');
 
-const sendServiceResult = (res, result) => {
-    if (!result.ok) {
-        return res.status(result.status).json({
-            success: false,
-            status: result.status,
-            message: result.message,
-            ...(result.details ? { details: result.details } : {}),
-        });
-    }
-    return res.status(result.status).json({
-        success: true,
-        status: result.status,
-        message: result.data.message,
-        data: result.data.data,
-    });
-};
+const getSummary = wrapMobileHandler('mobile partner subscription summary', async (req, res) => {
+  const result = await subscriptionChangeService.getSubscriptionSummary(getCallerId(req));
+  return sendServiceResult(res, result);
+});
 
-const getSummary = async (req, res) => {
-    try {
-        const result = await subscriptionChangeService.getSubscriptionSummary(req.user.id);
-        return sendServiceResult(res, result);
-    } catch (err) {
-        console.error('mobile partner subscription summary', err.message);
-        return res.status(500).json({
-            success: false,
-            status: 500,
-            message: 'Internal server error.',
-        });
-    }
-};
+const previewChange = wrapMobileHandler('mobile partner subscription preview', async (req, res) => {
+  const result = await subscriptionChangeService.previewChange(
+    getCallerId(req),
+    req.body.target_plan_id
+  );
+  return sendServiceResult(res, result);
+});
 
-const previewChange = async (req, res) => {
-    try {
-        const result = await subscriptionChangeService.previewChange(
-            req.user.id,
-            req.body.target_plan_id
-        );
-        return sendServiceResult(res, result);
-    } catch (err) {
-        console.error('mobile partner subscription preview', err.message);
-        return res.status(500).json({
-            success: false,
-            status: 500,
-            message: 'Internal server error.',
-        });
-    }
-};
+const applyChange = wrapMobileHandler('mobile partner subscription change', async (req, res) => {
+  const result = await subscriptionChangeService.applyChange(getCallerId(req), req.body);
+  return sendServiceResult(res, result);
+});
 
-const applyChange = async (req, res) => {
-    try {
-        const result = await subscriptionChangeService.applyChange(req.user.id, req.body);
-        return sendServiceResult(res, result);
-    } catch (err) {
-        console.error('mobile partner subscription change', err.message);
-        return res.status(500).json({
-            success: false,
-            status: 500,
-            message: 'Internal server error.',
-        });
-    }
-};
-
-const listHistory = async (req, res) => {
-    try {
-        const result = await subscriptionChangeService.listChangeHistory(req.user.id, req.query);
-        return sendServiceResult(res, result);
-    } catch (err) {
-        console.error('mobile partner subscription history', err.message);
-        return res.status(500).json({
-            success: false,
-            status: 500,
-            message: 'Internal server error.',
-        });
-    }
-};
+const listHistory = wrapMobileHandler('mobile partner subscription history', async (req, res) => {
+  const result = await subscriptionChangeService.listChangeHistory(getCallerId(req), req.query);
+  return sendServiceResult(res, result);
+});
 
 module.exports = {
-    getSummary,
-    previewChange,
-    applyChange,
-    listHistory,
+  getSummary,
+  previewChange,
+  applyChange,
+  listHistory,
 };

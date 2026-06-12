@@ -1,131 +1,94 @@
 const {
-    listFinancialPayments,
-    getFinancialPaymentById,
+  listFinancialPayments,
+  getFinancialPaymentById,
 } = require('../../../services/mobile/partner/financial_payments_service');
 const {
-    getWalletSummary,
-    listWalletTransactions,
+  getWalletSummary,
+  listWalletTransactions,
 } = require('../../../services/mobile/partner/wallet_service');
+const {
+  getCallerId,
+  wrapMobileHandler,
+  sendServiceError,
+} = require('../../../utils/mobile_controller_helpers');
 
-const getCallerId = (req) => req.user?.id || req.user?._id;
-
-const listFinancialPaymentsHandler = async (req, res) => {
-    try {
-        const result = await listFinancialPayments(getCallerId(req), req.query);
-        if (!result.ok) {
-            return res.status(result.status).json({
-                success: false,
-                status: result.status,
-                message: result.message,
-            });
-        }
-
-        return res.status(200).json({
-            success: true,
-            status: 200,
-            message: result.data.message,
-            source: result.data.source,
-            totalItems: result.data.totalItems,
-            totalPages: result.data.totalPages,
-            currentPage: result.data.currentPage,
-            totals: result.data.totals,
-            records: result.data.records,
-        });
-    } catch (error) {
-        console.error('mobile partner financial payments list', error.message);
-        return res.status(500).json({
-            success: false,
-            status: 500,
-            message: 'Internal server error.',
-        });
+const listFinancialPaymentsHandler = wrapMobileHandler(
+  'mobile partner financial payments list',
+  async (req, res) => {
+    const result = await listFinancialPayments(getCallerId(req), req.query);
+    if (!result.ok) {
+      return sendServiceError(res, result);
     }
-};
 
-const getFinancialPaymentHandler = async (req, res) => {
-    try {
-        const result = await getFinancialPaymentById(getCallerId(req), req.params.orderId);
-        if (!result.ok) {
-            return res.status(result.status).json({
-                success: false,
-                status: result.status,
-                message: result.message,
-            });
-        }
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: result.data.message,
+      source: result.data.source,
+      totalItems: result.data.totalItems,
+      totalPages: result.data.totalPages,
+      currentPage: result.data.currentPage,
+      totals: result.data.totals,
+      records: result.data.records,
+    });
+  }
+);
 
-        return res.status(200).json({
-            success: true,
-            status: 200,
-            message: result.data.message,
-            source: result.data.source,
-            record: result.data.record,
-        });
-    } catch (error) {
-        console.error('mobile partner financial payment detail', error.message);
-        return res.status(500).json({
-            success: false,
-            status: 500,
-            message: 'Internal server error.',
-        });
+const getFinancialPaymentHandler = wrapMobileHandler(
+  'mobile partner financial payment get',
+  async (req, res) => {
+    const result = await getFinancialPaymentById(getCallerId(req), req.params.orderId);
+    if (!result.ok) {
+      return sendServiceError(res, result);
     }
-};
 
-const getWalletSummaryHandler = async (req, res) => {
-    try {
-        const result = await getWalletSummary(getCallerId(req), req.query);
-        if (!result.ok) {
-            return res.status(result.status).json({
-                success: false,
-                status: result.status,
-                message: result.message,
-            });
-        }
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: result.data.message,
+      record: result.data.record,
+    });
+  }
+);
 
-        return res.status(200).json({
-            success: true,
-            status: 200,
-            message: result.data.message,
-            data: result.data.data,
-        });
-    } catch (error) {
-        console.error('mobile partner wallet summary', error.message);
-        return res.status(500).json({
-            success: false,
-            status: 500,
-            message: 'Internal server error.',
-        });
+const getWalletSummaryHandler = wrapMobileHandler('mobile partner wallet summary', async (req, res) => {
+  const result = await getWalletSummary(getCallerId(req));
+  if (!result.ok) {
+    return sendServiceError(res, result);
+  }
+
+  return res.status(200).json({
+    success: true,
+    status: 200,
+    message: result.data.message,
+    data: result.data.data,
+  });
+});
+
+const listWalletTransactionsHandler = wrapMobileHandler(
+  'mobile partner wallet transactions list',
+  async (req, res) => {
+    const result = await listWalletTransactions(getCallerId(req), req.query);
+    if (!result.ok) {
+      return sendServiceError(res, result);
     }
-};
 
-const listWalletTransactionsHandler = async (req, res) => {
-    try {
-        const result = await listWalletTransactions(getCallerId(req), req.query);
-        if (!result.ok) {
-            return res.status(result.status).json({
-                success: false,
-                status: result.status,
-                message: result.message,
-            });
-        }
-
-        return res.status(200).json({
-            success: true,
-            status: 200,
-            message: result.data.message,
-            data: result.data.data,
-        });
-    } catch (error) {
-        console.error('mobile partner wallet transactions', error.message);
-        return res.status(500).json({
-            success: false,
-            status: 500,
-            message: 'Internal server error.',
-        });
-    }
-};
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: result.data.message,
+      totalItems: result.data.totalItems,
+      totalPages: result.data.totalPages,
+      currentPage: result.data.currentPage,
+      limit: result.data.limit,
+      records: result.data.records,
+    });
+  }
+);
 
 module.exports = {
-    listFinancialPaymentsHandler,
-    getFinancialPaymentHandler,
-    getWalletSummaryHandler,
-    listWalletTransactionsHandler,
+  listFinancialPaymentsHandler,
+  getFinancialPaymentHandler,
+  getWalletSummaryHandler,
+  listWalletTransactionsHandler,
 };

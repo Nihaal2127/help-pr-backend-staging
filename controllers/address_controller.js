@@ -6,6 +6,7 @@ const { validationResult } = require('express-validator');
 
 const { applyPagination } = require('../utils/pagination');
 const { checkObjectIdExists } = require('../validator/id_validator');
+const { softDeleteAddressRecord } = require('../services/address_lifecycle_service');
 
 
 const getAll = async (req, res) => {
@@ -215,17 +216,18 @@ const deleteAddress = async (req, res) => {
       });
     }
 
-    if (address.deleted_at) {
-      return res.status(400).json({
+    const deleteResult = await softDeleteAddressRecord(address);
+    if (!deleteResult.ok) {
+      const message =
+        deleteResult.status === 400
+          ? 'Addreses is already deleted'
+          : deleteResult.message;
+      return res.status(deleteResult.status).json({
         success: false,
-        status: 400,
-        message: 'Addreses is already deleted'
+        status: deleteResult.status,
+        message,
       });
     }
-
-    address.deleted_at = new Date();
-
-    await address.save();
 
     res.status(200).json({
       success: true,

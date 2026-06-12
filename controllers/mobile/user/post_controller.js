@@ -11,318 +11,102 @@ const {
   recordPostShare,
   reportPost,
 } = require('../../../services/mobile/user/post_service');
+const {
+  wrapMobileHandler,
+  sendServiceError,
+  sendPaginatedListWithNestedData,
+  sendCreatedOrOkDataResult,
+  sendDataResult,
+} = require('../../../utils/mobile_controller_helpers');
 
-const listPaginatedPostsHandler = (serviceFn, logLabel) => async (req, res) => {
-  try {
+const buildPaginatedPostsHandler = (serviceFn, logLabel) =>
+  wrapMobileHandler(logLabel, async (req, res) => {
     const result = await serviceFn(req.user.id, req.query);
+    return sendPaginatedListWithNestedData(res, result, (listData) => ({
+      records: listData.records,
+    }));
+  });
 
-    if (!result.ok) {
-      return res.status(result.status).json({
-        success: false,
-        status: result.status,
-        message: result.message,
-      });
-    }
+const listFeedHandler = wrapMobileHandler('mobile user posts feed', async (req, res) => {
+  const result = await listPostsFeed(req.user.id, req.query);
+  return sendPaginatedListWithNestedData(res, result, (listData) => ({
+    franchise_id: listData.franchise_id,
+    franchise_name: listData.franchise_name,
+    records: listData.records,
+  }));
+});
 
-    return res.status(200).json({
-      success: true,
-      status: 200,
-      message: result.data.message,
-      totalItems: result.data.data.totalItems,
-      totalPages: result.data.data.totalPages,
-      currentPage: result.data.data.currentPage,
-      limit: result.data.data.limit,
-      data: {
-        records: result.data.data.records,
-      },
-    });
-  } catch (error) {
-    console.error(logLabel, error.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.',
-    });
+const listPartnerPostsHandler = wrapMobileHandler('mobile user partner posts', async (req, res) => {
+  const result = await listPartnerProfilePosts(req.user.id, req.params.partnerId, req.query);
+  return sendPaginatedListWithNestedData(res, result, (listData) => ({
+    partner_id: listData.partner_id,
+    records: listData.records,
+  }));
+});
+
+const getPostHandler = wrapMobileHandler('mobile user get post', async (req, res) => {
+  const result = await getPostDetail(req.user.id, req.params.postId, req.query.franchise_id);
+  if (!result.ok) {
+    return sendServiceError(res, result);
   }
-};
+  return res.status(200).json({
+    success: true,
+    status: 200,
+    message: result.data.message,
+    data: result.data.post,
+  });
+});
 
-const listFeedHandler = async (req, res) => {
-  try {
-    const result = await listPostsFeed(req.user.id, req.query);
-
-    if (!result.ok) {
-      return res.status(result.status).json({
-        success: false,
-        status: result.status,
-        message: result.message,
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      status: 200,
-      message: result.data.message,
-      totalItems: result.data.data.totalItems,
-      totalPages: result.data.data.totalPages,
-      currentPage: result.data.data.currentPage,
-      limit: result.data.data.limit,
-      data: {
-        franchise_id: result.data.data.franchise_id,
-        franchise_name: result.data.data.franchise_name,
-        records: result.data.data.records,
-      },
-    });
-  } catch (error) {
-    console.error('mobile user posts feed', error.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.',
-    });
+const resolveShareTokenHandler = wrapMobileHandler('mobile user resolve share token', async (req, res) => {
+  const result = await resolvePostByShareToken(req.params.shareToken);
+  if (!result.ok) {
+    return sendServiceError(res, result);
   }
-};
+  return res.status(200).json({
+    success: true,
+    status: 200,
+    message: result.data.message,
+    data: {
+      post: result.data.post,
+      share_url: result.data.share_url,
+    },
+  });
+});
 
-const listPartnerPostsHandler = async (req, res) => {
-  try {
-    const result = await listPartnerProfilePosts(
-      req.user.id,
-      req.params.partnerId,
-      req.query
-    );
+const listLikedPostsHandler = buildPaginatedPostsHandler(listLikedPosts, 'mobile user liked posts');
+const listSavedPostsHandler = buildPaginatedPostsHandler(listSavedPosts, 'mobile user saved posts');
 
-    if (!result.ok) {
-      return res.status(result.status).json({
-        success: false,
-        status: result.status,
-        message: result.message,
-      });
-    }
+const savePostHandler = wrapMobileHandler('mobile user save post', async (req, res) => {
+  const result = await savePostForCustomer(req.user.id, req.params.postId);
+  return sendCreatedOrOkDataResult(res, result, 'Post saved successfully.');
+});
 
-    return res.status(200).json({
-      success: true,
-      status: 200,
-      message: result.data.message,
-      totalItems: result.data.data.totalItems,
-      totalPages: result.data.data.totalPages,
-      currentPage: result.data.data.currentPage,
-      limit: result.data.data.limit,
-      data: {
-        partner_id: result.data.data.partner_id,
-        records: result.data.data.records,
-      },
-    });
-  } catch (error) {
-    console.error('mobile user partner posts', error.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.',
-    });
+const unsavePostHandler = wrapMobileHandler('mobile user unsave post', async (req, res) => {
+  const result = await unsavePostForCustomer(req.user.id, req.params.postId);
+  return sendDataResult(res, result);
+});
+
+const toggleLikeHandler = wrapMobileHandler('mobile user toggle post like', async (req, res) => {
+  const result = await togglePostLike(req.user.id, req.params.postId);
+  return sendDataResult(res, result);
+});
+
+const sharePostHandler = wrapMobileHandler('mobile user share post', async (req, res) => {
+  const result = await recordPostShare(req.user.id, req.params.postId);
+  return sendDataResult(res, result);
+});
+
+const reportPostHandler = wrapMobileHandler('mobile user report post', async (req, res) => {
+  const result = await reportPost(req.user.id, req.params.postId, req.body);
+  if (!result.ok) {
+    return sendServiceError(res, result);
   }
-};
-
-const getPostHandler = async (req, res) => {
-  try {
-    const result = await getPostDetail(req.user.id, req.params.postId, req.query.franchise_id);
-
-    if (!result.ok) {
-      return res.status(result.status).json({
-        success: false,
-        status: result.status,
-        message: result.message,
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      status: 200,
-      message: result.data.message,
-      data: result.data.post,
-    });
-  } catch (error) {
-    console.error('mobile user get post', error.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.',
-    });
-  }
-};
-
-const resolveShareTokenHandler = async (req, res) => {
-  try {
-    const result = await resolvePostByShareToken(req.params.shareToken);
-
-    if (!result.ok) {
-      return res.status(result.status).json({
-        success: false,
-        status: result.status,
-        message: result.message,
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      status: 200,
-      message: result.data.message,
-      data: {
-        post: result.data.post,
-        share_url: result.data.share_url,
-      },
-    });
-  } catch (error) {
-    console.error('mobile user resolve share token', error.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.',
-    });
-  }
-};
-
-const listLikedPostsHandler = listPaginatedPostsHandler(listLikedPosts, 'mobile user liked posts');
-const listSavedPostsHandler = listPaginatedPostsHandler(listSavedPosts, 'mobile user saved posts');
-
-const savePostHandler = async (req, res) => {
-  try {
-    const result = await savePostForCustomer(req.user.id, req.params.postId);
-
-    if (!result.ok) {
-      return res.status(result.status).json({
-        success: false,
-        status: result.status,
-        message: result.message,
-      });
-    }
-
-    const httpStatus = result.data.message === 'Post saved successfully.' ? 201 : 200;
-
-    return res.status(httpStatus).json({
-      success: true,
-      status: httpStatus,
-      message: result.data.message,
-      data: result.data.data,
-    });
-  } catch (error) {
-    console.error('mobile user save post', error.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.',
-    });
-  }
-};
-
-const unsavePostHandler = async (req, res) => {
-  try {
-    const result = await unsavePostForCustomer(req.user.id, req.params.postId);
-
-    if (!result.ok) {
-      return res.status(result.status).json({
-        success: false,
-        status: result.status,
-        message: result.message,
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      status: 200,
-      message: result.data.message,
-      data: result.data.data,
-    });
-  } catch (error) {
-    console.error('mobile user unsave post', error.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.',
-    });
-  }
-};
-
-const toggleLikeHandler = async (req, res) => {
-  try {
-    const result = await togglePostLike(req.user.id, req.params.postId);
-
-    if (!result.ok) {
-      return res.status(result.status).json({
-        success: false,
-        status: result.status,
-        message: result.message,
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      status: 200,
-      message: result.data.message,
-      data: result.data.data,
-    });
-  } catch (error) {
-    console.error('mobile user toggle post like', error.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.',
-    });
-  }
-};
-
-const sharePostHandler = async (req, res) => {
-  try {
-    const result = await recordPostShare(req.user.id, req.params.postId);
-
-    if (!result.ok) {
-      return res.status(result.status).json({
-        success: false,
-        status: result.status,
-        message: result.message,
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      status: 200,
-      message: result.data.message,
-      data: result.data.data,
-    });
-  } catch (error) {
-    console.error('mobile user share post', error.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.',
-    });
-  }
-};
-
-const reportPostHandler = async (req, res) => {
-  try {
-    const result = await reportPost(req.user.id, req.params.postId, req.body);
-
-    if (!result.ok) {
-      return res.status(result.status).json({
-        success: false,
-        status: result.status,
-        message: result.message,
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      status: 200,
-      message: result.data.message,
-    });
-  } catch (error) {
-    console.error('mobile user report post', error.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.',
-    });
-  }
-};
+  return res.status(200).json({
+    success: true,
+    status: 200,
+    message: result.data.message,
+  });
+});
 
 module.exports = {
   listFeedHandler,

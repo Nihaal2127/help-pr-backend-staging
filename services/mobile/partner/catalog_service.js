@@ -1,11 +1,9 @@
-const mongoose = require('mongoose');
-const User = require('../../../models/user');
 const Category = require('../../../models/category');
 const Service = require('../../../models/service');
 const PartnerService = require('../../../models/partner_service');
 const { resolveFranchiseEffectiveCatalog } = require('../../../utils/catalog_availability_resolver');
-
-const USER_TYPE_PARTNER = 2;
+const { loadPartnerFranchiseId } = require('../shared/partner_access_helpers');
+const { fail, ok } = require('../../../utils/mobile_service_result');
 
 const ACTIVE_CATEGORY_FILTER = {
   deleted_at: null,
@@ -21,53 +19,22 @@ const ACTIVE_SERVICE_FILTER = {
   approval_status: 'approve',
 };
 
-const loadPartnerFranchiseId = async (partnerId) => {
-  if (!mongoose.Types.ObjectId.isValid(String(partnerId))) {
-    return { ok: false, status: 401, message: 'Invalid token.' };
-  }
-
-  const user = await User.findOne({
-    _id: partnerId,
-    type: USER_TYPE_PARTNER,
-    deleted_at: null,
-  })
-    .select('franchise_id')
-    .lean();
-
-  if (!user) {
-    return { ok: false, status: 404, message: 'Partner not found.' };
-  }
-
-  if (!user.franchise_id) {
-    return {
-      ok: false,
-      status: 400,
-      message: 'Partner is not linked to a franchise. Complete your location on profile first.',
-    };
-  }
-
-  return { ok: true, franchiseId: user.franchise_id };
-};
-
 const listFranchiseCategoriesForPartner = async (partnerId) => {
   try {
     const partner = await loadPartnerFranchiseId(partnerId);
     if (!partner.ok) return partner;
 
-    const resolved = await resolveFranchiseEffectiveCatalog(partner.franchiseId);
+    const resolved = await resolveFranchiseEffectiveCatalog(partner.data.franchiseId);
     if (!resolved.ok) {
-      return { ok: false, status: resolved.status, message: resolved.message };
+      return fail(resolved.status, resolved.message);
     }
 
     const ids = resolved.effectiveCategoryIds || [];
     if (ids.length === 0) {
-      return {
-        ok: true,
-        data: {
-          message: 'Categories fetched successfully.',
-          data: [],
-        },
-      };
+      return ok(200, {
+        message: 'Categories fetched successfully.',
+        data: [],
+      });
     }
 
     const effectiveSvcSet = new Set(
@@ -150,16 +117,13 @@ const listFranchiseCategoriesForPartner = async (partnerId) => {
       };
     }).filter((c) => Array.isArray(c.services) && c.services.length > 0);
 
-    return {
-      ok: true,
-      data: {
-        message: 'Categories fetched successfully.',
-        data: categoriesWithServices,
-      },
-    };
+    return ok(200, {
+      message: 'Categories fetched successfully.',
+      data: categoriesWithServices,
+    });
   } catch (err) {
     console.error('listFranchiseCategoriesForPartner', err.message);
-    return { ok: false, status: 500, message: 'Internal server error.' };
+    return fail(500, 'Internal server error.');
   }
 };
 

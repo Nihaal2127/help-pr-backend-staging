@@ -13,8 +13,7 @@ const {
   loadSubscribedFranchisePartners,
 } = require("./franchise_partner_scope");
 
-const fail = (status, message) => ({ ok: false, status, message });
-const ok = (status, data) => ({ ok: true, status, data });
+const { fail, ok } = require('../../../utils/mobile_service_result');
 
 const parseReviewLimit = (raw) => {
   const n = parseInt(String(raw ?? ""), 10);

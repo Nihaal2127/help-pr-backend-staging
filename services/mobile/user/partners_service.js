@@ -19,17 +19,11 @@ const {
 } = require('./partner_rating_service');
 const { attachPartnerRatingFields } = require('../../../utils/rating_format');
 
-const fail = (status, message) => ({ ok: false, status, message });
-const ok = (status, data) => ({ ok: true, status, data });
+const { fail, ok, parsePositiveInt } = require('../../../utils/mobile_service_result');
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
-
-const parsePositiveInt = (raw, fallback) => {
-  const n = parseInt(String(raw ?? ''), 10);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
-};
 
 const parseOptionalPrice = (raw, fieldName) => {
   if (raw === undefined || raw === null || String(raw).trim() === '') {

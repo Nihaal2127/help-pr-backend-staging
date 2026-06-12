@@ -1,42 +1,31 @@
 const locationService = require('../../../services/mobile/common/location_service');
+const {
+  wrapMobileHandler,
+  sendSpreadDataResult,
+} = require('../../../utils/mobile_controller_helpers');
 
-const sendServiceResult = (res, result) => {
-  if (!result.ok) {
-    return res.status(result.status).json({
-      success: false,
-      status: result.status,
-      message: result.message,
-    });
-  }
-  return res.status(result.status).json({
-    success: true,
-    status: result.status,
-    ...result.data,
-  });
-};
-
-const states = async (req, res) => {
+const states = wrapMobileHandler('mobile location states', async (req, res) => {
   const result = await locationService.listStatesForPartner();
-  return sendServiceResult(res, result);
-};
+  return sendSpreadDataResult(res, result);
+});
 
-const cities = async (req, res) => {
+const cities = wrapMobileHandler('mobile location cities', async (req, res) => {
   const { stateOids = [] } = req.mobileLocationQuery || {};
   const result = await locationService.listCitiesForPartner({ stateOids });
-  return sendServiceResult(res, result);
-};
+  return sendSpreadDataResult(res, result);
+});
 
-const areas = async (req, res) => {
+const areas = wrapMobileHandler('mobile location areas', async (req, res) => {
   const { cityOids = [], stateOids = [] } = req.mobileLocationQuery || {};
   const result = await locationService.listAreasForPartner({ cityOids, stateOids });
-  return sendServiceResult(res, result);
-};
+  return sendSpreadDataResult(res, result);
+});
 
-const pincodes = async (req, res) => {
+const pincodes = wrapMobileHandler('mobile location pincodes', async (req, res) => {
   const { areaOids = [] } = req.mobileLocationQuery || {};
   const result = await locationService.listPincodesForPartner({ areaOids });
-  return sendServiceResult(res, result);
-};
+  return sendSpreadDataResult(res, result);
+});
 
 module.exports = {
   states,

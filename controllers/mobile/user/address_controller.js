@@ -4,79 +4,30 @@ const {
   updateAddress,
   deleteAddress,
 } = require('../../../services/mobile/user/address_service');
+const {
+  wrapMobileHandler,
+  sendDataResult,
+} = require('../../../utils/mobile_controller_helpers');
 
-const sendResult = (res, result) => {
-  if (!result.ok) {
-    return res.status(result.status).json({
-      success: false,
-      status: result.status,
-      message: result.message,
-    });
-  }
+const listHandler = wrapMobileHandler('mobile user addresses list', async (req, res) => {
+  const result = await listAddresses(req.user.id, { search: req.query.search });
+  return sendDataResult(res, result);
+});
 
-  return res.status(result.status).json({
-    success: true,
-    status: result.status,
-    message: result.data.message,
-    ...(result.data.data !== undefined ? { data: result.data.data } : {}),
-  });
-};
+const createHandler = wrapMobileHandler('mobile user address create', async (req, res) => {
+  const result = await createAddress(req.user.id, req.body);
+  return sendDataResult(res, result);
+});
 
-const listHandler = async (req, res) => {
-  try {
-    const result = await listAddresses(req.user.id, { search: req.query.search });
-    return sendResult(res, result);
-  } catch (error) {
-    console.error('mobile user addresses list', error.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.',
-    });
-  }
-};
+const updateHandler = wrapMobileHandler('mobile user address update', async (req, res) => {
+  const result = await updateAddress(req.user.id, req.params.id, req.body);
+  return sendDataResult(res, result);
+});
 
-const createHandler = async (req, res) => {
-  try {
-    const result = await createAddress(req.user.id, req.body);
-    return sendResult(res, result);
-  } catch (error) {
-    console.error('mobile user address create', error.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.',
-    });
-  }
-};
-
-const updateHandler = async (req, res) => {
-  try {
-    const result = await updateAddress(req.user.id, req.params.id, req.body);
-    return sendResult(res, result);
-  } catch (error) {
-    console.error('mobile user address update', error.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.',
-    });
-  }
-};
-
-const deleteHandler = async (req, res) => {
-  try {
-    const result = await deleteAddress(req.user.id, req.params.id);
-    return sendResult(res, result);
-  } catch (error) {
-    console.error('mobile user address delete', error.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.',
-    });
-  }
-};
+const deleteHandler = wrapMobileHandler('mobile user address delete', async (req, res) => {
+  const result = await deleteAddress(req.user.id, req.params.id);
+  return sendDataResult(res, result);
+});
 
 module.exports = {
   listHandler,

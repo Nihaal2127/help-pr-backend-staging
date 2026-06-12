@@ -10,6 +10,7 @@ const { handleImageUpload } = require('../../../helper/image_uploader');
 const { getUploadType } = require('../../../enum/upload_type_enum');
 const { normalizeUserPhone } = require('../../../utils/user_contact_uniqueness');
 const { USER_TYPE_CUSTOMER } = require('../../../constants/user_types');
+const { fail, okWithMessage } = require('../../../utils/mobile_service_result');
 
 const REGISTRATION_TYPE_NORMAL = 1;
 const MOBILE_USER_OTP = '123456';
@@ -23,11 +24,7 @@ const findOrCreateCustomer = async (phone_number) => {
 
   if (user) {
     if (Number(user.type) !== USER_TYPE_CUSTOMER) {
-      return {
-        ok: false,
-        status: 409,
-        message: 'This phone number is registered with another account type.',
-      };
+      return fail(409, 'This phone number is registered with another account type.');
     }
     return { ok: true, user };
   }
@@ -71,11 +68,7 @@ const sendOtp = async ({ phone_number }) => {
 
   await createMobileUserOtp(phone_number);
 
-  return {
-    ok: true,
-    status: 200,
-    message: 'OTP sent successfully.',
-  };
+  return okWithMessage(200, 'OTP sent successfully.');
 };
 
 const buildCustomerLoginData = async (user) => {
@@ -100,15 +93,11 @@ const verifyOtpAndLogin = async ({ phone_number, device_token, validOtp }) => {
   });
 
   if (!user) {
-    return { ok: false, status: 401, message: 'Invalid credentials.' };
+    return fail(401, 'Invalid credentials.');
   }
 
   if (user.is_blocked === true) {
-    return {
-      ok: false,
-      status: 403,
-      message: 'Your account is blocked. Please contact support.',
-    };
+    return fail(403, 'Your account is blocked. Please contact support.');
   }
 
   if (device_token !== undefined && device_token !== null && String(device_token).trim() !== '') {
@@ -121,15 +110,10 @@ const verifyOtpAndLogin = async ({ phone_number, device_token, validOtp }) => {
 
   const data = await buildCustomerLoginData(user);
   if (!data) {
-    return { ok: false, status: 500, message: 'Failed to load user profile.' };
+    return fail(500, 'Failed to load user profile.');
   }
 
-  return {
-    ok: true,
-    status: 200,
-    message: 'OTP verified successfully.',
-    data,
-  };
+  return okWithMessage(200, 'OTP verified successfully.', { data });
 };
 
 const MOBILE_USER_ALLOWED_UPDATE_FIELDS = ['name', 'phone_number', 'email', 'date_of_birth', 'gender'];
@@ -142,15 +126,11 @@ const updateUser = async ({ customerId, body, files }) => {
   });
 
   if (!user) {
-    return { ok: false, status: 404, message: 'Customer not found.' };
+    return fail(404, 'Customer not found.');
   }
 
   if (user.is_blocked === true) {
-    return {
-      ok: false,
-      status: 403,
-      message: 'Your account is blocked. Please contact support.',
-    };
+    return fail(403, 'Your account is blocked. Please contact support.');
   }
 
   if (files?.profile_photo?.[0]) {
@@ -173,15 +153,10 @@ const updateUser = async ({ customerId, body, files }) => {
 
   const data = await buildCustomerLoginData(user);
   if (!data) {
-    return { ok: false, status: 500, message: 'Failed to load user profile.' };
+    return fail(500, 'Failed to load user profile.');
   }
 
-  return {
-    ok: true,
-    status: 200,
-    message: 'User updated successfully.',
-    data,
-  };
+  return okWithMessage(200, 'User updated successfully.', { data });
 };
 
 const sanitizeCsvField = (value) => String(value ?? '').replace(/,/g, ' ').trim();
@@ -255,15 +230,10 @@ const listAllPincodes = async ({ search } = {}) => {
         `${sanitizeCsvField(record.pincode)},${record.area_name},${record.city_name},${record.state_name}`
     );
 
-    return {
-      ok: true,
-      status: 200,
-      message: 'Pincode list fetched successfully.',
-      data,
-    };
+    return okWithMessage(200, 'Pincode list fetched successfully.', { data });
   } catch (err) {
     console.error('listAllPincodes', err.message);
-    return { ok: false, status: 500, message: 'Internal server error.' };
+    return fail(500, 'Internal server error.');
   }
 };
 

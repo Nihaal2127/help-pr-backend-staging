@@ -1,42 +1,23 @@
 const subscriptionPlanService = require('../../../services/subscription_plan_service');
+const {
+  wrapMobileHandler,
+  sendServiceError,
+} = require('../../../utils/mobile_controller_helpers');
 
-const sendServiceResult = (res, result) => {
+const list = wrapMobileHandler('mobile partner subscription plans list', async (req, res) => {
+  const result = await subscriptionPlanService.listSubscriptionPlansForDropdown({});
   if (!result.ok) {
-    return res.status(result.status).json({
-      success: false,
-      status: result.status,
-      message: result.message,
-    });
+    return sendServiceError(res, result);
   }
+
+  const { records, ...rest } = result.data;
   return res.status(result.status).json({
     success: true,
     status: result.status,
-    ...result.data,
+    ...rest,
+    data: records,
   });
-};
-
-const list = async (req, res) => {
-  try {
-    const result = await subscriptionPlanService.listSubscriptionPlansForDropdown({});
-    if (!result.ok) {
-      return sendServiceResult(res, result);
-    }
-    const { records, ...rest } = result.data;
-    return res.status(result.status).json({
-      success: true,
-      status: result.status,
-      ...rest,
-      data: records,
-    });
-  } catch (err) {
-    console.error('mobile partner subscription plans list', err.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.',
-    });
-  }
-};
+});
 
 module.exports = {
   list,

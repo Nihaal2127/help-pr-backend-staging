@@ -2,15 +2,16 @@ const mongoose = require('mongoose');
 const PartnerService = require('../../../models/partner_service');
 const Category = require('../../../models/category');
 const Service = require('../../../models/service');
-const User = require('../../../models/user');
 const { rebuildPartnerCategoriesFromPartnerServices } = require('../../../services/partner_category_service');
 const { resolveFranchiseEffectiveCatalog } = require('../../../utils/catalog_availability_resolver');
+const {
+  assertActivePartner,
+  assertVerifiedPartner,
+} = require('../shared/partner_access_helpers');
 
-const USER_TYPE_PARTNER = 2;
 const OBJECT_ID_HEX_24 = /^[a-fA-F0-9]{24}$/;
 
-const fail = (status, message) => ({ ok: false, status, message });
-const ok = (status, data) => ({ ok: true, status, data });
+const { fail, ok } = require('../../../utils/mobile_service_result');
 
 const isPresentFieldValue = (value) =>
   value !== undefined && value !== null && String(value).trim() !== '';
@@ -51,33 +52,8 @@ const parseIsActive = (value, fieldName = 'is_active') => {
   return { ok: false, message: `${fieldName} must be true or false.` };
 };
 
-const loadApprovedPartner = async (partnerId) => {
-  if (!mongoose.Types.ObjectId.isValid(String(partnerId))) {
-    return fail(401, 'Invalid token.');
-  }
-
-  const partnerOid = new mongoose.Types.ObjectId(String(partnerId));
-  const partner = await User.findOne({
-    _id: partnerOid,
-    type: USER_TYPE_PARTNER,
-    deleted_at: null,
-  })
-    .select('_id franchise_id verification_status')
-    .lean();
-
-  if (!partner) {
-    return fail(404, 'Partner not found.');
-  }
-
-  if (Number(partner.verification_status) !== 2) {
-    return fail(
-      403,
-      'Catalog, services, and bank details can only be updated after your account is verified and approved.'
-    );
-  }
-
-  return ok(200, { partnerOid, partner });
-};
+const loadApprovedPartner = (partnerId) =>
+  assertVerifiedPartner(partnerId, { select: '_id franchise_id verification_status' });
 
 const assertCategoryAndServiceAvailable = async (categoryOid, serviceOid, franchiseId) => {
   const category = await Category.findOne({ _id: categoryOid, deleted_at: null }).lean();
@@ -138,23 +114,12 @@ const mapPartnerServiceRow = (row) => {
 
 const listPartnerMyServices = async (partnerId) => {
   try {
-    if (!mongoose.Types.ObjectId.isValid(String(partnerId))) {
-      return fail(401, 'Invalid token.');
+    const partnerResult = await assertActivePartner(partnerId);
+    if (!partnerResult.ok) {
+      return partnerResult;
     }
 
-    const partnerOid = new mongoose.Types.ObjectId(String(partnerId));
-    const partner = await User.findOne({
-      _id: partnerOid,
-      type: USER_TYPE_PARTNER,
-      deleted_at: null,
-    })
-      .select('_id')
-      .lean();
-
-    if (!partner) {
-      return fail(404, 'Partner not found.');
-    }
-
+    const { partnerOid } = partnerResult.data;
     const rows = await PartnerService.find({
       partner_id: partnerOid,
       deleted_at: null,

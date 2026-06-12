@@ -1,40 +1,21 @@
 const mongoose = require('mongoose');
 const Order = require('../../../models/order');
-const User = require('../../../models/user');
-const Service = require('../../../models/service');
-const Category = require('../../../models/category');
-const City = require('../../../models/city');
-const State = require('../../../models/state');
-const Address = require('../../../models/address');
-const Franchise = require('../../../models/franchise');
-const Quote = require('../../../models/quote');
-const { formatOrderRecords } = require('../../../utils/order_api_format');
-const { escapeRegExp } = require('../../../utils/string_helpers');
-const {
-  buildOrderDateRangeFilter,
-  buildOrderTodayOverlapFilter,
-} = require('../../../utils/schedule_date_filters');
-const {
-  isValidOrderPaymentStatus,
-  isValidPartnerPaymentStatus,
-} = require('../../../enum/order_payment_status_enum');
-const {
-  ORDER_STATUSES,
-  buildOrderManagementStatusQueryFilter,
-} = require('../../../enum/order_status_enum');
-const {
-  buildPartnerWorkStatusQueryFilter,
-} = require('../../../enum/partner_work_status_enum');
 const { loadOrderDetailLean } = require('../../order_detail_service');
-const { attachPartnerRatingFields } = require('../../../utils/rating_format');
-const {
-  buildEntityListPipeline,
-  parseFacetListResult,
-  getListCollectionNames,
-  embedOrderDetailForeignKeys,
-} = require('../../../utils/list_aggregation');
-const { attachRefundsToOrderRecords } = require('../../refund_service');
+const { embedOrderDetailForeignKeys } = require('../../../utils/list_aggregation');
 const { attachPartnerOrderSummary } = require('../../../utils/partner_order_summary');
+const { fail, ok } = require('../../../utils/mobile_service_result');
+const { assertValidCallerObjectId } = require('../shared/order_access_helpers');
+const {
+  buildOrderListSearchRegex,
+  applyOrderManagementStatusFilter,
+  applyOrderDateAndPaidFilters,
+  applyUserPaymentStatusFilter,
+  applyPartnerPaymentStatusFilter,
+  applyPartnerWorkStatusFilter,
+  applyObjectIdFilters,
+  fetchPaginatedMobileOrderList,
+  parseMobileOrderListPagination,
+} = require('../shared/order_list_helpers');
 
 const MOBILE_PARTNER_ORDER_LIST_SEARCH_FIELDS = [
   'unique_id',
@@ -64,240 +45,73 @@ const MOBILE_PARTNER_ORDER_LIST_SEARCH_FIELDS = [
   '_franchise.name',
 ];
 
-const fail = (status, message) => ({ ok: false, status, message });
-const ok = (status, data) => ({ ok: true, status, data });
-
-const parsePositiveInt = (raw, fallback) => {
-  const n = parseInt(String(raw ?? ''), 10);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
-};
-
-const parseOptionalBoolean = (raw) => {
-  if (raw === undefined || raw === null || String(raw).trim() === '') {
-    return { ok: true, value: null };
-  }
-  const normalized = String(raw).trim().toLowerCase();
-  if (normalized === 'true') return { ok: true, value: true };
-  if (normalized === 'false') return { ok: true, value: false };
-  return { ok: false, message: 'Invalid is_paid filter. Use true or false.' };
-};
-
-const mergeMongoFilters = (...parts) => {
-  const filters = parts.filter((part) => part && Object.keys(part).length > 0);
-  if (filters.length === 0) return {};
-  if (filters.length === 1) return filters[0];
-  return { $and: filters };
-};
-
-const addObjectIdFilter = (query, key, filter) => {
-  const raw = query[key];
-  if (raw === undefined || raw === null || String(raw).trim() === '') {
-    return { ok: true };
-  }
-  if (!mongoose.Types.ObjectId.isValid(String(raw))) {
-    return { ok: false, message: `Invalid ${key} filter.` };
-  }
-  filter[key] = new mongoose.Types.ObjectId(String(raw));
-  return { ok: true };
-};
-
-const attachPartnerRatingsToOrderRecord = (record) => {
-  if (!record?.partner_id?._id) return record;
-  return {
-    ...record,
-    partner_id: {
-      ...record.partner_id,
-      ...attachPartnerRatingFields(record.partner_id),
-    },
-  };
-};
+const PARTNER_OBJECT_ID_FILTER_KEYS = [
+  'franchise_id',
+  'user_id',
+  'category_id',
+  'service_id',
+  'city_id',
+  'address_id',
+];
 
 const listPartnerOrders = async (partnerId, query = {}) => {
   try {
-    if (!partnerId || !mongoose.Types.ObjectId.isValid(String(partnerId))) {
-      return fail(401, 'Invalid token.');
+    const callerResult = assertValidCallerObjectId(partnerId);
+    if (!callerResult.ok) {
+      return callerResult;
     }
 
-    const page = parsePositiveInt(query.page, 1);
-    const limit = Math.min(parsePositiveInt(query.limit, 10), 50);
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = parseMobileOrderListPagination(query);
 
     const filter = {
       deleted_at: null,
-      partner_id: new mongoose.Types.ObjectId(String(partnerId)),
+      partner_id: callerResult.oid,
     };
 
-    const statusRaw = query.status;
-    if (statusRaw !== undefined && String(statusRaw).trim() !== '') {
-      const statusFilter = buildOrderManagementStatusQueryFilter(statusRaw);
-      if (!statusFilter) {
-        return fail(409, `Invalid status. Use one of: ${ORDER_STATUSES.join(', ')}.`);
-      }
-      Object.assign(filter, statusFilter);
+    const statusResult = applyOrderManagementStatusFilter(filter, query);
+    if (!statusResult.ok) {
+      return statusResult;
     }
 
-    const searchRaw = query.search ?? query.q;
-    let searchRegex = null;
-    if (searchRaw !== undefined && String(searchRaw).trim() !== '') {
-      const search = String(searchRaw).trim();
-      searchRegex = new RegExp(escapeRegExp(search), 'i');
+    const searchRegex = buildOrderListSearchRegex(query);
+
+    const datePaidResult = applyOrderDateAndPaidFilters(filter, query);
+    if (!datePaidResult.ok) {
+      return datePaidResult;
     }
 
-    const dateRangeResult = buildOrderDateRangeFilter(query);
-    if (!dateRangeResult.ok) {
-      return fail(409, dateRangeResult.message);
-    }
-    Object.assign(filter, dateRangeResult.filter);
-
-    const isPaidResult = parseOptionalBoolean(query.is_paid);
-    if (!isPaidResult.ok) {
-      return fail(409, isPaidResult.message);
-    }
-    if (isPaidResult.value !== null) {
-      filter.is_paid = isPaidResult.value;
+    const paymentResult = applyUserPaymentStatusFilter(filter, query);
+    if (!paymentResult.ok) {
+      return paymentResult;
     }
 
-    const userPaymentStatusRaw =
-      query.user_payment_status !== undefined &&
-      query.user_payment_status !== null &&
-      String(query.user_payment_status).trim() !== ''
-        ? String(query.user_payment_status).trim().toLowerCase()
-        : query.payment_status !== undefined &&
-            query.payment_status !== null &&
-            String(query.payment_status).trim() !== ''
-          ? String(query.payment_status).trim().toLowerCase()
-          : null;
-
-    if (userPaymentStatusRaw) {
-      if (!isValidOrderPaymentStatus(userPaymentStatusRaw)) {
-        return fail(
-          409,
-          'Invalid user_payment_status/payment_status filter. Use unpaid, paid, partially_paid, refund, partially_refund.'
-        );
-      }
-      filter.user_payment_status = userPaymentStatusRaw;
+    const partnerPaymentResult = applyPartnerPaymentStatusFilter(filter, query);
+    if (!partnerPaymentResult.ok) {
+      return partnerPaymentResult;
     }
 
-    const partnerPaymentStatusRaw =
-      query.partner_payment_status !== undefined &&
-      query.partner_payment_status !== null &&
-      String(query.partner_payment_status).trim() !== ''
-        ? String(query.partner_payment_status).trim().toLowerCase()
-        : null;
-
-    if (partnerPaymentStatusRaw) {
-      if (!isValidPartnerPaymentStatus(partnerPaymentStatusRaw)) {
-        return fail(
-          409,
-          'Invalid partner_payment_status filter. Use unpaid, partially_paid, paid.'
-        );
-      }
-      filter.partner_payment_status = partnerPaymentStatusRaw;
+    const workStatusResult = applyPartnerWorkStatusFilter(filter, query);
+    if (!workStatusResult.ok) {
+      return workStatusResult;
     }
 
-    const partnerWorkStatusRaw =
-      query.partner_work_status !== undefined &&
-      query.partner_work_status !== null &&
-      String(query.partner_work_status).trim() !== ''
-        ? String(query.partner_work_status).trim().toLowerCase()
-        : null;
-
-    if (partnerWorkStatusRaw) {
-      const workStatusFilter = buildPartnerWorkStatusQueryFilter(partnerWorkStatusRaw);
-      if (!workStatusFilter) {
-        return fail(
-          409,
-          'Invalid partner_work_status filter. Use pending, in-progress, or completed.'
-        );
-      }
-      Object.assign(filter, workStatusFilter);
+    const objectIdResult = applyObjectIdFilters(filter, query, PARTNER_OBJECT_ID_FILTER_KEYS);
+    if (!objectIdResult.ok) {
+      return objectIdResult;
     }
 
-    const objectIdFilterKeys = [
-      'franchise_id',
-      'user_id',
-      'category_id',
-      'service_id',
-      'city_id',
-      'address_id',
-    ];
-    for (const key of objectIdFilterKeys) {
-      const result = addObjectIdFilter(query, key, filter);
-      if (!result.ok) {
-        return fail(409, result.message);
-      }
-    }
-
-    const todayOverlapResult = buildOrderTodayOverlapFilter();
-    const todayCountFilter = mergeMongoFilters(filter, todayOverlapResult.filter);
-
-    const collections = getListCollectionNames({
-      users: User,
-      categories: Category,
-      services: Service,
-      cities: City,
-      franchise: Franchise,
-      quotes: Quote,
-      address: Address,
-      states: State,
-    });
-
-    const pipeline = buildEntityListPipeline({
-      baseFilter: filter,
-      sortStage: { updated_at: -1, created_at: -1 },
+    const listData = await fetchPaginatedMobileOrderList({
+      filter,
+      searchRegex,
       skip,
       limit,
-      regex: searchRegex,
+      page,
       searchFields: MOBILE_PARTNER_ORDER_LIST_SEARCH_FIELDS,
-      collections,
-      includeRootCityLookup: true,
-      includeQuoteLookup: true,
-      includeServiceItemsLookup: false,
-      extraAddFields: {
-        city_id: {
-          $cond: [
-            { $ifNull: ['$_city._id', false] },
-            { _id: '$_city._id', name: '$_city.name' },
-            null,
-          ],
-        },
-        quote_id: {
-          $cond: [
-            { $ifNull: ['$_quote._id', false] },
-            {
-              _id: '$_quote._id',
-              quote_sequence_id: '$_quote.quote_sequence_id',
-              quote_description: '$_quote.quote_description',
-              status: '$_quote.status',
-            },
-            null,
-          ],
-        },
-      },
-      extraProject: { service_items: 0 },
     });
-
-    const [aggResult, todayCount] = await Promise.all([
-      Order.aggregate(pipeline).collation({ locale: 'en', strength: 2 }).exec(),
-      Order.countDocuments(todayCountFilter),
-    ]);
-
-    const { data: rows, totalCount: totalItems } = parseFacetListResult(aggResult, limit);
-    const totalPages = Math.max(Math.ceil(totalItems / limit), 1);
-    const records = await attachRefundsToOrderRecords(
-      formatOrderRecords(rows).map(attachPartnerRatingsToOrderRecord)
-    );
 
     return ok(200, {
       message: 'Orders fetched successfully.',
-      data: {
-        totalItems,
-        todayCount,
-        totalPages,
-        currentPage: page,
-        limit,
-        records,
-      },
+      data: listData,
     });
   } catch (err) {
     console.error('mobile partner list orders', err.message);
@@ -307,8 +121,9 @@ const listPartnerOrders = async (partnerId, query = {}) => {
 
 const getPartnerOrderById = async (partnerId, orderId) => {
   try {
-    if (!partnerId || !mongoose.Types.ObjectId.isValid(String(partnerId))) {
-      return fail(401, 'Invalid token.');
+    const callerResult = assertValidCallerObjectId(partnerId);
+    if (!callerResult.ok) {
+      return callerResult;
     }
     if (!orderId || !mongoose.Types.ObjectId.isValid(String(orderId))) {
       return fail(400, 'Invalid order id.');
@@ -316,7 +131,7 @@ const getPartnerOrderById = async (partnerId, orderId) => {
 
     const order = await Order.findOne({
       _id: orderId,
-      partner_id: new mongoose.Types.ObjectId(String(partnerId)),
+      partner_id: callerResult.oid,
       deleted_at: null,
     });
 

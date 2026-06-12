@@ -17,7 +17,7 @@ const {
 const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
 const { attachPartnerRatingFields } = require('../../../utils/rating_format');
 
-const fail = (status, message) => ({ ok: false, status, message });
+const { fail } = require('../../../utils/mobile_service_result');
 
 const sanitizeCsvField = (value) => String(value ?? '').replace(/,/g, ' ').trim();
 const normalizeKey = (value) => sanitizeCsvField(value).toLowerCase();

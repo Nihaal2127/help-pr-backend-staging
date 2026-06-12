@@ -1,6 +1,5 @@
-const mongoose = require('mongoose');
-const Order = require('../../../models/order');
 const OrderService = require('../../../models/order_services');
+const { loadPartnerOrder } = require('../shared/order_access_helpers');
 const { handleImageUpload } = require('../../../helper/image_uploader');
 const { getUploadType } = require('../../../enum/upload_type_enum');
 const {
@@ -29,8 +28,7 @@ const {
   createOrderPostFromUrls,
 } = require('../../partner_post_common_service');
 
-const fail = (status, message, extra = {}) => ({ ok: false, status, message, ...extra });
-const ok = (status, data) => ({ ok: true, status, data });
+const { fail, ok } = require('../../../utils/mobile_service_result');
 
 const TERMINAL_ORDER_STATUSES = new Set([
   ORDER_STATUS_COMPLETED,
@@ -56,27 +54,6 @@ const uploadWorkProofImages = async (files) => {
   }
 
   return urls;
-};
-
-const loadPartnerOrder = async (partnerId, orderId) => {
-  if (!partnerId || !mongoose.Types.ObjectId.isValid(String(partnerId))) {
-    return fail(401, 'Invalid token.');
-  }
-  if (!orderId || !mongoose.Types.ObjectId.isValid(String(orderId))) {
-    return fail(400, 'Invalid order id.');
-  }
-
-  const order = await Order.findOne({
-    _id: orderId,
-    partner_id: new mongoose.Types.ObjectId(String(partnerId)),
-    deleted_at: null,
-  });
-
-  if (!order) {
-    return fail(404, 'Order not found.');
-  }
-
-  return ok(200, { order });
 };
 
 const updatePartnerWorkStatus = async (partnerId, orderId, body) => {

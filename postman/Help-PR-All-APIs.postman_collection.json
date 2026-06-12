@@ -12390,8 +12390,45 @@
     },
     {
       "name": "42 — Partners browse",
-      "description": "**/api/partners** — Admin dashboard partner catalog browse (same partner cards + profile catalog as customer mobile `GET /api/mobile/user/partners`).\n\n**Access:** Super admin (5) & staff (6) — `franchise_id` **optional** on list (omit → all franchises; each partner includes `franchise_id` / `franchise_name`). Franchise admin (1) & employee (3) — own franchise only; `franchise_id` optional (defaults to caller franchise); wrong franchise → **403**. Partner (2) & customer (4) → **403**.\n\n**Auth:** `Bearer {{accessToken}}` (run **00 — Auth → Login**).\n\n**Flow:** 1 list → 2 get partner profile\n\n**Variables:** Set `franchiseId` from franchise APIs (optional for super/staff) · list sets `partnerMongoId` from `data.partners[0]._id`",
+      "description": "**/api/partners** — Admin dashboard partner catalog browse (same partner cards + profile catalog as customer mobile `GET /api/mobile/user/partners`).\n\n**Access:** Super admin (5) & staff (6) — `franchise_id` **optional** on list (omit → all franchises; each partner includes `franchise_id` / `franchise_name`). Franchise admin (1) & employee (3) — own franchise only; `franchise_id` optional (defaults to caller franchise); wrong franchise → **403**. Partner (2) & customer (4) → **403**.\n\n**Auth:** `Bearer {{accessToken}}` (run **00 — Auth → Login**).\n\n**Flow:** 0 getCounts (dashboard tabs) → 1 list → 2 get partner profile\n\n**Variables:** Set `franchiseId` from franchise APIs (optional for super/staff) · list sets `partnerMongoId` from `data.partners[0]._id`",
       "item": [
+        {
+          "name": "0. Partners — getCounts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/partners/getCounts?franchise_id={{franchiseId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "partners",
+                "getCounts"
+              ],
+              "query": [
+                {
+                  "key": "franchise_id",
+                  "value": "{{franchiseId}}",
+                  "description": "Optional for super admin/staff (omit → all franchises). Optional for franchise admin/employee (defaults to caller franchise)."
+                }
+              ]
+            },
+            "description": "**GET /api/partners/getCounts**\n\nDashboard tab counts for admin partner browse — same franchise/role scope and partner pool as **GET /api/partners**.\n\n**200 `record`:** `total`, `basic`, `silver`, `gold`, `platinum` (matches `plan_name` list filter).\n\nAlso available via **POST /api/getCount** with `{ \"type\": \"partner-portfolio-management\", \"franchise_id\": \"...\" }` (type **17**). See `docs/GET_COUNT_API_FRONTEND.txt`."
+          },
+          "description": "\n\n_Source: builtin:partners_browse → Admin partners getCounts_"
+        },
         {
           "name": "1. Partners (list)",
           "event": [

@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const User = require('../models/user');
 const Franchise = require('../models/franchise');
+const { PLAN_NAMES } = require('../models/subscription_plan');
 const { USER_TYPE_PARTNER } = require('../constants/user_types');
 const {
   listFranchisePartnersPaginated,
@@ -124,6 +125,88 @@ const listAllFranchisesPartnersPaginated = async (query) => {
   }
 };
 
+const emptyPartnersBrowseCounts = () => {
+  const counts = { total: 0 };
+  for (const plan of PLAN_NAMES) {
+    counts[plan] = 0;
+  }
+  return counts;
+};
+
+const countPartnersBrowseRecords = (records) => {
+  const counts = emptyPartnersBrowseCounts();
+  const safeRecords = Array.isArray(records) ? records : [];
+  counts.total = safeRecords.length;
+
+  for (const record of safeRecords) {
+    const plan = String(record.subscription_plan_name ?? '').trim().toLowerCase();
+    if (PLAN_NAMES.includes(plan)) {
+      counts[plan] += 1;
+    }
+  }
+
+  return counts;
+};
+
+const collectAllFranchisesPartnerBrowseRecords = async () => {
+  const franchises = await Franchise.find({ deleted_at: null }).select('_id name').lean();
+  const merged = [];
+
+  for (const franchise of franchises) {
+    const built = await buildFranchisePartnerListRecords(franchise._id);
+    if (!built.ok) continue;
+
+    const builtData = built.data || {};
+    const records = Array.isArray(builtData.records) ? builtData.records : [];
+    merged.push(...records);
+  }
+
+  return merged;
+};
+
+const collectPartnersBrowseRecords = async (scopeResult, queryFranchiseId) => {
+  const franchiseResolved = resolveListFranchiseId(scopeResult, queryFranchiseId);
+  if (!franchiseResolved.ok) {
+    return franchiseResolved;
+  }
+  if (franchiseResolved.empty) {
+    return ok(200, { records: [] });
+  }
+  if (franchiseResolved.allFranchises) {
+    try {
+      const records = await collectAllFranchisesPartnerBrowseRecords();
+      return ok(200, { records });
+    } catch (err) {
+      console.error('collectAllFranchisesPartnerBrowseRecords', err.message);
+      return fail(500, 'Internal server error.');
+    }
+  }
+
+  const built = await buildFranchisePartnerListRecords(franchiseResolved.franchiseId);
+  if (!built.ok) {
+    return built;
+  }
+
+  return ok(200, { records: built.data?.records || [] });
+};
+
+const getPartnersBrowseCounts = async (scopeResult, query = {}) => {
+  try {
+    const collected = await collectPartnersBrowseRecords(scopeResult, query.franchise_id);
+    if (!collected.ok) {
+      return collected;
+    }
+
+    return ok(200, {
+      message: 'Partner counts fetched successfully.',
+      counts: countPartnersBrowseRecords(collected.data.records),
+    });
+  } catch (err) {
+    console.error('getPartnersBrowseCounts', err.message);
+    return fail(500, 'Internal server error.');
+  }
+};
+
 const listPartnersForAdmin = async (scopeResult, query) => {
   const franchiseResolved = resolveListFranchiseId(scopeResult, query.franchise_id);
   if (!franchiseResolved.ok) {
@@ -168,6 +251,7 @@ const getPartnerProfileForAdmin = async (partnerId, franchiseId) =>
 
 module.exports = {
   listPartnersForAdmin,
+  getPartnersBrowseCounts,
   loadPartnerForAccess,
   getPartnerProfileForAdmin,
 };

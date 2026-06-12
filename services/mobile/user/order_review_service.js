@@ -6,8 +6,7 @@ const Service = require("../../../models/service");
 const PartnerServiceRating = require("../../../models/partner_service_rating");
 const { ORDER_STATUS_COMPLETED } = require("../../../enum/order_status_enum");
 
-const fail = (status, message) => ({ ok: false, status, message });
-const ok = (status, data) => ({ ok: true, status, data });
+const { fail, ok } = require('../../../utils/mobile_service_result');
 
 const normalizeRating = (value) => {
   const rating = Number(value);

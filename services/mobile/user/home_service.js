@@ -15,8 +15,7 @@ const { loadCustomerHomeOrders } = require('./home_orders_service');
 /** Max partners returned on home (highest plan priority first). */
 const HOME_PARTNERS_LIMIT = 20;
 
-const fail = (status, message) => ({ ok: false, status, message });
-const ok = (status, data) => ({ ok: true, status, data });
+const { fail, ok } = require('../../../utils/mobile_service_result');
 
 const ACTIVE_CATEGORY_FILTER = {
   deleted_at: null,

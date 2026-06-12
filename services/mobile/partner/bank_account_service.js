@@ -1,11 +1,6 @@
-const mongoose = require('mongoose');
 const PartnerBankAccount = require('../../../models/partner_bank_account');
-const User = require('../../../models/user');
-
-const USER_TYPE_PARTNER = 2;
-
-const fail = (status, message) => ({ ok: false, status, message });
-const ok = (status, data) => ({ ok: true, status, data });
+const { assertActivePartner } = require('../shared/partner_access_helpers');
+const { fail, ok } = require('../../../utils/mobile_service_result');
 
 const formatBankAccountRecord = (doc) => {
   const row = doc && doc.toObject ? doc.toObject() : { ...doc };
@@ -42,23 +37,12 @@ const bankAccountMatchesSearch = (record, search) => {
 
 const listPartnerBankAccounts = async (partnerId, { search } = {}) => {
   try {
-    if (!mongoose.Types.ObjectId.isValid(String(partnerId))) {
-      return fail(401, 'Invalid token.');
+    const partnerResult = await assertActivePartner(partnerId);
+    if (!partnerResult.ok) {
+      return partnerResult;
     }
 
-    const partnerOid = new mongoose.Types.ObjectId(String(partnerId));
-    const partner = await User.findOne({
-      _id: partnerOid,
-      type: USER_TYPE_PARTNER,
-      deleted_at: null,
-    })
-      .select('_id')
-      .lean();
-
-    if (!partner) {
-      return fail(404, 'Partner not found.');
-    }
-
+    const { partnerOid } = partnerResult.data;
     const normalizedSearch =
       search !== undefined && search !== null ? String(search).trim() : '';
 

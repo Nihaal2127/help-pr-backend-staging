@@ -9,8 +9,7 @@ const {
   buildFranchisePartnerListRecords,
 } = require('./partners_service');
 
-const fail = (status, message) => ({ ok: false, status, message });
-const ok = (status, data) => ({ ok: true, status, data });
+const { fail, ok } = require('../../../utils/mobile_service_result');
 
 const assertSavablePartner = async (partnerId) => {
   const partnerKey = String(partnerId ?? '').trim();

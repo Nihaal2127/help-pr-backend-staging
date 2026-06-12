@@ -1,6 +1,6 @@
-const mongoose = require('mongoose');
 const Order = require('../../../models/order');
 const OrderAdditionalCharge = require('../../../models/order_additional_charge');
+const { loadPartnerOrder } = require('../shared/order_access_helpers');
 const {
   listActiveChargesByOrder,
   createAdditionalCharge,
@@ -12,8 +12,7 @@ const {
   formatPartnerAdditionalCharge,
 } = require('../../../utils/partner_order_summary');
 
-const fail = (status, message) => ({ ok: false, status, message });
-const ok = (status, data) => ({ ok: true, status, data });
+const { fail, ok } = require('../../../utils/mobile_service_result');
 
 const formatOrderPricingSummary = async (order) => ({
   payment_status: order.payment_status,
@@ -29,27 +28,6 @@ const formatOrderPricingSummary = async (order) => ({
   additional_charges_total: order.additional_charges_total,
   partner_summary: await buildPartnerOrderSummaryFromOrderDoc(order),
 });
-
-const loadPartnerOrder = async (partnerId, orderId) => {
-  if (!partnerId || !mongoose.Types.ObjectId.isValid(String(partnerId))) {
-    return fail(401, 'Invalid token.');
-  }
-  if (!orderId || !mongoose.Types.ObjectId.isValid(String(orderId))) {
-    return fail(400, 'Invalid order id.');
-  }
-
-  const order = await Order.findOne({
-    _id: orderId,
-    partner_id: new mongoose.Types.ObjectId(String(partnerId)),
-    deleted_at: null,
-  });
-
-  if (!order) {
-    return fail(404, 'Order not found.');
-  }
-
-  return ok(200, { order });
-};
 
 const reloadOrderForPricing = async (orderId) => {
   const order = await Order.findOne({ _id: orderId, deleted_at: null });

@@ -3,6 +3,10 @@ const {
   loginPartner,
   updatePartner,
 } = require('../../../services/mobile/partner/partner_service');
+const {
+  wrapMobileHandler,
+  sendServiceError,
+} = require('../../../utils/mobile_controller_helpers');
 
 const register = async (req, res) => {
   try {
@@ -32,36 +36,24 @@ const register = async (req, res) => {
   }
 };
 
-const login = async (req, res) => {
-  try {
-    const { email, password, device_token } = req.body;
-    const result = await loginPartner({ email, password, device_token });
+const login = wrapMobileHandler('mobile partner login', async (req, res) => {
+  const result = await loginPartner({
+    email: req.body.email,
+    password: req.body.password,
+    device_token: req.body.device_token,
+  });
 
-    if (!result.ok) {
-      return res.status(result.status).json({
-        success: false,
-        status: result.status,
-        message: result.message,
-      });
-    }
-
-    const { data } = result;
-
-    return res.status(200).json({
-      success: true,
-      status: 200,
-      message: 'Login successfully.',
-      data,
-    });
-  } catch (error) {
-    console.error('mobile partner login', error.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.',
-    });
+  if (!result.ok) {
+    return sendServiceError(res, result);
   }
-};
+
+  return res.status(200).json({
+    success: true,
+    status: 200,
+    message: 'Login successfully.',
+    data: result.data,
+  });
+});
 
 const update = async (req, res) => {
   try {
@@ -73,11 +65,7 @@ const update = async (req, res) => {
     });
 
     if (!result.ok) {
-      return res.status(result.status).json({
-        success: false,
-        status: result.status,
-        message: result.message,
-      });
+      return sendServiceError(res, result);
     }
 
     return res.status(200).json({

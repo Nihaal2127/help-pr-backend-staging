@@ -52,13 +52,7 @@ const {
   buildQuoteTodayOverlapFilter,
 } = require('../../../utils/schedule_date_filters');
 
-const fail = (status, message) => ({ ok: false, status, message });
-const ok = (status, data) => ({ ok: true, status, data });
-
-const parsePositiveInt = (raw, fallback) => {
-  const n = parseInt(String(raw ?? ''), 10);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
-};
+const { fail, ok, parsePositiveInt } = require('../../../utils/mobile_service_result');
 
 const applyCustomerQuoteFieldUpdates = (quote, body) => {
   const previousValues = {};

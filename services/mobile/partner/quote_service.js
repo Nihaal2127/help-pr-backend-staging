@@ -23,15 +23,9 @@ const {
   appendQuoteHistory,
 } = require('../../../utils/quote_history_helper');
 
-const fail = (status, message) => ({ ok: false, status, message });
-const ok = (status, data) => ({ ok: true, status, data });
+const { fail, ok, parsePositiveInt } = require('../../../utils/mobile_service_result');
 
 const DEFAULT_LIST_STATUSES = ['pending', 'accepted'];
-
-const parsePositiveInt = (raw, fallback) => {
-  const n = parseInt(String(raw ?? ''), 10);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
-};
 
 const buildPartnerListFilter = (partnerId, query) => {
   const filter = {

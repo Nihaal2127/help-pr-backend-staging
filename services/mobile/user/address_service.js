@@ -1,12 +1,12 @@
 const mongoose = require('mongoose');
 const Address = require('../../../models/address');
-const State = require('../../../models/state');
-const City = require('../../../models/city');
-const Area = require('../../../models/area');
-const User = require('../../../models/user');
+const { resolveLocationFields: resolveLocationFieldsCore } = require('../../address_location_service');
+const {
+  softDeleteAddressRecord,
+  syncUserProfileOnFirstAddress,
+} = require('../../address_lifecycle_service');
 
-const fail = (status, message) => ({ ok: false, status, message });
-const ok = (status, data) => ({ ok: true, status, data });
+const { fail, ok } = require('../../../utils/mobile_service_result');
 
 const formatAddressRecord = (doc) => {
   const o = doc && doc.toObject ? doc.toObject() : { ...doc };
@@ -29,62 +29,12 @@ const formatAddressRecord = (doc) => {
   };
 };
 
-const resolveLocationFields = async ({ state_id, city_id, area_id, pincode }) => {
-  if (!mongoose.Types.ObjectId.isValid(String(state_id))) {
-    return fail(400, 'Invalid state id.');
+const resolveLocationFields = async (body) => {
+  const result = await resolveLocationFieldsCore(body);
+  if (!result.ok) {
+    return fail(result.status, result.message);
   }
-  if (!mongoose.Types.ObjectId.isValid(String(city_id))) {
-    return fail(400, 'Invalid city id.');
-  }
-  if (!mongoose.Types.ObjectId.isValid(String(area_id))) {
-    return fail(400, 'Invalid area id.');
-  }
-
-  const stateOid = new mongoose.Types.ObjectId(String(state_id));
-  const cityOid = new mongoose.Types.ObjectId(String(city_id));
-  const areaOid = new mongoose.Types.ObjectId(String(area_id));
-  const pincodeValue = String(pincode).trim();
-
-  const state = await State.findOne({ _id: stateOid, deleted_at: null }).lean();
-  if (!state) return fail(400, 'State not found.');
-  if (state.is_active === false) return fail(400, 'State is not active.');
-
-  const city = await City.findOne({ _id: cityOid, deleted_at: null }).lean();
-  if (!city) return fail(400, 'City not found.');
-  if (String(city.state_id) !== String(stateOid)) {
-    return fail(400, 'City does not belong to the selected state.');
-  }
-  if (city.is_active === false) return fail(400, 'City is not active.');
-
-  const area = await Area.findOne({ _id: areaOid, deleted_at: null }).lean();
-  if (!area) return fail(400, 'Area not found.');
-  if (String(area.city_id) !== String(cityOid)) {
-    return fail(400, 'Area does not belong to the selected city.');
-  }
-  if (String(area.state_id) !== String(stateOid)) {
-    return fail(400, 'Area does not belong to the selected state.');
-  }
-  if (area.is_active === false) return fail(400, 'Area is not active.');
-
-  const areaPincodes = Array.isArray(area.pincodes)
-    ? area.pincodes.map((p) => String(p).trim())
-    : [];
-  if (!areaPincodes.includes(pincodeValue)) {
-    return fail(400, 'Pincode must be selected from the list for the chosen area.');
-  }
-
-  return {
-    ok: true,
-    fields: {
-      state_id: stateOid,
-      city_id: cityOid,
-      area_id: areaOid,
-      state: state.name,
-      city: city.name,
-      area: area.name,
-      pincode: pincodeValue,
-    },
-  };
+  return result;
 };
 
 const addressMatchesSearch = (record, search) => {
@@ -148,11 +98,6 @@ const createAddress = async (customerId, body) => {
       return locationResult;
     }
 
-    const existingAddressCount = await Address.countDocuments({
-      user_id: customerId,
-      deleted_at: null,
-    });
-
     const addressLine = String(body.address).trim();
     const row = await Address.create({
       user_id: customerId,
@@ -164,21 +109,7 @@ const createAddress = async (customerId, body) => {
       address_status: true,
     });
 
-    if (existingAddressCount === 0) {
-      await User.updateOne(
-        { _id: customerId, deleted_at: null },
-        {
-          $set: {
-            address: addressLine,
-            state_id: locationResult.fields.state_id,
-            city_id: locationResult.fields.city_id,
-            area_id: locationResult.fields.area_id,
-            pincode: locationResult.fields.pincode,
-            updated_at: new Date(),
-          },
-        }
-      );
-    }
+    await syncUserProfileOnFirstAddress(customerId, locationResult.fields, addressLine);
 
     return ok(200, {
       message: 'Address created successfully.',
@@ -248,13 +179,10 @@ const deleteAddress = async (customerId, addressId) => {
       return fail(404, 'Address not found.');
     }
 
-    if (row.deleted_at) {
-      return fail(400, 'Address is already deleted.');
+    const deleteResult = await softDeleteAddressRecord(row);
+    if (!deleteResult.ok) {
+      return fail(deleteResult.status, deleteResult.message);
     }
-
-    row.deleted_at = new Date();
-    row.updated_at = new Date();
-    await row.save();
 
     return ok(200, {
       message: 'Address deleted successfully.',

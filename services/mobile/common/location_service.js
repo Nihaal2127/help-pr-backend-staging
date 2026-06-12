@@ -5,8 +5,7 @@ const Area = require('../../../models/area');
 const Franchise = require('../../../models/franchise');
 const { applyDropDownFilter } = require('../../../utils/pagination');
 
-const fail = (status, message) => ({ ok: false, status, message });
-const ok = (status, data) => ({ ok: true, status, data });
+const { fail, ok } = require('../../../utils/mobile_service_result');
 
 const collectObjectIdsFromField = (franchiseDocs, fieldName) => {
   const seen = new Set();

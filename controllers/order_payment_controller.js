@@ -2,13 +2,17 @@ const mongoose = require("mongoose");
 const Order = require("../models/order");
 const OrderPayment = require("../models/order_payment");
 const { assertOrderModifyAccess } = require("../utils/order_access");
-const { syncOrderPaymentStatus } = require("../services/order_payment_status_service");
-const { syncAllPartnerOrderPaymentsForOrder } = require("../services/partner_wallet_order_service");
 const { validatePartnerOrderPayment } = require("../services/partner_order_payment_validation");
 const { fieldLabel } = require("../utils/field_labels");
-
-const PAYER_TYPES = new Set(["customer", "partner"]);
-const STATUSES = new Set(["pending", "completed", "failed", "refunded"]);
+const {
+  PAYER_TYPES,
+  PAYMENT_STATUSES,
+  createOrderPaymentRecord,
+  applyOrderPaymentFieldUpdates,
+  commitOrderPaymentUpdate,
+  softDeleteOrderPaymentRecord,
+  formatAdminOrderPaymentSummary,
+} = require("../services/order_payment_crud_service");
 
 const create = async (req, res) => {
   try {
@@ -16,13 +20,7 @@ const create = async (req, res) => {
       order_id,
       payer_type,
       amount,
-      payment_method,
       status,
-      transaction_reference,
-      installment_index,
-      due_date,
-      paid_at,
-      notes,
     } = req.body;
 
     if (!order_id || !mongoose.Types.ObjectId.isValid(order_id)) {
@@ -67,7 +65,7 @@ const create = async (req, res) => {
       });
     }
 
-    const st = status && STATUSES.has(status) ? status : "pending";
+    const st = status && PAYMENT_STATUSES.has(status) ? status : "pending";
 
     if (payer_type === "partner") {
       const partnerCheck = await validatePartnerOrderPayment(order, {
@@ -83,25 +81,14 @@ const create = async (req, res) => {
       }
     }
 
-    const doc = new OrderPayment({
-      order_id: order._id,
-      payer_type,
-      amount: Number(amount),
-      payment_method: payment_method != null ? String(payment_method) : "",
-      status: st,
-      transaction_reference: transaction_reference || "",
-      installment_index:
-        installment_index !== undefined && installment_index !== null
-          ? Number(installment_index)
-          : null,
-      due_date: due_date ? new Date(due_date) : null,
-      paid_at: paid_at ? new Date(paid_at) : null,
-      notes: notes || "",
+    const { doc, syncResult } = await createOrderPaymentRecord(order, req.body, {
+      payerType: payer_type,
+      defaultStatus: st,
+      autoPaidAtOnCompleted: false,
+      trimStrings: false,
     });
-    await doc.save();
-
-    const { order: syncedOrder, breakdown } = await syncOrderPaymentStatus(order._id);
-    await syncAllPartnerOrderPaymentsForOrder(order._id);
+    const syncedOrder = syncResult?.order;
+    const breakdown = syncResult?.breakdown;
 
     return res.status(201).json({
       success: true,
@@ -109,12 +96,7 @@ const create = async (req, res) => {
       message: "Order payment record created.",
       record: doc,
       order_payment_status: breakdown.payment_status,
-      order: {
-        payment_status: syncedOrder.payment_status,
-        is_paid: syncedOrder.is_paid,
-        customer_due_amount: syncedOrder.customer_due_amount,
-        total_price: syncedOrder.total_price,
-      },
+      order: formatAdminOrderPaymentSummary(syncedOrder),
     });
   } catch (error) {
     console.error("order_payment create:", error);
@@ -215,16 +197,7 @@ const update = async (req, res) => {
       });
     }
 
-    const {
-      amount,
-      payment_method,
-      status,
-      transaction_reference,
-      installment_index,
-      due_date,
-      paid_at,
-      notes,
-    } = req.body;
+    const { amount } = req.body;
 
     if (amount !== undefined) {
       if (Number(amount) < 0) {
@@ -234,33 +207,19 @@ const update = async (req, res) => {
           message: "amount must be >= 0.",
         });
       }
-      row.amount = Number(amount);
     }
-    if (payment_method !== undefined) row.payment_method = String(payment_method);
-    if (status !== undefined) {
-      if (!STATUSES.has(status)) {
-        return res.status(400).json({
-          success: false,
-          status: 400,
-          message: "Invalid status.",
-        });
-      }
-      row.status = status;
+
+    const fieldUpdateResult = applyOrderPaymentFieldUpdates(row, req.body, {
+      validateStatus: true,
+      trimStrings: false,
+    });
+    if (!fieldUpdateResult.ok) {
+      return res.status(fieldUpdateResult.status).json({
+        success: false,
+        status: fieldUpdateResult.status,
+        message: fieldUpdateResult.message,
+      });
     }
-    if (transaction_reference !== undefined) {
-      row.transaction_reference = transaction_reference;
-    }
-    if (installment_index !== undefined) {
-      row.installment_index =
-        installment_index === null ? null : Number(installment_index);
-    }
-    if (due_date !== undefined) {
-      row.due_date = due_date ? new Date(due_date) : null;
-    }
-    if (paid_at !== undefined) {
-      row.paid_at = paid_at ? new Date(paid_at) : null;
-    }
-    if (notes !== undefined) row.notes = notes;
 
     if (row.payer_type === "partner") {
       const partnerCheck = await validatePartnerOrderPayment(order, {
@@ -277,24 +236,17 @@ const update = async (req, res) => {
       }
     }
 
-    row.updated_at = new Date();
-    await row.save();
-
-    const { order: syncedOrder, breakdown } = await syncOrderPaymentStatus(order._id);
-    await syncAllPartnerOrderPaymentsForOrder(order._id);
+    const updateResult = await commitOrderPaymentUpdate(row, order._id);
+    const syncedOrder = updateResult.syncResult?.order;
+    const breakdown = updateResult.syncResult?.breakdown;
 
     return res.status(200).json({
       success: true,
       status: 200,
       message: "Order payment updated.",
-      record: row,
+      record: updateResult.row,
       order_payment_status: breakdown.payment_status,
-      order: {
-        payment_status: syncedOrder.payment_status,
-        is_paid: syncedOrder.is_paid,
-        customer_due_amount: syncedOrder.customer_due_amount,
-        total_price: syncedOrder.total_price,
-      },
+      order: formatAdminOrderPaymentSummary(syncedOrder),
     });
   } catch (error) {
     console.error("order_payment update:", error);
@@ -343,12 +295,8 @@ const remove = async (req, res) => {
       });
     }
 
-    row.deleted_at = new Date();
-    row.updated_at = new Date();
-    await row.save();
-
-    const { breakdown } = await syncOrderPaymentStatus(orderForAuth._id);
-    await syncAllPartnerOrderPaymentsForOrder(orderForAuth._id);
+    const syncResult = await softDeleteOrderPaymentRecord(row, orderForAuth._id);
+    const breakdown = syncResult?.breakdown;
 
     return res.status(200).json({
       success: true,

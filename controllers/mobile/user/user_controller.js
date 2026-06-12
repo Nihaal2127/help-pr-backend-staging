@@ -4,128 +4,46 @@ const {
   updateUser,
   listAllPincodes,
 } = require('../../../services/mobile/user/user_service');
+const {
+  wrapMobileHandler,
+  sendTopLevelServiceResult,
+} = require('../../../utils/mobile_controller_helpers');
 
-const sendOtpHandler = async (req, res) => {
-  try {
-    const { phone_number } = req.body;
-    const result = await sendOtp({ phone_number });
+const sendOtpHandler = wrapMobileHandler(
+  'mobile user send-otp',
+  async (req, res) => {
+    const result = await sendOtp({ phone_number: req.body.phone_number });
+    return sendTopLevelServiceResult(res, result);
+  },
+  { errorMessage: 'Failed to send OTP.' }
+);
 
-    if (!result.ok) {
-      return res.status(result.status).json({
-        success: false,
-        status: result.status,
-        message: result.message,
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      status: 200,
-      message: result.message,
-    });
-  } catch (error) {
-    console.error('mobile user send-otp', error.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Failed to send OTP.',
-    });
-  }
-};
-
-const verifyOtpHandler = async (req, res) => {
-  try {
-    const { phone_number, device_token } = req.body;
+const verifyOtpHandler = wrapMobileHandler(
+  'mobile user verify-otp',
+  async (req, res) => {
     const result = await verifyOtpAndLogin({
-      phone_number,
-      device_token,
+      phone_number: req.body.phone_number,
+      device_token: req.body.device_token,
       validOtp: req.validOtp,
     });
+    return sendTopLevelServiceResult(res, result);
+  },
+  { errorMessage: 'Failed to verify OTP.' }
+);
 
-    if (!result.ok) {
-      return res.status(result.status).json({
-        success: false,
-        status: result.status,
-        message: result.message,
-      });
-    }
+const updateHandler = wrapMobileHandler('mobile user update', async (req, res) => {
+  const result = await updateUser({
+    customerId: req.user.id,
+    body: req.body,
+    files: req.files,
+  });
+  return sendTopLevelServiceResult(res, result);
+});
 
-    return res.status(200).json({
-      success: true,
-      status: 200,
-      message: result.message,
-      data: result.data,
-    });
-  } catch (error) {
-    console.error('mobile user verify-otp', error.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Failed to verify OTP.',
-    });
-  }
-};
-
-const updateHandler = async (req, res) => {
-  try {
-    const result = await updateUser({
-      customerId: req.user.id,
-      body: req.body,
-      files: req.files,
-    });
-
-    if (!result.ok) {
-      return res.status(result.status).json({
-        success: false,
-        status: result.status,
-        message: result.message,
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      status: 200,
-      message: result.message,
-      data: result.data,
-    });
-  } catch (error) {
-    console.error('mobile user update', error.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.',
-    });
-  }
-};
-
-const getPincodesHandler = async (req, res) => {
-  try {
-    const search = req.query.search;
-    const result = await listAllPincodes({ search });
-
-    if (!result.ok) {
-      return res.status(result.status).json({
-        success: false,
-        status: result.status,
-        message: result.message,
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      status: 200,
-      message: result.message,
-      data: result.data,
-    });
-  } catch (error) {
-    console.error('mobile user pincodes', error.message);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      message: 'Internal server error.',
-    });
-  }
-};
+const getPincodesHandler = wrapMobileHandler('mobile user pincodes', async (req, res) => {
+  const result = await listAllPincodes({ search: req.query.search });
+  return sendTopLevelServiceResult(res, result);
+});
 
 module.exports = {
   sendOtpHandler,

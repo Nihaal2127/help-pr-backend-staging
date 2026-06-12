@@ -1,15 +1,13 @@
 const mongoose = require('mongoose');
-const User = require('../../../models/user');
 const PartnerWalletLedger = require('../../../models/partner_wallet_ledger');
 const { TRANSACTION_TYPES } = require('../../../models/partner_wallet_ledger');
 const { getWalletAggregatesForPartners } = require('../../partner_payout_service');
 const { sanitizeInput } = require('../../../validator/search_keyword_validator');
+const { assertActivePartner } = require('../shared/partner_access_helpers');
 
-const USER_TYPE_PARTNER = 2;
 const MAX_PAGE_SIZE = 100;
 
-const fail = (status, message) => ({ ok: false, status, message });
-const ok = (status, data) => ({ ok: true, status, data });
+const { fail, ok } = require('../../../utils/mobile_service_result');
 
 const roundAmount = (n) => Math.round(Number(n) * 100) / 100;
 
@@ -59,27 +57,6 @@ const buildLedgerDateFilter = (query) => {
     }
 
     return { ok: true, filter };
-};
-
-const assertPartner = async (partnerId) => {
-    if (!mongoose.Types.ObjectId.isValid(String(partnerId))) {
-        return fail(401, 'Invalid token.');
-    }
-
-    const partnerOid = new mongoose.Types.ObjectId(String(partnerId));
-    const partner = await User.findOne({
-        _id: partnerOid,
-        type: USER_TYPE_PARTNER,
-        deleted_at: null,
-    })
-        .select('_id name user_id')
-        .lean();
-
-    if (!partner) {
-        return fail(404, 'Partner not found.');
-    }
-
-    return { ok: true, partner, partnerOid };
 };
 
 const buildLedgerBaseFilter = (partnerOid, query = {}) => {
@@ -168,12 +145,14 @@ const formatLedgerRecord = (row) => ({
 
 const getWalletSummary = async (partnerId, query = {}) => {
     try {
-        const partnerResult = await assertPartner(partnerId);
+        const partnerResult = await assertActivePartner(partnerId, {
+            select: '_id name user_id',
+        });
         if (!partnerResult.ok) {
             return partnerResult;
         }
 
-        const { partner, partnerOid } = partnerResult;
+        const { partner, partnerOid } = partnerResult.data;
         const walletMap = await getWalletAggregatesForPartners([partnerOid]);
         const wallet = walletMap.get(partnerOid.toString()) || { total_wallet_amount: 0 };
 
@@ -203,12 +182,14 @@ const getWalletSummary = async (partnerId, query = {}) => {
 
 const listWalletTransactions = async (partnerId, query = {}) => {
     try {
-        const partnerResult = await assertPartner(partnerId);
+        const partnerResult = await assertActivePartner(partnerId, {
+            select: '_id name user_id',
+        });
         if (!partnerResult.ok) {
             return partnerResult;
         }
 
-        const { partner, partnerOid } = partnerResult;
+        const { partner, partnerOid } = partnerResult.data;
         const { page, limit, skip } = parsePagination(query);
 
         const filterResult = buildLedgerBaseFilter(partnerOid, query);

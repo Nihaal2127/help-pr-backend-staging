@@ -6,6 +6,7 @@ const PartnerPostLike = require('../models/partner_post_like');
 const PartnerPostSave = require('../models/partner_post_save');
 const User = require('../models/user');
 const Order = require('../models/order');
+const OrderService = require('../models/order_services');
 const Category = require('../models/category');
 const Service = require('../models/service');
 const { USER_TYPE_PARTNER } = require('../constants/user_types');
@@ -240,7 +241,7 @@ const createOrderPostFromUrls = async (partnerId, orderId, imageUrls, descriptio
     deleted_at: null,
   });
 
-  const mapped = await mapPostRecords([post.toObject()], { includePartner: false });
+  const mapped = await mapPostRecords([post.toObject()], { includePartner: true });
   return ok(201, { post: mapped[0], postId: post._id });
 };
 
@@ -302,6 +303,124 @@ const loadSavedPostIds = async (userId, postIds) => {
   return new Set(saves.map((s) => String(s.post_id)));
 };
 
+const formatOrderServiceLocation = (order) => {
+  const addr = order.address_id;
+  if (addr && addr._id) {
+    return {
+      address: addr.address || order.address || '',
+      landmark: addr.landmark || '',
+      area_name: addr.area || null,
+      city_name: addr.city || null,
+      state_name: addr.state || null,
+      pincode: addr.pincode || '',
+    };
+  }
+
+  if (order.address) {
+    return {
+      address: order.address,
+      landmark: '',
+      area_name: null,
+      city_name: null,
+      state_name: null,
+      pincode: '',
+    };
+  }
+
+  return null;
+};
+
+const pickOrderServiceRating = (serviceLines, post) => {
+  if (!serviceLines?.length) {
+    return { rating: null, review_text: null, reviewed_at: null };
+  }
+
+  let line = null;
+  if (post.service_id) {
+    line = serviceLines.find(
+      (row) =>
+        String(row.service_id) === String(post.service_id) &&
+        String(row.partner_id) === String(post.partner_id)
+    );
+  }
+
+  if (!line && post.partner_id) {
+    line = serviceLines.find((row) => String(row.partner_id) === String(post.partner_id));
+  }
+
+  if (!line) {
+    line = serviceLines[0];
+  }
+
+  const rating = Number(line?.rating) || 0;
+  if (rating <= 0) {
+    return { rating: null, review_text: null, reviewed_at: null };
+  }
+
+  return {
+    rating,
+    review_text: line.review_text || '',
+    reviewed_at: line.reviewed_at || null,
+  };
+};
+
+const loadLinkedOrderDetails = async (posts) => {
+  const orderIds = [
+    ...new Set(
+      posts
+        .filter((post) => post.post_type === POST_TYPE_ORDER && post.order_id)
+        .map((post) => String(post.order_id))
+    ),
+  ];
+
+  if (orderIds.length === 0) {
+    return new Map();
+  }
+
+  const orders = await Order.find({
+    _id: { $in: orderIds.map((id) => new mongoose.Types.ObjectId(id)) },
+    deleted_at: null,
+  })
+    .select('_id address address_id service_items')
+    .populate({
+      path: 'address_id',
+      select: 'address landmark pincode city state area city_id state_id area_id',
+    })
+    .lean();
+
+  const serviceItemIds = [
+    ...new Set(orders.flatMap((order) => (order.service_items || []).map((id) => String(id)))),
+  ];
+
+  const serviceLines = serviceItemIds.length
+    ? await OrderService.find({
+        _id: { $in: serviceItemIds.map((id) => new mongoose.Types.ObjectId(id)) },
+        deleted_at: null,
+      })
+        .select('order_id service_id partner_id rating review_text reviewed_at')
+        .lean()
+    : [];
+
+  const serviceLinesByOrderId = new Map();
+  for (const line of serviceLines) {
+    const key = String(line.order_id);
+    if (!serviceLinesByOrderId.has(key)) {
+      serviceLinesByOrderId.set(key, []);
+    }
+    serviceLinesByOrderId.get(key).push(line);
+  }
+
+  const orderById = new Map();
+  for (const order of orders) {
+    orderById.set(String(order._id), {
+      service_location: formatOrderServiceLocation(order),
+      serviceLines: serviceLinesByOrderId.get(String(order._id)) || [],
+    });
+  }
+
+  return orderById;
+};
+
 const loadPartnerSummaries = async (partnerIds) => {
   if (partnerIds.length === 0) {
     return new Map();
@@ -327,12 +446,19 @@ const loadPartnerSummaries = async (partnerIds) => {
   );
 };
 
-const buildLinkedBlock = (post, { categoryById, serviceById }) => {
+const buildLinkedBlock = (post, { categoryById, serviceById, orderDetail = null }) => {
   if (post.post_type === POST_TYPE_ORDER) {
+    const ratingInfo = orderDetail
+      ? pickOrderServiceRating(orderDetail.serviceLines, post)
+      : { rating: null, review_text: null, reviewed_at: null };
+
     return {
       order_id: post.order_id,
       service_name: post.service_id ? serviceById.get(String(post.service_id)) || null : null,
       category_name: post.category_id ? categoryById.get(String(post.category_id)) || null : null,
+      rating: ratingInfo.rating,
+      review_text: ratingInfo.review_text,
+      reviewed_at: ratingInfo.reviewed_at,
     };
   }
 
@@ -355,8 +481,14 @@ const mapPostRecord = (post, options = {}) => {
     partnerById = new Map(),
     categoryById = new Map(),
     serviceById = new Map(),
+    orderById = new Map(),
     includePartner = true,
   } = options;
+
+  const orderDetail =
+    post.post_type === POST_TYPE_ORDER && post.order_id
+      ? orderById.get(String(post.order_id)) || null
+      : null;
 
   const record = {
     _id: post._id,
@@ -373,7 +505,7 @@ const mapPostRecord = (post, options = {}) => {
     reports_count: post.reports_count ?? 0,
     created_at: post.created_at,
     updated_at: post.updated_at,
-    linked: buildLinkedBlock(post, { categoryById, serviceById }),
+    linked: buildLinkedBlock(post, { categoryById, serviceById, orderDetail }),
   };
 
   if (userId) {
@@ -384,7 +516,10 @@ const mapPostRecord = (post, options = {}) => {
   if (includePartner && post.partner_id) {
     const partner = partnerById.get(String(post.partner_id));
     if (partner) {
-      record.partner = partner;
+      record.partner = {
+        ...partner,
+        ...(orderDetail?.service_location ? { service_location: orderDetail.service_location } : {}),
+      };
     }
   }
 
@@ -401,11 +536,12 @@ const mapPostRecords = async (posts, options = {}) => {
   const postIds = posts.map((p) => p._id);
   const partnerIds = [...new Set(posts.map((p) => String(p.partner_id)).filter(Boolean))];
 
-  const [likedPostIds, savedPostIds, partnerById, labelMaps] = await Promise.all([
+  const [likedPostIds, savedPostIds, partnerById, labelMaps, orderById] = await Promise.all([
     loadLikedPostIds(userId, postIds),
     loadSavedPostIds(userId, postIds),
     includePartner ? loadPartnerSummaries(partnerIds.map((id) => new mongoose.Types.ObjectId(id))) : Promise.resolve(new Map()),
     loadLinkedLabels(posts),
+    loadLinkedOrderDetails(posts),
   ]);
 
   return posts.map((post) =>
@@ -416,6 +552,7 @@ const mapPostRecords = async (posts, options = {}) => {
       partnerById,
       categoryById: labelMaps.categoryById,
       serviceById: labelMaps.serviceById,
+      orderById,
       includePartner,
     })
   );

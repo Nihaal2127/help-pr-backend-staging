@@ -1558,11 +1558,11 @@ const changePasswordMiddleware = (req, res, next) => {
     });
   }
   const normalizedType = Number(type);
-  if (![2, 4].includes(normalizedType)) {
+  if (!Number.isInteger(normalizedType) || normalizedType < 1 || normalizedType > 6) {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'changePassword is supported only for partner(type=2) and user(type=4).',
+      message: 'Invalid user type. Supported values: 1 (admin), 2 (partner), 3 (employee), 4 (user), 5 (super admin), 6 (staff).',
     });
   }
   if (!new_password || String(new_password).trim() === '') {

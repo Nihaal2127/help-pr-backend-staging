@@ -18,6 +18,7 @@ const Quote = require('../models/quote');
 const SubscriptionPlan = require('../models/subscription_plan');
 const PartnerSubscription = require('../models/partner_subscription');
 const Offer = require('../models/offer');
+const UserHomeCounts = require('../models/user_home_counts');
 const {
     buildFinancialOrderPaymentsCountFromOrders,
 } = require('../services/order_financial_payments_service');
@@ -1426,21 +1427,27 @@ const getPartnerServiceCount = async (req, res) => {
 
 const getHomeCount = async (req, res) => {
     try {
+        const userHomeCounts = await UserHomeCounts.findOne({});
+
         const result = {
-            total_distance_travelled: 0,
-            served: 0,
-            consulted: 0,
-            captured: 0,
-        }
+            total_distance_travelled: userHomeCounts?.total_distance_travelled ?? 0,
+            served: userHomeCounts?.served ?? 0,
+            consulted: userHomeCounts?.consulted ?? 0,
+            captured: userHomeCounts?.captured ?? 0,
+        };
 
         return res.status(200).json({
             success: true,
             status: 200,
-            record: result
+            record: result,
         });
     } catch (error) {
-        console.error("Error fetching partner service count:", error);
-        return res.status(500).json({ error: "Internal server error" });
+        console.error('Error fetching home count:', error);
+        return res.status(500).json({
+            success: false,
+            status: 500,
+            message: 'Internal server error.',
+        });
     }
 };
 

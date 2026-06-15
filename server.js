@@ -43,6 +43,7 @@ const notificationSettingsRoutes = require('./routes/notification_settings_route
 const dashboardRoutes = require('./routes/dashboard_routes');
 const exportRoutes = require('./routes/export_routes');
 const userHomeCountsRoutes = require('./routes/user_home_counts_routes');
+const quoteSettingsRoutes = require('./routes/quote_settings_routes');
 const contentManagementRoutes = require('./routes/content_management_routes');
 const expenseCategoryManagementRoutes = require('./routes/expense_category_management_routes');
 const expenseManagementRoutes = require('./routes/expense_management_routes');
@@ -141,6 +142,7 @@ app.use('/api/razorpay', razorpayRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/user_home_counts', userHomeCountsRoutes);
+app.use('/api/quote_settings', quoteSettingsRoutes);
 app.use('/api/content-management', contentManagementRoutes);
 app.use('/api/expense-category-management', expenseCategoryManagementRoutes);
 app.use('/api/expense-management', expenseManagementRoutes);

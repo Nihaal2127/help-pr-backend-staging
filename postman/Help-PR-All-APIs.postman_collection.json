@@ -10947,6 +10947,121 @@
       ]
     },
     {
+      "name": "33b — Quote settings",
+      "description": "**/api/quote_settings** — global singleton quote config (create once, update only, no delete). Super admin / staff only.",
+      "item": [
+        {
+          "name": "Create",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  try {",
+                  "    const j = pm.response.json();",
+                  "    if (j && j.record && j.record._id) {",
+                  "      pm.collectionVariables.set('quote_settings_id', String(j.record._id));",
+                  "      pm.collectionVariables.set('id', String(j.record._id));",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"free_quotes_per_user\": 3,\n  \"no_of_quotes\": 10,\n  \"quotes_price\": 99\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/quote_settings/create"
+          }
+        },
+        {
+          "name": "Get",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/quote_settings/get"
+          }
+        },
+        {
+          "name": "Update",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quotes_price\": 149\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/quote_settings/update/{{quote_settings_id}}"
+          }
+        }
+      ]
+    },
+    {
       "name": "34 — Content management",
       "description": "**/api/content-management** — 5 request(s). Duplicates merged across source collections.",
       "item": [
@@ -19962,6 +20077,121 @@
               ]
             },
             {
+              "name": "07 — Quote settings",
+              "description": "**3** request(s) — global singleton quote config (super admin / staff).",
+              "item": [
+                {
+                  "name": "Create",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "if (pm.response.code === 200) {",
+                          "  try {",
+                          "    const j = pm.response.json();",
+                          "    if (j && j.record && j.record._id) {",
+                          "      pm.collectionVariables.set('quote_settings_id', String(j.record._id));",
+                          "      pm.collectionVariables.set('id', String(j.record._id));",
+                          "    }",
+                          "  } catch (e) {}",
+                          "}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{auth_token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"free_quotes_per_user\": 3,\n  \"no_of_quotes\": 10,\n  \"quotes_price\": 99\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": "{{base_url}}/api/quote_settings/create"
+                  }
+                },
+                {
+                  "name": "Get",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{auth_token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [],
+                    "url": "{{base_url}}/api/quote_settings/get"
+                  }
+                },
+                {
+                  "name": "Update",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{auth_token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "PUT",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"quotes_price\": 149\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": "{{base_url}}/api/quote_settings/update/{{quote_settings_id}}"
+                  }
+                }
+              ]
+            },
+            {
               "name": "08 — Razorpay",
               "description": "**2** request(s)",
               "item": [
@@ -21645,6 +21875,13 @@
       "type": "string",
       "enabled": true,
       "description": "User home counts document _id."
+    },
+    {
+      "key": "quote_settings_id",
+      "value": "",
+      "type": "string",
+      "enabled": true,
+      "description": "Quote settings document _id."
     },
     {
       "key": "user_id",

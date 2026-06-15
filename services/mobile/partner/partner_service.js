@@ -26,6 +26,10 @@ const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
 const { fail, okWithData, okPass } = require('../../../utils/mobile_service_result');
 const { attachPartnerRatingFields } = require('../../../utils/rating_format');
 const { getPartnerEngagementCounts } = require('../../partner_post_common_service');
+const {
+  partnerDocumentFieldsAfterImageUpload,
+  applyPartnerUserStatusAfterDocumentUpload,
+} = require('../../../utils/partner_document_status');
 const DEFAULT_PARTNER_PLAN_NAME = 'basic';
 const REGISTRATION_TYPE_NORMAL = 1;
 
@@ -478,7 +482,7 @@ const mergePartnerDocumentPayloadFromMultipart = async (files) => {
 
 async function applyPartnerDocumentImageUpdates(partnerId, normalizedDocumentPayload) {
   if (!normalizedDocumentPayload || Object.keys(normalizedDocumentPayload).length === 0) {
-    return;
+    return false;
   }
   const documentList = await getDocumentList();
   const documentNameToId = new Map();
@@ -502,7 +506,11 @@ async function applyPartnerDocumentImageUpdates(partnerId, normalizedDocumentPay
       documentImageById[mappedDocumentId] = normalizedValue;
     }
   });
-  if (Object.keys(documentImageById).length === 0) return;
+  if (Object.keys(documentImageById).length === 0) return false;
+  const partnerUser = await User.findById(partnerId).select('verification_status').lean();
+  const documentStatusFields = partnerDocumentFieldsAfterImageUpload(
+    partnerUser?.verification_status
+  );
   const updates = Object.entries(documentImageById).map(([documentId, imageUrl]) =>
     PartnerDocument.updateOne(
       {
@@ -510,10 +518,11 @@ async function applyPartnerDocumentImageUpdates(partnerId, normalizedDocumentPay
         document_id: new mongoose.Types.ObjectId(documentId),
         deleted_at: null,
       },
-      { $set: { document_image: imageUrl } }
+      { $set: { document_image: imageUrl, ...documentStatusFields } }
     )
   );
   await Promise.all(updates);
+  return true;
 }
 
 async function ensurePartnerDocumentCatalogRows(partnerId, userRecord) {
@@ -1103,12 +1112,11 @@ const updatePartner = async ({ partnerId, body, files, section = PARTNER_UPDATE_
 
     if (shouldRunDocuments) {
       const mergedPartnerDocs = await mergePartnerDocumentPayloadFromMultipart(files);
-      await applyPartnerDocumentImageUpdates(
+      const documentsUpdated = await applyPartnerDocumentImageUpdates(
         updatedUser._id,
         normalizePartnerDocuments(mergedPartnerDocs)
       );
-      if (Number(updatedUser.verification_status) === 3) {
-        updatedUser.verification_status = 1;
+      if (documentsUpdated && applyPartnerUserStatusAfterDocumentUpload(updatedUser)) {
         await updatedUser.save();
       }
     }

@@ -5,6 +5,10 @@ const { applyPagination } = require('../utils/pagination');
 const { getVerificationId } = require('../helper/id_generator');
 const { getDocuementStatus } = require('../validator/document_validator');
 const { fieldLabel } = require('../utils/field_labels');
+const {
+  partnerDocumentFieldsAfterImageUpload,
+  applyPartnerUserStatusAfterDocumentUpload,
+} = require('../utils/partner_document_status');
 
 const getAll = async (req, res) => {
 
@@ -250,14 +254,25 @@ const updateDocument = async (req, res) => {
         message: 'Document not found'
       });
     }
+    const user = await User.findById(partnerDocument.partner_id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        status: 404,
+        message: 'Partner not found',
+      });
+    }
+
     partnerDocument.document_image = image_url;
+    Object.assign(
+      partnerDocument,
+      partnerDocumentFieldsAfterImageUpload(user.verification_status)
+    );
     await partnerDocument.save();
 
-    const user = await User.findById({ _id: partnerDocument.partner_id });
-    user.verification_status = 1;
-    user.is_active = false;
-    user.submitted_at = Date.now();
-    await user.save();
+    if (applyPartnerUserStatusAfterDocumentUpload(user)) {
+      await user.save();
+    }
 
     res.status(200).json({
       success: true,

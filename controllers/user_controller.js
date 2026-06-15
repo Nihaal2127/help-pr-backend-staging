@@ -40,6 +40,10 @@ const {
   checkUserContactUniqueness,
 } = require('../utils/user_contact_uniqueness');
 const { fieldLabel } = require('../utils/field_labels');
+const {
+  partnerDocumentFieldsAfterImageUpload,
+  applyPartnerUserStatusAfterDocumentUpload,
+} = require('../utils/partner_document_status');
 
 const GET_ALL_SORT_FIELDS = ['name', 'email', 'created_at'];
 const VERIFICATION_SORT_FIELDS = ['name', 'email', 'created_at'];
@@ -756,7 +760,7 @@ const mergePartnerDocumentPayloadFromMultipart = async (req, partner_documents) 
 
 async function applyPartnerDocumentImageUpdates(partnerId, normalizedDocumentPayload) {
   if (!normalizedDocumentPayload || Object.keys(normalizedDocumentPayload).length === 0) {
-    return;
+    return false;
   }
   const documentList = await getDocumentList();
   /** Match multipart slugs (e.g. pan_card) and JSON keys to Document.name whether stored with spaces or underscores. */
@@ -782,8 +786,12 @@ async function applyPartnerDocumentImageUpdates(partnerId, normalizedDocumentPay
     }
   });
   if (Object.keys(documentImageById).length === 0) {
-    return;
+    return false;
   }
+  const partnerUser = await User.findById(partnerId).select('verification_status').lean();
+  const documentStatusFields = partnerDocumentFieldsAfterImageUpload(
+    partnerUser?.verification_status
+  );
   const updates = Object.entries(documentImageById).map(([documentId, imageUrl]) =>
     PartnerDocument.updateOne(
       {
@@ -791,10 +799,11 @@ async function applyPartnerDocumentImageUpdates(partnerId, normalizedDocumentPay
         document_id: new mongoose.Types.ObjectId(documentId),
         deleted_at: null,
       },
-      { $set: { document_image: imageUrl } }
+      { $set: { document_image: imageUrl, ...documentStatusFields } }
     )
   );
   await Promise.all(updates);
+  return true;
 }
 
 /** Ensure partner_document rows exist for each active master Document (same as create). */
@@ -2236,10 +2245,13 @@ const update = async (req, res) => {
         req,
         updateData.partner_documents
       );
-      await applyPartnerDocumentImageUpdates(
+      const documentsUpdated = await applyPartnerDocumentImageUpdates(
         updatedUser._id,
         normalizePartnerDocuments(mergedPartnerDocs)
       );
+      if (documentsUpdated && applyPartnerUserStatusAfterDocumentUpload(updatedUser)) {
+        await updatedUser.save();
+      }
 
       if (hasNonEmptyPartnerCatalogPayload(updateData)) {
         const resolvedPartnerServicesInput = resolvePartnerServicesInputFromBody(updateData);

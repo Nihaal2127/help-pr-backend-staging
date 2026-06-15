@@ -77,11 +77,7 @@ const listWalletTransactionsHandler = wrapMobileHandler(
       success: true,
       status: 200,
       message: result.data.message,
-      totalItems: result.data.totalItems,
-      totalPages: result.data.totalPages,
-      currentPage: result.data.currentPage,
-      limit: result.data.limit,
-      records: result.data.records,
+      data: result.data.data,
     });
   }
 );

@@ -168,7 +168,7 @@ const createPartnerPost = async (partnerId, body, files) => {
     deleted_at: null,
   });
 
-  const mapped = await mapPostRecords([post.toObject()], { includePartner: false });
+  const mapped = await mapPostRecords([post.toObject()], { includePartner: true });
   return ok(201, { message: 'Post created successfully.', post: mapped[0] });
 };
 
@@ -190,7 +190,7 @@ const listPartnerPosts = async (partnerId, query) => {
     PartnerPost.find(filter).sort({ created_at: -1 }).skip(skip).limit(limit).lean(),
   ]);
 
-  const records = await mapPostRecords(posts, { includePartner: false });
+  const records = await mapPostRecords(posts, { includePartner: true });
   const totalPages = Math.ceil(totalItems / limit) || 0;
 
   return ok(200, {
@@ -288,7 +288,7 @@ const getPartnerPostById = async (partnerId, postId) => {
     return fail(404, 'Post not found.');
   }
 
-  const mapped = await mapPostRecords([post], { includePartner: false });
+  const mapped = await mapPostRecords([post], { includePartner: true });
   return ok(200, { message: 'Post retrieved successfully.', post: mapped[0] });
 };
 
@@ -353,7 +353,7 @@ const updatePartnerPost = async (partnerId, postId, body, files) => {
   Object.assign(post, updates);
   await post.save();
 
-  const mapped = await mapPostRecords([post.toObject()], { includePartner: false });
+  const mapped = await mapPostRecords([post.toObject()], { includePartner: true });
   return ok(200, { message: 'Post updated successfully.', post: mapped[0] });
 };
 

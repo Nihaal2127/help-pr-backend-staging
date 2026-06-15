@@ -24,6 +24,8 @@ const {
 } = require('../../../utils/user_contact_uniqueness');
 const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
 const { fail, okWithData, okPass } = require('../../../utils/mobile_service_result');
+const { attachPartnerRatingFields } = require('../../../utils/rating_format');
+const { getPartnerEngagementCounts } = require('../../partner_post_common_service');
 const DEFAULT_PARTNER_PLAN_NAME = 'basic';
 const REGISTRATION_TYPE_NORMAL = 1;
 
@@ -778,11 +780,14 @@ const loginPartner = async ({ email, password, device_token }) => {
   await user.save();
 
   const populated = await User.findById(user._id).populate([{ path: 'city_id' }]).lean();
+  const engagementCounts = await getPartnerEngagementCounts(user._id);
   const data = {
     ...populated,
     city_id: populated?.city_id?._id || null,
     city_name: populated?.city_id?.name || null,
     verification_status_message: verificationStatusToMessage(populated?.verification_status),
+    ...attachPartnerRatingFields(populated),
+    ...engagementCounts,
   };
   delete data.password;
 
@@ -860,7 +865,7 @@ const buildPartnerResponseData = async (partnerId) => {
 
   const partnerOid = new mongoose.Types.ObjectId(String(partnerId));
 
-  const [partner_services, bank_accounts, partner_documents] = await Promise.all([
+  const [partner_services, bank_accounts, partner_documents, engagementCounts] = await Promise.all([
     PartnerService.find({ partner_id: partnerOid, deleted_at: null })
       .populate([
         { path: 'category_id', select: 'name' },
@@ -871,6 +876,7 @@ const buildPartnerResponseData = async (partnerId) => {
       .sort({ is_primary: -1, created_at: -1 })
       .lean(),
     getPartnerDocumentList(partnerOid),
+    getPartnerEngagementCounts(partnerOid),
   ]);
 
   const data = {
@@ -884,6 +890,8 @@ const buildPartnerResponseData = async (partnerId) => {
     franchise_id: populated?.franchise_id?._id ?? populated?.franchise_id ?? null,
     franchise_name: populated?.franchise_id?.name ?? null,
     verification_status_message: verificationStatusToMessage(populated?.verification_status),
+    ...attachPartnerRatingFields(populated),
+    ...engagementCounts,
     partner_services,
     bank_accounts,
     partner_documents,

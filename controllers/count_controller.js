@@ -1132,8 +1132,8 @@ const roundServiceMoney = (value) =>
  * - Status counts: one per order (`order_status`, legacy numeric values).
  * - Customer amounts: order `total_price` / payment rollups (cancelled/refunded excluded from totals);
  *   `balance_amount` = sum of `customer_due_amount` (outstanding balance; 0 when fully paid).
- * - Partner amounts: sum `partner_earning` on service lines (refunded orders excluded);
- *   `balance_amount` = sum of `partner_paid_amount` on orders (received payouts).
+ * - Partner amounts: sum partner entitlement (`partner_earning` + `additional_charges_subtotal`,
+ *   non-terminal orders); `balance_amount` = sum of `partner_due_amount` (outstanding payout).
  */
 const getServiceCountData = async (id) => {
     const user = await User.findById(id).select('type').lean();
@@ -1256,13 +1256,13 @@ const getServiceCountData = async (id) => {
                     },
                     balance_amount: {
                         $sum: isPartner
-                            ? { $ifNull: ['$partner_paid_amount', 0] }
+                            ? { $ifNull: ['$partner_due_amount', 0] }
                             : { $ifNull: ['$customer_due_amount', 0] },
                     },
                     pending_amount: {
-                        $sum: isCustomer
-                            ? { $ifNull: ['$customer_due_amount', 0] }
-                            : 0,
+                        $sum: isPartner
+                            ? { $ifNull: ['$partner_due_amount', 0] }
+                            : { $ifNull: ['$customer_due_amount', 0] },
                     },
                     paid_amount: {
                         $sum: {
@@ -1288,43 +1288,57 @@ const getServiceCountData = async (id) => {
                 deleted_at: null,
             });
 
-            const lineEarning = await OrderService.aggregate([
+            const orderEntitlement = await Order.aggregate([
+                { $match: matchFilter },
                 {
-                    $match: {
-                        partner_id: userObjectId,
-                        deleted_at: null,
-                        service_status: { $ne: ORDER_STATUS_REFUNDED },
+                    $addFields: {
+                        _isTerminal: { $in: ['$order_status', terminalStatusValues] },
                     },
                 },
                 {
                     $lookup: {
-                        from: 'orders',
-                        localField: 'order_id',
-                        foreignField: '_id',
-                        as: '_order',
+                        from: OrderService.collection.name,
+                        let: { lineId: { $arrayElemAt: ['$service_items', 0] } },
+                        pipeline: [
+                            {
+                                $match: {
+                                    $and: [
+                                        { $expr: { $eq: ['$_id', '$$lineId'] } },
+                                        { deleted_at: null },
+                                        { service_status: { $ne: ORDER_STATUS_REFUNDED } },
+                                    ],
+                                },
+                            },
+                            { $limit: 1 },
+                            { $project: { partner_earning: 1 } },
+                        ],
+                        as: '_line',
                     },
                 },
-                { $unwind: '$_order' },
-                {
-                    $match: {
-                        '_order.deleted_at': null,
-                        '_order.order_status': { $nin: refundedStatusValues },
-                    },
-                },
+                { $unwind: { path: '$_line', preserveNullAndEmptyArrays: true } },
                 {
                     $group: {
                         _id: null,
-                        total_amount: { $sum: { $ifNull: ['$partner_earning', 0] } },
+                        total_amount: {
+                            $sum: {
+                                $cond: [
+                                    '$_isTerminal',
+                                    0,
+                                    {
+                                        $add: [
+                                            { $ifNull: ['$_line.partner_earning', 0] },
+                                            { $ifNull: ['$additional_charges_subtotal', 0] },
+                                        ],
+                                    },
+                                ],
+                            },
+                        },
                     },
                 },
             ]);
 
             if (result.length > 0) {
-                result[0].total_amount = lineEarning[0]?.total_amount ?? 0;
-                result[0].pending_amount = Math.max(
-                    0,
-                    result[0].total_amount - result[0].balance_amount
-                );
+                result[0].total_amount = orderEntitlement[0]?.total_amount ?? 0;
             }
         }
 

@@ -564,6 +564,59 @@ const publishedPostFilter = (extra = {}) => ({
   ...extra,
 });
 
+const partnerPostScopeFilter = (partnerId) => {
+  if (!partnerId || !mongoose.Types.ObjectId.isValid(String(partnerId))) {
+    return null;
+  }
+  return {
+    partner_id: new mongoose.Types.ObjectId(String(partnerId)),
+    deleted_at: null,
+  };
+};
+
+/** Aggregate post, like, and save totals for a partner (all non-deleted posts). */
+const getPartnerEngagementCounts = async (partnerId) => {
+  const postMatch = partnerPostScopeFilter(partnerId);
+  if (!postMatch) {
+    return { posts_count: 0, likes_count: 0, saves_count: 0 };
+  }
+
+  const [postAgg, savesAgg] = await Promise.all([
+    PartnerPost.aggregate([
+      { $match: postMatch },
+      {
+        $group: {
+          _id: null,
+          posts_count: { $sum: 1 },
+          likes_count: { $sum: { $ifNull: ['$likes_count', 0] } },
+        },
+      },
+    ]),
+    PartnerPostSave.aggregate([
+      {
+        $lookup: {
+          from: PartnerPost.collection.name,
+          localField: 'post_id',
+          foreignField: '_id',
+          as: 'post',
+        },
+      },
+      { $unwind: '$post' },
+      { $match: { 'post.partner_id': postMatch.partner_id, 'post.deleted_at': null } },
+      { $count: 'saves_count' },
+    ]),
+  ]);
+
+  const postStats = postAgg[0] || {};
+  const savesStats = savesAgg[0] || {};
+
+  return {
+    posts_count: Math.max(0, Number(postStats.posts_count) || 0),
+    likes_count: Math.max(0, Number(postStats.likes_count) || 0),
+    saves_count: Math.max(0, Number(savesStats.saves_count) || 0),
+  };
+};
+
 const findPublishedPostById = async (postId) => {
   const parsed = parseObjectId(postId, 'post_id');
   if (!parsed.ok) {
@@ -600,6 +653,7 @@ module.exports = {
   mapPostRecords,
   publishedPostFilter,
   findPublishedPostById,
+  getPartnerEngagementCounts,
   POST_TYPE_ORDER,
   POST_TYPE_LEGACY_WORK,
 };

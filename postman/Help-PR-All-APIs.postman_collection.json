@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-all-apis-merged",
     "name": "Help PR — All APIs (single collection)",
-    "description": "**Single Postman collection** for `help-pr-backend-staging`. Import only this file.\n\n**Generated:** 2026-05-20 via `node postman/merge-all-collections.mjs`\n\n**Sources merged (8) from `postman/archive/`:**\n- `archive/Help-PR-Orders-Module.postman_collection.json`\n- `archive/Help-PR-Order-Charges-Payments.postman_collection.json`\n- `archive/Help-PR-Partner-Franchise-Dropdowns.postman_collection.json`\n- `archive/content-expense-expense-category-management.postman_collection (1).json`\n- `archive/Area-Management.postman_collection.json`\n- `archive/Help-PR-Area-Franchise-Subscription-UserTypes.postman_collection.json`\n- `archive/Help-PR-Area-Franchise-Subscription.postman_collection.json`\n- `archive/Help-PR-Admin-Dashboard.postman_collection.json`\n- Built-in: Partner payout (4 requests)\n- Built-in: Order refunds (4 requests)\n- Built-in: Partners browse — admin `GET /api/partners` (2 requests)\n- Built-in: Partner post management — admin `/api/partner-post` (4 requests)\n\n**Dedup:** Same HTTP method + path template (+ getCount `type` in body) → one request; higher-priority source wins.\n\n**Setup:** Set `baseUrl`. Run **00 — Auth → Login** to set `accessToken` / `token`.\n\n**Docs:** `docs/ORDER_MODULE_FRONTEND.md`, `docs/ORDER_GETALL_API_CHANGES.md`, `docs/PARTNER_PAYOUT_FRONTEND.md`, `docs/PARTNER_POST_FRONTEND.md`, `docs/REFUND_API.md`, `docs/REFUND_FRONTEND.md`, `postman/Help-PR-Refunds.postman_collection.json`\n\n**Mobile:** folder **Mobile → Partner** / **Mobile → User** — run `node postman/build-mobile-folder.mjs` to refresh.",
+    "description": "**Single Postman collection** for `help-pr-backend-staging`. Import only this file.\n\n**Generated:** 2026-05-20 via `node postman/merge-all-collections.mjs`\n\n**Sources merged (8) from `postman/archive/`:**\n- `archive/Help-PR-Orders-Module.postman_collection.json`\n- `archive/Help-PR-Order-Charges-Payments.postman_collection.json`\n- `archive/Help-PR-Partner-Franchise-Dropdowns.postman_collection.json`\n- `archive/content-expense-expense-category-management.postman_collection (1).json`\n- `archive/Area-Management.postman_collection.json`\n- `archive/Help-PR-Area-Franchise-Subscription-UserTypes.postman_collection.json`\n- `archive/Help-PR-Area-Franchise-Subscription.postman_collection.json`\n- `archive/Help-PR-Admin-Dashboard.postman_collection.json`\n- Built-in: Partner payout (4 requests)\n- Built-in: Order refunds (4 requests)\n- Built-in: Partners browse — admin `GET /api/partners` (2 requests)\n- Built-in: Partner post management — admin `/api/partner-post` (4 requests)\n- Built-in: Appointment calendar — admin `/api/appointment` (6 requests)\n\n**Dedup:** Same HTTP method + path template (+ getCount `type` in body) → one request; higher-priority source wins.\n\n**Setup:** Set `baseUrl`. Run **00 — Auth → Login** to set `accessToken` / `token`.\n\n**Docs:** `docs/ORDER_MODULE_FRONTEND.md`, `docs/ORDER_GETALL_API_CHANGES.md`, `docs/APPOINTMENT_MODULE_FRONTEND.md`, `docs/PARTNER_PAYOUT_FRONTEND.md`, `docs/PARTNER_POST_FRONTEND.md`, `docs/REFUND_API.md`, `docs/REFUND_FRONTEND.md`, `postman/Help-PR-Refunds.postman_collection.json`\n\n**Mobile:** folder **Mobile → Partner** / **Mobile → User** — run `node postman/build-mobile-folder.mjs` to refresh.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -12983,6 +12983,369 @@
       ]
     },
     {
+      "name": "44 — Appointment (calendar)",
+      "description": "**/api/appointment** — Admin calendar / schedule appointments linked to orders.\n\n**Frontend doc:** `docs/APPOINTMENT_MODULE_FRONTEND.md`\n\n**Access:** Super admin (5), staff (6), franchise admin (1), employee (3) — back-office JWT only. Partner (2) & customer (4) → **403**.\n\n**Auth:** `Bearer {{accessToken}}` (run **00 — Auth → Login**).\n\n**Auto-create:** One appointment (`source: auto`) is created when an order is placed (**21 — Order → 3. Create order**).\n\n**Flow:** 1 getAll (calendar) → 2 getByOrder → 3 create (manual) → 4 get by id → 5 update → 6 delete\n\n**Variables:** `appointmentId` / `appointmentUniqueId` from list or create · `orderId` from order APIs · optional `franchiseId`, `from_date`, `to_date` on getAll",
+      "item": [
+        {
+          "name": "1. Get all appointments (calendar)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Appointments listed', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.records).to.be.an('array');",
+                  "  });",
+                  "  const a0 = j?.records?.[0];",
+                  "  if (a0?._id) pm.collectionVariables.set('appointmentId', String(a0._id));",
+                  "  if (a0?.unique_id) pm.collectionVariables.set('appointmentUniqueId', String(a0.unique_id));",
+                  "  if (a0?.order_id) pm.collectionVariables.set('orderId', String(a0.order_id));",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/appointment/getAll?page={{page}}&limit={{limit}}&from_date={{from_date}}&to_date={{to_date}}&franchise_id={{franchiseId}}&order_id={{orderId}}&keyword=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "appointment",
+                "getAll"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}",
+                  "description": "Default 1"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}",
+                  "description": "Default 50"
+                },
+                {
+                  "key": "from_date",
+                  "value": "{{from_date}}",
+                  "description": "ISO date. Alone = that UTC calendar day on service_date."
+                },
+                {
+                  "key": "to_date",
+                  "value": "{{to_date}}",
+                  "description": "ISO date. Range filter on service_date."
+                },
+                {
+                  "key": "franchise_id",
+                  "value": "{{franchiseId}}",
+                  "description": "Super/staff: optional. Franchise admin/employee: auto-scoped."
+                },
+                {
+                  "key": "order_id",
+                  "value": "{{orderId}}",
+                  "description": "Mongo _id or business unique_id (e.g. O1001). Requires order access."
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "disabled": true,
+                  "description": "Optional legacy filter — omit for calendar UI"
+                },
+                {
+                  "key": "keyword",
+                  "value": "",
+                  "description": "Search title, order_unique_id, partner_name, service_name, unique_id"
+                },
+                {
+                  "key": "sort",
+                  "value": "-1",
+                  "disabled": true,
+                  "description": "service_date sort: 1 asc, -1 desc (default)"
+                }
+              ]
+            },
+            "description": "**GET /api/appointment/getAll** — Paginated calendar list for back-office.\n\n| Query | Required | Notes |\n|-------|----------|--------|\n| `page` | No | Default 1 |\n| `limit` | No | Default 50 |\n| `from_date` / `to_date` | No | UTC calendar-day filter on `service_date` |\n| `franchise_id` | No | Franchise scope filter |\n| `order_id` | No | Filter by order (access-checked) |\n| `status` | No | Optional legacy filter — omit in UI |\n| `keyword` | No | Free-text search |\n\n**200 `records[]`:** `unique_id` (AP1001), `title`, `order_id`, `order_unique_id`, `partner_name`, `service_name`, `service_date` (YYYY-MM-DD), `start_time` / `end_time` (HH:mm), `source` (`auto` \\| `manual`).\n\nTest script sets `appointmentId`, `appointmentUniqueId`, `orderId` from first row."
+          },
+          "description": "\n\n_Source: builtin:appointment_calendar → Get all appointments_"
+        },
+        {
+          "name": "2. Get appointments by order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Order appointments listed', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.records).to.be.an('array');",
+                  "  });",
+                  "  const a0 = j?.records?.[0];",
+                  "  if (a0?._id) pm.collectionVariables.set('appointmentId', String(a0._id));",
+                  "  if (a0?.unique_id) pm.collectionVariables.set('appointmentUniqueId', String(a0.unique_id));",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/appointment/getByOrder/{{orderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "appointment",
+                "getByOrder",
+                "{{orderId}}"
+              ]
+            },
+            "description": "**GET /api/appointment/getByOrder/:orderId** — All appointments for one order (auto + manual).\n\n**Path:** `orderId` = order Mongo `_id` or business `unique_id` (e.g. `O1001`).\n\n**200:** `order_id`, `order_unique_id`, `records[]` sorted by `service_date` desc.\n\nRun **21 — Order** first to set `{{orderId}}`, or use an id from **1. Get all appointments**."
+          },
+          "description": "\n\n_Source: builtin:appointment_calendar → Get appointments by order_"
+        },
+        {
+          "name": "3. Create appointment (manual)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Appointment created', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.record).to.be.an('object');",
+                  "  });",
+                  "  if (j?.record?._id) pm.collectionVariables.set('appointmentId', String(j.record._id));",
+                  "  if (j?.record?.unique_id) pm.collectionVariables.set('appointmentUniqueId', String(j.record.unique_id));",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Follow-up visit\",\n  \"order_id\": \"{{orderId}}\",\n  \"service_date\": \"2026-06-17\",\n  \"start_time\": \"09:00\",\n  \"end_time\": \"11:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/appointment/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "appointment",
+                "create"
+              ]
+            },
+            "description": "**POST /api/appointment/create** — Schedule an additional appointment for an order (`source: manual`).\n\n| Field | Required | Notes |\n|-------|----------|--------|\n| `order_id` | Yes | Mongo `_id` or `unique_id` (e.g. O1001) |\n| `service_date` | Yes | ISO date (YYYY-MM-DD) |\n| `title` | No | Defaults from service name + order id |\n| `start_time` / `end_time` | No | HH:mm; `end_time` must be after `start_time` |\n| `status` | No | Optional — omit from UI; stored as `null` when omitted |\n\n**Partner** and **service_name** are filled server-side from the order.\n\n**200:** `record` — created appointment. Multiple manual appointments per order are allowed."
+          },
+          "description": "\n\n_Source: builtin:appointment_calendar → Create appointment_"
+        },
+        {
+          "name": "4. Get appointment by id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/appointment/get/{{appointmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "appointment",
+                "get",
+                "{{appointmentId}}"
+              ]
+            },
+            "description": "**GET /api/appointment/get/:id** — Single appointment detail.\n\n**Path:** Mongo `_id` or business `unique_id` (e.g. `AP1001`) — use `{{appointmentId}}` or `{{appointmentUniqueId}}`.\n\n**403** if outside caller franchise scope · **404** if not found."
+          },
+          "description": "\n\n_Source: builtin:appointment_calendar → Get appointment by id_"
+        },
+        {
+          "name": "5. Update appointment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Appointment updated', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.record).to.be.an('object');",
+                  "  });",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Rescheduled visit\",\n  \"service_date\": \"2026-06-18\",\n  \"start_time\": \"10:00\",\n  \"end_time\": \"12:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/appointment/update/{{appointmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "appointment",
+                "update",
+                "{{appointmentId}}"
+              ]
+            },
+            "description": "**PUT /api/appointment/update/:id** — Update schedule fields.\n\n| Field | Required | Notes |\n|-------|----------|--------|\n| `title` | No | |\n| `service_date` | No | Required if changing schedule times |\n| `start_time` / `end_time` | No | HH:mm |\n| `status` | No | Optional — omit from UI |\n\nAt least one field required. Partner/service name cannot be changed (derived from order at create)."
+          },
+          "description": "\n\n_Source: builtin:appointment_calendar → Update appointment_"
+        },
+        {
+          "name": "6. Delete appointment (soft)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  pm.test('Appointment deleted', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const j = pm.response.json();",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "  });",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/appointment/delete/{{appointmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "appointment",
+                "delete",
+                "{{appointmentId}}"
+              ]
+            },
+            "description": "**DELETE /api/appointment/delete/:id** — Soft-delete (`deleted_at` set).\n\n**Path:** `{{appointmentId}}` or `{{appointmentUniqueId}}`.\n\n**200:** success message. Deleted rows excluded from getAll / getByOrder."
+          },
+          "description": "\n\n_Source: builtin:appointment_calendar → Delete appointment_"
+        }
+      ]
+    },
+    {
       "name": "Mobile",
       "description": "**Mobile apps** — **Partner** (service provider) and **User** (customer). Set `{{baseUrl}}`. Regenerated via `node postman/build-mobile-folder.mjs`.",
       "item": [
@@ -21933,6 +22296,20 @@
       "type": "string",
       "enabled": true,
       "description": "Partner post report document _id (admin moderation queue)."
+    },
+    {
+      "key": "appointmentId",
+      "value": "",
+      "type": "string",
+      "enabled": true,
+      "description": "Appointment Mongo _id (from getAll, getByOrder, or create)."
+    },
+    {
+      "key": "appointmentUniqueId",
+      "value": "",
+      "type": "string",
+      "enabled": true,
+      "description": "Appointment business id (e.g. AP1001) — alternate path param for get/update/delete."
     }
   ]
 }

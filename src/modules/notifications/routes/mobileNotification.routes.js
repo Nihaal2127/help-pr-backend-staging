@@ -1,12 +1,12 @@
 const express = require("express");
-const userAuthMiddleware = require("../../../middleware/mobile/user/user_auth_middleware");
-const partnerAuthMiddleware = require("../../../middleware/mobile/partner/partner_auth_middleware");
+const userAuthMiddleware = require("../../../../middleware/mobile/user/user_auth_middleware");
+const partnerAuthMiddleware = require("../../../../middleware/mobile/partner/partner_auth_middleware");
 const {
   listHandler,
   unreadCountHandler,
   markReadHandler,
   markAllReadHandler,
-} = require("../../../controllers/notification_controller");
+} = require("../../../../controllers/notification_controller");
 
 const createMobileRouter = (authMiddleware) => {
   const router = express.Router();

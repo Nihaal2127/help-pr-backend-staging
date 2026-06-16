@@ -1,11 +1,11 @@
 const express = require("express");
-const authMiddleware = require("../../../middleware/auth_middleware");
+const authMiddleware = require("../../../../middleware/auth_middleware");
 const {
   listHandler,
   unreadCountHandler,
   markReadHandler,
   markAllReadHandler,
-} = require("../../../controllers/notification_controller");
+} = require("../../../../controllers/notification_controller");
 
 const router = express.Router();
 

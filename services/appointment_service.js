@@ -10,7 +10,6 @@ const { escapeRegExp } = require("../utils/string_helpers");
 const { isMongoObjectIdHex } = require("../utils/mongoose_helpers");
 const { getCallerId } = require("../utils/auth_caller");
 const {
-  DEFAULT_APPOINTMENT_STATUS,
   normalizeAppointmentStatus,
 } = require("../enum/appointment_status_enum");
 const {
@@ -116,6 +115,15 @@ const resolveScheduleFromOrder = (order, serviceLine) => {
   return { serviceDate, startTime, endTime };
 };
 
+/** undefined = omit field; null = clear; string = normalize or invalid */
+const resolveOptionalStatus = (value) => {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  return normalizeAppointmentStatus(value);
+};
+
 const buildAppointmentPayloadFromOrder = async (
   order,
   {
@@ -136,7 +144,9 @@ const buildAppointmentPayloadFromOrder = async (
     String(title || "").trim() ||
     (service?.name ? `${service.name} — ${order.unique_id}` : `Order ${order.unique_id}`);
 
-  return {
+  const resolvedStatus = resolveOptionalStatus(status);
+
+  const payload = {
     order_id: order._id,
     order_unique_id: order.unique_id || "",
     user_id: order.user_id ?? null,
@@ -150,10 +160,15 @@ const buildAppointmentPayloadFromOrder = async (
     service_date: resolvedServiceDate ? new Date(resolvedServiceDate) : null,
     start_time: startTime ?? schedule.startTime ?? null,
     end_time: endTime ?? schedule.endTime ?? null,
-    status: normalizeAppointmentStatus(status) || DEFAULT_APPOINTMENT_STATUS,
     source: source === "auto" ? "auto" : "manual",
     created_by_id: createdById ?? order.created_by_id ?? null,
   };
+
+  if (resolvedStatus !== undefined) {
+    payload.status = resolvedStatus;
+  }
+
+  return payload;
 };
 
 const createDefaultAppointmentForOrder = async (order, { actorUserId } = {}) => {
@@ -197,7 +212,7 @@ const safeCreateDefaultAppointmentForOrder = async (order, options = {}) => {
   }
 };
 
-const validateManualScheduleInput = ({ service_date, start_time, end_time, status }) => {
+const validateManualScheduleInput = ({ service_date, start_time, end_time }) => {
   const parsedDate = parseFilterDate(service_date);
   if (!parsedDate) {
     return { ok: false, status: 400, message: "Valid service_date is required." };
@@ -220,21 +235,11 @@ const validateManualScheduleInput = ({ service_date, start_time, end_time, statu
     return { ok: false, status: 400, message: "end_time must be after start_time." };
   }
 
-  const normalizedStatus = status ? normalizeAppointmentStatus(status) : DEFAULT_APPOINTMENT_STATUS;
-  if (status != null && String(status).trim() !== "" && !normalizedStatus) {
-    return {
-      ok: false,
-      status: 400,
-      message: "Invalid status. Use scheduled, in-progress, completed, or cancelled.",
-    };
-  }
-
   return {
     ok: true,
     serviceDate: parsedDate,
     startDateTime,
     endDateTime,
-    status: normalizedStatus || DEFAULT_APPOINTMENT_STATUS,
   };
 };
 
@@ -255,13 +260,26 @@ const createAppointmentForOrder = async (req, body) => {
       return scheduleCheck;
     }
 
+    if (
+      body.status !== undefined &&
+      body.status !== null &&
+      String(body.status).trim() !== "" &&
+      !normalizeAppointmentStatus(body.status)
+    ) {
+      return {
+        ok: false,
+        status: 400,
+        message: "Invalid status. Use scheduled, in-progress, completed, or cancelled.",
+      };
+    }
+
     const callerId = getCallerId(req);
     const payload = await buildAppointmentPayloadFromOrder(order, {
       title: body.title,
       serviceDate: scheduleCheck.serviceDate,
       startTime: scheduleCheck.startDateTime,
       endTime: scheduleCheck.endDateTime,
-      status: scheduleCheck.status,
+      status: body.status,
       source: "manual",
       createdById: callerId,
     });
@@ -322,7 +340,6 @@ const updateAppointmentById = async (req, id, body) => {
           endRaw instanceof Date
             ? `${String(endRaw.getHours()).padStart(2, "0")}:${String(endRaw.getMinutes()).padStart(2, "0")}`
             : endRaw,
-        status: body.status ?? appointment.status,
       });
 
       if (!scheduleCheck.ok) {
@@ -335,15 +352,19 @@ const updateAppointmentById = async (req, id, body) => {
     }
 
     if (body.status !== undefined) {
-      const normalized = normalizeAppointmentStatus(body.status);
-      if (!normalized) {
+      const resolvedStatus = resolveOptionalStatus(body.status);
+      if (
+        body.status !== null &&
+        String(body.status).trim() !== "" &&
+        resolvedStatus === null
+      ) {
         return {
           ok: false,
           status: 400,
           message: "Invalid status. Use scheduled, in-progress, completed, or cancelled.",
         };
       }
-      appointment.status = normalized;
+      appointment.status = resolvedStatus;
     }
 
     appointment.updated_at = new Date();

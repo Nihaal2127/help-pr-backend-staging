@@ -1,7 +1,9 @@
 const mongoose = require('mongoose');
 const Order = require('../models/order');
+const OrderPayment = require('../models/order_payment');
 const User = require('../models/user');
 const Service = require('../models/service');
+const { buildPartnerOrderSummaryFromOrderDoc } = require('../utils/partner_order_summary');
 const {
     ORDER_STATUS_IN_PROGRESS,
     ORDER_STATUS_COMPLETED,
@@ -566,6 +568,22 @@ const shapePartnerMobileFinancialRecord = (row, srNo) => {
     };
 };
 
+const shapePartnerMobileOrderPaymentLine = (row) => ({
+    _id: String(row._id),
+    order_id: String(row.order_id),
+    payer_type: row.payer_type,
+    amount: roundMoney(row.amount),
+    payment_method: row.payment_method || '',
+    status: row.status || 'pending',
+    transaction_reference: row.transaction_reference || '',
+    installment_index: row.installment_index ?? null,
+    due_date: row.due_date || null,
+    paid_at: row.paid_at || null,
+    notes: row.notes || '',
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+});
+
 const buildPartnerFinancialPaymentsTotals = async (baseFilter = {}) => {
     const match = { deleted_at: null, ...baseFilter };
     const collections = getListCollectionNames({
@@ -737,7 +755,8 @@ const getPartnerFinancialOrderPaymentById = async (partnerOid, orderId) => {
             return fail(404, 'Order not found.');
         }
 
-        await syncOrderPaymentStatus(order._id);
+        const syncResult = await syncOrderPaymentStatus(order._id);
+        const syncedOrder = syncResult?.order;
 
         const collections = getListCollectionNames({
             users: User,
@@ -745,17 +764,30 @@ const getPartnerFinancialOrderPaymentById = async (partnerOid, orderId) => {
             orderServices: require('../models/order_services'),
         });
 
-        const pipeline = buildFinancialOverviewPipeline({
-            baseFilter: { _id: order._id, partner_id: partnerOid, deleted_at: null },
-            searchRegex: null,
-            sortStage: { created_at: -1 },
-            skip: 0,
-            limit: 1,
-            collections,
-        });
+        const [aggregateResult, paymentRows, partnerSummary] = await Promise.all([
+            Order.aggregate(
+                buildFinancialOverviewPipeline({
+                    baseFilter: { _id: order._id, partner_id: partnerOid, deleted_at: null },
+                    searchRegex: null,
+                    sortStage: { created_at: -1 },
+                    skip: 0,
+                    limit: 1,
+                    collections,
+                })
+            ).exec(),
+            OrderPayment.find({ order_id: order._id, deleted_at: null })
+                .sort({ created_at: -1 })
+                .lean(),
+            syncedOrder
+                ? buildPartnerOrderSummaryFromOrderDoc(
+                      typeof syncedOrder.toObject === 'function'
+                          ? syncedOrder.toObject()
+                          : syncedOrder
+                  )
+                : null,
+        ]);
 
-        const result = await Order.aggregate(pipeline).exec();
-        const row = result[0]?.data?.[0];
+        const row = aggregateResult[0]?.data?.[0];
         if (!row) {
             return fail(404, 'Order not found.');
         }
@@ -764,6 +796,8 @@ const getPartnerFinancialOrderPaymentById = async (partnerOid, orderId) => {
             message: 'Partner order payment fetched successfully.',
             source: 'order',
             record: shapePartnerMobileFinancialRecord(row, 1),
+            partner_summary: partnerSummary,
+            order_payments: paymentRows.map(shapePartnerMobileOrderPaymentLine),
         });
     } catch (err) {
         console.error('getPartnerFinancialOrderPaymentById', err);
@@ -780,4 +814,5 @@ module.exports = {
     getPartnerFinancialOrderPaymentById,
     buildPartnerFinancialPaymentsTotals,
     shapePartnerMobileFinancialRecord,
+    shapePartnerMobileOrderPaymentLine,
 };

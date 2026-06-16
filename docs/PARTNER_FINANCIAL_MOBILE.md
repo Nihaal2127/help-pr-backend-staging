@@ -99,7 +99,72 @@ Cancelled / refunded orders: `pending_amount` is **0** (same as admin).
 
 ## 3. Order payment detail — `GET /financial-payments/:orderId`
 
-`:orderId` = order Mongo `_id`. Returns one record (same shape as a list row). **404** if the order is not assigned to this partner.
+`:orderId` = order Mongo `_id`. Returns the list-row summary plus payment line items. **404** if the order is not assigned to this partner.
+
+### Response fields
+
+| Field | Description |
+|-------|-------------|
+| `record` | Same shape as one list row (`total_earning`, `paid_amount`, `pending_amount`, …) |
+| `partner_summary` | Earnings breakdown (`service_earning`, `additional_charges_earning`, customer payment rollup) — same as order detail |
+| `order_payments` | All `order_payment` rows for this order (customer + partner), newest first |
+
+### Example response
+
+```json
+{
+  "success": true,
+  "status": 200,
+  "message": "Partner order payment fetched successfully.",
+  "source": "order",
+  "record": {
+    "order_unique_id": "ORD-00042",
+    "total_earning": 2700,
+    "paid_amount": 1000,
+    "pending_amount": 1700,
+    "payment_status": "partially_paid",
+    "order_status": "in_progress"
+  },
+  "partner_summary": {
+    "service_earning": 2200,
+    "additional_charges_earning": 500,
+    "total_earning": 2700,
+    "paid_amount": 1000,
+    "due_amount": 1700,
+    "payment_status": "partially_paid",
+    "customer_order_total": 3500,
+    "customer_due_amount": 1500,
+    "customer_payment_status": "partially_paid"
+  },
+  "order_payments": [
+    {
+      "_id": "...",
+      "order_id": "...",
+      "payer_type": "customer",
+      "amount": 2000,
+      "payment_method": "upi",
+      "status": "completed",
+      "paid_at": "2026-05-12T10:00:00.000Z",
+      "created_at": "2026-05-12T10:00:00.000Z"
+    },
+    {
+      "_id": "...",
+      "order_id": "...",
+      "payer_type": "partner",
+      "amount": 1000,
+      "payment_method": "bank_transfer",
+      "status": "completed",
+      "paid_at": "2026-05-15T12:00:00.000Z",
+      "created_at": "2026-05-15T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+| `order_payments[].payer_type` | Meaning |
+|-------------------------------|---------|
+| `customer` | Customer payment toward the order total |
+| `partner` | Payout / payment recorded for the partner |
 
 ---
 
@@ -208,6 +273,7 @@ Paginated ledger (credits from completed partner order payments, debits from adm
 
 [Order tap]
   GET /financial-payments/:orderId
+  → show record + partner_summary + order_payments[]
 
 [Wallet screen]
   GET /wallet?from_date=&to_date=

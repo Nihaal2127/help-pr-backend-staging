@@ -1770,7 +1770,7 @@
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "mobile", "partner", "financial-payments", "{{orderId}}"]
                 },
-                "description": "**GET /api/mobile/partner/financial-payments/:orderId** — One order row; `:orderId` = order Mongo `_id`."
+                "description": "**GET /api/mobile/partner/financial-payments/:orderId** — Order earnings summary (`record`) plus `partner_summary` and `order_payments[]` line items. `:orderId` = order Mongo `_id`."
               },
               "response": []
             },

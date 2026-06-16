@@ -46,7 +46,10 @@ const getFinancialPaymentHandler = wrapMobileHandler(
       success: true,
       status: 200,
       message: result.data.message,
+      source: result.data.source,
       record: result.data.record,
+      partner_summary: result.data.partner_summary,
+      order_payments: result.data.order_payments,
     });
   }
 );

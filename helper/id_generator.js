@@ -5,6 +5,7 @@ const Service = require('../models/service');
 const Order = require('../models/order');
 const Quote = require('../models/quote');
 const Ticket = require('../models/ticket');
+const Appointment = require('../models/appointment');
 
 const extractNumber = (str) => {
     const match = str.match(/\d+/); // Match one or more digits
@@ -127,6 +128,21 @@ const getTicketId = async () => {
     }
 };
 
+const getAppointmentId = async () => {
+    const records = await Appointment.find({ unique_id: { $regex: /^AP\d+$/i } })
+        .select('unique_id')
+        .lean();
+
+    let maxNum = 1000;
+    for (const row of records) {
+        const n = extractNumber(row.unique_id);
+        if (n !== null && n > maxNum) {
+            maxNum = n;
+        }
+    }
+    return 'AP' + (maxNum + 1);
+};
+
 const getQuoteSequenceId = async () => {
     let records = await Quote.find().sort({ _id: -1 });
     if (records.length > 0) {
@@ -151,5 +167,6 @@ module.exports = {
     getOrderId,
     getOfferId,
     getTicketId,
+    getAppointmentId,
     getQuoteSequenceId,
 };

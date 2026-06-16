@@ -1,6 +1,8 @@
 const OrderAdditionalCharge = require('../models/order_additional_charge');
+const Order = require('../models/order');
 const { computeAdditionalChargeLine } = require('../utils/order_pricing');
 const { recalculateOrderTotals } = require('../utils/order_financials');
+const { safeNotifyOrderAdditionalChargeAdded } = require('../src/modules/notifications/services/domainHooks');
 
 const ALLOWED_CHARGE_METHODS = new Set([
   'cash',
@@ -74,6 +76,12 @@ const createAdditionalCharge = async (order, item) => {
   });
   await doc.save();
   await recalculateOrderTotals(order._id);
+  const refreshedOrder = await Order.findById(order._id);
+  void safeNotifyOrderAdditionalChargeAdded({
+    order: refreshedOrder || order,
+    charge: doc,
+    actorUserId: item.actorUserId || null,
+  });
   return doc;
 };
 

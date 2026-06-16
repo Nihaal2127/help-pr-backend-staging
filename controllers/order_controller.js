@@ -8,7 +8,6 @@ const City = require('../models/city');
 const State = require('../models/state');
 const Address = require('../models/address');
 const Franchise = require('../models/franchise');
-const NotificationSettings = require('../models/notification_settings');
 const OrderService = require('../models/order_services');
 const { applyPagination } = require('../utils/pagination');
 const { validationResult } = require('express-validator');
@@ -29,7 +28,6 @@ const {
   isOrderStatusWithNoPendingAmounts,
   normalizeOrderStatus,
   buildOrderStatusQueryFilter,
-  getOrderStatusLabel,
   touchOrderStatusInfo,
 } = require('../enum/order_status_enum');
 const {
@@ -37,7 +35,6 @@ const {
   touchPartnerWorkStatusInfo,
 } = require('../enum/partner_work_status_enum');
 const { assertOrderCanBeMarkedCompleted } = require('../services/order_completion_validation');
-const { safeSendPushNotification } = require('../service/firebase/push_service');
 const { generatePaymentLink } = require('./razorpay_controller');
 const { escapeRegExp } = require('../utils/string_helpers');
 const { isMongoObjectIdHex, buildObjectIdQueryFilters } = require('../utils/mongoose_helpers');
@@ -118,6 +115,16 @@ const {
 } = require('../services/order_field_update_service');
 const { attachRefundsToOrderRecords } = require('../services/refund_service');
 const { loadOrderDetailLean } = require('../services/order_detail_service');
+const {
+  safeNotifyOrderStatusChanged,
+  safeNotifyOrderCancelled,
+  safeNotifyOrderServiceStatusChanged,
+  safeNotifyOrderServiceAssigned,
+  safeNotifyOrderServiceUnassigned,
+  safeNotifyOrderServiceTimeUpdated,
+  safeNotifyOrderServiceCancelled,
+  safeNotifyOrderNestedResources,
+} = require('../src/modules/notifications/services/domainHooks');
 const {
   resolveOrderListScope,
   assertOrderRecordAccess,
@@ -529,6 +536,7 @@ const create = async (req, res) => {
         newOrder.transaction_id = responsePaymentLink.transaction_id;
         const { order: savedOrder, nested } = await persistOrderAndLinkQuote(draft, {
           requestBody: req.body,
+          actorUserId: getCallerId(req),
         });
         const result = {
           payment_url: responsePaymentLink.payment_url,
@@ -552,6 +560,7 @@ const create = async (req, res) => {
 
     const { order: savedOrder, nested } = await persistOrderAndLinkQuote(draft, {
       requestBody: req.body,
+      actorUserId: getCallerId(req),
     });
     return res.status(200).json({
       success: true,
@@ -611,6 +620,8 @@ const update = async (req, res) => {
         message: 'No record found'
       });
     }
+
+    const previousOrderStatus = order.order_status;
 
     const access = await assertOrderRecordAccess(req, order);
     if (!access.ok) {
@@ -771,26 +782,17 @@ const update = async (req, res) => {
       updatedOrder = await Order.findById(updatedOrder._id);
     }
 
-    const notificationSetting = await NotificationSettings.findOne({
-      user_id: updatedOrder.user_id,
+    void safeNotifyOrderStatusChanged({
+      order: updatedOrder,
+      previousStatus: previousOrderStatus,
+      newStatus: updatedOrder.order_status,
+      actorUserId: getCallerId(req),
     });
-    if (notificationSetting?.is_update_allow) {
-      const user = await User.findById(updatedOrder.user_id);
-      const deviceToken = user?.device_token
-      const title = `Order Status Update`
-      const body = `Your Order #${updatedOrder.unique_id} status changed to ${getOrderStatusLabel(updatedOrder.order_status)}`
-      const data = {
-        order_id: updatedOrder.id,
-        order_status: updatedOrder.order_status,
-        type: "Order"
-      }
-      if (deviceToken !== null && deviceToken !== '') {
-        await safeSendPushNotification({ deviceToken, title, body, data });
-      }
-    }
-    if (notificationSetting?.is_sms_allow) {
-      // Put logic for sent sms update
-    }
+    void safeNotifyOrderNestedResources({
+      order: updatedOrder,
+      nested,
+      actorUserId: getCallerId(req),
+    });
 
     return res.status(200).json({
       success: true,
@@ -905,6 +907,7 @@ const serviceUpdate = async (req, res) => {
     }
 
     const originalPartnerId = service.partner_id?.toString();
+    const originalServiceStatus = service.service_status;
     const originalServiceDate = service.service_date;
     const originalFromTime = service.service_from_time;
     const originalToTime = service.service_to_time;
@@ -931,93 +934,61 @@ const serviceUpdate = async (req, res) => {
     service.partner_unique_id = partner.user_id;
     const updatedService = await service.save();
 
-
+    const actorUserId = getCallerId(req);
+    const serviceData = await Service.findById(service.service_id);
+    const serviceName = serviceData?.name || 'service';
 
     if (originalPartnerId && originalPartnerId !== service.partner_id?.toString()) {
-      const oldPartner = await User.findById(originalPartnerId);
-      const newPartner = await User.findById(service.partner_id);
-      const serviceData = await Service.findById(service.service_id);
-
-      // Notify old partner about cancellation
-      const oldDeviceToken = oldPartner.device_token;
-      if (oldDeviceToken !== null && oldDeviceToken !== '') {
-        const title = "Service Cancelled";
-        const body = `Service for order #${service.order_unique_id} has been cancelled from your list.`;
-        const data = { order_id: service.order_id.toString(), type: "Order" };
-        await safeSendPushNotification({
-          deviceToken: oldDeviceToken,
-          title,
-          body,
-          data
-        });
-      }
-
-      // Notify new partner about new assignment
-      const newDeviceToken = newPartner.device_token;
-      if (newDeviceToken !== null && newDeviceToken !== '') {
-        const title = "New Service Assigned";
-        const body = `You have a new service (${serviceData.name}) for order #${service.order_unique_id}.`;
-        const data = { order_id: service.order_id.toString(), type: "Order" };
-        await safeSendPushNotification({
-          newDeviceToken,
-          title,
-          body,
-          data,
-        });
-      }
-    }else if (
+      void safeNotifyOrderServiceUnassigned({
+        order: parentOrder,
+        partnerUserId: originalPartnerId,
+        orderUniqueId: service.order_unique_id,
+        actorUserId,
+      });
+      void safeNotifyOrderServiceAssigned({
+        order: parentOrder,
+        partnerUserId: service.partner_id,
+        serviceName,
+        orderUniqueId: service.order_unique_id,
+        actorUserId,
+      });
+    } else if (
       originalServiceDate !== service.service_date ||
       originalFromTime !== service.service_from_time ||
       originalToTime !== service.service_to_time
     ) {
-      const partner = await User.findById(service.partner_id);
-      const deviceToken = partner.device_token;
-      const serviceData = await Service.findById(service.service_id);
+      void safeNotifyOrderServiceTimeUpdated({
+        order: parentOrder,
+        partnerUserId: service.partner_id,
+        serviceName,
+        orderUniqueId: service.order_unique_id,
+        actorUserId,
+      });
+    } else if (
+      partner &&
+      service.service_status === ORDER_STATUS_IN_PROGRESS &&
+      originalServiceStatus !== ORDER_STATUS_IN_PROGRESS
+    ) {
+      void safeNotifyOrderServiceAssigned({
+        order: parentOrder,
+        partnerUserId: service.partner_id,
+        serviceName,
+        orderUniqueId: service.order_unique_id,
+        actorUserId,
+      });
+    }
 
-      if (deviceToken !== null && deviceToken !== '') {
-        await safeSendPushNotification({
-          deviceToken,
-          title: "Service Time Updated",
-          body: `Time updated for service (${serviceData.name}) of order #${service.order_unique_id}`,
-          data: { order_id: service.order_id.toString(), type: "Order" }
-        });
-      }
-    }else if (partner && service.service_status === ORDER_STATUS_IN_PROGRESS) {
-      const partnerNotifySettings = await NotificationSettings.findOne({ user_id: service.partner_id });
-      if (partnerNotifySettings?.is_update_allow) {
-        const serviceData = await Service.findById(service.service_id);
-        const deviceToken = partner.device_token
-        const title = `New Service Request Received`
-        const body = `You received request for ${serviceData.name} for order #${service.order_unique_id}`
-        const data = {
-          order_id: service.order_id.toString(),
-          type: "Order"
-        }
-        if (deviceToken !== null && deviceToken !== '') {
-          await safeSendPushNotification({ deviceToken, title, body, data });
-        }
-      }
-      if (partnerNotifySettings?.is_sms_allow) {
-        // Put logic for sent sms update
-      }
-    }
-    const userNotifySettings = await NotificationSettings.findOne({ user_id: service.user_id });
-    if (userNotifySettings?.is_update_allow) {
-      const user = await User.findById(service.user_id);
-      const serviceData = await Service.findById(service.service_id);
-      const deviceToken = user?.device_token
-      const title = `Service Update`
-      const body = `Your ${serviceData.name} status changed to ${getOrderStatusLabel(service.service_status)} for order #${service.order_unique_id}`
-      const data = {
-        order_id: service.order_id.toString(),
-        type: "Order"
-      }
-      if (deviceToken !== null && deviceToken !== '') {
-        await safeSendPushNotification({ deviceToken, title, body, data });
-      }
-    }
-    if (userNotifySettings?.is_sms_allow) {
-      // Put logic for sent sms update
+    if (
+      updateData.service_status !== undefined &&
+      originalServiceStatus !== service.service_status
+    ) {
+      void safeNotifyOrderServiceStatusChanged({
+        order: parentOrder,
+        service: updatedService,
+        serviceName,
+        newStatus: service.service_status,
+        actorUserId,
+      });
     }
 
     res.status(200).json({
@@ -1127,46 +1098,16 @@ const cancleService = async (req, res) => {
     const serviceInfo = serviceData.service_id
       ? await Service.findById(serviceData.service_id)
       : null;
-    body = serviceInfo
-      ? `Your ${serviceInfo.name} for order #${order.unique_id} has been cancelled`
-      : `A service for order #${order.unique_id} has been cancelled`;
     const updatedOrder = await order.save();
     await recalculateOrderTotals(order._id);
 
-    if (partner) {
-      const notificationSetting = await NotificationSettings.findOne({ user_id: partner._id });
-      if (notificationSetting?.is_update_allow) {
-        const deviceToken = partner.device_token
-        const title = `Service cancel`
-        const data = {
-          order_id: order.id,
-          type: "Order"
-        }
-        if (deviceToken !== null && deviceToken !== '') {
-          await safeSendPushNotification({ deviceToken, title, body, data });
-        }
-      }
-      if (notificationSetting?.is_sms_allow) {
-        // Put logic for sent sms update
-      }
-    }
-
-    const notificationSettingUser = await NotificationSettings.findOne({ user_id: order.user_id });
-    if (notificationSettingUser?.is_update_allow) {
-      const user = await User.findById(order.user_id);
-      const deviceToken = user?.device_token
-      const title = `Service cancel`
-      const data = {
-        order_id: order.id,
-        type: "Order"
-      }
-      if (deviceToken !== null && deviceToken !== '') {
-        await safeSendPushNotification({ deviceToken, title, body, data });
-      }
-    }
-    if (notificationSettingUser?.is_sms_allow) {
-      // Put logic for sent sms update
-    }
+    void safeNotifyOrderServiceCancelled({
+      order: updatedOrder,
+      serviceName: serviceInfo?.name || '',
+      orderUniqueId: order.unique_id,
+      actorUserId: getCallerId(req),
+      extraRecipientIds: partner ? [partner._id] : [],
+    });
 
     return res.status(200).json({
       success: true,
@@ -1246,62 +1187,11 @@ const cancleOrder = async (req, res) => {
     await syncAllPartnerOrderPaymentsForOrder(order._id);
     const updatedOrder = await Order.findById(order._id);
 
-    const orderServices = await OrderService.find({
-      _id: { $in: order.service_items }
-    }).select("partner_id");
-    console.log(orderServices);
-    const notificationPromises = orderServices.map(async (service) => {
-      const partnerId = service.partner_id;
-      console.log(partnerId);
-      if (!partnerId) return;
-
-      // Fetch notification setting first
-      const setting = await NotificationSettings.findOne({ user_id: partnerId });
-      console.log(setting);
-      if (!setting?.is_update_allow) return;
-
-      // Fetch partner user and device token
-      const partner = await User.findById(partnerId).select("device_token");
-      console.log(partner);
-      const deviceToken = partner?.device_token;
-      console.log(deviceToken);
-      if (deviceToken !== null && deviceToken !== '') {
-        const title = "Order Cancelled";
-        const body = `An order #${order.unique_id} related to your service has been cancelled`;
-        const data = {
-          order_id: order.id,
-          type: "Order"
-        };
-
-        return safeSendPushNotification({
-          deviceToken,
-          title,
-          body,
-          data,
-        });
-      }
+    void safeNotifyOrderCancelled({
+      order: updatedOrder,
+      actorUserId: getCallerId(req),
     });
 
-    await Promise.all(notificationPromises.filter(Boolean));
-    console.log('Notification sent.......');
-
-    const notificationSetting = await NotificationSettings.findOne({ user_id: order.user_id });
-    if (notificationSetting?.is_update_allow) {
-      const user = await User.findById(order.user_id);
-      const deviceToken = user?.device_token
-      const title = `Order cancel`
-      const body = `Your Order #${order.unique_id} has been cancelled`
-      const data = {
-        order_id: order.id,
-        type: "Order"
-      }
-      if (deviceToken !== null && deviceToken !== '') {
-        await safeSendPushNotification({ deviceToken, title, body, data });
-      }
-    }
-    if (notificationSetting?.is_sms_allow) {
-      // Put logic for sent sms update
-    }
     return res.status(200).json({
       success: true,
       status: 200,

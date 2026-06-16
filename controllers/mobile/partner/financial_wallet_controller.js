@@ -55,7 +55,7 @@ const getFinancialPaymentHandler = wrapMobileHandler(
 );
 
 const getWalletSummaryHandler = wrapMobileHandler('mobile partner wallet summary', async (req, res) => {
-  const result = await getWalletSummary(getCallerId(req));
+  const result = await getWalletSummary(getCallerId(req), req.query);
   if (!result.ok) {
     return sendServiceError(res, result);
   }
@@ -80,7 +80,14 @@ const listWalletTransactionsHandler = wrapMobileHandler(
       success: true,
       status: 200,
       message: result.data.message,
-      data: result.data.data,
+      wallet_balance: result.data.wallet_balance,
+      partner: result.data.partner,
+      totals: result.data.totals,
+      records: result.data.records,
+      totalPages: result.data.totalPages,
+      totalItems: result.data.totalItems,
+      currentPage: result.data.currentPage,
+      limit: result.data.limit,
     });
   }
 );

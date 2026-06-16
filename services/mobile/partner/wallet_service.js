@@ -56,6 +56,10 @@ const buildLedgerDateFilter = (query) => {
         filter.date.$lte = end;
     }
 
+    if (!filter.date.$gte && !filter.date.$lte) {
+        return { ok: true, filter: {} };
+    }
+
     return { ok: true, filter };
 };
 
@@ -120,13 +124,13 @@ const computeLedgerPeriodTotals = async (ledgerFilter) => {
     ]);
 
     const row = rows[0] || {};
-    const totalCredit = roundAmount(row.total_credit);
-    const totalDebit = roundAmount(row.total_debit);
+    const totalCredit = Number(row.total_credit) || 0;
+    const totalDebit = Number(row.total_debit) || 0;
 
     return {
         transaction_count: row.transaction_count || 0,
-        total_credit: totalCredit,
-        total_debit: totalDebit,
+        total_credit: roundAmount(totalCredit),
+        total_debit: roundAmount(totalDebit),
         net_change: roundAmount(totalCredit - totalDebit),
     };
 };
@@ -140,7 +144,7 @@ const formatLedgerRecord = (row) => ({
     order_payment_id: row.order_payment_id || null,
     description: row.description,
     payment_method: row.payment_method || null,
-    amount: row.amount,
+    amount: roundAmount(row.amount),
 });
 
 const getWalletSummary = async (partnerId, query = {}) => {
@@ -215,19 +219,17 @@ const listWalletTransactions = async (partnerId, query = {}) => {
 
         return ok(200, {
             message: 'Partner wallet transactions fetched successfully.',
-            data: {
-                wallet_balance: wallet.total_wallet_amount,
-                partner: {
-                    partner_id: partner.user_id || null,
-                    partner_name: partner.name || '',
-                },
-                totals,
-                records: rows.map(formatLedgerRecord),
-                totalPages,
-                totalItems,
-                currentPage: page,
-                limit,
+            wallet_balance: wallet.total_wallet_amount,
+            partner: {
+                partner_id: partner.user_id || null,
+                partner_name: partner.name || '',
             },
+            totals,
+            records: rows.map(formatLedgerRecord),
+            totalPages,
+            totalItems,
+            currentPage: page,
+            limit,
         });
     } catch (err) {
         console.error('listWalletTransactions', err.message);

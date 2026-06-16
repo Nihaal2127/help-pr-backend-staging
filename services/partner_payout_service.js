@@ -6,6 +6,7 @@ const PartnerPayout = require('../models/partner_payout');
 const PartnerWalletLedger = require('../models/partner_wallet_ledger');
 const { PAYMENT_METHODS } = require('../models/partner_payout');
 const { TRANSACTION_TYPES } = require('../models/partner_wallet_ledger');
+const { safeNotifyWalletTransaction } = require('../src/modules/notifications/services/domainHooks');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
 
 const PARTNER_USER_TYPE = 2;
@@ -393,7 +394,7 @@ const createPartnerPayout = async (body) => {
             updated_at: now,
         });
 
-        await PartnerWalletLedger.create({
+        const ledgerEntry = await PartnerWalletLedger.create({
             partner_id: pPartner.oid,
             franchise_id: payout.franchise_id,
             transaction_type: 'debit',
@@ -407,6 +408,11 @@ const createPartnerPayout = async (body) => {
             payout_id: payout._id,
             created_at: now,
             updated_at: now,
+        });
+
+        void safeNotifyWalletTransaction({
+            ledgerEntry,
+            actorUserId: null,
         });
 
         return ok(201, {

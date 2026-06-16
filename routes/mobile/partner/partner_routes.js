@@ -17,6 +17,7 @@ const { getHomeHandler } = require('../../../controllers/mobile/partner/home_con
 const quoteRoutes = require('./quote_routes');
 const orderRoutes = require('./order_routes');
 const postRoutes = require('./post_routes');
+const { partnerNotificationRoutes } = require('../../../src/modules/notifications');
 const { upload } = require('../../../utils/fileUpload');
 const { wrapMulterUpload } = require('../../../utils/multer_error_handler');
 
@@ -44,5 +45,6 @@ router.get('/subscription-plans', partnerAuthMiddleware, listSubscriptionPlans);
 router.use(quoteRoutes);
 router.use(orderRoutes);
 router.use(postRoutes);
+router.use('/notifications', partnerNotificationRoutes);
 
 module.exports = router;

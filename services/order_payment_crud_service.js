@@ -1,6 +1,7 @@
 const OrderPayment = require('../models/order_payment');
 const { syncOrderPaymentStatus } = require('./order_payment_status_service');
 const { syncAllPartnerOrderPaymentsForOrder } = require('./partner_wallet_order_service');
+const { safeNotifyOrderPaymentReceived } = require('../src/modules/notifications/services/domainHooks');
 
 const PAYER_TYPES = new Set(['customer', 'partner']);
 const PAYMENT_STATUSES = new Set(['pending', 'completed', 'failed', 'refunded']);
@@ -72,6 +73,13 @@ const createOrderPaymentRecord = async (order, body, options = {}) => {
   });
   await doc.save();
   const syncResult = await syncAfterOrderPaymentChange(order._id);
+  if (fields.status === 'completed') {
+    void safeNotifyOrderPaymentReceived({
+      order: syncResult?.order || order,
+      payment: doc,
+      actorUserId: options.actorUserId || null,
+    });
+  }
   return { doc, syncResult };
 };
 
@@ -124,12 +132,24 @@ const commitOrderPaymentUpdate = async (row, orderId) => {
 };
 
 const updateOrderPaymentRecord = async (row, order, body, options = {}) => {
+  const previousStatus = row.status;
   const updateResult = applyOrderPaymentFieldUpdates(row, body, options);
   if (!updateResult.ok) {
     return updateResult;
   }
 
-  return commitOrderPaymentUpdate(row, order._id);
+  const result = await commitOrderPaymentUpdate(row, order._id);
+  if (
+    row.status === 'completed' &&
+    previousStatus !== 'completed'
+  ) {
+    void safeNotifyOrderPaymentReceived({
+      order: result.syncResult?.order || order,
+      payment: row,
+      actorUserId: options.actorUserId || null,
+    });
+  }
+  return result;
 };
 
 const softDeleteOrderPaymentRecord = async (row, orderId) => {

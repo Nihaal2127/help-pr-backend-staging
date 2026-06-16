@@ -32,6 +32,7 @@ const addressRoutes = require('./address_routes');
 const quoteRoutes = require('./quote_routes');
 const postRoutes = require('./post_routes');
 const orderRoutes = require('./order_routes');
+const { userNotificationRoutes } = require('../../../src/modules/notifications');
 const { uploadImages } = require('../../../utils/fileUpload');
 
 const userMultipartUpload = uploadImages.fields([{ name: 'profile_photo', maxCount: 1 }]);
@@ -46,6 +47,7 @@ router.use(addressRoutes);
 router.use(quoteRoutes);
 router.use(postRoutes);
 router.use(orderRoutes);
+router.use('/notifications', userNotificationRoutes);
 router.get('/home', userAuthMiddleware, validateHomeLocationQuery, getHomeHandler);
 router.get(
   '/partners',

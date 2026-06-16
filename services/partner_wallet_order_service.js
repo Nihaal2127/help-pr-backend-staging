@@ -5,6 +5,7 @@ const OrderAdditionalCharge = require('../models/order_additional_charge');
 const PartnerWalletLedger = require('../models/partner_wallet_ledger');
 const { aggregateAdditionalCharges } = require('../utils/order_pricing');
 const { computeCustomerPaymentStatus } = require('../enum/order_payment_status_enum');
+const { safeNotifyWalletTransaction } = require('../src/modules/notifications/services/domainHooks');
 const {
     ORDER_STATUS_CANCELLED,
     ORDER_STATUS_REFUNDED,
@@ -206,9 +207,13 @@ const syncAllPartnerOrderPaymentsForOrder = async (orderId) => {
             if (existing) {
                 await PartnerWalletLedger.updateOne({ _id: existing._id }, { $set: payload });
             } else {
-                await PartnerWalletLedger.create({
+                const created = await PartnerWalletLedger.create({
                     ...payload,
                     created_at: now,
+                });
+                void safeNotifyWalletTransaction({
+                    ledgerEntry: created,
+                    actorUserId: null,
                 });
             }
 

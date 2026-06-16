@@ -26,6 +26,10 @@ const {
   TERMINAL_QUOTE_STATUSES,
 } = require('../../../enum/quote_status_enum');
 const {
+  safeNotifyQuoteCreated,
+  safeNotifyQuoteStatusChanged,
+} = require('../../../src/modules/notifications/services/domainHooks');
+const {
   assertCustomerOwnsQuote,
   assertFranchiseExists,
   assertCustomerOwnsAddress,
@@ -208,6 +212,11 @@ const createCustomerQuote = async (customerId, body) => {
     });
 
     await quote.save();
+
+    void safeNotifyQuoteCreated({
+      quote,
+      actorUserId: customerId,
+    });
 
     const populated = await Quote.findById(quote._id)
       .populate(QUOTE_MOBILE_DETAIL_POPULATE)
@@ -468,6 +477,13 @@ const cancelCustomerQuote = async (customerId, quoteId, body) => {
 
     await quote.save();
 
+    void safeNotifyQuoteStatusChanged({
+      quote,
+      previousStatus: oldStatus,
+      newStatus: quote.status,
+      actorUserId: customerId,
+    });
+
     const populated = await Quote.findById(quote._id)
       .populate(QUOTE_MOBILE_DETAIL_POPULATE)
       .lean();
@@ -521,7 +537,7 @@ const convertCustomerQuoteToOrder = async (customerId, quoteId, body) => {
 
     let created;
     try {
-      created = await createOrderFromQuote(quote);
+      created = await createOrderFromQuote(quote, { actorUserId: customerId });
     } catch (error) {
       if (error instanceof OrderCreationError) {
         return fail(error.status, error.message);

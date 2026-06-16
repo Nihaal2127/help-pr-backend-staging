@@ -11,6 +11,7 @@ const {
     computeProration,
     validateUpgradePaymentSplit,
 } = require('../../../utils/subscription_proration');
+const { safeNotifyWalletTransaction } = require('../../../src/modules/notifications/services/domainHooks');
 
 const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
 /** Pending rows older than this are treated as orphaned (failed/crashed apply). */
@@ -694,6 +695,10 @@ const createWalletLedgerEntry = async (
     }
     // Omit order_id / order_payment_id — null values collide on DocumentDB legacy unique indexes.
     const [row] = await PartnerWalletLedger.create([ledgerDoc], { session });
+    void safeNotifyWalletTransaction({
+        ledgerEntry: row,
+        actorUserId: null,
+    });
     return row;
 };
 

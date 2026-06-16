@@ -5,7 +5,6 @@ const User = require("../models/user");
 const Service = require("../models/service");
 const Address = require("../models/address");
 const Quote = require("../models/quote");
-const NotificationSettings = require("../models/notification_settings");
 const { getOrderId } = require("../helper/id_generator");
 const { recalculateOrderTotals } = require("../utils/order_financials");
 const { OrderCreationError } = require("../errors/order_creation_error");
@@ -29,6 +28,11 @@ const {
   buildPartnerWorkStatusInfo,
 } = require("../enum/partner_work_status_enum");
 const { resolveOrderFranchiseIdForCreate } = require("../utils/order_access");
+const { safeCreateDefaultAppointmentForOrder } = require("./appointment_service");
+const {
+  safeNotifyOrderCreated,
+  safeNotifyOrderNestedResources,
+} = require("../src/modules/notifications/services/domainHooks");
 
 const ORDER_TYPE_DEFAULT = 2;
 
@@ -106,42 +110,6 @@ const linkQuoteToOrder = async (quoteId, orderId) => {
   quote.updated_at = new Date();
   await quote.save();
   return quote;
-};
-
-const notifyPartnersForNewOrder = async (serviceItems, unique_id, orderId) => {
-  await Promise.all(
-    serviceItems.map(async (service) => {
-      try {
-        const partner = await User.findById(
-          new mongoose.Types.ObjectId(service.partner_id)
-        );
-        if (!partner) return;
-
-        const notificationSetting = await NotificationSettings.findOne({
-          user_id: partner._id,
-        });
-        if (!notificationSetting || notificationSetting.is_update_allow === false) {
-          return;
-        }
-
-        const serviceData = await Service.findById(service.service_id);
-        const title = "New Service Request Received";
-        const body = `You received request for ${serviceData?.name || "service"} for order #${unique_id}`;
-        const deviceToken = partner.device_token;
-        const data = {
-          order_id: orderId.toString(),
-          type: "Order",
-        };
-
-        if (deviceToken !== null && deviceToken !== "") {
-          const { sendPushNotification } = require("../service/firebase/push_service");
-          await sendPushNotification({ deviceToken, title, body, data });
-        }
-      } catch (err) {
-        console.error(`Error notifying partner ${service.partner_id}:`, err);
-      }
-    })
-  );
 };
 
 /**
@@ -351,7 +319,7 @@ const createOrderFromBody = async (body, options = {}) => {
 
 const persistOrderAndLinkQuote = async (
   { newOrder, order_id, service_items, resolvedQuoteId, orderOfferSnapshot },
-  { notifyPartners = true, requestBody = null } = {}
+  { notifyPartners = true, requestBody = null, actorUserId = null } = {}
 ) => {
   await newOrder.save();
 
@@ -372,11 +340,25 @@ const persistOrderAndLinkQuote = async (
     await linkQuoteToOrder(resolvedQuoteId, order_id);
   }
 
-  if (notifyPartners) {
-    await notifyPartnersForNewOrder(service_items, newOrder.unique_id, order_id);
-  }
-
   const refreshed = await Order.findById(order_id);
+
+  void safeCreateDefaultAppointmentForOrder(refreshed || newOrder, {
+    actorUserId,
+  });
+
+  if (notifyPartners) {
+    void safeNotifyOrderCreated({
+      order: refreshed || newOrder,
+      actorUserId,
+      serviceItems: service_items,
+    });
+  }
+  void safeNotifyOrderNestedResources({
+    order: refreshed || newOrder,
+    nested,
+    actorUserId,
+  });
+
   return { order: refreshed || newOrder, nested };
 };
 
@@ -494,6 +476,7 @@ const createOrderFromQuote = async (quote, options = {}) => {
   const { order } = await persistOrderAndLinkQuote(draft, {
     notifyPartners: options.notifyPartners !== false,
     requestBody: body,
+    actorUserId: options.actorUserId || null,
   });
   return { order, unique_id: draft.unique_id, order_id: draft.order_id };
 };
@@ -508,5 +491,4 @@ module.exports = {
   persistOrderAndLinkQuote,
   buildCreateInputFromQuote,
   createOrderFromQuote,
-  notifyPartnersForNewOrder,
 };

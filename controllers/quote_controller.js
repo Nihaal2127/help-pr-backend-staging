@@ -84,6 +84,10 @@ const {
   formatQuoteForApi,
   formatQuoteRecords,
 } = require("../enum/quote_status_enum");
+const {
+  safeNotifyQuoteCreated,
+  safeNotifyQuoteStatusChanged,
+} = require("../src/modules/notifications/services/domainHooks");
 
 const QUOTE_ADDRESS_POPULATE = {
   path: "address_id",
@@ -278,6 +282,11 @@ const create = async (req, res) => {
 
     await appendQuoteHistory(quote, req, "created", [], "Quote created.");
     await quote.save();
+
+    void safeNotifyQuoteCreated({
+      quote,
+      actorUserId: getCallerId(req),
+    });
 
     return res.status(200).json({
       success: true,
@@ -709,6 +718,7 @@ const update = async (req, res) => {
     }
     const currentStatus = resolveQuoteStatus(quote);
     const hasStatusUpdate = body.status !== undefined;
+    let previousStatusForNotify = null;
     const hasFieldUpdates =
       QUOTE_FIELD_UPDATE_KEYS.some((key) => body[key] !== undefined) ||
       quotePricingInputChanged(body);
@@ -842,7 +852,9 @@ const update = async (req, res) => {
         const oldStatus = quote.status;
         const oldOrderId = quote.order_id;
         const quoteForOrder = await Quote.findById(quote._id);
-        const { order, unique_id } = await createOrderFromQuote(quoteForOrder);
+        const { order, unique_id } = await createOrderFromQuote(quoteForOrder, {
+          actorUserId: getCallerId(req),
+        });
         const linkedQuote = await Quote.findById(quote._id);
 
         await appendQuoteHistory(
@@ -856,6 +868,13 @@ const update = async (req, res) => {
           `Status set to success. Order ${unique_id} created.`
         );
         await linkedQuote.save();
+
+        void safeNotifyQuoteStatusChanged({
+          quote: linkedQuote,
+          previousStatus: oldStatus,
+          newStatus: linkedQuote.status,
+          actorUserId: getCallerId(req),
+        });
 
         return res.status(200).json({
           success: true,
@@ -891,6 +910,7 @@ const update = async (req, res) => {
       }
 
       const oldStatus = quote.status;
+      previousStatusForNotify = oldStatus;
       const oldRejectionReason = quote.rejection_reason;
       const oldCancellationReason = quote.cancellation_reason;
 
@@ -929,6 +949,15 @@ const update = async (req, res) => {
     }
 
     const updated = await quote.save();
+
+    if (hasStatusUpdate) {
+      void safeNotifyQuoteStatusChanged({
+        quote: updated,
+        previousStatus: previousStatusForNotify,
+        newStatus: resolveQuoteStatus(updated),
+        actorUserId: getCallerId(req),
+      });
+    }
 
     return res.status(200).json({
       success: true,

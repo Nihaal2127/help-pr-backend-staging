@@ -9,6 +9,10 @@ const {
     assertFranchiseAccess,
 } = require('../utils/franchise_access');
 const { loadFranchiseCallerScope } = require('../utils/franchise_user_scope');
+const {
+    safeNotifySubscriptionAssigned,
+    safeNotifySubscriptionStatusChanged,
+} = require('../src/modules/notifications/services/domainHooks');
 /** Same as `user.type` in models/user.js (2 = Partner). */
 const USER_TYPE_PARTNER = 2;
 
@@ -526,6 +530,12 @@ const createPartnerSubscription = async (body, assignedByUserId) => {
             .populate('subscription_plan_id')
             .populate('assigned_by_id', 'name email');
 
+        void safeNotifySubscriptionAssigned({
+            subscription: populated,
+            planName: plan?.plan_name || '',
+            actorUserId: assignedByUserId || null,
+        });
+
         return ok(200, {
             message: 'Partner subscription assigned successfully.',
             record: populated,
@@ -543,6 +553,8 @@ const updatePartnerSubscription = async (id, body) => {
 
         const row = await PartnerSubscription.findOne({ _id: pId.oid, deleted_at: null });
         if (!row) return fail(404, 'No record found');
+
+        const previousStatus = row.status;
 
         if (body.subscription_plan_id !== undefined) {
             const pPlan = parseObjectId(body.subscription_plan_id, 'subscription_plan_id');
@@ -588,6 +600,16 @@ const updatePartnerSubscription = async (id, body) => {
             .populate('partner_id', 'name email phone_number')
             .populate('subscription_plan_id')
             .populate('assigned_by_id', 'name email');
+
+        if (body.status !== undefined && row.status !== previousStatus) {
+            void safeNotifySubscriptionStatusChanged({
+                subscription: populated,
+                previousStatus,
+                newStatus: row.status,
+                planName: populated?.subscription_plan_id?.plan_name || '',
+                actorUserId: null,
+            });
+        }
 
         return ok(200, { message: 'Partner subscription updated successfully', record: populated });
     } catch (error) {

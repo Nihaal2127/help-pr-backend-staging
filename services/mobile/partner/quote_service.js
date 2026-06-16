@@ -22,6 +22,7 @@ const {
   buildHistoryChange,
   appendQuoteHistory,
 } = require('../../../utils/quote_history_helper');
+const { safeNotifyQuoteStatusChanged } = require('../../../src/modules/notifications/services/domainHooks');
 
 const { fail, ok, parsePositiveInt } = require('../../../utils/mobile_service_result');
 
@@ -202,6 +203,13 @@ const updatePartnerQuoteStatus = async (partnerId, quoteId, body) => {
     });
 
     await quote.save();
+
+    void safeNotifyQuoteStatusChanged({
+      quote,
+      previousStatus: oldStatus,
+      newStatus: quote.status,
+      actorUserId: partnerId,
+    });
 
     const populated = await Quote.findById(quote._id)
       .populate(QUOTE_MOBILE_DETAIL_POPULATE)

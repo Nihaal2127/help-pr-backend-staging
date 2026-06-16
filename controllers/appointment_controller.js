@@ -1,21 +1,13 @@
 const Appointment = require("../models/appointment");
-const { applyPagination } = require("../utils/pagination");
-const { buildFieldDateRangeFilter } = require("../utils/schedule_date_filters");
-const { sanitizeInput } = require("../validator/search_keyword_validator");
 const { formatAppointmentForApi } = require("../utils/appointment_api_format");
-const {
-  resolveAppointmentListScope,
-  assertAppointmentRecordAccess,
-  assertOrderRecordAccess,
-} = require("../utils/appointment_access");
 const {
   createAppointmentForOrder,
   updateAppointmentById,
   softDeleteAppointmentById,
-  resolveOrderByIdParam,
-  resolveAppointmentByIdParam,
+  listAppointments,
+  getAppointmentById,
+  getAppointmentsByOrder,
 } = require("../services/appointment_service");
-const { normalizeAppointmentStatus } = require("../enum/appointment_status_enum");
 
 const create = async (req, res) => {
   try {
@@ -46,111 +38,23 @@ const create = async (req, res) => {
 
 const getAll = async (req, res) => {
   try {
-    const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 50;
-
-    const scope = await resolveAppointmentListScope(req, {
-      franchiseIdFromQuery: req.query.franchise_id,
-    });
-    if (!scope.ok) {
-      return res.status(scope.status).json({
+    const result = await listAppointments(req.query, { req });
+    if (!result.ok) {
+      return res.status(result.status).json({
         success: false,
-        status: scope.status,
-        message: scope.message,
+        status: result.status,
+        message: result.message,
       });
     }
-
-    if (scope.noFranchise) {
-      return res.status(200).json({
-        success: true,
-        status: 200,
-        message: "Appointment list fetched successfully.",
-        totalItems: 0,
-        totalPages: 0,
-        currentPage: page,
-        records: [],
-      });
-    }
-
-    const dateFilterResult = buildFieldDateRangeFilter(req.query, "service_date");
-    if (!dateFilterResult.ok) {
-      return res.status(400).json({
-        success: false,
-        status: 400,
-        message: dateFilterResult.message,
-      });
-    }
-
-    const filter = {
-      deleted_at: null,
-      ...scope.filter,
-      ...dateFilterResult.filter,
-    };
-
-    if (req.query.order_id) {
-      const order = await resolveOrderByIdParam(req.query.order_id);
-      if (!order) {
-        return res.status(400).json({
-          success: false,
-          status: 400,
-          message: "Invalid order_id filter.",
-        });
-      }
-      const orderAccess = await assertOrderRecordAccess(req, order);
-      if (!orderAccess.ok) {
-        return res.status(orderAccess.status).json({
-          success: false,
-          status: orderAccess.status,
-          message: orderAccess.message,
-        });
-      }
-      filter.order_id = order._id;
-    }
-
-    if (req.query.status) {
-      const normalized = normalizeAppointmentStatus(req.query.status);
-      if (!normalized) {
-        return res.status(400).json({
-          success: false,
-          status: 400,
-          message: "Invalid status filter.",
-        });
-      }
-      filter.status = normalized;
-    }
-
-    if (req.query.keyword) {
-      const regex = new RegExp(sanitizeInput(req.query.keyword), "i");
-      filter.$or = [
-        { title: regex },
-        { order_unique_id: regex },
-        { partner_name: regex },
-        { service_name: regex },
-        { unique_id: regex },
-      ];
-    }
-
-    const sort = {
-      service_date: req.query.sort !== undefined ? parseInt(req.query.sort, 10) : -1,
-      start_time: -1,
-    };
-
-    const { data, totalCount, totalPages, currentPage } = await applyPagination(
-      Appointment,
-      filter,
-      page,
-      limit,
-      sort
-    );
 
     return res.status(200).json({
       success: true,
       status: 200,
-      message: "Appointment list fetched successfully.",
-      totalItems: totalCount,
-      totalPages,
-      currentPage,
-      records: data.map((row) => formatAppointmentForApi(row)),
+      message: result.message,
+      totalItems: result.totalItems,
+      totalPages: result.totalPages,
+      currentPage: result.currentPage,
+      records: result.records,
     });
   } catch (err) {
     console.error("appointment getAll:", err.message);
@@ -164,29 +68,20 @@ const getAll = async (req, res) => {
 
 const getById = async (req, res) => {
   try {
-    const appointment = await resolveAppointmentByIdParam(req.params.id);
-    if (!appointment) {
-      return res.status(404).json({
+    const result = await getAppointmentById(req.params.id, { req });
+    if (!result.ok) {
+      return res.status(result.status).json({
         success: false,
-        status: 404,
-        message: "Appointment not found.",
-      });
-    }
-
-    const access = await assertAppointmentRecordAccess(req, appointment);
-    if (!access.ok) {
-      return res.status(access.status).json({
-        success: false,
-        status: access.status,
-        message: access.message,
+        status: result.status,
+        message: result.message,
       });
     }
 
     return res.status(200).json({
       success: true,
       status: 200,
-      message: "Appointment fetched successfully.",
-      record: formatAppointmentForApi(appointment),
+      message: result.message,
+      record: result.record,
     });
   } catch (err) {
     console.error("appointment getById:", err.message);
@@ -200,38 +95,22 @@ const getById = async (req, res) => {
 
 const getByOrder = async (req, res) => {
   try {
-    const order = await resolveOrderByIdParam(req.params.orderId);
-    if (!order) {
-      return res.status(404).json({
+    const result = await getAppointmentsByOrder(req.params.orderId, { req });
+    if (!result.ok) {
+      return res.status(result.status).json({
         success: false,
-        status: 404,
-        message: "Order not found.",
+        status: result.status,
+        message: result.message,
       });
     }
-
-    const access = await assertOrderRecordAccess(req, order);
-    if (!access.ok) {
-      return res.status(access.status).json({
-        success: false,
-        status: access.status,
-        message: access.message,
-      });
-    }
-
-    const appointments = await Appointment.find({
-      order_id: order._id,
-      deleted_at: null,
-    })
-      .sort({ service_date: -1, start_time: -1, created_at: -1 })
-      .lean();
 
     return res.status(200).json({
       success: true,
       status: 200,
-      message: "Appointments fetched successfully.",
-      order_id: String(order._id),
-      order_unique_id: order.unique_id,
-      records: appointments.map((row) => formatAppointmentForApi(row)),
+      message: result.message,
+      order_id: result.order_id,
+      order_unique_id: result.order_unique_id,
+      records: result.records,
     });
   } catch (err) {
     console.error("appointment getByOrder:", err.message);

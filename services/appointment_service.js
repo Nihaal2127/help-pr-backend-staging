@@ -13,9 +13,15 @@ const {
   normalizeAppointmentStatus,
 } = require("../enum/appointment_status_enum");
 const {
-  assertOrderRecordAccess,
-  assertAppointmentRecordAccess,
+  assertOrderAccessForAppointment,
+  assertAppointmentAccessForMutation,
+  resolveAppointmentListScope,
+  buildPartnerAppointmentListFilter,
 } = require("../utils/appointment_access");
+const { applyPagination } = require("../utils/pagination");
+const { buildFieldDateRangeFilter } = require("../utils/schedule_date_filters");
+const { sanitizeInput } = require("../validator/search_keyword_validator");
+const { formatAppointmentForApi } = require("../utils/appointment_api_format");
 
 const parseTimeInput = (value) => {
   if (value === undefined || value === null) return null;
@@ -243,14 +249,14 @@ const validateManualScheduleInput = ({ service_date, start_time, end_time }) => 
   };
 };
 
-const createAppointmentForOrder = async (req, body) => {
+const createAppointmentForOrder = async (req, body, { partnerId } = {}) => {
   try {
     const order = await resolveOrderByIdParam(body.order_id);
     if (!order) {
       return { ok: false, status: 404, message: "Order not found." };
     }
 
-    const access = await assertOrderRecordAccess(req, order);
+    const access = await assertOrderAccessForAppointment(req, order, { partnerId });
     if (!access.ok) {
       return { ok: false, status: access.status, message: access.message };
     }
@@ -273,7 +279,7 @@ const createAppointmentForOrder = async (req, body) => {
       };
     }
 
-    const callerId = getCallerId(req);
+    const callerId = partnerId || getCallerId(req);
     const payload = await buildAppointmentPayloadFromOrder(order, {
       title: body.title,
       serviceDate: scheduleCheck.serviceDate,
@@ -300,14 +306,14 @@ const createAppointmentForOrder = async (req, body) => {
   }
 };
 
-const updateAppointmentById = async (req, id, body) => {
+const updateAppointmentById = async (req, id, body, { partnerId } = {}) => {
   try {
     const appointment = await resolveAppointmentByIdParam(id);
     if (!appointment) {
       return { ok: false, status: 404, message: "Appointment not found." };
     }
 
-    const access = await assertAppointmentRecordAccess(req, appointment);
+    const access = await assertAppointmentAccessForMutation(req, appointment, { partnerId });
     if (!access.ok) {
       return { ok: false, status: access.status, message: access.message };
     }
@@ -376,14 +382,14 @@ const updateAppointmentById = async (req, id, body) => {
   }
 };
 
-const softDeleteAppointmentById = async (req, id) => {
+const softDeleteAppointmentById = async (req, id, { partnerId } = {}) => {
   try {
     const appointment = await resolveAppointmentByIdParam(id);
     if (!appointment) {
       return { ok: false, status: 404, message: "Appointment not found." };
     }
 
-    const access = await assertAppointmentRecordAccess(req, appointment);
+    const access = await assertAppointmentAccessForMutation(req, appointment, { partnerId });
     if (!access.ok) {
       return { ok: false, status: access.status, message: access.message };
     }
@@ -398,12 +404,175 @@ const softDeleteAppointmentById = async (req, id) => {
   }
 };
 
+const listAppointments = async (query, { req, partnerId } = {}) => {
+  try {
+    const page = parseInt(query.page, 10) || 1;
+    const maxLimit = partnerId ? 50 : 100;
+    const limit = Math.min(parseInt(query.limit, 10) || (partnerId ? 50 : 50), maxLimit);
+
+    let scopeFilter = {};
+
+    if (partnerId) {
+      const partnerScope = buildPartnerAppointmentListFilter(partnerId);
+      if (!partnerScope.ok) {
+        return { ok: false, status: partnerScope.status, message: partnerScope.message };
+      }
+      scopeFilter = partnerScope.filter;
+    } else {
+      const scope = await resolveAppointmentListScope(req, {
+        franchiseIdFromQuery: query.franchise_id,
+      });
+      if (!scope.ok) {
+        return { ok: false, status: scope.status, message: scope.message };
+      }
+      if (scope.noFranchise) {
+        return {
+          ok: true,
+          message: "Appointment list fetched successfully.",
+          totalItems: 0,
+          totalPages: 0,
+          currentPage: page,
+          limit,
+          records: [],
+        };
+      }
+      scopeFilter = scope.filter;
+    }
+
+    const dateFilterResult = buildFieldDateRangeFilter(query, "service_date");
+    if (!dateFilterResult.ok) {
+      return { ok: false, status: 400, message: dateFilterResult.message };
+    }
+
+    const filter = {
+      deleted_at: null,
+      ...scopeFilter,
+      ...dateFilterResult.filter,
+    };
+
+    if (query.order_id) {
+      const order = await resolveOrderByIdParam(query.order_id);
+      if (!order) {
+        return { ok: false, status: 400, message: "Invalid order_id filter." };
+      }
+      const orderAccess = await assertOrderAccessForAppointment(req, order, { partnerId });
+      if (!orderAccess.ok) {
+        return { ok: false, status: orderAccess.status, message: orderAccess.message };
+      }
+      filter.order_id = order._id;
+    }
+
+    if (query.status) {
+      const normalized = normalizeAppointmentStatus(query.status);
+      if (!normalized) {
+        return { ok: false, status: 400, message: "Invalid status filter." };
+      }
+      filter.status = normalized;
+    }
+
+    if (query.keyword) {
+      const regex = new RegExp(sanitizeInput(query.keyword), "i");
+      filter.$or = [
+        { title: regex },
+        { order_unique_id: regex },
+        { partner_name: regex },
+        { service_name: regex },
+        { unique_id: regex },
+      ];
+    }
+
+    const sort = {
+      service_date: query.sort !== undefined ? parseInt(query.sort, 10) : -1,
+      start_time: -1,
+    };
+
+    const { data, totalCount, totalPages, currentPage } = await applyPagination(
+      Appointment,
+      filter,
+      page,
+      limit,
+      sort
+    );
+
+    return {
+      ok: true,
+      message: "Appointment list fetched successfully.",
+      totalItems: totalCount,
+      totalPages,
+      currentPage,
+      limit,
+      records: data.map((row) => formatAppointmentForApi(row)),
+    };
+  } catch (err) {
+    console.error("listAppointments:", err.message);
+    return { ok: false, status: 500, message: "Internal server error." };
+  }
+};
+
+const getAppointmentById = async (id, { req, partnerId } = {}) => {
+  try {
+    const appointment = await resolveAppointmentByIdParam(id);
+    if (!appointment) {
+      return { ok: false, status: 404, message: "Appointment not found." };
+    }
+
+    const access = await assertAppointmentAccessForMutation(req, appointment, { partnerId });
+    if (!access.ok) {
+      return { ok: false, status: access.status, message: access.message };
+    }
+
+    return {
+      ok: true,
+      message: "Appointment fetched successfully.",
+      record: formatAppointmentForApi(appointment),
+    };
+  } catch (err) {
+    console.error("getAppointmentById:", err.message);
+    return { ok: false, status: 500, message: "Internal server error." };
+  }
+};
+
+const getAppointmentsByOrder = async (orderId, { req, partnerId } = {}) => {
+  try {
+    const order = await resolveOrderByIdParam(orderId);
+    if (!order) {
+      return { ok: false, status: 404, message: "Order not found." };
+    }
+
+    const access = await assertOrderAccessForAppointment(req, order, { partnerId });
+    if (!access.ok) {
+      return { ok: false, status: access.status, message: access.message };
+    }
+
+    const appointments = await Appointment.find({
+      order_id: order._id,
+      deleted_at: null,
+    })
+      .sort({ service_date: -1, start_time: -1, created_at: -1 })
+      .lean();
+
+    return {
+      ok: true,
+      message: "Appointments fetched successfully.",
+      order_id: String(order._id),
+      order_unique_id: order.unique_id,
+      records: appointments.map((row) => formatAppointmentForApi(row)),
+    };
+  } catch (err) {
+    console.error("getAppointmentsByOrder:", err.message);
+    return { ok: false, status: 500, message: "Internal server error." };
+  }
+};
+
 module.exports = {
   safeCreateDefaultAppointmentForOrder,
   createDefaultAppointmentForOrder,
   createAppointmentForOrder,
   updateAppointmentById,
   softDeleteAppointmentById,
+  listAppointments,
+  getAppointmentById,
+  getAppointmentsByOrder,
   resolveOrderByIdParam,
   resolveAppointmentByIdParam,
   validateManualScheduleInput,

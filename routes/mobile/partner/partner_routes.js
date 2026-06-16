@@ -16,6 +16,7 @@ const { requirePartnerAccount } = require('../../../middleware/mobile/partner/qu
 const { getHomeHandler } = require('../../../controllers/mobile/partner/home_controller');
 const quoteRoutes = require('./quote_routes');
 const orderRoutes = require('./order_routes');
+const appointmentRoutes = require('./appointment_routes');
 const postRoutes = require('./post_routes');
 const { partnerNotificationRoutes } = require('../../../src/modules/notifications');
 const { upload } = require('../../../utils/fileUpload');
@@ -44,6 +45,7 @@ router.get('/categories', partnerAuthMiddleware, categories);
 router.get('/subscription-plans', partnerAuthMiddleware, listSubscriptionPlans);
 router.use(quoteRoutes);
 router.use(orderRoutes);
+router.use('/appointments', appointmentRoutes);
 router.use(postRoutes);
 router.use('/notifications', partnerNotificationRoutes);
 

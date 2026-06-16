@@ -1,12 +1,18 @@
 # Calendar / appointments — frontend integration guide
 
-Admin **Calendar** screen (`/calendar`) and **Schedule Appointment** modal. Appointments are linked to orders: **one order → many appointments**. The first appointment is created **automatically** when an order is placed; staff can add more manually.
+Admin **Calendar** screen (`/calendar`) and **Schedule Appointment** modal. **Partner mobile app** calendar uses the same fields scoped to the partner’s orders.
 
-Postman: **`postman/Help-PR-All-APIs.postman_collection.json`** → folder **44 — Appointment (calendar)**.
+Appointments are linked to orders: **one order → many appointments**. The first appointment is created **automatically** when an order is placed; staff and partners can add more manually.
+
+Postman:
+- Admin: **`postman/Help-PR-All-APIs.postman_collection.json`** → **44 — Appointment (calendar)**
+- Partner mobile: same file → **Mobile → Partner → Appointments**
 
 ---
 
 ## 1. Base URL and access
+
+### Admin web (`/api/appointment`)
 
 | Item | Detail |
 |------|--------|
@@ -14,9 +20,18 @@ Postman: **`postman/Help-PR-All-APIs.postman_collection.json`** → folder **44 
 | **Auth** | `Authorization: Bearer <backoffice_jwt>` |
 | **Who can call** | Super admin (5), staff (6), franchise admin (1), employee (3) |
 | **Blocked** | Partner (2), customer (4) → **403** |
-| **Screen gate** | User should have `accessible_screens` entry `{ page: "Calendar", url: "/calendar" }` |
+| **Screen gate** | `{ page: "Calendar", url: "/calendar" }` in `accessible_screens` |
 
-**Response envelope:**
+### Partner mobile (`/api/mobile/partner/appointments`)
+
+| Item | Detail |
+|------|--------|
+| **Base path** | `{baseUrl}/api/mobile/partner/appointments` |
+| **Auth** | `Authorization: Bearer <partner_jwt>` (`type` 2) |
+| **Scope** | Only appointments for orders where `order.partner_id` = logged-in partner |
+| **Create** | `order_id` must be an order assigned to the partner |
+
+**Response envelope (admin):**
 
 ```json
 {
@@ -33,9 +48,13 @@ Postman: **`postman/Help-PR-All-APIs.postman_collection.json`** → folder **44 
 
 List endpoints return `records[]` + pagination. Single-resource endpoints return `record`.
 
+**Response envelope (partner mobile):** same top-level shape as other partner APIs (`success`, `status`, `message`, `records` or `record`, pagination on list).
+
 ---
 
 ## 2. API routes
+
+### Admin — `/api/appointment`
 
 | Method | Path | Purpose |
 |--------|------|---------|
@@ -46,11 +65,25 @@ List endpoints return `records[]` + pagination. Single-resource endpoints return
 | `PUT` | `/update/:id` | Edit appointment |
 | `DELETE` | `/delete/:id` | Soft delete |
 
-`:id` and `:orderId` accept **Mongo `_id`** or **business id** (`AP1001`, `O1001`).
+### Partner mobile — `/api/mobile/partner/appointments`
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/` | Partner calendar list (own orders only) |
+| `GET` | `/order/:orderId` | Appointments for one assigned order |
+| `GET` | `/:appointmentId` | Single appointment |
+| `POST` | `/` | Create appointment on partner’s order |
+| `PUT` | `/:appointmentId` | Update |
+| `DELETE` | `/:appointmentId` | Soft delete |
+
+`:id` / `:appointmentId` accept Mongo `_id` or `AP1001`. Partner `orderId` path param: Mongo `_id` only (same as **GET /orders/:orderId**).
 
 ---
 
-## 3. Schedule Appointment modal → `POST /create`
+## 3. Schedule Appointment modal → create
+
+**Admin:** `POST /api/appointment/create`  
+**Partner mobile:** `POST /api/mobile/partner/appointments`
 
 **Required body**
 
@@ -87,17 +120,22 @@ List endpoints return `records[]` + pagination. Single-resource endpoints return
 
 **UI wiring**
 
-1. **Order ID** — searchable dropdown from existing order list APIs (`GET /api/order/getAll` or your order dropdown).
+1. **Order ID** — searchable dropdown from order list (`GET /api/order/getAll` admin, `GET /api/mobile/partner/orders` partner).
 2. On order select — show **Partner** and **Service Name** as read-only from the order row (or `GET /api/order/get/:id`).
 3. **Title**, **Service Date**, **Start / End Time** — editable; map to the body above.
 4. **No Status field** in the modal — appointments are schedule entries only.
 
 ---
 
-## 4. Calendar view → `GET /getAll`
+## 4. Calendar view → list
+
+**Admin:** `GET /api/appointment/getAll?...`  
+**Partner mobile:** `GET /api/mobile/partner/appointments?...`
 
 ```
 GET /api/appointment/getAll?page=1&limit=50&from_date=2026-06-01&to_date=2026-06-30&franchise_id=&keyword=&order_id=
+
+GET /api/mobile/partner/appointments?page=1&limit=50&from_date=2026-06-01&to_date=2026-06-30&order_id=
 ```
 
 | Query | Notes |
@@ -126,7 +164,10 @@ Render calendar events using `service_date` + `start_time` / `end_time`. If time
 
 ---
 
-## 5. Order detail panel → `GET /getByOrder/:orderId`
+## 5. Order detail panel → appointments by order
+
+**Admin:** `GET /api/appointment/getByOrder/O1001`  
+**Partner mobile:** `GET /api/mobile/partner/appointments/order/:orderId`
 
 ```
 GET /api/appointment/getByOrder/O1001
@@ -138,7 +179,10 @@ Returns `order_id`, `order_unique_id`, and `records[]` (newest `service_date` fi
 
 ## 6. Edit and delete
 
-**Update** — `PUT /api/appointment/update/:id`
+**Admin update:** `PUT /api/appointment/update/:id`  
+**Partner update:** `PUT /api/mobile/partner/appointments/:appointmentId`  
+**Admin delete:** `DELETE /api/appointment/delete/:id`  
+**Partner delete:** `DELETE /api/mobile/partner/appointments/:appointmentId`
 
 ```json
 {
@@ -183,4 +227,6 @@ If the order has no schedule times yet, the auto appointment may have `start_tim
 - [ ] Save calls `POST /create`; edit calls `PUT /update/:id`.
 - [ ] Order detail shows `GET /getByOrder/:orderId`.
 - [ ] Hide calendar + Save for non–back-office roles (API returns 403 anyway).
+- [ ] Partner app: calendar uses `GET /api/mobile/partner/appointments` with date range.
+- [ ] Partner app: create/update/delete only for orders from `GET /api/mobile/partner/orders`.
 - [ ] After creating an order, refresh calendar or order appointments to show the auto-created row (`source: "auto"`).

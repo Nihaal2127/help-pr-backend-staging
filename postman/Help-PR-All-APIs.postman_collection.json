@@ -19994,6 +19994,322 @@
               ]
             },
             {
+              "name": "Appointments",
+              "description": "Partner calendar — appointments on assigned orders only. **Auth:** Bearer partner JWT (`type` 2). See `docs/APPOINTMENT_MODULE_FRONTEND.md`.",
+              "item": [
+                {
+                  "name": "List appointments",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Partner appointments listed', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.records).to.be.an('array');",
+                          "  });",
+                          "  const a0 = j?.records?.[0];",
+                          "  if (a0?._id) pm.collectionVariables.set('appointmentId', String(a0._id));",
+                          "  if (a0?.unique_id) pm.collectionVariables.set('appointmentUniqueId', String(a0.unique_id));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/appointments?page=1&limit=50&from_date={{from_date}}&to_date={{to_date}}&order_id={{orderId}}&keyword=",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "appointments"
+                      ],
+                      "query": [
+                        {
+                          "key": "page",
+                          "value": "1"
+                        },
+                        {
+                          "key": "limit",
+                          "value": "50"
+                        },
+                        {
+                          "key": "from_date",
+                          "value": "{{from_date}}"
+                        },
+                        {
+                          "key": "to_date",
+                          "value": "{{to_date}}"
+                        },
+                        {
+                          "key": "order_id",
+                          "value": "{{orderId}}",
+                          "description": "Optional — Mongo order _id assigned to partner"
+                        },
+                        {
+                          "key": "keyword",
+                          "value": ""
+                        }
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/appointments** — Calendar list scoped to `partner_id` from JWT."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "List by order",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/appointments/order/{{orderId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "appointments",
+                        "order",
+                        "{{orderId}}"
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/appointments/order/:orderId** — Order must be assigned to caller."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Create appointment",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  if (j?.record?._id) pm.collectionVariables.set('appointmentId', String(j.record._id));",
+                          "  if (j?.record?.unique_id) pm.collectionVariables.set('appointmentUniqueId', String(j.record.unique_id));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"title\": \"Follow-up visit\",\n  \"order_id\": \"{{orderId}}\",\n  \"service_date\": \"2026-06-17\",\n  \"start_time\": \"09:00\",\n  \"end_time\": \"11:00\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/appointments",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "appointments"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/partner/appointments** — `order_id` must be partner's assigned order."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get appointment",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/appointments/{{appointmentId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "appointments",
+                        "{{appointmentId}}"
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/appointments/:appointmentId**"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Update appointment",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "PUT",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"title\": \"Rescheduled visit\",\n  \"service_date\": \"2026-06-18\",\n  \"start_time\": \"10:00\",\n  \"end_time\": \"12:00\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/appointments/{{appointmentId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "appointments",
+                        "{{appointmentId}}"
+                      ]
+                    },
+                    "description": "**PUT /api/mobile/partner/appointments/:appointmentId**"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Delete appointment",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "DELETE",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/appointments/{{appointmentId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "appointments",
+                        "{{appointmentId}}"
+                      ]
+                    },
+                    "description": "**DELETE /api/mobile/partner/appointments/:appointmentId** — soft delete"
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
               "name": "Posts",
               "description": "Partner portfolio posts — `post_routes.js`. Requires verified partner. See `docs/PARTNER_POST_FRONTEND.md`.",
               "item": [

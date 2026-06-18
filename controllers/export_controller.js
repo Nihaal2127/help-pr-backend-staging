@@ -20,6 +20,18 @@ const {
 const { getResolveStatus } = require('../enum/ticket_resolve_status_enum');
 const { getWalletAggregatesForPartners } = require('../services/partner_payout_service');
 const { fieldLabel } = require('../utils/field_labels');
+const {
+  fetchOrdersForExport,
+  ORDER_EXPORT_HEADERS,
+} = require('../services/order_export_service');
+const {
+  fetchQuotesForExport,
+  QUOTE_EXPORT_HEADERS,
+} = require('../services/quote_export_service');
+const {
+  fetchPartnersForExport,
+  PARTNER_EXPORT_HEADERS,
+} = require('../services/partner_export_service');
 
 
 const exportState = async (req, res) => {
@@ -369,6 +381,111 @@ const exportOrders = async (req, res) => {
     } catch (error) {
         console.error('Error generating report:', error);
         res.status(500).json({ error: 'Failed to export report' });
+    }
+};
+
+const exportOrderReport = async (req, res) => {
+    try {
+        const result = await fetchOrdersForExport(req);
+        if (!result.ok) {
+            return res.status(result.status || 400).json({
+                success: false,
+                status: result.status || 400,
+                message: result.message || 'Unable to export orders.',
+            });
+        }
+
+        const timestamp = new Date().toISOString().slice(0, 10);
+        const { fileBuffer, fileName } = await createExcel({
+            headers: ORDER_EXPORT_HEADERS,
+            data: result.rows,
+            sheetName: 'Order Report',
+            fileName: `Order_Report_${timestamp}.xlsx`,
+        });
+
+        res.setHeader(
+            'Content-Type',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        );
+        res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
+        res.send(
+            process.env.NODE_ENV === 'production'
+                ? fileBuffer.toString('base64')
+                : fileBuffer
+        );
+    } catch (error) {
+        console.error('Error generating order report:', error);
+        res.status(500).json({ error: 'Failed to export order report' });
+    }
+};
+
+const exportQuoteReport = async (req, res) => {
+    try {
+        const result = await fetchQuotesForExport(req);
+        if (!result.ok) {
+            return res.status(result.status || 400).json({
+                success: false,
+                status: result.status || 400,
+                message: result.message || 'Unable to export quotes.',
+            });
+        }
+
+        const timestamp = new Date().toISOString().slice(0, 10);
+        const { fileBuffer, fileName } = await createExcel({
+            headers: QUOTE_EXPORT_HEADERS,
+            data: result.rows,
+            sheetName: 'Quotation Report',
+            fileName: `Quotation_Report_${timestamp}.xlsx`,
+        });
+
+        res.setHeader(
+            'Content-Type',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        );
+        res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
+        res.send(
+            process.env.NODE_ENV === 'production'
+                ? fileBuffer.toString('base64')
+                : fileBuffer
+        );
+    } catch (error) {
+        console.error('Error generating quotation report:', error);
+        res.status(500).json({ error: 'Failed to export quotation report' });
+    }
+};
+
+const exportPartnerReport = async (req, res) => {
+    try {
+        const result = await fetchPartnersForExport(req);
+        if (!result.ok) {
+            return res.status(result.status || 400).json({
+                success: false,
+                status: result.status || 400,
+                message: result.message || 'Unable to export partners.',
+            });
+        }
+
+        const timestamp = new Date().toISOString().slice(0, 10);
+        const { fileBuffer, fileName } = await createExcel({
+            headers: PARTNER_EXPORT_HEADERS,
+            data: result.rows,
+            sheetName: 'Partner Report',
+            fileName: `Partner_Report_${timestamp}.xlsx`,
+        });
+
+        res.setHeader(
+            'Content-Type',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        );
+        res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
+        res.send(
+            process.env.NODE_ENV === 'production'
+                ? fileBuffer.toString('base64')
+                : fileBuffer
+        );
+    } catch (error) {
+        console.error('Error generating partner report:', error);
+        res.status(500).json({ error: 'Failed to export partner report' });
     }
 };
 
@@ -929,6 +1046,9 @@ module.exports = {
     exportService,
     exportUserList,
     exportOrders,
+    exportOrderReport,
+    exportQuoteReport,
+    exportPartnerReport,
     exportOrderPayments,
     exportUserServices,
     exportTicket,

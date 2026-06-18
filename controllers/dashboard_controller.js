@@ -1,6 +1,7 @@
 const User = require('../models/user');
 const Service = require('../models/service');
 const Order = require('../models/order');
+const { buildAdminDashboardStats } = require('../services/admin_dashboard_stats_service');
 
 
 
@@ -326,4 +327,30 @@ const getDashboardData = async (req, res) => {
 };
 
 
-module.exports = { getDashboardData };
+const getAdminDashboardStats = async (req, res) => {
+    try {
+        const result = await buildAdminDashboardStats(req);
+        if (!result.ok) {
+            return res.status(result.status).json({
+                success: false,
+                status: result.status,
+                message: result.message,
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            status: 200,
+            record: result.data,
+        });
+    } catch (error) {
+        console.error('Error fetching admin dashboard stats:', error);
+        return res.status(500).json({
+            success: false,
+            status: 500,
+            error: 'Internal Server Error',
+        });
+    }
+};
+
+module.exports = { getDashboardData, getAdminDashboardStats };

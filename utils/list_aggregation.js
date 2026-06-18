@@ -376,6 +376,13 @@ const buildEntityListPipeline = (config) => {
   return pipeline;
 };
 
+/** Same pipeline as list APIs but without pagination facet (for Excel export). */
+const buildEntityExportPipeline = (config) => {
+  const pipeline = buildEntityListPipeline({ ...config, skip: 0, limit: 1 });
+  pipeline.pop();
+  return pipeline;
+};
+
 const parseFacetListResult = (result, limit) => {
   const facet = result[0] || { data: [], totalCount: [] };
   const data = facet.data || [];
@@ -546,6 +553,7 @@ const embedOrderDetailForeignKeys = (record) => {
 
 module.exports = {
   buildEntityListPipeline,
+  buildEntityExportPipeline,
   buildServiceItemsLookupStage,
   parseFacetListResult,
   getListCollectionNames,

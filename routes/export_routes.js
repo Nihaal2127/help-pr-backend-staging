@@ -9,6 +9,9 @@ const {
     exportService,
     exportUserList,
     exportOrders,
+    exportOrderReport,
+    exportQuoteReport,
+    exportPartnerReport,
     exportOrderPayments,
     exportUserServices,
     exportTicket,
@@ -27,6 +30,9 @@ router.post('/category', authMiddleware,  exportCategory);
 router.post('/service', authMiddleware,  exportService);
 router.post('/user_role',authMiddleware,  exportUserList);
 router.post('/orders',authMiddleware,  exportOrders);
+router.post('/order-report', authMiddleware, exportOrderReport);
+router.post('/quote-report', authMiddleware, exportQuoteReport);
+router.post('/partner-report', authMiddleware, exportPartnerReport);
 router.post('/orders_payments',authMiddleware,  exportOrderPayments);
 router.post('/user_service',authMiddleware,  exportUserServices);
 router.post('/tickets',authMiddleware,  exportTicket);

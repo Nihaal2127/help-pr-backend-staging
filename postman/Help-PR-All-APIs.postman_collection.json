@@ -10135,6 +10135,108 @@
           "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 10 — Reports & Analytics (export)_"
         },
         {
+          "name": "Export — order report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"from_date\": \"\",\n  \"to_date\": \"\",\n  \"order_status\": \"\",\n  \"quote_status\": \"\",\n  \"category_id\": \"\",\n  \"service_id\": \"\",\n  \"partner_id\": \"\",\n  \"user_id\": \"\",\n  \"partner_payment_status\": \"\",\n  \"customer_payment_status\": \"\",\n  \"state_id\": \"\",\n  \"city_id\": \"\",\n  \"franchise_id\": \"\",\n  \"area_id\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/export/order-report",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "export",
+                "order-report"
+              ]
+            }
+          },
+          "description": "Order Reports Excel download with all dashboard filters. Franchise admin: auto-scoped to their franchise. Super admin/staff: optional `franchise_id` in body or query. Filters mirror `GET /api/order/getAll` plus `quote_status`, `state_id`, `area_id`, and `customer_payment_status`."
+        },
+        {
+          "name": "Export — quote report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"from_date\": \"\",\n  \"to_date\": \"\",\n  \"quote_status\": \"\",\n  \"category_id\": \"\",\n  \"service_id\": \"\",\n  \"partner_id\": \"\",\n  \"user_id\": \"\",\n  \"state_id\": \"\",\n  \"city_id\": \"\",\n  \"franchise_id\": \"\",\n  \"area_id\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/export/quote-report",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "export",
+                "quote-report"
+              ]
+            }
+          },
+          "description": "Quotation Reports Excel download with all dashboard filters. Franchise admin: auto-scoped to their franchise. Super admin/staff: optional `franchise_id` in body or query. Filters mirror `GET /api/quote/getAll` plus `state_id`, `city_id`, and `area_id` (via quote address)."
+        },
+        {
+          "name": "Export — partner report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"from_date\": \"\",\n  \"to_date\": \"\",\n  \"partner_id\": \"\",\n  \"category_id\": \"\",\n  \"service_id\": \"\",\n  \"state_id\": \"\",\n  \"city_id\": \"\",\n  \"franchise_id\": \"\",\n  \"area_id\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/export/partner-report",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "export",
+                "partner-report"
+              ]
+            }
+          },
+          "description": "Partner Reports Excel download with performance and earnings. Franchise admin: auto-scoped to their franchise. Super admin/staff: optional `franchise_id`. Verified partners only. Date range scopes order-service earnings and services provided."
+        },
+        {
           "name": "Export — orders_payments",
           "request": {
             "method": "POST",

@@ -38,37 +38,33 @@ const formatDateOnly = (date) => {
     return d.toISOString().slice(0, 10);
 };
 
-const todayIsoDate = () => new Date().toISOString().slice(0, 10);
-
-/** Shared UTC day bounds for dashboard query params (default = today). */
+/** UTC day bounds when from_date / to_date are sent; no default range when omitted. */
 const resolveDashboardDateBounds = (query = {}) => {
     const core = buildScheduleDateRangeCore(query);
     if (!core.ok) {
         return core;
     }
 
-    let { rangeFrom, rangeTo, hasFrom, hasTo, parsedFrom, parsedTo } = core;
-
     if (core.noDateParams) {
-        const today = todayIsoDate();
-        rangeFrom = startOfUtcDay(new Date(today));
-        rangeTo = endOfUtcDay(new Date(today));
-    } else {
-        if (hasFrom && !hasTo && parsedFrom) {
-            rangeTo = endOfUtcDay(parsedFrom);
-        } else if (!hasFrom && hasTo && parsedTo) {
-            rangeFrom = startOfUtcDay(parsedTo);
-        }
-
-        if (rangeFrom && rangeTo && rangeTo < rangeFrom) {
-            return {
-                ok: false,
-                message: 'To date filter must be on or after from date filter.',
-            };
-        }
+        return { ok: true, rangeFrom: null, rangeTo: null, hasDateFilter: false };
     }
 
-    return { ok: true, rangeFrom, rangeTo, noDateParams: core.noDateParams };
+    let { rangeFrom, rangeTo, hasFrom, hasTo, parsedFrom, parsedTo } = core;
+
+    if (hasFrom && !hasTo && parsedFrom) {
+        rangeTo = endOfUtcDay(parsedFrom);
+    } else if (!hasFrom && hasTo && parsedTo) {
+        rangeFrom = startOfUtcDay(parsedTo);
+    }
+
+    if (rangeFrom && rangeTo && rangeTo < rangeFrom) {
+        return {
+            ok: false,
+            message: 'To date filter must be on or after from date filter.',
+        };
+    }
+
+    return { ok: true, rangeFrom, rangeTo, hasDateFilter: true };
 };
 
 const resolveDashboardDateFilters = (query = {}) => {
@@ -77,16 +73,23 @@ const resolveDashboardDateFilters = (query = {}) => {
         return bounds;
     }
 
-    const today = todayIsoDate();
-    const dateQuery =
-        bounds.noDateParams ? { from_date: today, to_date: today } : query;
+    if (!bounds.hasDateFilter) {
+        return {
+            ok: true,
+            rangeFrom: null,
+            rangeTo: null,
+            hasDateFilter: false,
+            quoteDateFilter: {},
+            orderDateFilter: {},
+        };
+    }
 
-    const quoteDateResult = buildFieldDateRangeFilter(dateQuery, 'created_at');
+    const quoteDateResult = buildFieldDateRangeFilter(query, 'created_at');
     if (!quoteDateResult.ok) {
         return quoteDateResult;
     }
 
-    const orderDateResult = buildOrderDateRangeFilter(dateQuery);
+    const orderDateResult = buildOrderDateRangeFilter(query);
     if (!orderDateResult.ok) {
         return orderDateResult;
     }
@@ -95,6 +98,7 @@ const resolveDashboardDateFilters = (query = {}) => {
         ok: true,
         rangeFrom: bounds.rangeFrom,
         rangeTo: bounds.rangeTo,
+        hasDateFilter: true,
         quoteDateFilter: quoteDateResult.filter,
         orderDateFilter: orderDateResult.filter,
     };
@@ -265,15 +269,18 @@ const buildPaymentDashboardTotals = async (
 
     const scopedOrderFilter = await buildScopedOrderIdFilter(scopeResult.filter);
 
-    const [paymentAgg, orderIdsWithCustomerPayments] = await Promise.all([
-        OrderPayment.aggregate([
-            {
-                $match: {
-                    deleted_at: null,
-                    status: 'completed',
-                    ...scopedOrderFilter,
-                },
+    const paymentPipeline = [
+        {
+            $match: {
+                deleted_at: null,
+                status: 'completed',
+                ...scopedOrderFilter,
             },
+        },
+    ];
+
+    if (rangeFrom && rangeTo) {
+        paymentPipeline.push(
             {
                 $addFields: {
                     payment_date: { $ifNull: ['$paid_at', '$created_at'] },
@@ -283,28 +290,33 @@ const buildPaymentDashboardTotals = async (
                 $match: {
                     payment_date: { $gte: rangeFrom, $lte: rangeTo },
                 },
-            },
-            {
-                $group: {
-                    _id: null,
-                    customer: {
-                        $sum: {
-                            $cond: [{ $eq: ['$payer_type', 'customer'] }, '$amount', 0],
-                        },
-                    },
-                    partner: {
-                        $sum: {
-                            $cond: [{ $eq: ['$payer_type', 'partner'] }, '$amount', 0],
-                        },
-                    },
-                    customer_order_ids: {
-                        $addToSet: {
-                            $cond: [{ $eq: ['$payer_type', 'customer'] }, '$order_id', null],
-                        },
-                    },
+            }
+        );
+    }
+
+    paymentPipeline.push({
+        $group: {
+            _id: null,
+            customer: {
+                $sum: {
+                    $cond: [{ $eq: ['$payer_type', 'customer'] }, '$amount', 0],
                 },
             },
-        ]),
+            partner: {
+                $sum: {
+                    $cond: [{ $eq: ['$payer_type', 'partner'] }, '$amount', 0],
+                },
+            },
+            customer_order_ids: {
+                $addToSet: {
+                    $cond: [{ $eq: ['$payer_type', 'customer'] }, '$order_id', null],
+                },
+            },
+        },
+    });
+
+    const [paymentAgg, orderIdsWithCustomerPayments] = await Promise.all([
+        OrderPayment.aggregate(paymentPipeline),
         OrderPayment.distinct('order_id', {
             deleted_at: null,
             payer_type: 'customer',
@@ -467,8 +479,12 @@ const buildAdminDashboardStats = async (req) => {
 
     return ok({
         franchise_id: franchiseOid ? String(franchiseOid) : null,
-        from_date: formatDateOnly(rangeFrom),
-        to_date: formatDateOnly(rangeTo),
+        from_date: dateFiltersResult.hasDateFilter
+            ? formatDateOnly(dateFiltersResult.rangeFrom)
+            : null,
+        to_date: dateFiltersResult.hasDateFilter
+            ? formatDateOnly(dateFiltersResult.rangeTo)
+            : null,
         quotes: quotesResult.data,
         orders: ordersResult.data,
         payments: paymentsResult.data,

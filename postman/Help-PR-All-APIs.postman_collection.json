@@ -883,7 +883,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/dashboard/stats?franchise_id={{franchiseId}}&from_date={{from_date}}&to_date={{to_date}}",
+              "raw": "{{baseUrl}}/api/dashboard/stats?franchise_id={{franchiseId}}",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -901,16 +901,18 @@
                 {
                   "key": "from_date",
                   "value": "{{from_date}}",
-                  "description": "ISO date (YYYY-MM-DD). Defaults to today (UTC) when omitted along with to_date."
+                  "description": "Optional ISO date (YYYY-MM-DD). Omit with to_date for all-time stats. With to_date only, or alone, filters that single UTC day.",
+                  "disabled": true
                 },
                 {
                   "key": "to_date",
                   "value": "{{to_date}}",
-                  "description": "ISO date (YYYY-MM-DD). Defaults to today (UTC) when omitted along with from_date."
+                  "description": "Optional ISO date (YYYY-MM-DD). Omit with from_date for all-time stats.",
+                  "disabled": true
                 }
               ]
             },
-            "description": "**GET /api/dashboard/stats** — Admin home dashboard KPIs in one response.\n\n**Access:** Super admin (5), admin (1), staff (6), employee (3). Partner / customer → **403**.\n\n**Auth:** `Bearer {{accessToken}}` (run **00 — Auth → Login**).\n\n**Query:** `franchise_id` (optional), `from_date`, `to_date` (default = today UTC).\n\n**Date filters:**\n- `quotes` — `created_at` in range\n- `orders` — schedule / `order_date` overlap (same as order list)\n- `payments` — completed `order_payment` rows by `paid_at` (fallback `created_at`), plus legacy `is_paid` orders without payment rows (order schedule date)\n- `services` / `partners` — current snapshot (not date-filtered)\n\n**Response `record`:**\n| Key | Fields |\n|-----|--------|\n| `quotes` | `requests_received`, `in_progress`, `completed`, `cancelled` |\n| `orders` | `in_progress`, `completed`, `cancelled` |\n| `payments` | `total_payments`, `customer`, `partner`, `commission` (₹ amounts) |\n| `services` | `total`, `active`, `inactive` |\n| `partners` | `total`, `active`, `inactive` (approved partners, `verification_status: 2`) |\n| meta | `franchise_id`, `from_date`, `to_date` |"
+            "description": "**GET /api/dashboard/stats** — Admin home dashboard KPIs in one response.\n\n**Access:** Super admin (5), admin (1), staff (6), employee (3). Partner / customer → **403**.\n\n**Auth:** `Bearer {{accessToken}}` (run **00 — Auth → Login**).\n\n**Query:** `franchise_id` (optional), `from_date`, `to_date` (optional — omit both for **all-time** stats; pass one or both to filter).\n\n**Date filters (only when from_date and/or to_date sent):**\n- `quotes` — `created_at` in range\n- `orders` — schedule / `order_date` overlap (same as order list)\n- `payments` — completed `order_payment` rows by `paid_at` (fallback `created_at`), plus legacy `is_paid` orders without payment rows (order schedule date)\n- `services` / `partners` — current snapshot (not date-filtered)\n\n**Response `record`:**\n| Key | Fields |\n|-----|--------|\n| `quotes` | `requests_received`, `in_progress`, `completed`, `cancelled` |\n| `orders` | `in_progress`, `completed`, `cancelled` |\n| `payments` | `total_payments`, `customer`, `partner`, `commission` (₹ amounts) |\n| `services` | `total`, `active`, `inactive` |\n| `partners` | `total`, `active`, `inactive` (approved partners, `verification_status: 2`) |\n| meta | `franchise_id`, `from_date`, `to_date` |"
           },
           "description": "Admin dashboard aggregate counts — quotes, orders, payments, services, partners with franchise scope."
         },

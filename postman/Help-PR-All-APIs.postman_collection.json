@@ -12329,6 +12329,100 @@
           "response": []
         },
         {
+          "name": "Chat — transfer (reassign agent)",
+          "event": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/{{chatId}}/transfer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "chat",
+                "{{chatId}}",
+                "transfer"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newAssignedTo\": \"{{employee_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "**POST /api/chat/:id/transfer**\n\nReassign handler (`assignedTo`).\n\n**Support & dispute (full handoff):** swaps employee participant — customer stays, previous employee removed, new employee added, `dispute.employee_id` updated, system message posted. Message history unchanged.\n\n**Order group chats:** only updates `assignedTo` (participants unchanged).\n\n| Field | Required |\n|-------|----------|\n| `newAssignedTo` | Yes — active employee `_id` in same franchise |\n\n**Socket:** `transfer_chat` → `chat_assigned`, `chat_updated`, `receive_message` (system).",
+          "response": []
+        },
+        {
+          "name": "Chat — add members",
+          "event": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/{{chatId}}/members",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "chat",
+                "{{chatId}}",
+                "members"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userIds\": [\n    \"{{employee_id}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "**POST /api/chat/:id/members**\n\nAdd users to a group chat (e.g. order chat).\n\nBody: `{ \"userIds\": [\"...\"] }`",
+          "response": []
+        },
+        {
           "name": "Chat — create (manual)",
           "event": [
             {

@@ -839,7 +839,7 @@
     },
     {
       "name": "03 — Dashboard",
-      "description": "**/api/dashboard** — 2 request(s). Duplicates merged across source collections.",
+      "description": "**/api/dashboard** — 3 request(s). Duplicates merged across source collections.",
       "item": [
         {
           "name": "Dashboard — getData",
@@ -865,6 +865,54 @@
             }
           },
           "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 01 — Dashboard & Home_"
+        },
+        {
+          "name": "Dashboard — stats (admin KPIs)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/stats?franchise_id={{franchiseId}}&from_date={{from_date}}&to_date={{to_date}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboard",
+                "stats"
+              ],
+              "query": [
+                {
+                  "key": "franchise_id",
+                  "value": "{{franchiseId}}",
+                  "description": "Optional. Super admin / staff: omit for all franchises or pass one franchise. Admin / employee: auto-scoped to caller franchise; wrong id → 403."
+                },
+                {
+                  "key": "from_date",
+                  "value": "{{from_date}}",
+                  "description": "ISO date (YYYY-MM-DD). Defaults to today (UTC) when omitted along with to_date."
+                },
+                {
+                  "key": "to_date",
+                  "value": "{{to_date}}",
+                  "description": "ISO date (YYYY-MM-DD). Defaults to today (UTC) when omitted along with from_date."
+                }
+              ]
+            },
+            "description": "**GET /api/dashboard/stats** — Admin home dashboard KPIs in one response.\n\n**Access:** Super admin (5), admin (1), staff (6), employee (3). Partner / customer → **403**.\n\n**Auth:** `Bearer {{accessToken}}` (run **00 — Auth → Login**).\n\n**Query:** `franchise_id` (optional), `from_date`, `to_date` (default = today UTC).\n\n**Date filters:**\n- `quotes` — `created_at` in range\n- `orders` — schedule / `order_date` overlap (same as order list)\n- `payments` — completed `order_payment` rows by `paid_at` (fallback `created_at`), plus legacy `is_paid` orders without payment rows (order schedule date)\n- `services` / `partners` — current snapshot (not date-filtered)\n\n**Response `record`:**\n| Key | Fields |\n|-----|--------|\n| `quotes` | `requests_received`, `in_progress`, `completed`, `cancelled` |\n| `orders` | `in_progress`, `completed`, `cancelled` |\n| `payments` | `total_payments`, `customer`, `partner`, `commission` (₹ amounts) |\n| `services` | `total`, `active`, `inactive` |\n| `partners` | `total`, `active`, `inactive` (approved partners, `verification_status: 2`) |\n| meta | `franchise_id`, `from_date`, `to_date` |"
+          },
+          "description": "Admin dashboard aggregate counts — quotes, orders, payments, services, partners with franchise scope."
         },
         {
           "name": "Get data",

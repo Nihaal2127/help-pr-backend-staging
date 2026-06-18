@@ -66,6 +66,7 @@ const buildHydratedServiceField = () => ({
         is_request: "$_service.is_request",
         is_active: "$_service.is_active",
         rejection_reason: "$_service.rejection_reason",
+        payment_type: "$_service.payment_type",
       },
       null,
     ],
@@ -439,6 +440,7 @@ const hydrateServiceRef = (service) => {
     is_request: service.is_request,
     is_active: service.is_active,
     rejection_reason: service.rejection_reason,
+    payment_type: service.payment_type ?? "",
   };
 };
 

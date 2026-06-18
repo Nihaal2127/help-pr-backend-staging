@@ -41,7 +41,7 @@ const HOME_ORDER_POPULATE = [
   {
     path: 'service_id',
     select:
-      'name service_id desc image_url approval_status is_request is_active rejection_reason',
+      'name service_id desc image_url approval_status is_request is_active rejection_reason payment_type',
   },
   { path: 'franchise_id', select: 'name city_name state_name' },
 ];

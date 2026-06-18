@@ -519,4 +519,5 @@ module.exports = {
   createDisputeChat,
   findOrderChat,
   getOrderChatForUser,
+  buildRolesForParticipantIds,
 };

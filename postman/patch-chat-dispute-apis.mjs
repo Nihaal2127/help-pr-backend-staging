@@ -170,6 +170,22 @@ const newChatRequests = [
     description: "**PATCH /api/chat/:id/status**\n\nClose or reopen chat.\n\n`status`: `open` | `closed` | `pending`",
     body: { status: "closed" },
   }),
+  req("Chat — transfer (reassign agent)", "POST", "api/chat/{{chatId}}/transfer", {
+    headerList: jsonHeader,
+    description:
+      "**POST /api/chat/:id/transfer**\n\nReassign handler (`assignedTo`).\n\n**Support & dispute (full handoff):** swaps employee participant — customer stays, previous employee removed, new employee added, `dispute.employee_id` updated, system message posted. Message history unchanged.\n\n**Order group chats:** only updates `assignedTo` (participants unchanged).\n\n| Field | Required |\n|-------|----------|\n| `newAssignedTo` | Yes — active employee `_id` in same franchise |\n\n**Socket:** `transfer_chat` → `chat_assigned`, `chat_updated`, `receive_message` (system).",
+    body: {
+      newAssignedTo: "{{employee_id}}",
+    },
+  }),
+  req("Chat — add members", "POST", "api/chat/{{chatId}}/members", {
+    headerList: jsonHeader,
+    description:
+      "**POST /api/chat/:id/members**\n\nAdd users to a group chat (e.g. order chat).\n\nBody: `{ \"userIds\": [\"...\"] }`",
+    body: {
+      userIds: ["{{employee_id}}"],
+    },
+  }),
   req("Chat — create (manual)", "POST", "api/chat", {
     headerList: jsonHeader,
     description:

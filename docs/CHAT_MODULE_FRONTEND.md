@@ -2,7 +2,7 @@
 
 Realtime messaging for **order group chats**, **disputes** (completed orders), and **general support** (customer ↔ employee).
 
-Postman: **`postman/Help-PR-All-APIs.postman_collection.json`** → **16 — Chat & Messages** (REST) plus new dispute/support routes below.
+Postman: **`postman/Help-PR-All-APIs.postman_collection.json`** → **39 — Chat** (REST), **45 — Dispute**, and **Mobile → User → Chat & Disputes**.
 
 Socket.IO runs on the **same host/port** as the API when not deployed on AWS Lambda.
 
@@ -54,6 +54,7 @@ Chat list items now include **`unreadCount`** per chat.
 | `GET` | `/by-order/:orderId` | Order group chat for an order |
 | `POST` | `/support` | Start or resume support chat (customer or back-office) |
 | `PATCH` | `/:id/status` | Close/reopen chat `{ "status": "closed" }` |
+| `POST` | `/:id/transfer` | Reassign handler `{ "newAssignedTo": "<employee_id>" }` |
 | `POST` | `/messages` | Send message (REST fallback) |
 | `GET` | `/messages?chatId=…&after=…&limit=50` | Message history |
 
@@ -144,7 +145,32 @@ Returns existing **open** support chat for the same customer + employee pair whe
 
 ---
 
-## 7. Socket.IO
+## 7. Transfer chat (reassign handler)
+
+**POST** `/api/chat/:id/transfer` or socket **`transfer_chat`**
+
+```json
+{
+  "newAssignedTo": "<employee_mongo_id>"
+}
+```
+
+| Chat type | Behavior |
+|-----------|----------|
+| `support`, `dispute` | **Full handoff** — customer stays; previous employee removed from `participants`; new employee added; `assignedTo` updated; `isGroup: false`. For disputes, `dispute.employee_id` is updated too. Prior messages stay on the same `chatId`. |
+| `order` (and others) | Only **`assignedTo`** changes; group participants are unchanged. |
+
+Validation for support/dispute handoff:
+
+- New assignee must be an **active employee** with `chat !== false`.
+- Employee must belong to the **same franchise** as the chat.
+- Customer must remain a participant.
+
+On success, backend posts a **system message** (`type: "system"`) and emits **`receive_message`** so open threads show the transfer line. Also listen for **`chat_assigned`** and **`chat_updated`**.
+
+---
+
+## 8. Socket.IO
 
 Connect with JWT, then:
 
@@ -154,7 +180,7 @@ Connect with JWT, then:
 | `leave_chat` | `chatId` | — |
 | `send_message` | `{ chatId, type, content, fileUrl?, metadata? }` | `receive_message` |
 | `read_messages` | `{ chatId }` | — |
-| `transfer_chat` | `{ chatId, newAssignedTo }` | `chat_assigned`, `chat_updated` |
+| `transfer_chat` | `{ chatId, newAssignedTo }` | `chat_assigned`, `chat_updated`, `receive_message` (system) |
 | `add_member` / `remove_member` | group management | `member_added`, `member_removed`, `chat_updated` |
 
 Errors arrive on **`chat_error`**.
@@ -163,7 +189,7 @@ Errors arrive on **`chat_error`**.
 
 ---
 
-## 8. UI mapping (suggested)
+## 9. UI mapping (suggested)
 
 | Screen | API / socket |
 |--------|----------------|
@@ -173,16 +199,17 @@ Errors arrive on **`chat_error`**.
 | Chat inbox | `GET /api/chat` |
 | Chat thread | `GET /api/chat/messages` + socket `send_message` / `receive_message` |
 | Unread badge | `unreadCount` on each chat in list; mark read via socket `read_messages` |
+| Reassign support/dispute | `POST /api/chat/:id/transfer` or `transfer_chat`; refresh participant list from `chat_updated` |
 
 ---
 
-## 9. Push notifications
+## 10. Push notifications
 
 New chat messages trigger FCM push to other participants (type `Chat`, data includes `chat_id`, `order_id` when applicable).
 
 ---
 
-## 10. Notes
+## 11. Notes
 
 - Socket.IO is **not** available on AWS Lambda deploys; use REST `POST /api/chat/messages` as fallback.
 - Dispute and support chats are **1:1** (customer + employee). Order chats are **group**.

@@ -416,6 +416,30 @@ const safeNotifyOrderNestedResources = async ({ order, nested, actorUserId }) =>
   });
 };
 
+const safeNotifyDisputeRaised = async ({ dispute, order, actorUserId }) => {
+  await runSafe("dispute.raised", async () => {
+    if (!dispute?.employee_id) return;
+
+    await notify({
+      eventKey: "DISPUTE_RAISED",
+      actorUserId,
+      recipientUserIds: [dispute.employee_id],
+      context: { dispute, order },
+      entityType: "dispute",
+      entityId: dispute._id,
+      franchiseId: dispute.franchise_id,
+      metadata: {
+        order_id: order?._id || null,
+        order_unique_id: order?.unique_id || "",
+        dispute_id: dispute._id,
+        dispute_unique_id: dispute.unique_id || "",
+        chat_id: dispute.chat_id || null,
+      },
+      dedupeKeyPrefix: `dispute.raised:${dispute._id}`,
+    });
+  });
+};
+
 module.exports = {
   runSafe,
   safeNotifyOrderCreated,
@@ -434,4 +458,5 @@ module.exports = {
   safeNotifySubscriptionAssigned,
   safeNotifySubscriptionStatusChanged,
   safeNotifyWalletTransaction,
+  safeNotifyDisputeRaised,
 };

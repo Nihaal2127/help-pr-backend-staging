@@ -45,10 +45,31 @@ const removeMemberValidator = [
   param("userId").isMongoId().withMessage("Invalid user id."),
 ];
 
+const supportChatValidator = [
+  body("customer_id").optional().isMongoId().withMessage("customer_id must be valid."),
+  body("employee_id").optional().isMongoId().withMessage("employee_id must be valid."),
+  body("franchise_id").optional().isMongoId().withMessage("franchise_id must be valid."),
+  body("initial_message").optional().isString().withMessage("initial_message must be string."),
+];
+
+const updateChatStatusValidator = [
+  param("id").isMongoId().withMessage("Invalid chat id."),
+  body("status")
+    .isIn(["open", "closed", "pending"])
+    .withMessage("status must be open, closed, or pending."),
+];
+
+const orderChatValidator = [
+  param("orderId").isMongoId().withMessage("orderId must be valid."),
+];
+
 module.exports = {
   createChatValidator,
   transferChatValidator,
   convertChatValidator,
   membersValidator,
   removeMemberValidator,
+  supportChatValidator,
+  updateChatStatusValidator,
+  orderChatValidator,
 };

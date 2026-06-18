@@ -143,6 +143,22 @@ const getAppointmentId = async () => {
     return 'AP' + (maxNum + 1);
 };
 
+const getDisputeId = async () => {
+    const Dispute = require('../models/dispute');
+    const records = await Dispute.find({ unique_id: { $regex: /^D\d+$/i } })
+        .select('unique_id')
+        .lean();
+
+    let maxNum = 1000;
+    for (const row of records) {
+        const n = extractNumber(row.unique_id);
+        if (n !== null && n > maxNum) {
+            maxNum = n;
+        }
+    }
+    return 'D' + (maxNum + 1);
+};
+
 const getQuoteSequenceId = async () => {
     let records = await Quote.find().sort({ _id: -1 });
     if (records.length > 0) {
@@ -168,5 +184,6 @@ module.exports = {
     getOfferId,
     getTicketId,
     getAppointmentId,
+    getDisputeId,
     getQuoteSequenceId,
 };

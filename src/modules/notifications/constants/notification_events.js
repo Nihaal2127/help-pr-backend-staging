@@ -105,6 +105,12 @@ const NOTIFICATION_EVENTS = {
     body: (ctx) =>
       `${formatAmount(ctx.amount)} debited from your wallet${ctx.description ? `: ${ctx.description}` : "."}`,
   },
+  DISPUTE_RAISED: {
+    category: "chat",
+    title: () => "New dispute",
+    body: (ctx) =>
+      `Customer raised dispute ${ctx.dispute?.unique_id || ""} for order #${ctx.order?.unique_id || ""}.`,
+  },
 };
 
 module.exports = {

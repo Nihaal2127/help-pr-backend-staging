@@ -69,6 +69,8 @@ const formatOrderServiceItemForApi = (item) => {
 const formatOrderForApi = (order) => {
   if (!order) return order;
   const plain = toPlainObject(order);
+  if (plain._id != null) plain._id = serializeObjectId(plain._id);
+  if (plain.chat_id != null) plain.chat_id = serializeObjectId(plain.chat_id);
   applyCalendarDateFields(plain, ORDER_CALENDAR_DATE_KEYS);
   if (plain.quote_info) {
     plain.quote_info = formatQuoteEmbedForApi(plain.quote_info);

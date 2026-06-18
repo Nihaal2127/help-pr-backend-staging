@@ -41,6 +41,30 @@ const getUserChats = async (userId) => {
   }).sort({ updatedAt: -1 });
 };
 
+const getUserChatsWithUnread = async (userId) => {
+  const chats = await getUserChats(userId);
+  const readService = require("./read.service");
+  const unreadMap = await readService.getUnreadCountsForChats(
+    userId,
+    chats.map((chat) => chat._id)
+  );
+
+  return chats.map((chat) => {
+    const plain = chat.toObject ? chat.toObject() : { ...chat };
+    return {
+      ...plain,
+      unreadCount: unreadMap.get(String(chat._id)) || 0,
+    };
+  });
+};
+
+const updateChatStatus = async (chatId, status, actorUserId, userType) => {
+  const chat = await assertChatManageAccess(chatId, actorUserId, userType);
+  chat.status = status;
+  await chat.save();
+  return chat;
+};
+
 const getChatById = async (chatId, userId, userType) => {
   return assertChatAccess(chatId, userId, userType);
 };
@@ -93,10 +117,12 @@ const linkChats = async (chatId, linkedChatId, actorUserId, userType) => {
 module.exports = {
   createChat,
   getUserChats,
+  getUserChatsWithUnread,
   getChatById,
   addParticipants,
   removeParticipant,
   transferChat,
   convertChat,
   linkChats,
+  updateChatStatus,
 };

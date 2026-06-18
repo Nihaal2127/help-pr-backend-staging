@@ -23,7 +23,7 @@ const ORDER_DETAIL_POPULATE = [
   { path: 'employee_id', select: 'name user_id email phone_number profile_url' },
   { path: 'franchise_id', select: 'name city_name state_name' },
   { path: 'address_id' },
-  { path: 'service_id', select: 'name service_id desc image_url' },
+  { path: 'service_id', select: 'name service_id desc image_url payment_type' },
   {
     path: 'quote_id',
     select:
@@ -37,7 +37,7 @@ const ORDER_DETAIL_POPULATE = [
         select: 'name user_id email phone_number profile_url city_id average_rating rating_count',
         populate: [{ path: 'city_id', select: 'name' }],
       },
-      { path: 'service_id', select: 'name service_id desc image_url' },
+      { path: 'service_id', select: 'name service_id desc image_url payment_type' },
     ],
   },
 ];

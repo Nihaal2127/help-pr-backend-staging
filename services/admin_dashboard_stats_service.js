@@ -1,5 +1,6 @@
 const Quote = require('../models/quote');
 const Order = require('../models/order');
+const OrderPayment = require('../models/order_payment');
 const Service = require('../models/service');
 const User = require('../models/user');
 const { buildQuoteBucketFilter } = require('../enum/quote_status_enum');
@@ -17,7 +18,11 @@ const {
     assertFranchiseAccess,
 } = require('../utils/franchise_access');
 const { loadFranchiseCallerScope } = require('../utils/franchise_user_scope');
-const { buildFieldDateRangeFilter } = require('../utils/schedule_date_filters');
+const {
+    buildScheduleDateRangeCore,
+    buildFieldDateRangeFilter,
+    buildOrderDateRangeFilter,
+} = require('../utils/schedule_date_filters');
 const { startOfUtcDay, endOfUtcDay } = require('../utils/date_bounds');
 const { countFranchiseScopedCatalogDashboard } = require('../utils/franchise_catalog_dashboard_counts');
 
@@ -33,22 +38,66 @@ const formatDateOnly = (date) => {
     return d.toISOString().slice(0, 10);
 };
 
-const resolveDashboardDateRange = (query = {}) => {
-    const hasFrom =
-        query.from_date !== undefined &&
-        query.from_date !== null &&
-        String(query.from_date).trim() !== '';
-    const hasTo =
-        query.to_date !== undefined &&
-        query.to_date !== null &&
-        String(query.to_date).trim() !== '';
+const todayIsoDate = () => new Date().toISOString().slice(0, 10);
 
-    if (!hasFrom && !hasTo) {
-        const today = new Date().toISOString().slice(0, 10);
-        return buildFieldDateRangeFilter({ from_date: today, to_date: today }, 'created_at');
+/** Shared UTC day bounds for dashboard query params (default = today). */
+const resolveDashboardDateBounds = (query = {}) => {
+    const core = buildScheduleDateRangeCore(query);
+    if (!core.ok) {
+        return core;
     }
 
-    return buildFieldDateRangeFilter(query, 'created_at');
+    let { rangeFrom, rangeTo, hasFrom, hasTo, parsedFrom, parsedTo } = core;
+
+    if (core.noDateParams) {
+        const today = todayIsoDate();
+        rangeFrom = startOfUtcDay(new Date(today));
+        rangeTo = endOfUtcDay(new Date(today));
+    } else {
+        if (hasFrom && !hasTo && parsedFrom) {
+            rangeTo = endOfUtcDay(parsedFrom);
+        } else if (!hasFrom && hasTo && parsedTo) {
+            rangeFrom = startOfUtcDay(parsedTo);
+        }
+
+        if (rangeFrom && rangeTo && rangeTo < rangeFrom) {
+            return {
+                ok: false,
+                message: 'To date filter must be on or after from date filter.',
+            };
+        }
+    }
+
+    return { ok: true, rangeFrom, rangeTo, noDateParams: core.noDateParams };
+};
+
+const resolveDashboardDateFilters = (query = {}) => {
+    const bounds = resolveDashboardDateBounds(query);
+    if (!bounds.ok) {
+        return bounds;
+    }
+
+    const today = todayIsoDate();
+    const dateQuery =
+        bounds.noDateParams ? { from_date: today, to_date: today } : query;
+
+    const quoteDateResult = buildFieldDateRangeFilter(dateQuery, 'created_at');
+    if (!quoteDateResult.ok) {
+        return quoteDateResult;
+    }
+
+    const orderDateResult = buildOrderDateRangeFilter(dateQuery);
+    if (!orderDateResult.ok) {
+        return orderDateResult;
+    }
+
+    return {
+        ok: true,
+        rangeFrom: bounds.rangeFrom,
+        rangeTo: bounds.rangeTo,
+        quoteDateFilter: quoteDateResult.filter,
+        orderDateFilter: orderDateResult.filter,
+    };
 };
 
 const resolveDashboardFranchiseScope = async (req) => {
@@ -76,6 +125,62 @@ const resolveDashboardFranchiseScope = async (req) => {
     }
 
     return ok({ franchiseOid });
+};
+
+const buildScopedOrderIdFilter = async (scopeFilter = {}) => {
+    const ids = await Order.find({ deleted_at: null, ...scopeFilter }).distinct('_id');
+    if (ids.length === 0) {
+        return { order_id: { $in: [] } };
+    }
+    return { order_id: { $in: ids } };
+};
+
+const legacyOrderMoneyGroupStage = {
+    $group: {
+        _id: null,
+        customer: {
+            $sum: {
+                $let: {
+                    vars: {
+                        netPaid: { $ifNull: ['$customer_net_paid', 0] },
+                        paidAmt: { $ifNull: ['$customer_paid_amount', 0] },
+                        totalPrice: { $ifNull: ['$total_price', 0] },
+                        isPaid: { $ifNull: ['$is_paid', false] },
+                    },
+                    in: {
+                        $cond: [
+                            { $gt: ['$$netPaid', 0] },
+                            '$$netPaid',
+                            {
+                                $cond: [
+                                    { $gt: ['$$paidAmt', 0] },
+                                    '$$paidAmt',
+                                    {
+                                        $cond: [
+                                            {
+                                                $and: [
+                                                    '$$isPaid',
+                                                    { $gt: ['$$totalPrice', 0] },
+                                                ],
+                                            },
+                                            '$$totalPrice',
+                                            0,
+                                        ],
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                },
+            },
+        },
+        partner: { $sum: { $ifNull: ['$partner_paid_amount', 0] } },
+        commission: {
+            $sum: {
+                $ifNull: ['$admin_earning', { $ifNull: ['$commission_amount', 0] }],
+            },
+        },
+    },
 };
 
 const buildQuoteDashboardCounts = async (req, franchiseOid, dateFilter) => {
@@ -139,7 +244,17 @@ const buildOrderDashboardCounts = async (req, franchiseOid, dateFilter) => {
     });
 };
 
-const buildPaymentDashboardTotals = async (req, franchiseOid, dateFilter) => {
+/**
+ * Payments: sum completed order_payment rows by paid_at (fallback created_at) in range,
+ * plus legacy is_paid orders without customer payment rows (order schedule date filter).
+ */
+const buildPaymentDashboardTotals = async (
+    req,
+    franchiseOid,
+    rangeFrom,
+    rangeTo,
+    orderDateFilter
+) => {
     const franchiseQuery = franchiseOid ? franchiseOid.toString() : undefined;
     const scopeResult = await resolveOrderListScope(req, {
         franchiseIdFromQuery: franchiseQuery,
@@ -148,28 +263,110 @@ const buildPaymentDashboardTotals = async (req, franchiseOid, dateFilter) => {
         return scopeResult;
     }
 
-    const match = { deleted_at: null, ...scopeResult.filter, ...dateFilter };
+    const scopedOrderFilter = await buildScopedOrderIdFilter(scopeResult.filter);
 
-    const result = await Order.aggregate([
-        { $match: match },
-        {
-            $group: {
-                _id: null,
-                customer: {
-                    $sum: {
-                        $ifNull: ['$customer_net_paid', { $ifNull: ['$customer_paid_amount', 0] }],
+    const [paymentAgg, orderIdsWithCustomerPayments] = await Promise.all([
+        OrderPayment.aggregate([
+            {
+                $match: {
+                    deleted_at: null,
+                    status: 'completed',
+                    ...scopedOrderFilter,
+                },
+            },
+            {
+                $addFields: {
+                    payment_date: { $ifNull: ['$paid_at', '$created_at'] },
+                },
+            },
+            {
+                $match: {
+                    payment_date: { $gte: rangeFrom, $lte: rangeTo },
+                },
+            },
+            {
+                $group: {
+                    _id: null,
+                    customer: {
+                        $sum: {
+                            $cond: [{ $eq: ['$payer_type', 'customer'] }, '$amount', 0],
+                        },
+                    },
+                    partner: {
+                        $sum: {
+                            $cond: [{ $eq: ['$payer_type', 'partner'] }, '$amount', 0],
+                        },
+                    },
+                    customer_order_ids: {
+                        $addToSet: {
+                            $cond: [{ $eq: ['$payer_type', 'customer'] }, '$order_id', null],
+                        },
                     },
                 },
-                partner: { $sum: { $ifNull: ['$partner_paid_amount', 0] } },
-                commission: { $sum: { $ifNull: ['$admin_earning', 0] } },
             },
-        },
+        ]),
+        OrderPayment.distinct('order_id', {
+            deleted_at: null,
+            payer_type: 'customer',
+            ...scopedOrderFilter,
+        }),
     ]);
 
-    const row = result[0] || {};
-    const customer = roundMoney(row.customer);
-    const partner = roundMoney(row.partner);
-    const commission = roundMoney(row.commission);
+    const paymentRow = paymentAgg[0] || {};
+    let customer = roundMoney(paymentRow.customer || 0);
+    let partner = roundMoney(paymentRow.partner || 0);
+    let commission = 0;
+
+    const customerOrderIds = (paymentRow.customer_order_ids || []).filter(Boolean);
+    if (customerOrderIds.length > 0) {
+        const commissionAgg = await Order.aggregate([
+            {
+                $match: {
+                    _id: { $in: customerOrderIds },
+                    deleted_at: null,
+                },
+            },
+            {
+                $group: {
+                    _id: null,
+                    commission: {
+                        $sum: {
+                            $ifNull: [
+                                '$admin_earning',
+                                { $ifNull: ['$commission_amount', 0] },
+                            ],
+                        },
+                    },
+                },
+            },
+        ]);
+        commission = roundMoney(commissionAgg[0]?.commission || 0);
+    }
+
+    const legacyAgg = await Order.aggregate([
+        {
+            $match: {
+                deleted_at: null,
+                ...scopeResult.filter,
+                ...orderDateFilter,
+                _id: { $nin: orderIdsWithCustomerPayments },
+                $or: [
+                    { is_paid: true, total_price: { $gt: 0 } },
+                    { customer_net_paid: { $gt: 0 } },
+                    { customer_paid_amount: { $gt: 0 } },
+                    { partner_paid_amount: { $gt: 0 } },
+                    { admin_earning: { $gt: 0 } },
+                    { commission_amount: { $gt: 0 } },
+                ],
+            },
+        },
+        legacyOrderMoneyGroupStage,
+    ]);
+
+    const legacyRow = legacyAgg[0] || {};
+    customer = roundMoney(customer + (legacyRow.customer || 0));
+    partner = roundMoney(partner + (legacyRow.partner || 0));
+    commission = roundMoney(commission + (legacyRow.commission || 0));
 
     return ok({
         total_payments: roundMoney(customer + partner + commission),
@@ -219,9 +416,9 @@ const buildPartnerDashboardCounts = async (franchiseOid) => {
 };
 
 const buildAdminDashboardStats = async (req) => {
-    const dateRangeResult = resolveDashboardDateRange(req.query || {});
-    if (!dateRangeResult.ok) {
-        return fail(400, dateRangeResult.message);
+    const dateFiltersResult = resolveDashboardDateFilters(req.query || {});
+    if (!dateFiltersResult.ok) {
+        return fail(400, dateFiltersResult.message);
     }
 
     const franchiseScopeResult = await resolveDashboardFranchiseScope(req);
@@ -230,13 +427,24 @@ const buildAdminDashboardStats = async (req) => {
     }
 
     const { franchiseOid } = franchiseScopeResult.data;
-    const dateFilter = dateRangeResult.filter;
+    const {
+        rangeFrom,
+        rangeTo,
+        quoteDateFilter,
+        orderDateFilter,
+    } = dateFiltersResult;
 
     const [quotesResult, ordersResult, paymentsResult, servicesResult, partnersResult] =
         await Promise.all([
-            buildQuoteDashboardCounts(req, franchiseOid, dateFilter),
-            buildOrderDashboardCounts(req, franchiseOid, dateFilter),
-            buildPaymentDashboardTotals(req, franchiseOid, dateFilter),
+            buildQuoteDashboardCounts(req, franchiseOid, quoteDateFilter),
+            buildOrderDashboardCounts(req, franchiseOid, orderDateFilter),
+            buildPaymentDashboardTotals(
+                req,
+                franchiseOid,
+                rangeFrom,
+                rangeTo,
+                orderDateFilter
+            ),
             buildServiceDashboardCounts(franchiseOid),
             buildPartnerDashboardCounts(franchiseOid),
         ]);
@@ -257,13 +465,10 @@ const buildAdminDashboardStats = async (req) => {
         return fail(partnersResult.status, partnersResult.message);
     }
 
-    const rangeFrom = dateFilter.created_at?.$gte ?? null;
-    const rangeTo = dateFilter.created_at?.$lte ?? null;
-
     return ok({
         franchise_id: franchiseOid ? String(franchiseOid) : null,
-        from_date: formatDateOnly(rangeFrom) || formatDateOnly(startOfUtcDay(new Date())),
-        to_date: formatDateOnly(rangeTo) || formatDateOnly(endOfUtcDay(new Date())),
+        from_date: formatDateOnly(rangeFrom),
+        to_date: formatDateOnly(rangeTo),
         quotes: quotesResult.data,
         orders: ordersResult.data,
         payments: paymentsResult.data,
@@ -274,6 +479,7 @@ const buildAdminDashboardStats = async (req) => {
 
 module.exports = {
     buildAdminDashboardStats,
-    resolveDashboardDateRange,
+    resolveDashboardDateFilters,
+    resolveDashboardDateBounds,
     resolveDashboardFranchiseScope,
 };

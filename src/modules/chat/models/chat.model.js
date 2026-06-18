@@ -50,5 +50,16 @@ const chatSchema = new mongoose.Schema(
 );
 
 chatSchema.index({ participants: 1 });
+chatSchema.index({ type: 1, "context.disputeId": 1 });
+chatSchema.index(
+  { "context.orderId": 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      type: "order",
+      "context.orderId": { $exists: true, $ne: null },
+    },
+  }
+);
 
 module.exports = mongoose.model("chat", chatSchema);

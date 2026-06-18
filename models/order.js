@@ -12,6 +12,7 @@ var orderSchema = new schema(
     partner_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "user" },
     employee_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "user" },
     franchise_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "franchise" },
+    chat_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "chat" },
 
     type: { type: Number, default: 2, required: true },
     city_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "city" },
@@ -228,5 +229,6 @@ orderSchema.index({ service_id: 1 });
 orderSchema.index({ quote_id: 1 });
 orderSchema.index({ offer_id: 1 });
 orderSchema.index({ order_offer_id: 1 });
+orderSchema.index({ chat_id: 1 });
 
 module.exports = mongoose.model("order", orderSchema);

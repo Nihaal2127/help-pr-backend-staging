@@ -29,6 +29,7 @@ const {
 } = require("../enum/partner_work_status_enum");
 const { resolveOrderFranchiseIdForCreate } = require("../utils/order_access");
 const { safeCreateDefaultAppointmentForOrder } = require("./appointment_service");
+const { safeCreateOrderChatForOrder } = require("../src/modules/chat/services/chatProvisioning.service");
 const {
   safeNotifyOrderCreated,
   safeNotifyOrderNestedResources,
@@ -343,6 +344,10 @@ const persistOrderAndLinkQuote = async (
   const refreshed = await Order.findById(order_id);
 
   void safeCreateDefaultAppointmentForOrder(refreshed || newOrder, {
+    actorUserId,
+  });
+
+  void safeCreateOrderChatForOrder(refreshed || newOrder, {
     actorUserId,
   });
 

@@ -12137,86 +12137,25 @@
     },
     {
       "name": "39 — Chat",
-      "description": "**/api/chat** — 9 request(s). Duplicates merged across source collections.",
+      "description": "**/api/chat** — Messaging (order group, dispute, support).\n\n**Doc:** `docs/CHAT_MODULE_FRONTEND.md`\n\n**Auth:** `Bearer {{accessToken}}`\n\n**Auto:** Order group chat on order create (`chat_id` on order). **Socket.IO** on same host when not on Lambda.\n\n**Variables:** `{{chatId}}` · `{{orderId}}` · `{{employee_id}}` · `{{userId}}` (customer)",
       "item": [
         {
-          "name": "Chat — add members",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}",
-                "type": "text"
+          "name": "Chat — list (with unreadCount)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const c0 = j?.records?.[0];",
+                  "  if (c0?._id) pm.collectionVariables.set('chatId', String(c0._id));",
+                  "} catch (e) {}"
+                ]
               }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/chat/{{chatId}}/members",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "chat",
-                "{{chatId}}",
-                "members"
-              ]
             }
-          },
-          "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 16 — Chat & Messages_"
-        },
-        {
-          "name": "Chat — convert",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/chat/{{chatId}}/convert",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "chat",
-                "{{chatId}}",
-                "convert"
-              ]
-            }
-          },
-          "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 16 — Chat & Messages_"
-        },
-        {
-          "name": "Chat — create",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/chat/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "chat"
-              ]
-            }
-          },
-          "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 16 — Chat & Messages_"
-        },
-        {
-          "name": "Chat — getById",
+          ],
           "request": {
             "method": "GET",
             "header": [
@@ -12227,21 +12166,36 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/chat/{{chatId}}",
+              "raw": "{{baseUrl}}/api/chat",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "chat",
-                "{{chatId}}"
+                "chat"
               ]
             }
           },
-          "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 16 — Chat & Messages_"
+          "description": "**GET /api/chat**\n\nInbox for logged-in user. Each chat includes **`unreadCount`**.\n\nSets `{{chatId}}` from first row.",
+          "response": []
         },
         {
-          "name": "Chat — list",
+          "name": "Chat — get order chat",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const id = j?.record?._id;",
+                  "  if (id) pm.collectionVariables.set('chatId', String(id));",
+                  "} catch (e) {}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [
@@ -12252,47 +12206,38 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/chat/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "chat"
-              ]
-            }
-          },
-          "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 16 — Chat & Messages_"
-        },
-        {
-          "name": "Chat — remove member",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/chat/{{chatId}}/members/{{userId}}",
+              "raw": "{{baseUrl}}/api/chat/by-order/{{orderId}}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "chat",
-                "{{chatId}}",
-                "members",
-                "{{userId}}"
+                "by-order",
+                "{{orderId}}"
               ]
             }
           },
-          "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 16 — Chat & Messages_"
+          "description": "**GET /api/chat/by-order/:orderId**\n\nOrder group chat (auto-created on order). Requires access to the order chat.\n\nSets `{{chatId}}` from `record._id`.",
+          "response": []
         },
         {
-          "name": "Chat — transfer",
+          "name": "Chat — start support (back-office)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const id = j?.record?._id;",
+                  "  if (id) pm.collectionVariables.set('chatId', String(id));",
+                  "} catch (e) {}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -12300,10 +12245,66 @@
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
                 "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/chat/{{chatId}}/transfer",
+              "raw": "{{baseUrl}}/api/chat/support",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "chat",
+                "support"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": \"{{userId}}\",\n  \"employee_id\": \"{{employee_id}}\",\n  \"initial_message\": \"Hello, how can we help?\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "**POST /api/chat/support**\n\nStart or resume **support** chat (customer ↔ employee).\n\n| Field | Required | Notes |\n|-------|----------|--------|\n| `customer_id` | Yes* | Required when caller is admin/staff/employee starting for a customer |\n| `employee_id` | Yes* | Required when caller is **admin/staff** (not employee) |\n| `franchise_id` | No | Franchise scope hint |\n| `initial_message` | No | First text message |\n\nEmployee caller: omit `employee_id` (uses self). Customer uses mobile route instead.",
+          "response": []
+        },
+        {
+          "name": "Chat — update status",
+          "event": [],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/{{chatId}}/status",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -12311,14 +12312,84 @@
                 "api",
                 "chat",
                 "{{chatId}}",
-                "transfer"
+                "status"
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"closed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           },
-          "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 16 — Chat & Messages_"
+          "description": "**PATCH /api/chat/:id/status**\n\nClose or reopen chat.\n\n`status`: `open` | `closed` | `pending`",
+          "response": []
+        },
+        {
+          "name": "Chat — create (manual)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const id = j?.record?._id;",
+                  "  if (id) pm.collectionVariables.set('chatId', String(id));",
+                  "} catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chat",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "chat"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"support\",\n  \"isGroup\": false,\n  \"participants\": [\n    \"{{userId}}\",\n    \"{{employee_id}}\"\n  ],\n  \"assignedTo\": \"{{employee_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "**POST /api/chat** — manual chat create (prefer auto order / support / dispute flows).\n\n`type`: `support` | `order` | `quote` | `dispute`",
+          "response": []
         },
         {
           "name": "Messages — list",
+          "event": [],
           "request": {
             "method": "GET",
             "header": [
@@ -12337,19 +12408,41 @@
                 "api",
                 "chat",
                 "messages"
+              ],
+              "query": [
+                {
+                  "key": "chatId",
+                  "value": "{{chatId}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
               ]
             }
           },
-          "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 16 — Chat & Messages_"
+          "description": "**GET /api/chat/messages?chatId=**\n\nPaginated history. Optional `after` (ISO date), `limit` (1–200).",
+          "response": []
         },
         {
           "name": "Messages — send",
+          "event": [],
           "request": {
             "method": "POST",
             "header": [
               {
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
                 "type": "text"
               }
             ],
@@ -12363,9 +12456,19 @@
                 "chat",
                 "messages"
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chatId\": \"{{chatId}}\",\n  \"type\": \"text\",\n  \"content\": \"Test message from Postman\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           },
-          "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 16 — Chat & Messages_"
+          "description": "**POST /api/chat/messages**\n\nREST fallback when Socket.IO unavailable.\n\n`type`: `text` | `image` | `file`",
+          "response": []
         }
       ]
     },
@@ -13342,6 +13445,165 @@
             "description": "**DELETE /api/appointment/delete/:id** — Soft-delete (`deleted_at` set).\n\n**Path:** `{{appointmentId}}` or `{{appointmentUniqueId}}`.\n\n**200:** success message. Deleted rows excluded from getAll / getByOrder."
           },
           "description": "\n\n_Source: builtin:appointment_calendar → Delete appointment_"
+        }
+      ]
+    },
+    {
+      "name": "45 — Dispute",
+      "description": "**/api/dispute** — Disputes on **completed** orders (employee ↔ customer chat).\n\n**Frontend doc:** `docs/CHAT_MODULE_FRONTEND.md`\n\n**Access:** Franchise admin, employee, super admin, staff — back-office JWT.\n\n**Auth:** `Bearer {{accessToken}}`\n\n**Flow:** Customer raises via **Mobile → User → Disputes → Raise dispute** → staff **Get all** / **Update status**",
+      "item": [
+        {
+          "name": "1. Get all disputes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const d0 = j?.records?.[0];",
+                  "  if (d0?._id) pm.collectionVariables.set('disputeId', String(d0._id));",
+                  "  if (d0?.chat_id) pm.collectionVariables.set('chatId', String(d0.chat_id));",
+                  "} catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dispute/getAll",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dispute",
+                "getAll"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "franchise_id",
+                  "value": "{{franchiseId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "open",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "description": "**GET /api/dispute/getAll**\n\nFranchise-scoped list. Optional `status`, `order_id`, `franchise_id`, `page`, `limit`.",
+          "response": []
+        },
+        {
+          "name": "2. Get dispute by id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const id = j?.record?._id;",
+                  "  const chatId = j?.record?.chat_id;",
+                  "  if (id) pm.collectionVariables.set('disputeId', String(id));",
+                  "  if (chatId) pm.collectionVariables.set('chatId', String(chatId));",
+                  "} catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dispute/get/{{disputeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dispute",
+                "get",
+                "{{disputeId}}"
+              ]
+            }
+          },
+          "description": "**GET /api/dispute/get/:id**\n\nIncludes `chat_id` for opening the dispute thread.",
+          "response": []
+        },
+        {
+          "name": "3. Update dispute status",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dispute/update/{{disputeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dispute",
+                "update",
+                "{{disputeId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"in_review\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "**PUT /api/dispute/update/:id**\n\n`status`: `open` | `in_review` | `resolved` | `closed`\n\nResolving/closing also closes linked chat.",
+          "response": []
         }
       ]
     },
@@ -22177,6 +22439,254 @@
                   "response": []
                 }
               ]
+            },
+            {
+              "name": "Chat & Disputes",
+              "description": "Customer **support chat** and **order disputes** (completed orders only).\n\n**Doc:** `docs/CHAT_MODULE_FRONTEND.md`\n\n**Flow:** Complete order → **Raise dispute** OR **Start support chat** → use `{{chatId}}` with **39 — Chat → Messages** (admin) or Socket.IO.\n\nOrder group chat: `record.chat_id` on **GET order** or admin **GET /api/chat/by-order/:orderId`.",
+              "item": [
+                {
+                  "name": "Raise dispute",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  const id = j?.record?._id;",
+                          "  const chatId = j?.record?.chat_id;",
+                          "  if (id) pm.collectionVariables.set('disputeId', String(id));",
+                          "  if (chatId) pm.collectionVariables.set('chatId', String(chatId));",
+                          "} catch (e) {}"
+                        ]
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/disputes",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "disputes"
+                      ]
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"order_id\": \"{{orderId}}\",\n  \"reason\": \"Service quality issue\",\n  \"description\": \"Work was not completed as agreed.\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "description": "**POST /api/mobile/user/disputes**\n\n| Field | Required |\n|-------|----------|\n| `order_id` | Yes — completed order owned by customer |\n| `reason` | No |\n| `description` | No |\n\n**409** if open dispute exists or order not completed.\n\nSets `{{disputeId}}` and `{{chatId}}`.",
+                  "response": []
+                },
+                {
+                  "name": "List disputes",
+                  "event": [],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/disputes?page=1&limit=10",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "disputes"
+                      ],
+                      "query": [
+                        {
+                          "key": "page",
+                          "value": "1"
+                        },
+                        {
+                          "key": "limit",
+                          "value": "10"
+                        }
+                      ]
+                    }
+                  },
+                  "description": "**GET /api/mobile/user/disputes** — paginated list for logged-in customer.",
+                  "response": []
+                },
+                {
+                  "name": "Get dispute",
+                  "event": [],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/disputes/{{disputeId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "disputes",
+                        "{{disputeId}}"
+                      ]
+                    }
+                  },
+                  "description": "**GET /api/mobile/user/disputes/:disputeId**",
+                  "response": []
+                },
+                {
+                  "name": "Start support chat",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  const id = j?.record?._id;",
+                          "  if (id) pm.collectionVariables.set('chatId', String(id));",
+                          "} catch (e) {}"
+                        ]
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/chats/support",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "chats",
+                        "support"
+                      ]
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"employee_id\": \"{{employee_id}}\",\n  \"initial_message\": \"I need help with my account\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "description": "**POST /api/mobile/user/chats/support**\n\n| Field | Required |\n|-------|----------|\n| `employee_id` | No — auto-picks franchise employee if omitted |\n| `franchise_id` | No |\n| `initial_message` | No |\n\nReturns existing open chat for same customer + employee pair.",
+                  "response": []
+                }
+              ]
             }
           ]
         }
@@ -22585,7 +23095,8 @@
     },
     {
       "key": "chatId",
-      "value": ""
+      "value": "",
+      "description": "Chat Mongo _id"
     },
     {
       "key": "categoryRequestId",
@@ -22626,6 +23137,13 @@
       "type": "string",
       "enabled": true,
       "description": "Appointment business id (e.g. AP1001) — alternate path param for get/update/delete."
+    },
+    {
+      "key": "disputeId",
+      "value": "",
+      "type": "string",
+      "enabled": true,
+      "description": "Dispute Mongo _id (from raise or list)"
     }
   ]
 }

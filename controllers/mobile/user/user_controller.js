@@ -5,8 +5,15 @@ const {
   listAllPincodes,
 } = require('../../../services/mobile/user/user_service');
 const {
+  requestForgotPasswordOtp,
+  verifyForgotPasswordOtp,
+  resetPasswordWithToken,
+} = require('../../../services/mobile/shared/forgot_password_service');
+const { USER_TYPE_CUSTOMER } = require('../../../constants/user_types');
+const {
   wrapMobileHandler,
   sendTopLevelServiceResult,
+  sendServiceError,
 } = require('../../../utils/mobile_controller_helpers');
 
 const sendOtpHandler = wrapMobileHandler(
@@ -31,6 +38,54 @@ const verifyOtpHandler = wrapMobileHandler(
   { errorMessage: 'Failed to verify OTP.' }
 );
 
+const forgotPasswordHandler = wrapMobileHandler(
+  'mobile user forgot-password',
+  async (req, res) => {
+    const result = await requestForgotPasswordOtp({
+      email: req.body.email,
+      userType: USER_TYPE_CUSTOMER,
+    });
+    return sendTopLevelServiceResult(res, result);
+  },
+  { errorMessage: 'Failed to send password reset OTP.' }
+);
+
+const verifyForgotPasswordOtpHandler = wrapMobileHandler(
+  'mobile user verify-forgot-password-otp',
+  async (req, res) => {
+    const result = await verifyForgotPasswordOtp({
+      email: req.body.email,
+      otp: req.body.otp,
+      userType: USER_TYPE_CUSTOMER,
+    });
+
+    if (!result.ok) {
+      return sendServiceError(res, result);
+    }
+
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      verified: result.verified,
+      reset_token: result.reset_token,
+    });
+  },
+  { errorMessage: 'Failed to verify OTP.' }
+);
+
+const resetPasswordHandler = wrapMobileHandler(
+  'mobile user reset-password',
+  async (req, res) => {
+    const result = await resetPasswordWithToken({
+      resetToken: req.body.reset_token,
+      newPassword: req.body.new_password,
+      userType: USER_TYPE_CUSTOMER,
+    });
+    return sendTopLevelServiceResult(res, result);
+  },
+  { errorMessage: 'Failed to reset password.' }
+);
+
 const updateHandler = wrapMobileHandler('mobile user update', async (req, res) => {
   const result = await updateUser({
     customerId: req.user.id,
@@ -48,6 +103,9 @@ const getPincodesHandler = wrapMobileHandler('mobile user pincodes', async (req,
 module.exports = {
   sendOtpHandler,
   verifyOtpHandler,
+  forgotPasswordHandler,
+  verifyForgotPasswordOtpHandler,
+  resetPasswordHandler,
   updateHandler,
   getPincodesHandler,
 };

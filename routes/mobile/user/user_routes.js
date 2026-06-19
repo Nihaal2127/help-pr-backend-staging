@@ -2,9 +2,17 @@ const express = require('express');
 const {
   sendOtpHandler,
   verifyOtpHandler,
+  forgotPasswordHandler,
+  verifyForgotPasswordOtpHandler,
+  resetPasswordHandler,
   updateHandler,
   getPincodesHandler,
 } = require('../../../controllers/mobile/user/user_controller');
+const {
+  validateForgotPasswordEmail,
+  validateVerifyForgotPasswordOtp,
+  validateResetPassword,
+} = require('../../../middleware/mobile/common/forgot_password_middleware');
 const { getHomeHandler } = require('../../../controllers/mobile/user/home_controller');
 const {
   listPartnersHandler,
@@ -43,6 +51,13 @@ const router = express.Router();
 // Public auth routes must be registered before sub-routers (post_routes applies auth via router.use).
 router.post('/login', rateLimitSendOtp, sendOtpHandler);
 router.post('/verify-otp', validateVerifyOtp, verifyOtpHandler);
+router.post('/forgot-password', validateForgotPasswordEmail, forgotPasswordHandler);
+router.post(
+  '/verify-forgot-password-otp',
+  validateVerifyForgotPasswordOtp,
+  verifyForgotPasswordOtpHandler
+);
+router.post('/reset-password', validateResetPassword, resetPasswordHandler);
 
 router.use(addressRoutes);
 router.use(quoteRoutes);

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { register, login, update } = require('../../../controllers/mobile/partner/partner_controller');
+const { register, login, forgotPassword, update } = require('../../../controllers/mobile/partner/partner_controller');
+const { validateForgotPasswordEmail } = require('../../../middleware/mobile/common/forgot_password_middleware');
 const { categories } = require('../../../controllers/mobile/partner/catalog_controller');
 const { list: listSubscriptionPlans } = require('../../../controllers/mobile/partner/subscription_plan_controller');
 const {
@@ -31,6 +32,7 @@ const partnerMultipartUpload = wrapMulterUpload(upload.fields(PARTNER_MULTIPART_
 
 router.post('/register', partnerRegisterMiddleware, register);
 router.post('/login', partnerLoginMiddleware, login);
+router.post('/forgot-password', validateForgotPasswordEmail, forgotPassword);
 router.get('/home', partnerAuthMiddleware, requirePartnerAccount, getHomeHandler);
 router.put(
   '/update',

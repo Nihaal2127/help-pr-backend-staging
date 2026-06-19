@@ -10007,8 +10007,146 @@
     },
     {
       "name": "32 — Export",
-      "description": "**/api/export** — 30 request(s). Duplicates merged across source collections.",
+      "description": "**`/api/export`** — Excel/CSV export endpoints.\n\n### Reports & Analytics (dashboard Excel downloads)\n| Method | Route | Description |\n|--------|-------|-------------|\n| POST | `/api/export/order-report` | Order report — all dashboard filters + franchise scope |\n| POST | `/api/export/quote-report` | Quotation report — all dashboard filters + franchise scope |\n| POST | `/api/export/partner-report` | Partner performance/earnings report + franchise scope |\n\nFilters may be sent in **JSON body** or **query string** (body wins). Franchise admin: auto-scoped. Super admin/staff: optional `franchise_id`.\n\n### Legacy exports (minimal filters, no franchise scope)\n| POST | `/api/export/orders` | Legacy — `order_status` only; prefer **order-report** |\n| POST | `/api/export/partner` | Legacy — all partners; prefer **partner-report** |\n\n### Other exports\nstate, city, area, franchise, category, service, user_role, orders_payments, user_service, tickets, verification, user",
       "item": [
+        {
+          "name": "Reports & Analytics — Excel",
+          "description": "Dashboard report downloads (`POST` + JSON filters). Returns `.xlsx` attachment.",
+          "item": [
+            {
+              "name": "Export — order report",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"from_date\": \"2026-01-01\",\n  \"to_date\": \"2026-06-18\",\n  \"order_status\": \"completed\",\n  \"quote_status\": \"success\",\n  \"category_id\": \"\",\n  \"service_id\": \"\",\n  \"partner_id\": \"\",\n  \"user_id\": \"\",\n  \"customer_payment_status\": \"paid\",\n  \"partner_payment_status\": \"paid\",\n  \"state_id\": \"\",\n  \"city_id\": \"\",\n  \"area_id\": \"\",\n  \"franchise_id\": \"\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/export/order-report",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "export",
+                    "order-report"
+                  ]
+                }
+              },
+              "description": "**POST** `/api/export/order-report`\n\nOrder Reports Excel download. Omit empty filter fields.\n\n**Filters:** `from_date`, `to_date`, `order_status`, `quote_status`, `category_id`, `service_id`, `partner_id`, `user_id`, `customer_payment_status` (alias `user_payment_status` / `payment_status`), `partner_payment_status`, `state_id`, `city_id`, `area_id`, `franchise_id` (super admin only), `search`.\n\n**Scope:** franchise admin/employee → own franchise (+ legacy orders). Super admin/staff → all; optional `franchise_id`."
+            },
+            {
+              "name": "Export — quote report",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"from_date\": \"2026-01-01\",\n  \"to_date\": \"2026-06-18\",\n  \"quote_status\": \"success\",\n  \"category_id\": \"\",\n  \"service_id\": \"\",\n  \"partner_id\": \"\",\n  \"user_id\": \"\",\n  \"state_id\": \"\",\n  \"city_id\": \"\",\n  \"area_id\": \"\",\n  \"franchise_id\": \"\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/export/quote-report",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "export",
+                    "quote-report"
+                  ]
+                }
+              },
+              "description": "**POST** `/api/export/quote-report`\n\nQuotation Reports Excel download. Omit empty filter fields.\n\n**Filters:** `from_date`, `to_date`, `quote_status` (alias `status`: new, pending, accepted, success, failed), `category_id`, `service_id`, `partner_id`, `user_id`, `state_id`, `city_id`, `area_id`, `franchise_id` (super admin only), `search`.\n\n**Scope:** same franchise rules as `GET /api/quote/getAll`."
+            },
+            {
+              "name": "Export — partner report",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"from_date\": \"2026-01-01\",\n  \"to_date\": \"2026-06-18\",\n  \"partner_id\": \"\",\n  \"category_id\": \"\",\n  \"service_id\": \"\",\n  \"state_id\": \"\",\n  \"city_id\": \"\",\n  \"area_id\": \"\",\n  \"franchise_id\": \"\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/export/partner-report",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "export",
+                    "partner-report"
+                  ]
+                }
+              },
+              "description": "**POST** `/api/export/partner-report`\n\nPartner Reports Excel (performance + earnings). Verified partners only. Omit empty filter fields.\n\n**Filters:** `from_date`, `to_date` (scopes earnings & services provided), `partner_id` (user Mongo `_id`), `category_id`, `service_id`, `state_id`, `city_id`, `area_id`, `franchise_id` (super admin only), `search`.\n\n**Scope:** same franchise rules as partner payout list."
+            }
+          ]
+        },
         {
           "name": "Export — area",
           "request": {
@@ -10132,109 +10270,7 @@
               ]
             }
           },
-          "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 10 — Reports & Analytics (export)_"
-        },
-        {
-          "name": "Export — order report",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"from_date\": \"\",\n  \"to_date\": \"\",\n  \"order_status\": \"\",\n  \"quote_status\": \"\",\n  \"category_id\": \"\",\n  \"service_id\": \"\",\n  \"partner_id\": \"\",\n  \"user_id\": \"\",\n  \"partner_payment_status\": \"\",\n  \"customer_payment_status\": \"\",\n  \"state_id\": \"\",\n  \"city_id\": \"\",\n  \"franchise_id\": \"\",\n  \"area_id\": \"\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/export/order-report",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "export",
-                "order-report"
-              ]
-            }
-          },
-          "description": "Order Reports Excel download with all dashboard filters. Franchise admin: auto-scoped to their franchise. Super admin/staff: optional `franchise_id` in body or query. Filters mirror `GET /api/order/getAll` plus `quote_status`, `state_id`, `area_id`, and `customer_payment_status`."
-        },
-        {
-          "name": "Export — quote report",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"from_date\": \"\",\n  \"to_date\": \"\",\n  \"quote_status\": \"\",\n  \"category_id\": \"\",\n  \"service_id\": \"\",\n  \"partner_id\": \"\",\n  \"user_id\": \"\",\n  \"state_id\": \"\",\n  \"city_id\": \"\",\n  \"franchise_id\": \"\",\n  \"area_id\": \"\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/export/quote-report",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "export",
-                "quote-report"
-              ]
-            }
-          },
-          "description": "Quotation Reports Excel download with all dashboard filters. Franchise admin: auto-scoped to their franchise. Super admin/staff: optional `franchise_id` in body or query. Filters mirror `GET /api/quote/getAll` plus `state_id`, `city_id`, and `area_id` (via quote address)."
-        },
-        {
-          "name": "Export — partner report",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"from_date\": \"\",\n  \"to_date\": \"\",\n  \"partner_id\": \"\",\n  \"category_id\": \"\",\n  \"service_id\": \"\",\n  \"state_id\": \"\",\n  \"city_id\": \"\",\n  \"franchise_id\": \"\",\n  \"area_id\": \"\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/export/partner-report",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "export",
-                "partner-report"
-              ]
-            }
-          },
-          "description": "Partner Reports Excel download with performance and earnings. Franchise admin: auto-scoped to their franchise. Super admin/staff: optional `franchise_id`. Verified partners only. Date range scopes order-service earnings and services provided."
+          "description": "**Legacy.** Minimal export — `body.order_status` only, **no franchise scope**. Prefer **Reports & Analytics → Export — order report** (`POST /api/export/order-report`).\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 10 — Reports & Analytics (export)_"
         },
         {
           "name": "Export — orders_payments",
@@ -10284,7 +10320,7 @@
               ]
             }
           },
-          "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 10 — Reports & Analytics (export)_"
+          "description": "**Legacy.** Global partner export, **no franchise scope**. Prefer **Reports & Analytics → Export — partner report** (`POST /api/export/partner-report`).\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 10 — Reports & Analytics (export)_"
         },
         {
           "name": "Export — service",
@@ -10586,7 +10622,118 @@
             },
             "url": "{{base_url}}/api/export/orders"
           },
-          "description": "\n\n_Source: Help-PR-Area-Franchise-Subscription.postman_collection.json → Export_"
+          "description": "**Legacy** — `order_status` only, no franchise scope. Prefer `POST /api/export/order-report`.\n\n_Source: Help-PR-Area-Franchise-Subscription.postman_collection.json → Export_"
+        },
+        {
+          "name": "Export order report",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"from_date\": \"2026-01-01\",\n  \"to_date\": \"2026-06-18\",\n  \"order_status\": \"completed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/export/order-report"
+          },
+          "description": "**POST** `/api/export/order-report` — Order Reports Excel (dashboard filters + franchise scope)."
+        },
+        {
+          "name": "Export quote report",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"from_date\": \"2026-01-01\",\n  \"to_date\": \"2026-06-18\",\n  \"quote_status\": \"success\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/export/quote-report"
+          },
+          "description": "**POST** `/api/export/quote-report` — Quotation Reports Excel (dashboard filters + franchise scope)."
+        },
+        {
+          "name": "Export partner report",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"from_date\": \"2026-01-01\",\n  \"to_date\": \"2026-06-18\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/export/partner-report"
+          },
+          "description": "**POST** `/api/export/partner-report` — Partner Reports Excel (performance + earnings + franchise scope)."
         },
         {
           "name": "Export orders payments",
@@ -10660,7 +10807,7 @@
             },
             "url": "{{base_url}}/api/export/partner"
           },
-          "description": "\n\n_Source: Help-PR-Area-Franchise-Subscription.postman_collection.json → Export_"
+          "description": "**Legacy** — global export, no franchise scope. Prefer `POST /api/export/partner-report`.\n\n_Source: Help-PR-Area-Franchise-Subscription.postman_collection.json → Export_"
         },
         {
           "name": "Export service",

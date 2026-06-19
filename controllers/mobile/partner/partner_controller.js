@@ -3,6 +3,8 @@ const {
   loginPartner,
   updatePartner,
 } = require('../../../services/mobile/partner/partner_service');
+const { forgotPasswordByEmail } = require('../../../services/mobile/shared/forgot_password_service');
+const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
 const {
   wrapMobileHandler,
   sendServiceError,
@@ -55,6 +57,23 @@ const login = wrapMobileHandler('mobile partner login', async (req, res) => {
   });
 });
 
+const forgotPassword = wrapMobileHandler('mobile partner forgot-password', async (req, res) => {
+  const result = await forgotPasswordByEmail({
+    email: req.body.email,
+    userType: USER_TYPE_PARTNER,
+  });
+
+  if (!result.ok) {
+    return sendServiceError(res, result);
+  }
+
+  return res.status(200).json({
+    success: true,
+    status: 200,
+    message: result.message,
+  });
+});
+
 const update = async (req, res) => {
   try {
     const result = await updatePartner({
@@ -88,5 +107,6 @@ const update = async (req, res) => {
 module.exports = {
   register,
   login,
+  forgotPassword,
   update,
 };

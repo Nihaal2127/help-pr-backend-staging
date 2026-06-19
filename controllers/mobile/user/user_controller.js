@@ -4,6 +4,8 @@ const {
   updateUser,
   listAllPincodes,
 } = require('../../../services/mobile/user/user_service');
+const { forgotPasswordByEmail } = require('../../../services/mobile/shared/forgot_password_service');
+const { USER_TYPE_CUSTOMER } = require('../../../constants/user_types');
 const {
   wrapMobileHandler,
   sendTopLevelServiceResult,
@@ -31,6 +33,18 @@ const verifyOtpHandler = wrapMobileHandler(
   { errorMessage: 'Failed to verify OTP.' }
 );
 
+const forgotPasswordHandler = wrapMobileHandler(
+  'mobile user forgot-password',
+  async (req, res) => {
+    const result = await forgotPasswordByEmail({
+      email: req.body.email,
+      userType: USER_TYPE_CUSTOMER,
+    });
+    return sendTopLevelServiceResult(res, result);
+  },
+  { errorMessage: 'Failed to reset password.' }
+);
+
 const updateHandler = wrapMobileHandler('mobile user update', async (req, res) => {
   const result = await updateUser({
     customerId: req.user.id,
@@ -48,6 +62,7 @@ const getPincodesHandler = wrapMobileHandler('mobile user pincodes', async (req,
 module.exports = {
   sendOtpHandler,
   verifyOtpHandler,
+  forgotPasswordHandler,
   updateHandler,
   getPincodesHandler,
 };

@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Order = require('../../../models/order');
+const OrderService = require('../../../models/order_services');
 const User = require('../../../models/user');
 const Service = require('../../../models/service');
 const Category = require('../../../models/category');
@@ -60,6 +61,79 @@ const attachPartnerRatingsToOrderRecord = (record) => {
       ...attachPartnerRatingFields(record.partner_id),
     },
   };
+};
+
+const EMPTY_CUSTOMER_REVIEW = { rating: null, review_text: null, reviewed_at: null };
+
+const pickCustomerReviewForOrder = (serviceLines, orderRecord, { partnerId } = {}) => {
+  if (!serviceLines?.length) {
+    return EMPTY_CUSTOMER_REVIEW;
+  }
+
+  const resolvedPartnerId =
+    partnerId ?? orderRecord?.partner_id?._id ?? orderRecord?.partner_id ?? null;
+  const resolvedServiceId = orderRecord?.service_id?._id ?? orderRecord?.service_id ?? null;
+
+  let line = null;
+  if (resolvedServiceId && resolvedPartnerId) {
+    line = serviceLines.find(
+      (row) =>
+        String(row.service_id) === String(resolvedServiceId) &&
+        String(row.partner_id) === String(resolvedPartnerId)
+    );
+  }
+  if (!line && resolvedPartnerId) {
+    line = serviceLines.find((row) => String(row.partner_id) === String(resolvedPartnerId));
+  }
+  if (!line) {
+    line = serviceLines[0];
+  }
+
+  const rating = Number(line?.rating) || 0;
+  if (rating <= 0) {
+    return EMPTY_CUSTOMER_REVIEW;
+  }
+
+  return {
+    rating,
+    review_text: line.review_text || '',
+    reviewed_at: line.reviewed_at || null,
+  };
+};
+
+const attachCustomerReviewsToOrderRecords = async (records, { partnerId } = {}) => {
+  if (!Array.isArray(records) || !records.length) {
+    return records;
+  }
+
+  const orderIds = records.map((record) => record._id).filter((id) => id != null);
+  if (!orderIds.length) {
+    return records;
+  }
+
+  const serviceLines = await OrderService.find({
+    order_id: { $in: orderIds },
+    deleted_at: null,
+  })
+    .select('order_id service_id partner_id rating review_text reviewed_at')
+    .lean();
+
+  const serviceLinesByOrderId = new Map();
+  for (const line of serviceLines) {
+    const key = String(line.order_id);
+    if (!serviceLinesByOrderId.has(key)) {
+      serviceLinesByOrderId.set(key, []);
+    }
+    serviceLinesByOrderId.get(key).push(line);
+  }
+
+  return records.map((record) => {
+    const lines = serviceLinesByOrderId.get(String(record._id)) || [];
+    return {
+      ...record,
+      ...pickCustomerReviewForOrder(lines, record, { partnerId }),
+    };
+  });
 };
 
 const buildOrderListSearchRegex = (query) => {
@@ -213,6 +287,8 @@ const fetchPaginatedMobileOrderList = async ({
   limit,
   page,
   searchFields,
+  includeCustomerReviews = false,
+  reviewPartnerId = null,
 }) => {
   const todayOverlapResult = buildOrderTodayOverlapFilter();
   const todayCountFilter = mergeMongoFilters(filter, todayOverlapResult.filter);
@@ -250,9 +326,15 @@ const fetchPaginatedMobileOrderList = async ({
 
   const { data: rows, totalCount: totalItems } = parseFacetListResult(aggResult, limit);
   const totalPages = Math.max(Math.ceil(totalItems / limit), 1);
-  const records = await attachRefundsToOrderRecords(
+  let records = await attachRefundsToOrderRecords(
     formatOrderRecords(rows).map(attachPartnerRatingsToOrderRecord)
   );
+
+  if (includeCustomerReviews) {
+    records = await attachCustomerReviewsToOrderRecords(records, {
+      partnerId: reviewPartnerId,
+    });
+  }
 
   return {
     totalItems,
@@ -274,6 +356,8 @@ const parseMobileOrderListPagination = (query) => {
 module.exports = {
   addObjectIdFilter,
   attachPartnerRatingsToOrderRecord,
+  attachCustomerReviewsToOrderRecords,
+  pickCustomerReviewForOrder,
   buildOrderListSearchRegex,
   applyOrderManagementStatusFilter,
   applyOrderDateAndPaidFilters,

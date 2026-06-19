@@ -6,7 +6,6 @@ const orderOfferSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       required: true,
       ref: "order",
-      index: true,
     },
     offer_id: {
       type: mongoose.Schema.Types.ObjectId,

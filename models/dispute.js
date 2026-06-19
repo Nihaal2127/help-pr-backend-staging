@@ -7,7 +7,6 @@ const disputeSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       required: true,
       ref: "order",
-      index: true,
     },
     user_id: {
       type: mongoose.Schema.Types.ObjectId,

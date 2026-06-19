@@ -10,6 +10,7 @@ const {
 const {
   listOrdersHandler,
   getOrderDetailsHandler,
+  downloadOrderInvoiceHandler,
   updateWorkStatusHandler,
   completeOrderWorkHandler,
 } = require('../../../controllers/mobile/partner/order_controller');
@@ -68,6 +69,11 @@ router.delete(
   validateOrderIdParam,
   validateChargeIdParam,
   deleteOrderAdditionalChargeHandler
+);
+router.get(
+  '/orders/:orderId/invoice',
+  validateOrderIdParam,
+  downloadOrderInvoiceHandler
 );
 router.get('/orders/:orderId', validateOrderIdParam, getOrderDetailsHandler);
 

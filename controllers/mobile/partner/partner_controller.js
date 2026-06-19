@@ -132,10 +132,15 @@ const update = async (req, res) => {
       return sendServiceError(res, result);
     }
 
+    const message = result.passwordUpdated
+      ? 'Password updated successfully.'
+      : 'Partner updated successfully.';
+
     return res.status(200).json({
       success: true,
       status: 200,
-      message: 'Partner updated successfully.',
+      message,
+      password_updated: result.passwordUpdated === true,
       data: result.data,
     });
   } catch (error) {

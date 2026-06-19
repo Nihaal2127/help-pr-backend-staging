@@ -108,6 +108,8 @@ const listPartnerOrders = async (partnerId, query = {}) => {
       limit,
       page,
       searchFields: MOBILE_PARTNER_ORDER_LIST_SEARCH_FIELDS,
+      includeCustomerReviews: true,
+      reviewPartnerId: callerResult.oid,
     });
 
     return ok(200, {

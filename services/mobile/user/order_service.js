@@ -99,6 +99,7 @@ const listCustomerOrders = async (customerId, query = {}) => {
       limit,
       page,
       searchFields: MOBILE_ORDER_LIST_SEARCH_FIELDS,
+      includeCustomerReviews: true,
     });
 
     return ok(200, {

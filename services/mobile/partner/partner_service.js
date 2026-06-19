@@ -988,9 +988,12 @@ const updatePartner = async ({ partnerId, body, files, section = PARTNER_UPDATE_
     delete updateData.is_additional_address;
   }
 
+  let passwordUpdated = false;
+
   if (runBasic) {
     if (updateData.password !== undefined && String(updateData.password).trim() !== '') {
       user.password = updateData.password;
+      passwordUpdated = true;
     }
 
     if (updateData.password !== undefined && String(updateData.password).trim() === '') {
@@ -1142,7 +1145,7 @@ const updatePartner = async ({ partnerId, body, files, section = PARTNER_UPDATE_
   }
 
   const data = await buildPartnerResponseData(updatedUser._id);
-  return okWithData(data);
+  return { ok: true, data, passwordUpdated };
 };
 
 module.exports = {

@@ -1709,6 +1709,59 @@
               "response": []
             },
             {
+              "name": "Download order invoice",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test('Order invoice downloaded', function () {",
+                      "  pm.response.to.have.status(200);",
+                      "  pm.expect(pm.response.headers.get('Content-Type')).to.include('text/html');",
+                      "  pm.expect(pm.response.text()).to.include('INVOICE');",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "text/html"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/orders/{{orderId}}/invoice",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "partner",
+                    "orders",
+                    "{{orderId}}",
+                    "invoice"
+                  ]
+                },
+                "description": "**GET /api/mobile/partner/orders/:orderId/invoice**\n\n- **Auth:** Bearer partner\n- Downloads a printable HTML invoice for one order assigned to the caller (`partner_id`)\n- **Path `orderId`:** order Mongo `_id` (24-char hex)\n- **200:** `text/html` attachment (`invoice-<orderId>.html`) with line items, additional charges, totals, and customer payments\n- Uses the same invoice builder as user `GET /api/mobile/user/orders/:orderId/invoice` and admin `GET /api/order/invoice/:id`\n\n**404** order not found or not assigned to partner | **400** invalid order id"
+              },
+              "response": []
+            },
+            {
               "name": "List additional charges",
               "request": {
                 "auth": {

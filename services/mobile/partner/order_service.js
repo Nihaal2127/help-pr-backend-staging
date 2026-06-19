@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Order = require('../../../models/order');
 const { loadOrderDetailLean } = require('../../order_detail_service');
+const { buildOrderInvoiceHtml } = require('../../../utils/order_invoice_html');
 const { embedOrderDetailForeignKeys } = require('../../../utils/list_aggregation');
 const { attachPartnerOrderSummary } = require('../../../utils/partner_order_summary');
 const { fail, ok } = require('../../../utils/mobile_service_result');
@@ -154,7 +155,46 @@ const getPartnerOrderById = async (partnerId, orderId) => {
   }
 };
 
+const getPartnerOrderInvoice = async (partnerId, orderId) => {
+  try {
+    const callerResult = assertValidCallerObjectId(partnerId);
+    if (!callerResult.ok) {
+      return callerResult;
+    }
+    if (!orderId || !mongoose.Types.ObjectId.isValid(String(orderId))) {
+      return fail(400, 'Invalid order id.');
+    }
+
+    const order = await Order.findOne({
+      _id: orderId,
+      partner_id: callerResult.oid,
+      deleted_at: null,
+    });
+
+    if (!order) {
+      return fail(404, 'Order not found.');
+    }
+
+    const record = await loadOrderDetailLean(order._id);
+    if (!record) {
+      return fail(404, 'Order not found.');
+    }
+
+    const html = buildOrderInvoiceHtml(record);
+    const safeId = String(record.unique_id || order._id).replace(/[^\w-]/g, '_');
+
+    return ok(200, {
+      html,
+      filename: `invoice-${safeId}.html`,
+    });
+  } catch (err) {
+    console.error('mobile partner get order invoice', err.message);
+    return fail(500, 'Internal server error.');
+  }
+};
+
 module.exports = {
   listPartnerOrders,
   getPartnerOrderById,
+  getPartnerOrderInvoice,
 };

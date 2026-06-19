@@ -1,6 +1,7 @@
 const {
   listPartnerOrders,
   getPartnerOrderById,
+  getPartnerOrderInvoice,
 } = require('../../../services/mobile/partner/order_service');
 const {
   updatePartnerWorkStatus,
@@ -23,6 +24,20 @@ const getOrderDetailsHandler = wrapMobileHandler('mobile partner order details h
   const result = await getPartnerOrderById(getCallerId(req), req.params.orderId);
   return sendRecordResult(res, result);
 });
+
+const downloadOrderInvoiceHandler = wrapMobileHandler(
+  'mobile partner download order invoice handler',
+  async (req, res) => {
+    const result = await getPartnerOrderInvoice(getCallerId(req), req.params.orderId);
+    if (!result.ok) {
+      return sendServiceError(res, result);
+    }
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${result.data.filename}"`);
+    return res.status(200).send(result.data.html);
+  }
+);
 
 const updateWorkStatusHandler = wrapMobileHandler('mobile partner update work status handler', async (req, res) => {
   const result = await updatePartnerWorkStatus(
@@ -57,6 +72,7 @@ const completeOrderWorkHandler = wrapMobileHandler('mobile partner complete orde
 module.exports = {
   listOrdersHandler,
   getOrderDetailsHandler,
+  downloadOrderInvoiceHandler,
   updateWorkStatusHandler,
   completeOrderWorkHandler,
 };

@@ -3,7 +3,11 @@ const {
   loginPartner,
   updatePartner,
 } = require('../../../services/mobile/partner/partner_service');
-const { forgotPasswordByEmail } = require('../../../services/mobile/shared/forgot_password_service');
+const {
+  requestForgotPasswordOtp,
+  verifyForgotPasswordOtp: verifyForgotPasswordOtpService,
+  resetPasswordWithToken,
+} = require('../../../services/mobile/shared/forgot_password_service');
 const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
 const {
   wrapMobileHandler,
@@ -58,8 +62,49 @@ const login = wrapMobileHandler('mobile partner login', async (req, res) => {
 });
 
 const forgotPassword = wrapMobileHandler('mobile partner forgot-password', async (req, res) => {
-  const result = await forgotPasswordByEmail({
+  const result = await requestForgotPasswordOtp({
     email: req.body.email,
+    userType: USER_TYPE_PARTNER,
+  });
+
+  if (!result.ok) {
+    return sendServiceError(res, result);
+  }
+
+  return res.status(200).json({
+    success: true,
+    status: 200,
+    message: result.message,
+  });
+});
+
+const verifyForgotPasswordOtp = wrapMobileHandler(
+  'mobile partner verify-forgot-password-otp',
+  async (req, res) => {
+    const result = await verifyForgotPasswordOtpService({
+      email: req.body.email,
+      otp: req.body.otp,
+      userType: USER_TYPE_PARTNER,
+    });
+
+    if (!result.ok) {
+      return sendServiceError(res, result);
+    }
+
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      verified: result.verified,
+      reset_token: result.reset_token,
+    });
+  },
+  { errorMessage: 'Failed to verify OTP.' }
+);
+
+const resetPassword = wrapMobileHandler('mobile partner reset-password', async (req, res) => {
+  const result = await resetPasswordWithToken({
+    resetToken: req.body.reset_token,
+    newPassword: req.body.new_password,
     userType: USER_TYPE_PARTNER,
   });
 
@@ -108,5 +153,7 @@ module.exports = {
   register,
   login,
   forgotPassword,
+  verifyForgotPasswordOtp,
+  resetPassword,
   update,
 };

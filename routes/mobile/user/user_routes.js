@@ -3,10 +3,16 @@ const {
   sendOtpHandler,
   verifyOtpHandler,
   forgotPasswordHandler,
+  verifyForgotPasswordOtpHandler,
+  resetPasswordHandler,
   updateHandler,
   getPincodesHandler,
 } = require('../../../controllers/mobile/user/user_controller');
-const { validateForgotPasswordEmail } = require('../../../middleware/mobile/common/forgot_password_middleware');
+const {
+  validateForgotPasswordEmail,
+  validateVerifyForgotPasswordOtp,
+  validateResetPassword,
+} = require('../../../middleware/mobile/common/forgot_password_middleware');
 const { getHomeHandler } = require('../../../controllers/mobile/user/home_controller');
 const {
   listPartnersHandler,
@@ -46,6 +52,12 @@ const router = express.Router();
 router.post('/login', rateLimitSendOtp, sendOtpHandler);
 router.post('/verify-otp', validateVerifyOtp, verifyOtpHandler);
 router.post('/forgot-password', validateForgotPasswordEmail, forgotPasswordHandler);
+router.post(
+  '/verify-forgot-password-otp',
+  validateVerifyForgotPasswordOtp,
+  verifyForgotPasswordOtpHandler
+);
+router.post('/reset-password', validateResetPassword, resetPasswordHandler);
 
 router.use(addressRoutes);
 router.use(quoteRoutes);

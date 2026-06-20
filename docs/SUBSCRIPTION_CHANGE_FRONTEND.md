@@ -265,6 +265,8 @@ GET /api/mobile/partner/subscription/change/:changeId/payment-status
 
 **200 `data`:** `status`, `payment_status`, `target_plan`, `applied_at` (set when completed).
 
+If payment was made but status stays `pending` (webhook issue on Lambda), **call this endpoint again** — the server checks Razorpay directly and completes the change when the link is `paid`. Look for `data.sync.synced: true`.
+
 **Env vars (backend `.env`):**
 
 ```env

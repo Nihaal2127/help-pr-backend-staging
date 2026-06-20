@@ -13,7 +13,7 @@ const {
     validateUpgradePaymentSplit,
 } = require('../../../utils/subscription_proration');
 const { safeNotifyWalletTransaction } = require('../../../src/modules/notifications/services/domainHooks');
-const { createSubscriptionChangePaymentLink } = require('../../../src/modules/payments');
+const { createSubscriptionChangePaymentLink, fetchPaymentLink } = require('../../../src/modules/payments');
 
 const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
 /** Pending rows without a Razorpay link id (orphaned initiation). */
@@ -1223,6 +1223,60 @@ const completeOnlineChangeFromWebhook = async (changeId, paymentLinkId, paidAmou
     return result || { ok: false, message: 'Failed to complete subscription change.' };
 };
 
+/**
+ * When webhook delivery fails (common on Lambda), poll Razorpay and complete pending changes.
+ */
+const syncPendingOnlineChangePayment = async (changeId, partnerId) => {
+    const change = await PartnerSubscriptionChange.findOne({
+        _id: changeId,
+        partner_id: partnerId,
+        deleted_at: null,
+    }).lean();
+
+    if (!change) {
+        return { synced: false, reason: 'not_found' };
+    }
+
+    if (change.status === 'completed') {
+        return { synced: false, reason: 'already_completed' };
+    }
+
+    if (change.status !== 'pending' || !change.razorpay_payment_link_id) {
+        return { synced: false, reason: 'not_pending_online' };
+    }
+
+    let link;
+    try {
+        link = await fetchPaymentLink(change.razorpay_payment_link_id);
+    } catch (err) {
+        console.error('syncPendingOnlineChangePayment fetchPaymentLink', err?.response?.data || err.message);
+        return { synced: false, reason: 'razorpay_fetch_failed' };
+    }
+
+    if (link.status !== 'paid') {
+        return { synced: false, reason: 'not_paid', razorpay_status: link.status };
+    }
+
+    const paidAmountPaise =
+        link.amount_paid != null ? Number(link.amount_paid) : Number(link.amount);
+
+    const completion = await completeOnlineChangeFromWebhook(
+        change._id,
+        change.razorpay_payment_link_id,
+        paidAmountPaise
+    );
+
+    if (!completion?.ok) {
+        return {
+            synced: false,
+            reason: 'completion_failed',
+            message: completion?.message || 'Failed to complete subscription change.',
+        };
+    }
+
+    return { synced: true, change_id: change._id, already_completed: !!completion.already_completed };
+};
+
 const getChangePaymentStatus = async (partnerId, changeId) => {
     try {
         const pPartner = parseObjectId(partnerId, 'partner_id');
@@ -1247,24 +1301,57 @@ const getChangePaymentStatus = async (partnerId, changeId) => {
             return fail(404, 'Subscription change not found.');
         }
 
+        let syncResult = null;
+        if (change.status === 'pending' && change.razorpay_payment_link_id) {
+            syncResult = await syncPendingOnlineChangePayment(change._id, pPartner.oid);
+        }
+
+        let latestChange = change;
+        if (syncResult?.synced) {
+            latestChange = await PartnerSubscriptionChange.findOne({
+                _id: pChange.oid,
+                partner_id: pPartner.oid,
+                deleted_at: null,
+            })
+                .populate('to_plan_id', 'plan_name price duration duration_type priority')
+                .lean();
+        }
+
         const walletBalance = await getWalletBalance(pPartner.oid);
 
         return ok(200, {
-            message: 'Subscription change payment status fetched successfully.',
+            message: syncResult?.synced
+                ? 'Payment verified with Razorpay and subscription change applied.'
+                : 'Subscription change payment status fetched successfully.',
             data: {
-                change_id: change._id,
-                status: change.status,
-                payment_status: change.payment_status,
-                payment_method: change.payment_method,
-                amount_to_pay: change.amount_to_pay,
-                wallet_amount: change.wallet_amount,
+                change_id: latestChange._id,
+                status: latestChange.status,
+                payment_status: latestChange.payment_status,
+                payment_method: latestChange.payment_method,
+                amount_to_pay: latestChange.amount_to_pay,
+                wallet_amount: latestChange.wallet_amount,
                 online_amount: roundAmount(
-                    Math.max(0, change.amount_to_pay - change.wallet_amount - change.cash_amount)
+                    Math.max(
+                        0,
+                        latestChange.amount_to_pay -
+                            latestChange.wallet_amount -
+                            latestChange.cash_amount
+                    )
                 ),
-                razorpay_payment_link_id: change.razorpay_payment_link_id,
-                applied_at: change.applied_at,
-                target_plan: formatPlanSummary(change.to_plan_id),
+                razorpay_payment_link_id: latestChange.razorpay_payment_link_id,
+                applied_at: latestChange.applied_at,
+                target_plan: formatPlanSummary(latestChange.to_plan_id),
                 wallet_balance: walletBalance,
+                ...(syncResult
+                    ? {
+                          sync: {
+                              attempted: change.status === 'pending',
+                              synced: syncResult.synced,
+                              reason: syncResult.reason || null,
+                              razorpay_status: syncResult.razorpay_status || null,
+                          },
+                      }
+                    : {}),
             },
         });
     } catch (err) {

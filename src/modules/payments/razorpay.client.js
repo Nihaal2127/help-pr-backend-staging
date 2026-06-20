@@ -95,6 +95,57 @@ const createPaymentLink = async ({
 };
 
 /**
+ * Fetch a Razorpay payment link by id (e.g. plink_xxx).
+ */
+const fetchPaymentLink = async (paymentLinkId) => {
+    assertConfigured();
+    const id = String(paymentLinkId || '').trim();
+    if (!id) {
+        throw new Error('Payment link id is required.');
+    }
+    const response = await axios.get(`${RAZORPAY_API_BASE}/payment_links/${id}`, getAuthConfig());
+    return response.data;
+};
+
+/**
+ * Resolve raw webhook body (Lambda API Gateway + local express.raw).
+ * @param {import('express').Request} req
+ */
+const resolveWebhookRawBody = (req) => {
+    const event = req.apiGateway?.event;
+    if (event?.body != null) {
+        if (event.isBase64Encoded) {
+            return Buffer.from(event.body, 'base64');
+        }
+        return typeof event.body === 'string' ? event.body : JSON.stringify(event.body);
+    }
+
+    if (Buffer.isBuffer(req.body)) {
+        return req.body;
+    }
+    if (typeof req.body === 'string') {
+        return req.body;
+    }
+    if (req.body && typeof req.body === 'object') {
+        return JSON.stringify(req.body);
+    }
+    return '';
+};
+
+/**
+ * Parse verified webhook JSON from the request.
+ * @param {import('express').Request} req
+ */
+const parseWebhookRequest = (req) => {
+    const rawBody = resolveWebhookRawBody(req);
+    const bodyString = Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : String(rawBody);
+    return {
+        rawBody,
+        body: bodyString ? JSON.parse(bodyString) : {},
+    };
+};
+
+/**
  * Verify Razorpay webhook HMAC signature against the raw request body.
  * @param {Buffer|string|object} rawBody - Raw webhook body (Buffer preferred)
  * @param {string} signature - x-razorpay-signature header
@@ -127,5 +178,8 @@ const verifyWebhookSignature = (rawBody, signature) => {
 
 module.exports = {
     createPaymentLink,
+    fetchPaymentLink,
     verifyWebhookSignature,
+    resolveWebhookRawBody,
+    parseWebhookRequest,
 };

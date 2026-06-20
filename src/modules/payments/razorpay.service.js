@@ -80,6 +80,9 @@ module.exports = {
     createOrderPaymentLink,
     createSubscriptionChangePaymentLink,
     generatePaymentLink,
+    fetchPaymentLink: razorpayClient.fetchPaymentLink,
     verifyWebhookSignature: razorpayClient.verifyWebhookSignature,
+    resolveWebhookRawBody: razorpayClient.resolveWebhookRawBody,
+    parseWebhookRequest: razorpayClient.parseWebhookRequest,
     PAYMENT_PURPOSES,
 };

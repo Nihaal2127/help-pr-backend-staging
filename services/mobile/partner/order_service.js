@@ -182,7 +182,7 @@ const getPartnerOrderInvoice = async (partnerId, orderId) => {
       return fail(404, 'Order not found.');
     }
 
-    const html = buildOrderInvoiceHtml(record);
+    const html = buildOrderInvoiceHtml(record, { audience: 'partner' });
     const safeId = String(record.unique_id || order._id).replace(/[^\w-]/g, '_');
 
     return ok(200, {

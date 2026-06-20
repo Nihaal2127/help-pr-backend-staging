@@ -44,8 +44,12 @@ const validateApplyChangeBody = (req, res, next) => {
     const cashParsed = parseNonNegativeAmount(req.body.cash_amount, 'cash_amount');
     if (!cashParsed.ok) return sendError(res, 400, cashParsed.message);
 
+    const onlineParsed = parseNonNegativeAmount(req.body.online_amount, 'online_amount');
+    if (!onlineParsed.ok) return sendError(res, 400, onlineParsed.message);
+
     req.body.wallet_amount = walletParsed.value;
     req.body.cash_amount = cashParsed.value;
+    req.body.online_amount = onlineParsed.value;
     next();
 };
 

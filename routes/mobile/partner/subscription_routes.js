@@ -5,6 +5,7 @@ const {
     previewChange,
     applyChange,
     listHistory,
+    getChangePaymentStatus,
 } = require('../../../controllers/mobile/partner/subscription_change_controller');
 const partnerAuthMiddleware = require('../../../middleware/mobile/partner/partner_auth_middleware');
 const { requirePartnerAccount } = require('../../../middleware/mobile/partner/quote_middleware');
@@ -28,6 +29,12 @@ router.post(
     requirePartnerAccount,
     validateApplyChangeBody,
     applyChange
+);
+router.get(
+    '/subscription/change/:changeId/payment-status',
+    partnerAuthMiddleware,
+    requirePartnerAccount,
+    getChangePaymentStatus
 );
 
 module.exports = router;

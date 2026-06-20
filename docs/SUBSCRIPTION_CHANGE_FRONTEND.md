@@ -13,7 +13,7 @@ Partners can **upgrade** or **downgrade** their subscription tier from the mobil
 
 | Action | Payment | Wallet |
 |--------|---------|--------|
-| **Upgrade** | `wallet_amount` + `cash_amount` = `amount_to_pay` when due (no Razorpay v1) | Wallet portion debited |
+| **Upgrade** | `wallet_amount` + `cash_amount` or `online_amount` = `amount_to_pay` when due | Wallet portion debited immediately; online via Razorpay link |
 | **Downgrade** | Same as upgrade when `amount_to_pay` > 0 | Credit **surplus** (`wallet_credit`) when unused value exceeds new plan price |
 
 **Requirements**
@@ -33,8 +33,9 @@ Partners can **upgrade** or **downgrade** their subscription tier from the mobil
 1. GET  /subscription              → show current plan + wallet balance
 2. GET  /subscription-plans        → plan picker (catalog)
 3. POST /subscription/change/preview → quote screen
-4. POST /subscription/change       → confirm (wallet + cash split for upgrade)
-5. GET  /subscription/changes      → history (optional)
+4. POST /subscription/change       → confirm (wallet + cash or wallet + online)
+5. GET  /subscription/change/:id/payment-status → poll after online payment (optional)
+6. GET  /subscription/changes      → history (optional)
 ```
 
 ---
@@ -102,7 +103,9 @@ POST /api/mobile/partner/subscription/change/preview
 POST /api/mobile/partner/subscription/change
 ```
 
-**Upgrade body**
+`wallet_amount + cash_amount` or `wallet_amount + online_amount` must equal `amount_to_pay` from preview (± ₹0.01). Use **either** `cash_amount` or `online_amount`, not both.
+
+**Upgrade body (cash)**
 
 ```json
 {
@@ -112,7 +115,15 @@ POST /api/mobile/partner/subscription/change
 }
 ```
 
-`wallet_amount + cash_amount` must equal `amount_to_pay` from preview (± ₹0.01).
+**Upgrade body (Razorpay — UPI / card / netbanking)**
+
+```json
+{
+  "target_plan_id": "...",
+  "wallet_amount": 30,
+  "online_amount": 20
+}
+```
 
 **Downgrade body (no payment due)**
 
@@ -182,16 +193,94 @@ DOWNGRADE: amount_to_pay = max(0, new_plan.price − remaining_value)
 
 ---
 
-## 6. Payment methods (v1)
+## 6. Payment methods
 
 | `payment_method` | Meaning |
 |------------------|---------|
 | `not_required` | Downgrade or zero-pay upgrade |
 | `wallet` | Full amount from wallet |
 | `cash` | Full amount cash (honor system) |
-| `wallet_and_cash` | Split |
+| `wallet_and_cash` | Split wallet + cash |
+| `online` | Full amount via Razorpay (UPI / card / netbanking) |
+| `wallet_and_online` | Split wallet + Razorpay |
 
-**Razorpay:** reserved for a future release (same pattern as order payments).
+### 6.1 Online payment (Razorpay)
+
+When paying online, send `online_amount` instead of `cash_amount` for the non-wallet portion. Cash and online are **mutually exclusive**.
+
+**Upgrade body (online)**
+
+```json
+{
+  "target_plan_id": "...",
+  "wallet_amount": 30,
+  "online_amount": 20
+}
+```
+
+**Full online**
+
+```json
+{
+  "target_plan_id": "...",
+  "wallet_amount": 0,
+  "online_amount": 50
+}
+```
+
+**202 response (payment pending)**
+
+```json
+{
+  "success": true,
+  "status": 202,
+  "message": "Complete payment to apply your subscription change.",
+  "data": {
+    "subscription": { "plan": { "plan_name": "silver" } },
+    "change": {
+      "_id": "...",
+      "change_type": "upgrade",
+      "amount_to_pay": 50,
+      "wallet_amount": 30,
+      "online_amount": 20,
+      "payment_method": "wallet_and_online",
+      "payment_status": "pending",
+      "status": "pending",
+      "payment_url": "https://rzp.io/i/..."
+    },
+    "wallet_balance": 90
+  }
+}
+```
+
+Open `payment_url` in a browser or WebView. Razorpay supports **UPI, cards, and net banking** on the same link.
+
+After payment, Razorpay calls `POST /api/razorpay/razorpayWebhook` (`payment_link.paid`). The backend completes the subscription change automatically.
+
+**Poll payment status**
+
+```
+GET /api/mobile/partner/subscription/change/:changeId/payment-status
+```
+
+**200 `data`:** `status`, `payment_status`, `target_plan`, `applied_at` (set when completed).
+
+**Env vars (backend `.env`):**
+
+```env
+RAZORPAY_KEY_ID=rzp_test_...
+RAZORPAY_KEY_SECRET=...
+RAZORPAY_WEBHOOK_SECRET=...
+RAZORPAY_BASE_URL=https://your-ngrok-url.ngrok.io
+```
+
+`RAZORPAY_BASE_URL` is the **public** URL Razorpay can reach (often ngrok in dev). This is separate from Postman `{{baseUrl}}`, which is your backend API base for app requests.
+
+Configure the webhook in [Razorpay Dashboard](https://dashboard.razorpay.com) → Webhooks → `payment_link.paid` → URL `{RAZORPAY_BASE_URL}/api/razorpay/razorpayWebhook`.
+
+Pending online changes expire after **24 hours**; any wallet portion is refunded automatically.
+
+**Webhook note:** The server verifies Razorpay signatures against the **raw** JSON body (`express.raw` on the webhook route). Do not put a reverse proxy in front that re-serializes the payload.
 
 ---
 

@@ -81,6 +81,14 @@ connectDB();
 // Initialize Express app
 const app = express();
 
+// Razorpay webhook must verify HMAC against the raw body (before express.json parses it).
+const { handleRazorpayWebhook } = require('./controllers/razorpay_controller');
+app.post(
+    '/api/razorpay/razorpayWebhook',
+    express.raw({ type: 'application/json' }),
+    handleRazorpayWebhook
+);
+
 // Middleware
 // app.use(cors()); // Enable CORS
 // app.use(cors({

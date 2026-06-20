@@ -9,4 +9,9 @@ module.exports = {
   /** No trailing slash. Used to turn stored keys/paths into full image URLs in API JSON. */
   IMAGE_CDN_BASE_URL: process.env.IMAGE_CDN_BASE_URL || process.env.CDN_BASE_URL,
   NODE_ENV: process.env.NODE_ENV,  // 'production' or 'development'
+  RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID,
+  RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,
+  RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET,
+  /** Public URL Razorpay can reach (ngrok/production host) — separate from Postman `baseUrl`. */
+  RAZORPAY_BASE_URL: process.env.RAZORPAY_BASE_URL,
 };

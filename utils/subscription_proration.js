@@ -118,33 +118,50 @@ const computeProration = ({ currentPlan, newPlan, startedAt, asOf = new Date() }
     };
 };
 
-const resolvePaymentMethod = ({ amountToPay, walletAmount, cashAmount }) => {
+const resolvePaymentMethod = ({ amountToPay, walletAmount, cashAmount, onlineAmount = 0 }) => {
     if (amountToPay <= PAYMENT_TOLERANCE) {
         return 'not_required';
     }
     const wallet = roundAmount(walletAmount);
     const cash = roundAmount(cashAmount);
+    const online = roundAmount(onlineAmount);
+    if (wallet > 0 && online > 0) return 'wallet_and_online';
+    if (online > 0) return 'online';
     if (wallet > 0 && cash > 0) return 'wallet_and_cash';
     if (wallet > 0) return 'wallet';
     if (cash > 0) return 'cash';
     return 'not_required';
 };
 
-const validateUpgradePaymentSplit = ({ amountToPay, walletAmount, cashAmount, walletBalance }) => {
+const validateUpgradePaymentSplit = ({
+    amountToPay,
+    walletAmount,
+    cashAmount,
+    onlineAmount = 0,
+    walletBalance,
+}) => {
     const due = roundAmount(amountToPay);
     const wallet = roundAmount(walletAmount);
     const cash = roundAmount(cashAmount);
+    const online = roundAmount(onlineAmount);
     const balance = roundAmount(walletBalance);
 
     if (due <= PAYMENT_TOLERANCE) {
-        if (wallet > PAYMENT_TOLERANCE || cash > PAYMENT_TOLERANCE) {
+        if (wallet > PAYMENT_TOLERANCE || cash > PAYMENT_TOLERANCE || online > PAYMENT_TOLERANCE) {
             return { ok: false, message: 'No payment is required for this subscription change.' };
         }
-        return { ok: true, wallet: 0, cash: 0, payment_method: 'not_required' };
+        return { ok: true, wallet: 0, cash: 0, online: 0, payment_method: 'not_required' };
     }
 
-    if (wallet < 0 || cash < 0) {
+    if (wallet < 0 || cash < 0 || online < 0) {
         return { ok: false, message: 'Payment amounts cannot be negative.' };
+    }
+
+    if (cash > PAYMENT_TOLERANCE && online > PAYMENT_TOLERANCE) {
+        return {
+            ok: false,
+            message: 'Use either cash_amount or online_amount for the non-wallet portion, not both.',
+        };
     }
 
     if (wallet > balance + PAYMENT_TOLERANCE) {
@@ -154,10 +171,10 @@ const validateUpgradePaymentSplit = ({ amountToPay, walletAmount, cashAmount, wa
         };
     }
 
-    if (Math.abs(wallet + cash - due) > PAYMENT_TOLERANCE) {
+    if (Math.abs(wallet + cash + online - due) > PAYMENT_TOLERANCE) {
         return {
             ok: false,
-            message: 'Wallet amount and cash amount must add up to the amount due.',
+            message: 'Wallet, cash, and online amounts must add up to the amount due.',
         };
     }
 
@@ -165,7 +182,13 @@ const validateUpgradePaymentSplit = ({ amountToPay, walletAmount, cashAmount, wa
         ok: true,
         wallet,
         cash,
-        payment_method: resolvePaymentMethod({ amountToPay: due, walletAmount: wallet, cashAmount: cash }),
+        online,
+        payment_method: resolvePaymentMethod({
+            amountToPay: due,
+            walletAmount: wallet,
+            cashAmount: cash,
+            onlineAmount: online,
+        }),
     };
 };
 

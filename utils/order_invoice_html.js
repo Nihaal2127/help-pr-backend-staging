@@ -269,6 +269,7 @@ const INVOICE_STYLES = `
     justify-content: space-between;
     align-items: flex-start;
     gap: 20px;
+    flex-wrap: wrap;
     padding: 28px 32px 20px;
     border-bottom: 1px solid var(--border);
   }
@@ -277,7 +278,13 @@ const INVOICE_STYLES = `
     display: flex;
     align-items: center;
     gap: 14px;
+    flex: 1 1 220px;
     min-width: 0;
+  }
+
+  .top-bar--partner .brand-wrap {
+    flex: 1 1 260px;
+    min-width: min(100%, 260px);
   }
 
   .brand-logo {
@@ -293,7 +300,10 @@ const INVOICE_STYLES = `
     border-radius: 50%;
   }
 
-  .brand-text { min-width: 0; }
+  .brand-text {
+    flex: 0 0 auto;
+    min-width: max-content;
+  }
 
   .brand-name {
     margin: 0;
@@ -302,11 +312,15 @@ const INVOICE_STYLES = `
     color: var(--navy);
     letter-spacing: -0.02em;
     line-height: 1.1;
+    white-space: nowrap;
   }
 
   .brand-name span { color: var(--success); }
 
-  .brand-name--partner span { color: var(--partner-orange); }
+  .brand-name--partner span {
+    color: var(--partner-orange);
+    font-weight: 900;
+  }
 
   .brand-tagline {
     margin: 4px 0 0;
@@ -322,6 +336,8 @@ const INVOICE_STYLES = `
     color: var(--navy);
     letter-spacing: 0.04em;
     line-height: 1;
+    flex: 0 0 auto;
+    margin-left: auto;
   }
 
   .meta-row {
@@ -723,6 +739,7 @@ const buildOrderInvoiceHtml = (record, options = {}) => {
   const logoUrl = isPartnerInvoice ? PARTNER_INVOICE_LOGO_URL : INVOICE_LOGO_URL;
   const logoClass = isPartnerInvoice ? 'brand-logo brand-logo--partner' : 'brand-logo';
   const brandNameClass = isPartnerInvoice ? 'brand-name brand-name--partner' : 'brand-name';
+  const topBarClass = isPartnerInvoice ? 'top-bar top-bar--partner' : 'top-bar';
   const orderId = record.unique_id || record._id;
   const invoiceNo = `INV-${orderId}`;
   const customerName = record.user_info?.name || '—';
@@ -752,7 +769,7 @@ const buildOrderInvoiceHtml = (record, options = {}) => {
 </head>
 <body>
   <div class="invoice">
-    <div class="top-bar">
+    <div class="${topBarClass}">
       <div class="brand-wrap">
         <img class="${logoClass}" src="${logoUrl}" alt="${escapeHtml(INVOICE_BRAND_NAME)} logo" />
         <div class="brand-text">

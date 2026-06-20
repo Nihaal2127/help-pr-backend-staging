@@ -1228,7 +1228,7 @@
                     "payment-status"
                   ]
                 },
-                "description": "**GET /api/mobile/partner/subscription/change/:changeId/payment-status**\n\n- **Auth:** Bearer `{{token}}`\n- **Path:** `changeId` — from **Apply plan change (upgrade — Razorpay online)** (`{{subscriptionChangeId}}`)\n\n**200** `data`: `status` (`pending` | `completed` | `expired` | …), `payment_status`, `amount_to_pay`, `wallet_amount`, `online_amount`, `target_plan`, `applied_at`, `wallet_balance`\n\nPoll after opening `{{subscriptionPaymentUrl}}` until `status` is `completed`."
+                "description": "**GET /api/mobile/partner/subscription/change/:changeId/payment-status**\n\n- **Auth:** Bearer `{{token}}`\n- **Path:** `changeId` — from **Apply plan change (upgrade — Razorpay online)** (`{{subscriptionChangeId}}`)\n\n**200** `data`: `status`, `payment_status`, `target_plan`, `applied_at`, `wallet_balance`, optional `sync` object\n\nPoll after paying until `status` is `completed`. If still `pending` after payment, **call again** — backend polls Razorpay and applies the change when paid (`sync.synced: true`)."
               },
               "response": []
             },

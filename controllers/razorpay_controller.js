@@ -2,29 +2,20 @@ const path = require('path');
 const {
     generatePaymentLink,
     verifyWebhookSignature,
+    parseWebhookRequest,
     dispatchWebhook,
 } = require('../src/modules/payments');
-
-const parseWebhookBody = (req) => {
-    if (Buffer.isBuffer(req.body)) {
-        const rawBody = req.body;
-        const body = JSON.parse(rawBody.toString('utf8'));
-        return { rawBody, body };
-    }
-
-    return {
-        rawBody: req.rawBody || JSON.stringify(req.body),
-        body: req.body,
-    };
-};
 
 const handleRazorpayWebhook = async (req, res) => {
     try {
         const signature = req.headers['x-razorpay-signature'];
-        const { rawBody, body } = parseWebhookBody(req);
+        const { rawBody, body } = parseWebhookRequest(req);
 
         if (!verifyWebhookSignature(rawBody, signature)) {
-            console.log('Razorpay webhook signature mismatch');
+            console.log('Razorpay webhook signature mismatch', {
+                hasApiGatewayEvent: Boolean(req.apiGateway?.event),
+                bodyType: Buffer.isBuffer(req.body) ? 'buffer' : typeof req.body,
+            });
             return res.status(400).send('Invalid signature');
         }
 

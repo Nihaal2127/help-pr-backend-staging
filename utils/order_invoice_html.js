@@ -1,5 +1,21 @@
+const fs = require('fs');
+const path = require('path');
+
 const INVOICE_LOGO_URL =
   'http://helper-admin-dashboard-staging.s3-website.ap-south-1.amazonaws.com/static/media/login_logo.dd37de4b8ee5c0dddd7a63cb3e3b7a5c.svg';
+const PARTNER_INVOICE_LOGO_PATH = path.join(
+  __dirname,
+  '../public/static/partner-invoice-logo.png'
+);
+const PARTNER_INVOICE_LOGO_URL = (() => {
+  try {
+    const logoBuffer = fs.readFileSync(PARTNER_INVOICE_LOGO_PATH);
+    return `data:image/png;base64,${logoBuffer.toString('base64')}`;
+  } catch (err) {
+    console.error('Failed to load partner invoice logo:', err.message);
+    return INVOICE_LOGO_URL;
+  }
+})();
 const INVOICE_BRAND_NAME = 'Help PR';
 const INVOICE_TAGLINE = 'Trusted Home Services';
 const INVOICE_SUPPORT_PHONE = '+91 1800-123-4567';
@@ -268,6 +284,12 @@ const INVOICE_STYLES = `
     height: 52px;
     object-fit: contain;
     flex-shrink: 0;
+  }
+
+  .brand-logo--partner {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
   }
 
   .brand-text { min-width: 0; }
@@ -690,8 +712,13 @@ const INVOICE_STYLES = `
 
 /**
  * Build a printable HTML invoice from a shaped order detail record (loadOrderDetailLean).
+ * @param {object} record
+ * @param {{ audience?: 'user' | 'partner' }} [options]
  */
-const buildOrderInvoiceHtml = (record) => {
+const buildOrderInvoiceHtml = (record, options = {}) => {
+  const isPartnerInvoice = options.audience === 'partner';
+  const logoUrl = isPartnerInvoice ? PARTNER_INVOICE_LOGO_URL : INVOICE_LOGO_URL;
+  const logoClass = isPartnerInvoice ? 'brand-logo brand-logo--partner' : 'brand-logo';
   const orderId = record.unique_id || record._id;
   const invoiceNo = `INV-${orderId}`;
   const customerName = record.user_info?.name || '—';
@@ -723,11 +750,15 @@ const buildOrderInvoiceHtml = (record) => {
   <div class="invoice">
     <div class="top-bar">
       <div class="brand-wrap">
-        <img class="brand-logo" src="${INVOICE_LOGO_URL}" alt="${escapeHtml(INVOICE_BRAND_NAME)} logo" />
-        <div class="brand-text">
+        <img class="${logoClass}" src="${logoUrl}" alt="${escapeHtml(INVOICE_BRAND_NAME)} logo" />
+        ${
+          isPartnerInvoice
+            ? ''
+            : `<div class="brand-text">
           <h1 class="brand-name">${brandNameHtml}</h1>
           <p class="brand-tagline">${escapeHtml(INVOICE_TAGLINE)}</p>
-        </div>
+        </div>`
+        }
       </div>
       <h2 class="invoice-title">INVOICE</h2>
     </div>

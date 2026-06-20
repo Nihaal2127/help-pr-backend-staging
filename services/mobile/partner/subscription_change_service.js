@@ -14,6 +14,11 @@ const {
 } = require('../../../utils/subscription_proration');
 const { safeNotifyWalletTransaction } = require('../../../src/modules/notifications/services/domainHooks');
 const { createSubscriptionChangePaymentLink, fetchPaymentLink } = require('../../../src/modules/payments');
+const { PAYMENT_PURPOSES } = require('../../../src/modules/payments/constants/payment.constants');
+const {
+    recordGatewayPayment,
+    extractPaymentIdFromLink,
+} = require('../../../src/modules/payments/services/gatewayPayment.service');
 
 const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
 /** Pending rows without a Razorpay link id (orphaned initiation). */
@@ -1078,7 +1083,12 @@ const initiateOnlineChangeInTransaction = async ({
     };
 };
 
-const completeOnlineChangeFromWebhook = async (changeId, paymentLinkId, paidAmountPaise = null) => {
+const completeOnlineChangeFromWebhook = async (
+    changeId,
+    paymentLinkId,
+    paidAmountPaise = null,
+    gatewayMeta = {}
+) => {
     const session = await mongoose.startSession();
     let result = null;
 
@@ -1198,10 +1208,32 @@ const completeOnlineChangeFromWebhook = async (changeId, paymentLinkId, paidAmou
             change.status = 'completed';
             change.payment_status = 'completed';
             change.applied_at = now;
-            change.transaction_reference = paymentLinkId;
+            change.transaction_reference =
+                gatewayMeta.gateway_payment_id || paymentLinkId;
             change.wallet_ledger_credit_id = walletLedgerCreditId;
             change.updated_at = now;
             await change.save({ session });
+
+            const onlineAmount = roundAmount(
+                Math.max(0, change.amount_to_pay - change.wallet_amount - change.cash_amount)
+            );
+            if (onlineAmount > PAYMENT_TOLERANCE) {
+                await recordGatewayPayment(
+                    {
+                        purpose: PAYMENT_PURPOSES.SUBSCRIPTION_CHANGE,
+                        referenceId: change._id,
+                        payerType: 'partner',
+                        payerId: change.partner_id,
+                        amount: onlineAmount,
+                        gatewayPaymentLinkId: paymentLinkId,
+                        gatewayPaymentId: gatewayMeta.gateway_payment_id || null,
+                        instrumentType: gatewayMeta.instrument_type || null,
+                        paidAt: gatewayMeta.paid_at || now,
+                        notes: 'Subscription change — Razorpay online payment',
+                    },
+                    session
+                );
+            }
 
             result = {
                 ok: true,
@@ -1263,7 +1295,12 @@ const syncPendingOnlineChangePayment = async (changeId, partnerId) => {
     const completion = await completeOnlineChangeFromWebhook(
         change._id,
         change.razorpay_payment_link_id,
-        paidAmountPaise
+        paidAmountPaise,
+        {
+            gateway_payment_id: extractPaymentIdFromLink(link),
+            instrument_type: link.payments?.[0]?.method || null,
+            paid_at: link.updated_at ? new Date(link.updated_at * 1000) : new Date(),
+        }
     );
 
     if (!completion?.ok) {
@@ -1319,6 +1356,20 @@ const getChangePaymentStatus = async (partnerId, changeId) => {
 
         const walletBalance = await getWalletBalance(pPartner.oid);
 
+        let gatewayPayment = null;
+        if (latestChange.status === 'completed' && latestChange.razorpay_payment_link_id) {
+            const GatewayPayment = require('../../../models/gateway_payment');
+            gatewayPayment = await GatewayPayment.findOne({
+                purpose: PAYMENT_PURPOSES.SUBSCRIPTION_CHANGE,
+                reference_id: latestChange._id,
+                deleted_at: null,
+            })
+                .select(
+                    'amount currency status payment_method gateway_payment_link_id gateway_payment_id instrument_type paid_at created_at'
+                )
+                .lean();
+        }
+
         return ok(200, {
             message: syncResult?.synced
                 ? 'Payment verified with Razorpay and subscription change applied.'
@@ -1342,6 +1393,7 @@ const getChangePaymentStatus = async (partnerId, changeId) => {
                 applied_at: latestChange.applied_at,
                 target_plan: formatPlanSummary(latestChange.to_plan_id),
                 wallet_balance: walletBalance,
+                gateway_payment: gatewayPayment,
                 ...(syncResult
                     ? {
                           sync: {

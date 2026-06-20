@@ -282,6 +282,26 @@ Configure the webhook in [Razorpay Dashboard](https://dashboard.razorpay.com) â†
 
 Pending online changes expire after **24 hours**; any wallet portion is refunded automatically.
 
+### 6.2 Gateway payment records (`gateway_payment` collection)
+
+Each completed Razorpay online payment creates a row in **`gateway_payment`** (separate from `partner_subscription_change`):
+
+| Field | Example |
+|-------|---------|
+| `purpose` | `subscription_change` |
+| `reference_id` | subscription change `_id` |
+| `payer_type` | `partner` |
+| `amount` | online portion in INR |
+| `gateway_payment_link_id` | `plink_xxx` |
+| `gateway_payment_id` | `pay_xxx` (Razorpay payment id) |
+| `instrument_type` | `card`, `upi`, `netbanking`, â€¦ |
+
+`partner_subscription_change.transaction_reference` stores `pay_xxx` when available.
+
+**GET payment-status** includes `data.gateway_payment` when completed.
+
+Orders will use the same collection with `purpose: order` later.
+
 **Webhook note:** The server verifies Razorpay signatures against the **raw** JSON body (`express.raw` on the webhook route). Do not put a reverse proxy in front that re-serializes the payload.
 
 ---

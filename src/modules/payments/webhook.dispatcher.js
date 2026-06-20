@@ -44,6 +44,7 @@ const dispatchWebhook = async (body) => {
     const subscriptionResult = await handleSubscriptionPaymentLinkPaid(paymentLinkId, {
         paymentLinkEntity,
         paidAmountPaise,
+        paymentEntity,
     });
     results.push({ type: 'subscription_change', ...subscriptionResult });
 

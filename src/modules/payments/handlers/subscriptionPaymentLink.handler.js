@@ -30,7 +30,7 @@ const findPendingChangeForPaymentLink = async (paymentLinkId, paymentLinkEntity)
  * @param {{ paymentLinkEntity?: object, paidAmountPaise?: number }} context
  */
 const handleSubscriptionPaymentLinkPaid = async (paymentLinkId, context = {}) => {
-    const { paymentLinkEntity, paidAmountPaise } = context;
+    const { paymentLinkEntity, paidAmountPaise, paymentEntity } = context;
 
     const change = await findPendingChangeForPaymentLink(paymentLinkId, paymentLinkEntity);
     if (!change) {
@@ -45,7 +45,14 @@ const handleSubscriptionPaymentLinkPaid = async (paymentLinkId, context = {}) =>
     const result = await completeOnlineChangeFromWebhook(
         change._id,
         paymentLinkId,
-        paidAmountPaise
+        paidAmountPaise,
+        {
+            gateway_payment_id: context.paymentEntity?.id || null,
+            instrument_type: context.paymentEntity?.method || null,
+            paid_at: context.paymentEntity?.created_at
+                ? new Date(Number(context.paymentEntity.created_at) * 1000)
+                : new Date(),
+        }
     );
 
     if (result.ok) {

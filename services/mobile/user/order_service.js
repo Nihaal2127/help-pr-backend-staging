@@ -172,7 +172,7 @@ const getCustomerOrderInvoice = async (customerId, orderId) => {
       return fail(404, 'Order not found.');
     }
 
-    const html = buildOrderInvoiceHtml(record);
+    const html = buildOrderInvoiceHtml(record, { audience: 'user' });
     const safeId = String(record.unique_id || order._id).replace(/[^\w-]/g, '_');
 
     return ok(200, {

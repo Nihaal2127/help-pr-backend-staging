@@ -23,6 +23,17 @@ const applyChange = wrapMobileHandler('mobile partner subscription change', asyn
   return sendServiceResult(res, result);
 });
 
+const getChangePaymentStatus = wrapMobileHandler(
+  'mobile partner subscription change payment status',
+  async (req, res) => {
+    const result = await subscriptionChangeService.getChangePaymentStatus(
+      getCallerId(req),
+      req.params.changeId
+    );
+    return sendServiceResult(res, result);
+  }
+);
+
 const listHistory = wrapMobileHandler('mobile partner subscription history', async (req, res) => {
   const result = await subscriptionChangeService.listChangeHistory(getCallerId(req), req.query);
   return sendServiceResult(res, result);
@@ -33,4 +44,5 @@ module.exports = {
   previewChange,
   applyChange,
   listHistory,
+  getChangePaymentStatus,
 };

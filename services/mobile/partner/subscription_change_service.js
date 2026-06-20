@@ -6,16 +6,20 @@ const PartnerWalletLedger = require('../../../models/partner_wallet_ledger');
 const User = require('../../../models/user');
 const { getWalletAggregatesForPartners } = require('../../partner_payout_service');
 const {
+    PAYMENT_TOLERANCE,
     roundAmount,
     computeExpiresAt,
     computeProration,
     validateUpgradePaymentSplit,
 } = require('../../../utils/subscription_proration');
 const { safeNotifyWalletTransaction } = require('../../../src/modules/notifications/services/domainHooks');
+const { createSubscriptionChangePaymentLink } = require('../../../src/modules/payments');
 
 const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
-/** Pending rows older than this are treated as orphaned (failed/crashed apply). */
-const PENDING_CHANGE_STALE_MS = 60 * 1000;
+/** Pending rows without a Razorpay link id (orphaned initiation). */
+const PENDING_ORPHAN_EXPIRY_MS = 5 * 60 * 1000;
+/** Online payment pending rows expire after this (Razorpay link validity window). */
+const ONLINE_PENDING_EXPIRY_MS = 24 * 60 * 60 * 1000;
 const APPLY_CHANGE_MAX_ATTEMPTS = 3;
 const DUPLICATE_KEY_LOOKUP_ATTEMPTS = 4;
 const DUPLICATE_KEY_LOOKUP_DELAY_MS = 75;
@@ -205,13 +209,21 @@ const buildApplySuccessResponse = (
               status: updatedSubscription.status,
               plan: formatPlanSummary(updatedPlan),
           }
-        : {
-              _id: idempotentChange?.subscription?._id,
-              started_at: idempotentChange?.subscription?.started_at,
-              expires_at: idempotentChange?.subscription?.expires_at,
-              status: idempotentChange?.subscription?.status,
-              plan: formatPlanSummary(idempotentChange?.plan),
-          };
+        : txResult?.currentSubscription
+          ? {
+                _id: txResult.currentSubscription._id,
+                started_at: txResult.currentSubscription.started_at,
+                expires_at: txResult.currentSubscription.expires_at,
+                status: txResult.currentSubscription.status,
+                plan: formatPlanSummary(txResult.currentPlan),
+            }
+          : {
+                _id: idempotentChange?.subscription?._id,
+                started_at: idempotentChange?.subscription?.started_at,
+                expires_at: idempotentChange?.subscription?.expires_at,
+                status: idempotentChange?.subscription?.status,
+                plan: formatPlanSummary(idempotentChange?.plan),
+            };
 
     const changePayload = {
         _id: changeDoc?._id || null,
@@ -219,17 +231,27 @@ const buildApplySuccessResponse = (
         amount_to_pay: proration.amount_to_pay,
         wallet_amount: paymentValidation.wallet,
         cash_amount: paymentValidation.cash,
+        online_amount: paymentValidation.online ?? 0,
         payment_method: paymentValidation.payment_method,
+        payment_status: txResult?.changeDoc?.payment_status || 'completed',
+        status: txResult?.changeDoc?.status || 'completed',
     };
     if (proration.change_type === 'downgrade') {
         changePayload.wallet_credit = proration.wallet_credit;
     }
+    if (txResult?.payment_url) {
+        changePayload.payment_url = txResult.payment_url;
+    }
 
-    return ok(200, {
-        message:
-            proration.change_type === 'downgrade'
-                ? 'Subscription downgraded successfully.'
-                : 'Subscription upgraded successfully.',
+    const isPendingOnline =
+        txResult?.changeDoc?.status === 'pending' && Boolean(txResult?.payment_url);
+
+    return ok(isPendingOnline ? 202 : 200, {
+        message: isPendingOnline
+            ? 'Complete payment to apply your subscription change.'
+            : proration.change_type === 'downgrade'
+              ? 'Subscription downgraded successfully.'
+              : 'Subscription upgraded successfully.',
         data: {
             subscription: subscriptionPayload,
             change: changePayload,
@@ -251,27 +273,76 @@ const resolveChangePaymentStatus = (amountToPay) =>
     roundAmount(amountToPay) > 0 ? 'completed' : 'not_required';
 
 const releaseStalePendingChanges = async (partnerId, session = null) => {
-    const cutoff = new Date(Date.now() - PENDING_CHANGE_STALE_MS);
-    const query = PartnerSubscriptionChange.updateMany(
+    const orphanCutoff = new Date(Date.now() - PENDING_ORPHAN_EXPIRY_MS);
+    const onlineCutoff = new Date(Date.now() - ONLINE_PENDING_EXPIRY_MS);
+
+    const findQuery = PartnerSubscriptionChange.find({
+        partner_id: partnerId,
+        status: 'pending',
+        deleted_at: null,
+        applied_at: null,
+        $or: [
+            {
+                $or: [{ razorpay_payment_link_id: null }, { razorpay_payment_link_id: '' }],
+                created_at: { $lt: orphanCutoff },
+            },
+            {
+                razorpay_payment_link_id: { $gt: '' },
+                created_at: { $lt: onlineCutoff },
+            },
+        ],
+    }).select('_id wallet_ledger_debit_id partner_id wallet_amount');
+    if (session) {
+        findQuery.session(session);
+    }
+    const staleRows = await findQuery.lean();
+
+    if (!staleRows.length) {
+        return 0;
+    }
+
+    let expiredCount = 0;
+    for (const row of staleRows) {
+        const expired = await expirePendingChangeRow(row, session);
+        if (expired) {
+            expiredCount += 1;
+        }
+    }
+
+    return expiredCount;
+};
+
+const expirePendingChangeRow = async (row, session = null) => {
+    const now = new Date();
+    const updateQuery = PartnerSubscriptionChange.findOneAndUpdate(
         {
-            partner_id: partnerId,
+            _id: row._id,
             status: 'pending',
             deleted_at: null,
-            applied_at: null,
-            created_at: { $lt: cutoff },
         },
         {
             $set: {
                 status: 'expired',
-                updated_at: new Date(),
+                payment_status: 'failed',
+                updated_at: now,
             },
-        }
+        },
+        { new: true }
     );
     if (session) {
-        query.session(session);
+        updateQuery.session(session);
     }
-    const result = await query;
-    return result.modifiedCount || 0;
+    const updated = await updateQuery.lean();
+
+    if (!updated) {
+        return false;
+    }
+
+    if (updated.wallet_ledger_debit_id && updated.wallet_amount > 0) {
+        await reverseWalletDebitForChange(updated, session);
+    }
+
+    return true;
 };
 
 const { fail, ok } = require('../../../utils/mobile_service_result');
@@ -302,7 +373,7 @@ const loadPartnerUser = async (partnerOid) =>
         type: USER_TYPE_PARTNER,
         deleted_at: null,
     })
-        .select('_id name email franchise_id verification_status is_blocked')
+        .select('_id name email phone_number franchise_id verification_status is_blocked')
         .lean();
 
 const assertPartnerAccount = (partner) => {
@@ -702,6 +773,35 @@ const createWalletLedgerEntry = async (
     return row;
 };
 
+const reverseWalletDebitForChange = async (changeRow, session = null) => {
+    const partnerId = changeRow.partner_id;
+    const amount = roundAmount(changeRow.wallet_amount);
+    if (amount <= 0) {
+        return null;
+    }
+
+    const partner = await User.findById(partnerId)
+        .select('_id franchise_id')
+        .session(session || null)
+        .lean();
+    if (!partner) {
+        return null;
+    }
+
+    return createWalletLedgerEntry(
+        {
+            partnerId: partner._id,
+            franchiseId: partner.franchise_id,
+            transactionType: 'credit',
+            amount,
+            description: 'Subscription change payment expired — wallet refund',
+            paymentMethod: 'subscription_refund',
+            subscriptionChangeId: changeRow._id,
+        },
+        session
+    );
+};
+
 const executeChangeInTransaction = async ({
     partner,
     subscription,
@@ -730,6 +830,7 @@ const executeChangeInTransaction = async ({
                     amountToPay: proration.amount_to_pay,
                     walletAmount: paymentValidation.wallet,
                     cashAmount: paymentValidation.cash,
+                    onlineAmount: paymentValidation.online ?? 0,
                     walletBalance: freshBalance,
                 });
                 if (!revalidated.ok) {
@@ -737,7 +838,15 @@ const executeChangeInTransaction = async ({
                 }
                 paymentValidation.wallet = revalidated.wallet;
                 paymentValidation.cash = revalidated.cash;
+                paymentValidation.online = revalidated.online;
                 paymentValidation.payment_method = revalidated.payment_method;
+
+                if (revalidated.online > PAYMENT_TOLERANCE) {
+                    throw new SubscriptionChangeError(
+                        400,
+                        'Online payment must use the online_amount flow, not immediate apply.'
+                    );
+                }
             }
 
             const changeId = new mongoose.Types.ObjectId();
@@ -837,9 +946,336 @@ const executeChangeInTransaction = async ({
     return result;
 };
 
+const initiateOnlineChangeInTransaction = async ({
+    partner,
+    subscription,
+    currentPlan,
+    newPlan,
+    proration,
+    paymentValidation,
+}) => {
+    const changeId = new mongoose.Types.ObjectId();
+
+    const paymentLink = await createSubscriptionChangePaymentLink({
+        name: partner.name || 'Partner',
+        email: partner.email,
+        contact: partner.phone_number,
+        amount: paymentValidation.online,
+        changeId,
+        partnerId: partner._id,
+        planName: newPlan.plan_name,
+    });
+
+    if (!paymentLink.success) {
+        throw new SubscriptionChangeError(
+            502,
+            paymentLink.error || 'Failed to create Razorpay payment link.'
+        );
+    }
+
+    const session = await mongoose.startSession();
+    let pendingChange = null;
+
+    try {
+        await session.withTransaction(async () => {
+            await releaseStalePendingChanges(partner._id, session);
+
+            const blocking = await findBlockingPendingChange(partner._id, session);
+            if (blocking) {
+                throw await buildInProgressError(partner._id, session, 'active_pending');
+            }
+
+            const now = new Date();
+            const freshBalance = await getWalletBalance(partner._id, session);
+            const revalidated = validateUpgradePaymentSplit({
+                amountToPay: proration.amount_to_pay,
+                walletAmount: paymentValidation.wallet,
+                cashAmount: paymentValidation.cash,
+                onlineAmount: paymentValidation.online ?? 0,
+                walletBalance: freshBalance,
+            });
+            if (!revalidated.ok) {
+                throw new SubscriptionChangeError(400, revalidated.message);
+            }
+            if (revalidated.online <= 0) {
+                throw new SubscriptionChangeError(400, 'Online payment amount must be greater than zero.');
+            }
+
+            paymentValidation.wallet = revalidated.wallet;
+            paymentValidation.cash = revalidated.cash;
+            paymentValidation.online = revalidated.online;
+            paymentValidation.payment_method = revalidated.payment_method;
+
+            let walletLedgerDebitId = null;
+
+            if (paymentValidation.wallet > 0) {
+                const debitLabel =
+                    proration.change_type === 'downgrade' ? 'downgrade payment' : 'upgrade payment';
+                const debitRow = await createWalletLedgerEntry(
+                    {
+                        partnerId: partner._id,
+                        franchiseId: partner.franchise_id,
+                        transactionType: 'debit',
+                        amount: paymentValidation.wallet,
+                        description: `Subscription ${debitLabel} (${currentPlan.plan_name} to ${newPlan.plan_name})`,
+                        paymentMethod: 'wallet',
+                        subscriptionChangeId: changeId,
+                    },
+                    session
+                );
+                walletLedgerDebitId = debitRow._id;
+            }
+
+            const [createdChange] = await PartnerSubscriptionChange.create(
+                [
+                    {
+                        _id: changeId,
+                        partner_id: partner._id,
+                        from_plan_id: currentPlan._id,
+                        to_plan_id: newPlan._id,
+                        change_type: proration.change_type,
+                        days_used: proration.days_used,
+                        days_total: proration.days_total,
+                        consumed_value: proration.consumed_value,
+                        remaining_value: proration.remaining_value,
+                        gross_new_plan_price: proration.gross_new_plan_price,
+                        amount_to_pay: proration.amount_to_pay,
+                        wallet_amount: paymentValidation.wallet,
+                        cash_amount: 0,
+                        wallet_credit: proration.wallet_credit,
+                        payment_method: paymentValidation.payment_method,
+                        payment_status: 'pending',
+                        status: 'pending',
+                        applied_at: null,
+                        wallet_ledger_debit_id: walletLedgerDebitId,
+                        wallet_ledger_credit_id: null,
+                        razorpay_payment_link_id: paymentLink.payment_link_id,
+                        transaction_reference: null,
+                        created_at: now,
+                        updated_at: now,
+                    },
+                ],
+                { session }
+            );
+
+            pendingChange = createdChange.toObject();
+        });
+    } catch (err) {
+        throw await mapExecutionError(err, partner._id, session);
+    } finally {
+        await endMongoSession(session);
+    }
+
+    if (!pendingChange) {
+        throw new SubscriptionChangeError(500, 'Could not initiate online subscription payment.');
+    }
+
+    return {
+        changeDoc: pendingChange,
+        payment_url: paymentLink.payment_url,
+        currentSubscription: subscription,
+        currentPlan,
+    };
+};
+
+const completeOnlineChangeFromWebhook = async (changeId, paymentLinkId, paidAmountPaise = null) => {
+    const session = await mongoose.startSession();
+    let result = null;
+
+    try {
+        await session.withTransaction(async () => {
+            const change = await PartnerSubscriptionChange.findOne({
+                _id: changeId,
+                deleted_at: null,
+            }).session(session);
+
+            if (!change) {
+                throw new SubscriptionChangeError(404, 'Subscription change not found.');
+            }
+
+            if (
+                change.razorpay_payment_link_id &&
+                change.razorpay_payment_link_id !== paymentLinkId
+            ) {
+                throw new SubscriptionChangeError(404, 'Subscription change payment link mismatch.');
+            }
+
+            if (!change.razorpay_payment_link_id) {
+                change.razorpay_payment_link_id = paymentLinkId;
+            }
+
+            if (change.status === 'completed') {
+                result = { ok: true, already_completed: true, change_id: change._id };
+                return;
+            }
+
+            if (change.status !== 'pending') {
+                throw new SubscriptionChangeError(
+                    409,
+                    `Subscription change is ${change.status} and cannot be completed.`
+                );
+            }
+
+            const expectedOnlineRupees = roundAmount(
+                Math.max(0, change.amount_to_pay - change.wallet_amount - change.cash_amount)
+            );
+            if (expectedOnlineRupees > PAYMENT_TOLERANCE) {
+                if (paidAmountPaise == null || !Number.isFinite(Number(paidAmountPaise))) {
+                    throw new SubscriptionChangeError(400, 'Paid amount missing from webhook payload.');
+                }
+                const expectedPaise = Math.round(expectedOnlineRupees * 100);
+                if (Math.abs(Number(paidAmountPaise) - expectedPaise) > 1) {
+                    throw new SubscriptionChangeError(
+                        400,
+                        `Paid amount mismatch: expected ${expectedPaise} paise, got ${paidAmountPaise}.`
+                    );
+                }
+            }
+
+            const subscription = await PartnerSubscription.findOne({
+                partner_id: change.partner_id,
+                status: 'active',
+                deleted_at: null,
+            })
+                .session(session)
+                .lean();
+
+            if (!subscription) {
+                throw new SubscriptionChangeError(404, 'Active subscription not found for partner.');
+            }
+
+            const currentPlan = await SubscriptionPlan.findById(change.from_plan_id)
+                .session(session)
+                .lean();
+            const newPlan = await SubscriptionPlan.findById(change.to_plan_id).session(session).lean();
+
+            if (!currentPlan || !newPlan) {
+                throw new SubscriptionChangeError(404, 'Subscription plan not found.');
+            }
+
+            if (String(subscription.subscription_plan_id) !== String(currentPlan._id)) {
+                throw new SubscriptionChangeError(
+                    409,
+                    'Subscription plan changed before payment could be applied.'
+                );
+            }
+
+            const now = new Date();
+            let walletLedgerCreditId = change.wallet_ledger_credit_id;
+
+            if (
+                change.change_type === 'downgrade' &&
+                change.wallet_credit > 0 &&
+                !walletLedgerCreditId
+            ) {
+                const partner = await User.findById(change.partner_id)
+                    .select('_id franchise_id')
+                    .session(session)
+                    .lean();
+                const creditRow = await createWalletLedgerEntry(
+                    {
+                        partnerId: change.partner_id,
+                        franchiseId: partner?.franchise_id,
+                        transactionType: 'credit',
+                        amount: change.wallet_credit,
+                        description: `Subscription downgrade credit (${currentPlan.plan_name} to ${newPlan.plan_name})`,
+                        paymentMethod: 'subscription_downgrade',
+                        subscriptionChangeId: change._id,
+                    },
+                    session
+                );
+                walletLedgerCreditId = creditRow._id;
+            }
+
+            const { updated, plan: updatedPlan } = await applySubscriptionUpdate(
+                subscription._id,
+                newPlan._id,
+                currentPlan._id,
+                now,
+                session
+            );
+
+            change.status = 'completed';
+            change.payment_status = 'completed';
+            change.applied_at = now;
+            change.transaction_reference = paymentLinkId;
+            change.wallet_ledger_credit_id = walletLedgerCreditId;
+            change.updated_at = now;
+            await change.save({ session });
+
+            result = {
+                ok: true,
+                change_id: change._id,
+                updatedSubscription: updated,
+                updatedPlan,
+            };
+        });
+    } catch (err) {
+        if (err instanceof SubscriptionChangeError) {
+            return { ok: false, message: err.message, status: err.status };
+        }
+        console.error('completeOnlineChangeFromWebhook', err.message, err.stack || '');
+        return { ok: false, message: 'Failed to complete subscription change.' };
+    } finally {
+        await endMongoSession(session);
+    }
+
+    return result || { ok: false, message: 'Failed to complete subscription change.' };
+};
+
+const getChangePaymentStatus = async (partnerId, changeId) => {
+    try {
+        const pPartner = parseObjectId(partnerId, 'partner_id');
+        if (!pPartner.ok) return fail(400, pPartner.message);
+
+        const pChange = parseObjectId(changeId, 'change_id');
+        if (!pChange.ok) return fail(400, pChange.message);
+
+        const partner = await loadPartnerUser(pPartner.oid);
+        const accountError = assertPartnerAccount(partner);
+        if (accountError) return accountError;
+
+        const change = await PartnerSubscriptionChange.findOne({
+            _id: pChange.oid,
+            partner_id: pPartner.oid,
+            deleted_at: null,
+        })
+            .populate('to_plan_id', 'plan_name price duration duration_type priority')
+            .lean();
+
+        if (!change) {
+            return fail(404, 'Subscription change not found.');
+        }
+
+        const walletBalance = await getWalletBalance(pPartner.oid);
+
+        return ok(200, {
+            message: 'Subscription change payment status fetched successfully.',
+            data: {
+                change_id: change._id,
+                status: change.status,
+                payment_status: change.payment_status,
+                payment_method: change.payment_method,
+                amount_to_pay: change.amount_to_pay,
+                wallet_amount: change.wallet_amount,
+                online_amount: roundAmount(
+                    Math.max(0, change.amount_to_pay - change.wallet_amount - change.cash_amount)
+                ),
+                razorpay_payment_link_id: change.razorpay_payment_link_id,
+                applied_at: change.applied_at,
+                target_plan: formatPlanSummary(change.to_plan_id),
+                wallet_balance: walletBalance,
+            },
+        });
+    } catch (err) {
+        console.error('getChangePaymentStatus', err.message);
+        return fail(500, 'Internal server error.');
+    }
+};
+
 const applyChange = async (partnerId, body) => {
     try {
-        const { target_plan_id, wallet_amount = 0, cash_amount = 0 } = body;
+        const { target_plan_id, wallet_amount = 0, cash_amount = 0, online_amount = 0 } = body;
 
         const ctx = await buildChangeContext(partnerId, target_plan_id);
         if (!ctx.ok) return ctx;
@@ -848,7 +1284,7 @@ const applyChange = async (partnerId, body) => {
 
         await releaseStalePendingChanges(partner._id);
 
-        let paymentValidation = { wallet: 0, cash: 0, payment_method: 'not_required' };
+        let paymentValidation = { wallet: 0, cash: 0, online: 0, payment_method: 'not_required' };
 
         if (proration.amount_to_pay > 0) {
             const walletBalance = await getWalletBalance(partner._id);
@@ -856,11 +1292,67 @@ const applyChange = async (partnerId, body) => {
                 amountToPay: proration.amount_to_pay,
                 walletAmount: wallet_amount,
                 cashAmount: cash_amount,
+                onlineAmount: online_amount,
                 walletBalance,
             });
             if (!paymentValidation.ok) {
                 return fail(400, paymentValidation.message);
             }
+        }
+
+        const requiresOnlineGateway = (paymentValidation.online ?? 0) > 0;
+
+        if (requiresOnlineGateway) {
+            if (!partner.email && !partner.phone_number) {
+                return fail(
+                    400,
+                    'Email or phone number is required on your profile to pay online.'
+                );
+            }
+
+            let txResult = null;
+            let lastInProgressError = null;
+
+            for (let attempt = 1; attempt <= APPLY_CHANGE_MAX_ATTEMPTS; attempt++) {
+                try {
+                    await releaseStalePendingChanges(partner._id);
+                    txResult = await initiateOnlineChangeInTransaction({
+                        partner,
+                        subscription,
+                        currentPlan,
+                        newPlan,
+                        proration,
+                        paymentValidation,
+                    });
+                    lastInProgressError = null;
+                    break;
+                } catch (err) {
+                    if (!(err instanceof SubscriptionChangeError) || err.status !== 409) {
+                        throw err;
+                    }
+                    if (isRetryableInProgressError(err) && attempt < APPLY_CHANGE_MAX_ATTEMPTS) {
+                        lastInProgressError = err;
+                        await sleep(100 * attempt);
+                        continue;
+                    }
+                    throw err;
+                }
+            }
+
+            if (!txResult) {
+                throw (
+                    lastInProgressError ||
+                    new SubscriptionChangeError(500, 'Subscription change could not be initiated.')
+                );
+            }
+
+            const newWalletBalance = await getWalletBalance(partner._id);
+            return buildApplySuccessResponse(
+                proration,
+                paymentValidation,
+                txResult,
+                newWalletBalance
+            );
         }
 
         let txResult = null;
@@ -941,4 +1433,6 @@ module.exports = {
     previewChange,
     applyChange,
     listChangeHistory,
+    getChangePaymentStatus,
+    completeOnlineChangeFromWebhook,
 };

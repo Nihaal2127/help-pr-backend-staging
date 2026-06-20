@@ -1,4 +1,4 @@
-const GatewayPayment = require('../../../models/gateway_payment');
+const GatewayPayment = require('../../../../models/gateway_payment');
 const { GATEWAY_PAYMENT_METHOD } = require('../constants/payment.constants');
 
 const normalizeInstrumentType = (raw) => {

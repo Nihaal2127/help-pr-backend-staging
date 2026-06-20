@@ -1,9 +1,9 @@
 const mongoose = require('mongoose');
-const { PAYMENT_PURPOSES } = require('../src/modules/payments/constants/payment.constants');
 
 const GATEWAYS = ['razorpay'];
 const PAYER_TYPES = ['partner', 'customer'];
 const STATUSES = ['pending', 'completed', 'failed', 'refunded'];
+const PURPOSES = ['order', 'subscription_change'];
 const INSTRUMENT_TYPES = ['card', 'upi', 'netbanking', 'wallet', 'emi', 'other'];
 
 const gatewayPaymentSchema = new mongoose.Schema(
@@ -17,7 +17,7 @@ const gatewayPaymentSchema = new mongoose.Schema(
         purpose: {
             type: String,
             required: true,
-            enum: Object.values(PAYMENT_PURPOSES),
+            enum: PURPOSES,
             index: true,
         },
         reference_id: {
@@ -76,4 +76,5 @@ module.exports = mongoose.model('gateway_payment', gatewayPaymentSchema);
 module.exports.GATEWAYS = GATEWAYS;
 module.exports.PAYER_TYPES = PAYER_TYPES;
 module.exports.STATUSES = STATUSES;
+module.exports.PURPOSES = PURPOSES;
 module.exports.INSTRUMENT_TYPES = INSTRUMENT_TYPES;

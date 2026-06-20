@@ -105,6 +105,11 @@ const requiresProfilePhotoForUpdate = (req) => {
   return false;
 };
 
+const hasExistingProfilePhoto = (partner) => {
+  const url = partner?.profile_url;
+  return typeof url === 'string' && url.trim() !== '';
+};
+
 const PARTNER_UPDATE_SECTION = {
   ALL: 'all',
   BASIC: 'basic-details',
@@ -1131,8 +1136,10 @@ const validatePartnerBankAccountsPayload = (req, res) => {
   return validateBankPayloadIfPresent(req, res);
 };
 
-const validatePartnerUpdatePartialFields = async (req, res) => {
-  if (requiresProfilePhotoForUpdate(req) && !validateProfileImageRequired(req, res)) return false;
+const validatePartnerUpdatePartialFields = async (req, res, partner) => {
+  const mustUploadProfilePhoto =
+    requiresProfilePhotoForUpdate(req) && !hasExistingProfilePhoto(partner);
+  if (mustUploadProfilePhoto && !validateProfileImageRequired(req, res)) return false;
   if (!(await validatePartnerBasicPartialFields(req, res))) return false;
   if (!validateBankPayloadIfPresent(req, res)) return false;
   if (requiresAadharCardFile(req) && !validateAadharCardFileRequired(req, res)) {
@@ -1540,7 +1547,7 @@ const runPartnerUpdateIdentityChecks = async (req, res) => {
 };
 
 const createPartnerUpdateMiddleware = (section) => {
-  const runSectionValidation = async (req, res) => {
+  const runSectionValidation = async (req, res, partner) => {
     if (section === PARTNER_UPDATE_SECTION.BASIC) {
       return validatePartnerBasicPartialFields(req, res);
     }
@@ -1550,7 +1557,7 @@ const createPartnerUpdateMiddleware = (section) => {
     if (section === PARTNER_UPDATE_SECTION.BANKS) {
       return validatePartnerBankAccountsPayload(req, res);
     }
-    return validatePartnerUpdatePartialFields(req, res);
+    return validatePartnerUpdatePartialFields(req, res, partner);
   };
 
   return async (req, res, next) => {
@@ -1565,7 +1572,7 @@ const createPartnerUpdateMiddleware = (section) => {
     let partner;
     try {
       partner = await User.findOne({ _id: req.user.id, deleted_at: null })
-        .select('type verification_status')
+        .select('type verification_status profile_url')
         .lean();
       if (!partner || Number(partner.type) !== USER_TYPE_PARTNER) {
         return res.status(403).json({
@@ -1614,7 +1621,7 @@ const createPartnerUpdateMiddleware = (section) => {
     }
 
     try {
-      if (!(await runSectionValidation(req, res))) {
+      if (!(await runSectionValidation(req, res, partner))) {
         return;
       }
     } catch (err) {

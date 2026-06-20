@@ -3,19 +3,32 @@ const path = require('path');
 
 const INVOICE_LOGO_URL =
   'http://helper-admin-dashboard-staging.s3-website.ap-south-1.amazonaws.com/static/media/login_logo.dd37de4b8ee5c0dddd7a63cb3e3b7a5c.svg';
+
+const loadInvoiceLogoDataUrl = (filePath, fallbackUrl, label) => {
+  try {
+    const logoBuffer = fs.readFileSync(filePath);
+    return `data:image/png;base64,${logoBuffer.toString('base64')}`;
+  } catch (err) {
+    console.error(`Failed to load ${label} invoice logo:`, err.message);
+    return fallbackUrl;
+  }
+};
+
+const USER_INVOICE_LOGO_PATH = path.join(__dirname, '../public/static/user-invoice-logo.png');
 const PARTNER_INVOICE_LOGO_PATH = path.join(
   __dirname,
   '../public/static/partner-invoice-logo.png'
 );
-const PARTNER_INVOICE_LOGO_URL = (() => {
-  try {
-    const logoBuffer = fs.readFileSync(PARTNER_INVOICE_LOGO_PATH);
-    return `data:image/png;base64,${logoBuffer.toString('base64')}`;
-  } catch (err) {
-    console.error('Failed to load partner invoice logo:', err.message);
-    return INVOICE_LOGO_URL;
-  }
-})();
+const USER_INVOICE_LOGO_URL = loadInvoiceLogoDataUrl(
+  USER_INVOICE_LOGO_PATH,
+  INVOICE_LOGO_URL,
+  'user'
+);
+const PARTNER_INVOICE_LOGO_URL = loadInvoiceLogoDataUrl(
+  PARTNER_INVOICE_LOGO_PATH,
+  INVOICE_LOGO_URL,
+  'partner'
+);
 const INVOICE_BRAND_NAME = 'Help PR';
 const INVOICE_TAGLINE = 'Trusted Home Services';
 const INVOICE_SUPPORT_PHONE = '+91 1800-123-4567';
@@ -282,7 +295,7 @@ const INVOICE_STYLES = `
     min-width: 0;
   }
 
-  .top-bar--partner .brand-wrap {
+  .top-bar--badge .brand-wrap {
     flex: 1 1 260px;
     min-width: min(100%, 260px);
   }
@@ -294,7 +307,7 @@ const INVOICE_STYLES = `
     flex-shrink: 0;
   }
 
-  .brand-logo--partner {
+  .brand-logo--badge {
     width: 72px;
     height: 72px;
     border-radius: 50%;
@@ -736,10 +749,16 @@ const INVOICE_STYLES = `
  */
 const buildOrderInvoiceHtml = (record, options = {}) => {
   const isPartnerInvoice = options.audience === 'partner';
-  const logoUrl = isPartnerInvoice ? PARTNER_INVOICE_LOGO_URL : INVOICE_LOGO_URL;
-  const logoClass = isPartnerInvoice ? 'brand-logo brand-logo--partner' : 'brand-logo';
+  const isUserMobileInvoice = options.audience === 'user';
+  const isBadgeLogoInvoice = isPartnerInvoice || isUserMobileInvoice;
+  const logoUrl = isPartnerInvoice
+    ? PARTNER_INVOICE_LOGO_URL
+    : isUserMobileInvoice
+      ? USER_INVOICE_LOGO_URL
+      : INVOICE_LOGO_URL;
+  const logoClass = isBadgeLogoInvoice ? 'brand-logo brand-logo--badge' : 'brand-logo';
   const brandNameClass = isPartnerInvoice ? 'brand-name brand-name--partner' : 'brand-name';
-  const topBarClass = isPartnerInvoice ? 'top-bar top-bar--partner' : 'top-bar';
+  const topBarClass = isBadgeLogoInvoice ? 'top-bar top-bar--badge' : 'top-bar';
   const orderId = record.unique_id || record._id;
   const invoiceNo = `INV-${orderId}`;
   const customerName = record.user_info?.name || '—';

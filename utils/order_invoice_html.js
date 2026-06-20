@@ -330,7 +330,7 @@ const INVOICE_STYLES = `
 
   .brand-name span { color: var(--success); }
 
-  .brand-name--partner span {
+  .brand-name--accent span {
     color: var(--partner-orange);
     font-weight: 900;
   }
@@ -757,7 +757,7 @@ const buildOrderInvoiceHtml = (record, options = {}) => {
       ? USER_INVOICE_LOGO_URL
       : INVOICE_LOGO_URL;
   const logoClass = isBadgeLogoInvoice ? 'brand-logo brand-logo--badge' : 'brand-logo';
-  const brandNameClass = isPartnerInvoice ? 'brand-name brand-name--partner' : 'brand-name';
+  const brandNameClass = isBadgeLogoInvoice ? 'brand-name brand-name--accent' : 'brand-name';
   const topBarClass = isBadgeLogoInvoice ? 'top-bar top-bar--badge' : 'top-bar';
   const orderId = record.unique_id || record._id;
   const invoiceNo = `INV-${orderId}`;

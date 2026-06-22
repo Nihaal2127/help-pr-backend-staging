@@ -236,22 +236,18 @@ When paying online, send `online_amount` instead of `cash_amount` for the non-wa
   "status": 202,
   "message": "Complete payment to apply your subscription change.",
   "data": {
-    "subscription": { "plan": { "plan_name": "silver" } },
     "change": {
       "_id": "...",
-      "change_type": "upgrade",
-      "amount_to_pay": 50,
-      "wallet_amount": 30,
-      "online_amount": 20,
-      "payment_method": "wallet_and_online",
-      "payment_status": "pending",
-      "status": "pending",
-      "payment_url": "https://rzp.io/i/..."
-    },
-    "wallet_balance": 90
+      "payment_url": "https://rzp.io/i/...",
+      "resumed": false
+    }
   }
 }
 ```
+
+**Tap Pay again after backing out of Razorpay:** call the same **POST /subscription/change** again with the same body. The server returns **202** with the **same** `payment_url` and `"resumed": true` (no 409). Wallet portion is not debited twice.
+
+**Poll payment status** also returns `payment_url` while `status` is `pending`.
 
 Open `payment_url` in a browser or WebView. Razorpay supports **UPI, cards, and net banking** on the same link.
 

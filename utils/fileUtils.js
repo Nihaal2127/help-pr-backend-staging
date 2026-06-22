@@ -14,7 +14,7 @@ const getFileExtension = (fileName) => {
 };
 
 // Utility to check if file type is valid (you can extend this based on your needs)
-const isValidFileType = (file, allowedTypes = ['.jpg', '.jpeg', '.png', '.gif','.pdf']) => {
+const isValidFileType = (file, allowedTypes = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.pdf']) => {
   const fileExtension = getFileExtension(file.originalname);
   return allowedTypes.includes(fileExtension);
 };

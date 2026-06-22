@@ -58,7 +58,6 @@ const partnerPostSchema = new mongoose.Schema(
 
 partnerPostSchema.index({ partner_id: 1, deleted_at: 1, created_at: -1 });
 partnerPostSchema.index({ franchise_id: 1, status: 1, deleted_at: 1, created_at: -1 });
-partnerPostSchema.index({ share_token: 1 }, { unique: true });
 partnerPostSchema.index({ order_id: 1, deleted_at: 1 });
 
 module.exports = mongoose.model('partner_post', partnerPostSchema);

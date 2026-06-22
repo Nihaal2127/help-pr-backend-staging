@@ -10,7 +10,7 @@
  *   total             = taxable_subtotal + tax_amount
  */
 
-const { applyInitialPaymentStatusFields } = require("../services/order_payment_status_service");
+const { applyInitialPaymentStatusFields } = require("./order_payment_initial_status");
 
 const PRICING_TOLERANCE = 0.01;
 

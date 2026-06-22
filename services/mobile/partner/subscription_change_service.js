@@ -29,7 +29,9 @@ const APPLY_CHANGE_MAX_ATTEMPTS = 3;
 const DUPLICATE_KEY_LOOKUP_ATTEMPTS = 4;
 const DUPLICATE_KEY_LOOKUP_DELAY_MS = 75;
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+/** Razorpay payment link statuses that still accept payment. */
+const RAZORPAY_LINK_RESUMABLE = new Set(['created', 'issued', 'partially_paid']);
+const RAZORPAY_LINK_TERMINAL_UNPAID = new Set(['expired', 'cancelled']);
 
 class SubscriptionChangeError extends Error {
     constructor(status, message, details = null) {
@@ -247,13 +249,18 @@ const buildApplySuccessResponse = (
     if (txResult?.payment_url) {
         changePayload.payment_url = txResult.payment_url;
     }
+    if (txResult?.resumed) {
+        changePayload.resumed = true;
+    }
 
     const isPendingOnline =
         txResult?.changeDoc?.status === 'pending' && Boolean(txResult?.payment_url);
 
     return ok(isPendingOnline ? 202 : 200, {
         message: isPendingOnline
-            ? 'Complete payment to apply your subscription change.'
+            ? txResult?.resumed
+                ? 'Continue your pending payment to complete the subscription change.'
+                : 'Complete payment to apply your subscription change.'
             : proration.change_type === 'downgrade'
               ? 'Subscription downgraded successfully.'
               : 'Subscription upgraded successfully.',
@@ -348,6 +355,141 @@ const expirePendingChangeRow = async (row, session = null) => {
     }
 
     return true;
+};
+
+const pendingOnlineAmount = (row) =>
+    roundAmount(Math.max(0, row.amount_to_pay - row.wallet_amount - row.cash_amount));
+
+const pendingMatchesOnlineRequest = (
+    pending,
+    { currentPlan, newPlan, proration, paymentValidation }
+) => {
+    if (String(pending.to_plan_id) !== String(newPlan._id)) {
+        return false;
+    }
+    if (String(pending.from_plan_id) !== String(currentPlan._id)) {
+        return false;
+    }
+    if (Math.abs(pending.amount_to_pay - proration.amount_to_pay) > PAYMENT_TOLERANCE) {
+        return false;
+    }
+    if (Math.abs(pending.wallet_amount - paymentValidation.wallet) > PAYMENT_TOLERANCE) {
+        return false;
+    }
+    if (Math.abs(pendingOnlineAmount(pending) - paymentValidation.online) > PAYMENT_TOLERANCE) {
+        return false;
+    }
+    return true;
+};
+
+const buildCompletedOnlineTxResult = async (changeId, partnerId) => {
+    const changeDoc = await PartnerSubscriptionChange.findById(changeId).lean();
+    const updatedSubscription = await loadActiveSubscription(partnerId);
+    const updatedPlan = updatedSubscription ? await resolveCurrentPlan(updatedSubscription) : null;
+    return {
+        changeDoc,
+        updatedSubscription,
+        updatedPlan,
+    };
+};
+
+/**
+ * Mobile UX: user backed out of Razorpay and tapped Pay again.
+ * Resume the same unpaid link, complete if already paid, or clear stale/conflicting pending rows.
+ */
+const tryResumeOrClearPendingOnlineChange = async ({
+    partner,
+    subscription,
+    currentPlan,
+    newPlan,
+    proration,
+    paymentValidation,
+}) => {
+    const pending = await PartnerSubscriptionChange.findOne({
+        partner_id: partner._id,
+        status: 'pending',
+        deleted_at: null,
+    }).lean();
+
+    if (!pending) {
+        return { action: 'none' };
+    }
+
+    if (!pending.razorpay_payment_link_id) {
+        await expirePendingChangeRow(pending);
+        return { action: 'cleared' };
+    }
+
+    const sync = await syncPendingOnlineChangePayment(pending._id, partner._id);
+    if (sync.synced) {
+        return {
+            action: 'completed',
+            txResult: await buildCompletedOnlineTxResult(pending._id, partner._id),
+        };
+    }
+
+    let link;
+    try {
+        link = await fetchPaymentLink(pending.razorpay_payment_link_id);
+    } catch (err) {
+        console.error('tryResumeOrClearPendingOnlineChange fetchPaymentLink', err?.response?.data || err.message);
+        await expirePendingChangeRow(pending);
+        return { action: 'cleared' };
+    }
+
+    if (link.status === 'paid') {
+        const retrySync = await syncPendingOnlineChangePayment(pending._id, partner._id);
+        if (retrySync.synced) {
+            return {
+                action: 'completed',
+                txResult: await buildCompletedOnlineTxResult(pending._id, partner._id),
+            };
+        }
+        return {
+            action: 'blocked',
+            message:
+                'Your payment was received but the subscription could not be updated. Please contact support.',
+        };
+    }
+
+    if (RAZORPAY_LINK_TERMINAL_UNPAID.has(link.status)) {
+        await expirePendingChangeRow(pending);
+        return { action: 'cleared' };
+    }
+
+    if (!pendingMatchesOnlineRequest(pending, {
+        currentPlan,
+        newPlan,
+        proration,
+        paymentValidation,
+    })) {
+        if (RAZORPAY_LINK_RESUMABLE.has(link.status)) {
+            await expirePendingChangeRow(pending);
+            return { action: 'cleared' };
+        }
+        return {
+            action: 'blocked',
+            message:
+                'A different subscription payment is in progress. Complete or cancel it before starting a new one.',
+            details: { change_id: pending._id },
+        };
+    }
+
+    if (RAZORPAY_LINK_RESUMABLE.has(link.status)) {
+        return {
+            action: 'resume',
+            txResult: {
+                changeDoc: pending,
+                payment_url: link.short_url,
+                currentSubscription: subscription,
+                currentPlan,
+                resumed: true,
+            },
+        };
+    }
+
+    await expirePendingChangeRow(pending);
+    return { action: 'cleared' };
 };
 
 const { fail, ok } = require('../../../utils/mobile_service_result');
@@ -1357,6 +1499,17 @@ const getChangePaymentStatus = async (partnerId, changeId) => {
         const walletBalance = await getWalletBalance(pPartner.oid);
 
         let gatewayPayment = null;
+        let paymentUrl = null;
+        if (latestChange.status === 'pending' && latestChange.razorpay_payment_link_id) {
+            try {
+                const link = await fetchPaymentLink(latestChange.razorpay_payment_link_id);
+                if (RAZORPAY_LINK_RESUMABLE.has(link.status) && link.short_url) {
+                    paymentUrl = link.short_url;
+                }
+            } catch (err) {
+                console.error('getChangePaymentStatus fetchPaymentLink', err?.response?.data || err.message);
+            }
+        }
         if (latestChange.status === 'completed' && latestChange.razorpay_payment_link_id) {
             const GatewayPayment = require('../../../models/gateway_payment');
             gatewayPayment = await GatewayPayment.findOne({
@@ -1390,6 +1543,7 @@ const getChangePaymentStatus = async (partnerId, changeId) => {
                     )
                 ),
                 razorpay_payment_link_id: latestChange.razorpay_payment_link_id,
+                payment_url: paymentUrl,
                 applied_at: latestChange.applied_at,
                 target_plan: formatPlanSummary(latestChange.to_plan_id),
                 wallet_balance: walletBalance,
@@ -1447,6 +1601,31 @@ const applyChange = async (partnerId, body) => {
                     400,
                     'Email or phone number is required on your profile to pay online.'
                 );
+            }
+
+            const resumeOutcome = await tryResumeOrClearPendingOnlineChange({
+                partner,
+                subscription,
+                currentPlan,
+                newPlan,
+                proration,
+                paymentValidation,
+            });
+
+            if (resumeOutcome.action === 'resume' || resumeOutcome.action === 'completed') {
+                const newWalletBalance = await getWalletBalance(partner._id);
+                return buildApplySuccessResponse(
+                    proration,
+                    paymentValidation,
+                    resumeOutcome.txResult,
+                    newWalletBalance
+                );
+            }
+
+            if (resumeOutcome.action === 'blocked') {
+                return fail(409, resumeOutcome.message, {
+                    details: resumeOutcome.details || {},
+                });
             }
 
             let txResult = null;

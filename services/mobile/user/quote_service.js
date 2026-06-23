@@ -7,6 +7,7 @@ const { checkObjectIdExists } = require('../../../validator/id_validator');
 const { applyPagination } = require('../../../utils/pagination');
 const { OrderCreationError } = require('../../../errors/order_creation_error');
 const OrderPayment = require('../../../models/order_payment');
+const Order = require('../../../models/order');
 const {
   resolveQuotePricing,
   applyPricingToQuote,
@@ -50,6 +51,11 @@ const {
 const { syncOrderPaymentStatus } = require('../../order_payment_status_service');
 const { syncAllPartnerOrderPaymentsForOrder } = require('../../partner_wallet_order_service');
 const { formatOrderForApi } = require('../../../utils/order_api_format');
+const {
+  loadCustomerProfile,
+  initiateOnlineOrderPayment,
+  finalizeCompletedOrderPaymentSideEffects,
+} = require('../../../src/modules/payments/services/orderOnlinePayment.service');
 const { escapeRegExp } = require('../../../utils/string_helpers');
 const {
   buildQuoteDateRangeFilter,
@@ -543,6 +549,68 @@ const convertCustomerQuoteToOrder = async (customerId, quoteId, body) => {
         return fail(error.status, error.message);
       }
       throw error;
+    }
+
+    const paymentMethod = String(body.payment_method || '').trim().toLowerCase();
+
+    if (paymentMethod === 'online') {
+      const profile = await loadCustomerProfile(customerId);
+      if (!profile.ok) {
+        return fail(profile.status, profile.message);
+      }
+
+      const onlineResult = await initiateOnlineOrderPayment({
+        order: created.order,
+        customer: profile.user,
+        amount: paidAmount,
+        notes: body.notes ? String(body.notes).trim() : 'Quote deposit — Razorpay online payment',
+      });
+
+      if (!onlineResult.ok) {
+        return fail(onlineResult.status, onlineResult.message);
+      }
+
+      let paymentRow = onlineResult.payment;
+      if (onlineResult.already_completed) {
+        await finalizeCompletedOrderPaymentSideEffects(created.order._id, {
+          payment: paymentRow,
+          actorUserId: customerId,
+          notify: true,
+        });
+        paymentRow = await OrderPayment.findById(paymentRow._id).lean();
+      }
+
+      const linkedQuote = await Quote.findById(quote._id)
+        .populate(QUOTE_MOBILE_DETAIL_POPULATE)
+        .lean();
+      await attachPartnerServiceToQuote(linkedQuote);
+
+      const latestOrder =
+        onlineResult.already_completed
+          ? await Order.findById(created.order._id).lean()
+          : created.order;
+
+      return ok(onlineResult.status, {
+        message: onlineResult.resumed
+          ? 'Continue your pending payment to complete quote conversion.'
+          : onlineResult.already_completed
+            ? 'Quote converted to order and payment completed successfully.'
+            : 'Quote converted to order. Complete payment to confirm deposit.',
+        data: {
+          quote: formatQuoteForApi(linkedQuote),
+          order: formatOrderForApi(latestOrder),
+          payment: {
+            ...paymentRow,
+            payment_url: onlineResult.payment_url || null,
+            resumed: Boolean(onlineResult.resumed),
+          },
+          deposit: {
+            minimum_deposit_amount: minimumDeposit,
+            paid_amount: paidAmount,
+            remaining_deposit_due: Math.max(0, minimumDeposit - paidAmount),
+          },
+        },
+      });
     }
 
     const paymentStatus = body.payment_status ? String(body.payment_status).trim() : 'completed';

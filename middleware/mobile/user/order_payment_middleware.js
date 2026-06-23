@@ -144,6 +144,20 @@ const validateCreateOrderPaymentBody = (req, res, next) => {
   if (!validateOptionalDate(body.due_date, 'due_date', res)) return;
   if (!validateOptionalDate(body.paid_at, 'paid_at', res)) return;
 
+  if (paymentMethod === 'online') {
+    if (amount <= 0) {
+      return sendError(res, 400, 'amount must be greater than 0 for online payments.');
+    }
+    if (status === 'completed') {
+      return sendError(
+        res,
+        400,
+        'Online payments cannot be marked completed until Razorpay confirms payment.'
+      );
+    }
+    status = 'pending';
+  }
+
   req.body = {
     ...body,
     amount,

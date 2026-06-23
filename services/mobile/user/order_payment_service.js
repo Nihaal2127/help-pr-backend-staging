@@ -10,6 +10,20 @@ const {
   softDeleteOrderPaymentRecord,
   formatMobileCustomerOrderSummary,
 } = require('../../order_payment_crud_service');
+const {
+  loadCustomerProfile,
+  initiateOnlineOrderPayment,
+  syncPendingOrderPayment,
+  finalizeCompletedOrderPaymentSideEffects,
+  RAZORPAY_LINK_RESUMABLE,
+} = require('../../../src/modules/payments/services/orderOnlinePayment.service');
+const { fetchPaymentLink } = require('../../../src/modules/payments/razorpay.client');
+const GatewayPayment = require('../../../models/gateway_payment');
+const {
+  PAYMENT_PURPOSES,
+  GATEWAY_PAYMENT_METHOD,
+} = require('../../../src/modules/payments/constants/payment.constants');
+const { syncOrderPaymentStatus } = require('../../order_payment_status_service');
 
 const PAYER_TYPE_CUSTOMER = 'customer';
 const { fail, ok, parsePositiveInt } = require('../../../utils/mobile_service_result');
@@ -135,6 +149,58 @@ const createCustomerOrderPayment = async (customerId, orderId, body) => {
     if (!access.ok) return access;
 
     const order = access.data.order;
+
+    if (body.payment_method === 'online' && body.amount > 0) {
+      const profile = await loadCustomerProfile(customerId);
+      if (!profile.ok) {
+        return fail(profile.status, profile.message);
+      }
+
+      const onlineResult = await initiateOnlineOrderPayment({
+        order,
+        customer: profile.user,
+        amount: body.amount,
+        notes: body.notes || '',
+        installment_index: body.installment_index,
+        due_date: body.due_date,
+      });
+
+      if (!onlineResult.ok) {
+        return fail(onlineResult.status, onlineResult.message);
+      }
+
+      let paymentRow = onlineResult.payment;
+      let breakdown = null;
+      if (onlineResult.already_completed) {
+        const sync = await finalizeCompletedOrderPaymentSideEffects(order._id, {
+          payment: paymentRow,
+          actorUserId: customerId,
+          notify: true,
+        });
+        breakdown = sync?.breakdown;
+        paymentRow = await OrderPayment.findById(paymentRow._id).lean();
+      }
+
+      const latestOrder =
+        onlineResult.already_completed
+          ? await Order.findById(order._id).lean()
+          : order;
+
+      return ok(onlineResult.status, {
+        message: onlineResult.resumed
+          ? 'Continue your pending payment to complete this order payment.'
+          : onlineResult.already_completed
+            ? 'Order payment completed successfully.'
+            : 'Complete payment to record this order payment.',
+        record: {
+          ...paymentRow,
+          payment_url: onlineResult.payment_url || null,
+          resumed: Boolean(onlineResult.resumed),
+        },
+        order: formatMobileCustomerOrderSummary(latestOrder, breakdown),
+      });
+    }
+
     const { doc, syncResult } = await createOrderPaymentRecord(order, body, {
       payerType: PAYER_TYPE_CUSTOMER,
       autoPaidAtOnCompleted: true,
@@ -231,10 +297,99 @@ const deleteCustomerOrderPayment = async (customerId, orderId, paymentId) => {
   }
 };
 
+const getCustomerOrderPaymentStatus = async (customerId, orderId, paymentId) => {
+  try {
+    const loaded = await loadCustomerPaymentOnOrder(customerId, orderId, paymentId);
+    if (!loaded.ok) return loaded;
+
+    const payment = loaded.data.payment;
+    const order = loaded.data.order;
+
+    let syncResult = null;
+    if (
+      payment.status === 'pending' &&
+      payment.payment_method === GATEWAY_PAYMENT_METHOD &&
+      payment.transaction_reference
+    ) {
+      syncResult = await syncPendingOrderPayment(payment._id);
+    }
+
+    let latestPayment = payment.toObject ? payment.toObject() : payment;
+    if (syncResult?.synced) {
+      latestPayment = await OrderPayment.findById(payment._id).lean();
+    }
+
+    let paymentUrl = null;
+    if (latestPayment.status === 'pending' && latestPayment.transaction_reference) {
+      try {
+        const link = await fetchPaymentLink(latestPayment.transaction_reference);
+        if (RAZORPAY_LINK_RESUMABLE.has(link.status) && link.short_url) {
+          paymentUrl = link.short_url;
+        }
+      } catch (err) {
+        console.error('getCustomerOrderPaymentStatus fetchPaymentLink', err?.response?.data || err.message);
+      }
+    }
+
+    let gatewayPayment = null;
+    if (latestPayment.status === 'completed') {
+      gatewayPayment = await GatewayPayment.findOne({
+        purpose: PAYMENT_PURPOSES.ORDER,
+        reference_id: latestPayment._id,
+        deleted_at: null,
+      })
+        .select(
+          'amount currency status payment_method gateway_payment_link_id gateway_payment_id instrument_type paid_at created_at'
+        )
+        .lean();
+    }
+
+    let breakdown = null;
+    let latestOrder = order;
+    if (syncResult?.synced) {
+      latestPayment = await OrderPayment.findById(payment._id).lean();
+      latestOrder = syncResult.syncResult?.order || (await Order.findById(order._id).lean());
+      breakdown = syncResult.syncResult?.breakdown;
+    }
+
+    return ok(200, {
+      message: syncResult?.synced
+        ? 'Payment verified with Razorpay and order payment applied.'
+        : 'Order payment status fetched successfully.',
+      data: {
+        payment_id: latestPayment._id,
+        order_id: latestPayment.order_id,
+        status: latestPayment.status,
+        amount: latestPayment.amount,
+        payment_method: latestPayment.payment_method,
+        transaction_reference: latestPayment.transaction_reference,
+        payment_url: paymentUrl,
+        paid_at: latestPayment.paid_at,
+        gateway_payment: gatewayPayment,
+        order: formatMobileCustomerOrderSummary(latestOrder, breakdown),
+        ...(syncResult
+          ? {
+              sync: {
+                attempted: payment.status === 'pending',
+                synced: syncResult.synced,
+                reason: syncResult.reason || null,
+                razorpay_status: syncResult.razorpay_status || null,
+              },
+            }
+          : {}),
+      },
+    });
+  } catch (err) {
+    console.error('mobile user get order payment status', err.message);
+    return fail(500, 'Internal server error.');
+  }
+};
+
 module.exports = {
   listAllCustomerOrderPayments,
   listCustomerOrderPayments,
   createCustomerOrderPayment,
   updateCustomerOrderPayment,
   deleteCustomerOrderPayment,
+  getCustomerOrderPaymentStatus,
 };

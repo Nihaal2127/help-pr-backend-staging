@@ -34,7 +34,11 @@ const dispatchWebhook = async (body) => {
               ? Number(paymentLinkEntity.amount)
               : null;
 
-    const orderResult = await handleOrderPaymentLinkPaid(paymentLinkId);
+    const orderResult = await handleOrderPaymentLinkPaid(paymentLinkId, {
+        paymentLinkEntity,
+        paidAmountPaise,
+        paymentEntity,
+    });
     results.push({ type: 'order', ...orderResult });
 
     if (orderResult.handled) {

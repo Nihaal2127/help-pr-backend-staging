@@ -4,16 +4,32 @@ const { PAYMENT_PURPOSES } = require('./constants/payment.constants');
 /**
  * Create a Razorpay payment link for an order.
  */
-const createOrderPaymentLink = async ({ name, email, contact, amount, orderId }) => {
+const createOrderPaymentLink = async ({
+    name,
+    email,
+    contact,
+    amount,
+    orderId,
+    orderPaymentId,
+}) => {
     try {
+        const notes = {
+            purpose: PAYMENT_PURPOSES.ORDER,
+            order_id: orderId ? String(orderId) : '',
+        };
+        if (orderPaymentId) {
+            notes.order_payment_id = String(orderPaymentId);
+        }
+
         const link = await razorpayClient.createPaymentLink({
             amount,
             customer: { name, email, contact },
-            notes: {
-                purpose: PAYMENT_PURPOSES.ORDER,
-                order_id: orderId ? String(orderId) : '',
-            },
-            referenceId: orderId ? `order_${orderId}` : undefined,
+            notes,
+            referenceId: orderPaymentId
+                ? `order_pay_${orderPaymentId}`
+                : orderId
+                  ? `order_${orderId}`
+                  : undefined,
             description: 'Order payment',
         });
 
@@ -21,6 +37,7 @@ const createOrderPaymentLink = async ({ name, email, contact, amount, orderId })
             success: true,
             payment_url: link.payment_url,
             transaction_id: link.payment_link_id,
+            payment_link_id: link.payment_link_id,
         };
     } catch (error) {
         console.error('createOrderPaymentLink', error?.response?.data || error.message);

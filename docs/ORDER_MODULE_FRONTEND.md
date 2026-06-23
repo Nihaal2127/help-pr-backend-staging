@@ -203,7 +203,8 @@ List responses use **case-insensitive collation** for sort. Each record includes
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/create` | Ledger row: `order_id`, `payer_type` (`customer` \| `partner`), `amount`, optional fields |
+| POST | `/create` | Ledger row: `order_id`, `payer_type` (`customer` \| `partner`), `amount`, optional fields. **`payment_method: online`** (customer only) → **202** + `record.payment_url` |
+| GET | `/payment-status/:id` | Poll Razorpay for pending online payment; sync if webhook missed |
 | GET | `/by-order/:orderId` | Optional query `payer_type` |
 | PUT | `/update/:id` | Update status, amounts, references, etc. |
 | DELETE | `/delete/:id` | Soft-delete |
@@ -267,6 +268,24 @@ Same **403** participant rule as additional charges.
 | GET | `/callback` | Browser redirect success page |
 
 Frontend normally only opens **`payment_url`** returned from order create when `payment_mode_id === "2"`.
+
+### Mobile customer — Razorpay online payments
+
+Same pattern as partner subscription online pay (`docs/SUBSCRIPTION_CHANGE_FRONTEND.md`):
+
+| Step | API |
+|------|-----|
+| 1 | `POST /api/mobile/user/orders/:orderId/payments` with `payment_method: online`, `amount` > 0 |
+| 2 | Open **`record.payment_url`** (HTTP **202**) |
+| 3 | `GET /api/mobile/user/orders/:orderId/payments/:paymentId/payment-status` — poll until `data.status` is `completed` |
+
+**Quote deposit:** `POST /api/mobile/user/quotes/:id/convert-to-order` with `payment_method: online` creates the order first, then returns **`data.payment.payment_url`** (**202**).
+
+**Resume:** posting the same online amount again while a pending link exists returns the same URL (`resumed: true`).
+
+**Requirements:** customer profile must have **email or phone**. Webhook: `POST /api/razorpay/razorpayWebhook` (see env `RAZORPAY_*`).
+
+**Admin create** (`payment_mode_id === "2"`): order is saved first, then a pending `order_payment` + Razorpay link; response includes `payment_url` and `payment_id`.
 
 ### API response date formats (GET list / GET detail / update)
 

@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-mobile-apis-only",
     "name": "Help PR — Mobile APIs only",
-    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** → Register/Login → **Forgot password** (3-step OTP reset: forgot → verify OTP → reset password) → **Home** (assigned quotes + orders) → **Quotes** (accept/reject pending) → **Orders** (assigned jobs) → **Appointments** (calendar on partner orders) → Update → **Bank accounts (list)** → Catalog → My services\n\n## Customer (User)\n1. **Login** → **Verify OTP** (dev OTP: `123456`) — or **Forgot password** (3-step email OTP reset when customer has email on file)\n2. **Pincodes (search)** or set `{{homeLocation}}` — e.g. `500032,Gachibowli,Hyderabad,Telangana`\n3. **Home** — categories, services, partners for franchise (Bearer + `location` query)\n4. **Partners** — list → **Get partner profile** (catalog + professional summary) → **Create quote** with `partner_id`\n5. **Addresses** — create / get / update / delete\n6. **Quotes** — create / list / get / update / cancel (`franchise_id` required on create)\n7. **Posts** — feed, liked/saved lists, like, save, share, report\n8. **Update** — multipart `profile_photo` + profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.\n\n**Appointments:** `docs/APPOINTMENT_MODULE_FRONTEND.md`\n\n**Chat & disputes:** User → **Chat & Disputes** (support chat, raise/list disputes). See `docs/CHAT_MODULE_FRONTEND.md`.\n\n**Chat & disputes:** User → **Chat & Disputes** (support chat, raise/list disputes). See `docs/CHAT_MODULE_FRONTEND.md`.\n\n**Chat & disputes:** User → **Chat & Disputes** (support chat, raise/list disputes). See `docs/CHAT_MODULE_FRONTEND.md`.",
+    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Razorpay online payments (test mode)\n\n| Flow | Where in collection |\n|------|---------------------|\n| Partner subscription upgrade | **Partner → Subscription** — Apply (Razorpay online) → Get payment status |\n| Customer order payment | **User** — Create order payment (Razorpay online) → Get order payment status |\n| Quote deposit | **User → Quotes** — Convert quote to order (Razorpay deposit) → payment status on new order |\n\n**Env (Lambda):** `RAZORPAY_*` on server; set `{{baseUrl}}` in Postman. Webhook: `{RAZORPAY_BASE_URL}/api/razorpay/razorpayWebhook`.\n\n**Additional charges:** no separate Razorpay API — customer pays updated due via **order payments**. **Partner payouts:** admin `/api/partner_payout` (manual bank transfer), not Razorpay.\n\nFull audit: `docs/RAZORPAY_ONLINE_PAYMENTS_AUDIT.md`\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** → Register/Login → **Forgot password** (3-step OTP reset: forgot → verify OTP → reset password) → **Home** (assigned quotes + orders) → **Quotes** (accept/reject pending) → **Orders** (assigned jobs) → **Appointments** (calendar on partner orders) → Update → **Bank accounts (list)** → Catalog → My services\n\n## Customer (User)\n1. **Login** → **Verify OTP** (dev OTP: `123456`) — or **Forgot password** (3-step email OTP reset when customer has email on file)\n2. **Pincodes (search)** or set `{{homeLocation}}` — e.g. `500032,Gachibowli,Hyderabad,Telangana`\n3. **Home** — categories, services, partners for franchise (Bearer + `location` query)\n4. **Partners** — list → **Get partner profile** (catalog + professional summary) → **Create quote** with `partner_id`\n5. **Addresses** — create / get / update / delete\n6. **Quotes** — create / list / get / update / cancel / **convert-to-order** (`franchise_id` required on create)\n7. **Posts** — feed, liked/saved lists, like, save, share, report\n8. **Orders & payments** — list orders → **Create order payment (Razorpay online)** or cash/offline → **Get order payment status**\n9. **Update** — multipart `profile_photo` + profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.\n\n**Appointments:** `docs/APPOINTMENT_MODULE_FRONTEND.md`\n\n**Chat & disputes:** User → **Chat & Disputes** (support chat, raise/list disputes). See `docs/CHAT_MODULE_FRONTEND.md`.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -1608,7 +1608,7 @@
         },
         {
           "name": "Orders",
-          "description": "Partner assigned orders. **Auth:** Bearer partner JWT (`type` 2) after **Login**.\n\n**Flow:** List order → optional **Additional charges** (`POST .../additional-charges`, same rules as admin web) → **Start work** (`PUT .../work-status`) → customer pays in full → **Complete** (`POST .../complete` with proof photos). Optional `publish_as_post=true` creates a user-feed post.",
+          "description": "Partner assigned orders. **Auth:** Bearer partner JWT (`type` 2) after **Login**.\n\n**Flow:** List order → optional **Additional charges** (`POST .../additional-charges`) — increases order `total_price`; **customer pays via mobile order payments** (Razorpay online on `POST /api/mobile/user/orders/:id/payments`, not on charge create) → **Start work** → **Complete** (proof photos). Optional `publish_as_post=true`.",
           "item": [
             {
               "name": "List orders",
@@ -3219,7 +3219,7 @@
     },
     {
       "name": "User",
-      "description": "Customer mobile — OTP, forgot password (email), home, addresses, orders, quotes, profile. Order: **Login** → **Verify OTP** → **Pincodes (search)** (sets `homeLocation`) → **Home** → **Orders** → **Addresses** → **Quotes** → **Update** (multipart). Address dropdowns: **Common → Location**.",
+      "description": "Customer mobile — OTP, forgot password (email), home, addresses, orders, quotes, profile. Order: **Login** → **Verify OTP** → **Pincodes (search)** (sets `homeLocation`) → **Home** → **Orders** → **Addresses** → **Quotes** → **Update** (multipart). Address dropdowns: **Common → Location**.\n\n**Razorpay:** **Create order payment (Razorpay online)** + **Get order payment status**; quote **Convert (Razorpay deposit)**. Additional charges: pay via order payments after partner adds charge (no separate Razorpay endpoint).",
       "item": [
         {
           "name": "Login",
@@ -4090,7 +4090,118 @@
                 "payments"
               ]
             },
-            "description": "**POST /api/mobile/user/orders/:orderId/payments**\n\nRecord a **customer** payment on the caller's order (same ledger as admin `/api/order-payments/create` with `payer_type: customer`).\n\n| Field | Required | Notes |\n|-------|----------|--------|\n| `amount` | Yes | >= 0 |\n| `payment_method` | Yes | `cash` \\| `upi` \\| `card` \\| `online` \\| `bank_transfer` \\| `other` |\n| `status` | No | `pending` (default) \\| `completed` \\| `failed` \\| `refunded` |\n| `transaction_reference`, `installment_index`, `due_date`, `paid_at`, `notes` | No | Same as admin |\n\n**201** returns `record` + `order` payment rollup (`payment_status`, `is_paid`, `customer_due_amount`, etc.). Runs `syncOrderPaymentStatus`."
+            "description": "**POST /api/mobile/user/orders/:orderId/payments**\n\nRecord a **customer** payment on the caller's order.\n\n| Field | Required | Notes |\n|-------|----------|--------|\n| `amount` | Yes | > 0 for `online`; >= 0 otherwise |\n| `payment_method` | Yes | `cash` \\| `upi` \\| `card` \\| `online` \\| `bank_transfer` \\| `other` |\n| `status` | No | `pending` (default) \\| `completed` \\| `failed` \\| `refunded` — **not** `completed` for `online` |\n| `transaction_reference`, `installment_index`, `due_date`, `paid_at`, `notes` | No | Same as admin |\n\n**Cash/offline:** **201** + `record` + `order` rollup.\n\n**`payment_method: online`:** **202** + `record.payment_url` (Razorpay). Open URL, pay, then poll **GET** `.../payments/:paymentId/payment-status`. Re-posting same amount while pending returns same URL (`record.resumed: true`). Profile must have email or phone."
+          },
+          "response": []
+        },
+        {
+          "name": "Create order payment (Razorpay online)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Order online payment initiated', function () {",
+                  "    pm.expect([200, 201, 202]).to.include(pm.response.code);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.record?._id).to.be.a('string');",
+                  "  });",
+                  "  if (j?.record?._id) pm.collectionVariables.set('orderPaymentId', String(j.record._id));",
+                  "  if (j?.record?.payment_url) pm.collectionVariables.set('orderPaymentUrl', String(j.record.payment_url));",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": {{orderPaymentAmount}},\n  \"payment_method\": \"online\",\n  \"notes\": \"Mobile order payment — Razorpay test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/orders/{{orderId}}/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "user",
+                "orders",
+                "{{orderId}}",
+                "payments"
+              ]
+            },
+            "description": "**POST** with `payment_method: online`. Returns **202** and `record.payment_url`. Test card `4111111111111111` or UPI `success@razorpay`. Then run **Get order payment status**."
+          },
+          "response": []
+        },
+        {
+          "name": "Get order payment status (Razorpay)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/orders/{{orderId}}/payments/{{orderPaymentId}}/payment-status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "user",
+                "orders",
+                "{{orderId}}",
+                "payments",
+                "{{orderPaymentId}}",
+                "payment-status"
+              ]
+            },
+            "description": "**GET /api/mobile/user/orders/:orderId/payments/:paymentId/payment-status**\n\nPoll after Razorpay pay. **200** `data.status` → `completed` when applied; includes `payment_url` while pending, `gateway_payment` when done, and `sync.synced: true` if webhook was missed."
           },
           "response": []
         },
@@ -5104,8 +5215,98 @@
           ]
         },
         {
+          "name": "Orders & payments",
+          "description": "**Customer orders & Razorpay online pay.**\n\n1. **List orders** — sets `{{orderId}}`\n2. **Create order payment (Razorpay online)** — **202** + `{{orderPaymentUrl}}`\n3. Pay in browser (test card `4111…` / UPI `success@razorpay`)\n4. **Get order payment status** — poll until `data.status` is `completed`\n\n**Additional charges:** partner adds charge → customer pays increased due via step 2 (no separate Razorpay on charge API).\n\nSee `docs/RAZORPAY_ONLINE_PAYMENTS_AUDIT.md`.",
+          "item": [
+            {
+              "name": "List orders",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  const row = (j?.records || []).find((o) => Number(o.customer_due_amount) > 0) || j?.records?.[0];",
+                      "  if (row?._id) pm.collectionVariables.set('orderId', String(row._id));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/orders?page=1&limit=10",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "orders"],
+                  "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "10" }]
+                },
+                "description": "**GET /api/mobile/user/orders** — sets `orderId` from first order with due amount (or first row)."
+              },
+              "response": []
+            },
+            {
+              "name": "Create order payment (Razorpay online)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  if (j?.record?._id) pm.collectionVariables.set('orderPaymentId', String(j.record._id));",
+                      "  if (j?.record?.payment_url) pm.collectionVariables.set('orderPaymentUrl', String(j.record.payment_url));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Accept", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"amount\": {{orderPaymentAmount}},\n  \"payment_method\": \"online\",\n  \"notes\": \"Mobile order payment — Razorpay test\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/orders/{{orderId}}/payments",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "orders", "{{orderId}}", "payments"]
+                },
+                "description": "**POST** `payment_method: online` → **202** + `record.payment_url`."
+              },
+              "response": []
+            },
+            {
+              "name": "Get order payment status (Razorpay)",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/orders/{{orderId}}/payments/{{orderPaymentId}}/payment-status",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "user", "orders", "{{orderId}}", "payments", "{{orderPaymentId}}", "payment-status"]
+                },
+                "description": "**GET .../payment-status** — poll after Razorpay; `sync.synced: true` if webhook missed."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
           "name": "Quotes",
-          "description": "Customer quote requests (Phase 1). **Auth:** Bearer customer JWT (`type` 4) after **Verify OTP**.\n\n**Prerequisites:** **Home** (`{{franchiseId}}`, `{{categoryId}}`, `{{serviceId}}`), **Addresses → Create** (`{{addressId}}`). For **with partner**, run **Partners (list)** first (`{{quotePartnerId}}`).\n\n**Two create types (same endpoint):**\n| Type | `partner_id` | Initial status |\n|------|----------------|----------------|\n| Without partner | omit or `\"\"` | **new** (franchise/admin can assign later) |\n| With partner | valid partner ObjectId | **pending** (partner can accept) |\n\nPartner flow: **Partner → Quotes → Accept**.",
+          "description": "Customer quote requests (Phase 1). **Auth:** Bearer customer JWT (`type` 4) after **Verify OTP**.\n\n**Prerequisites:** **Home** (`{{franchiseId}}`, `{{categoryId}}`, `{{serviceId}}`), **Addresses → Create** (`{{addressId}}`). For **with partner**, run **Partners (list)** first (`{{quotePartnerId}}`). Partner must **Accept** quote before convert.\n\n**Convert to order:** offline (`cash`, `upi`, …) → **200**; **`payment_method: online`** → **202** + `data.payment.payment_url` — use **Get order payment status** on the new order.\n\n**Two create types (same endpoint):**\n| Type | `partner_id` | Initial status |\n|------|----------------|----------------|\n| Without partner | omit or `\"\"` | **new** |\n| With partner | valid partner ObjectId | **pending** |",
           "item": [
             {
               "name": "Create quote (without partner)",
@@ -5607,7 +5808,74 @@
                     "convert-to-order"
                   ]
                 },
-                "description": "**POST /api/mobile/user/quotes/:id/convert-to-order**\n\n- **Auth:** Bearer customer\n- Quote must be in **accepted** status and belong to logged-in customer\n- **Required:** `amount`, `payment_method`\n- **Allowed `payment_method`:** `cash` | `upi` | `card` | `online` | `bank_transfer` | `other`\n- `amount` must be >= quote `minimum_deposit_amount`\n- Creates order from quote and records customer `order_payment` row"
+                "description": "**POST /api/mobile/user/quotes/:id/convert-to-order**\n\n- **Auth:** Bearer customer\n- Quote must be **accepted** and owned by caller\n- **Required:** `amount`, `payment_method`\n- `amount` >= `minimum_deposit_amount`\n\n**Offline (`cash`, `upi`, etc.):** **200** — order + completed/pending payment.\n\n**`payment_method: online`:** **202** — order created + `payment.payment_url`; pay deposit via Razorpay, then poll order payment status on the new order."
+              },
+              "response": []
+            },
+            {
+              "name": "Convert quote to order (Razorpay deposit)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  if (j?.data?.order?._id) pm.collectionVariables.set('orderId', String(j.data.order._id));",
+                      "  if (j?.data?.payment?._id) pm.collectionVariables.set('orderPaymentId', String(j.data.payment._id));",
+                      "  if (j?.data?.payment?.payment_url) pm.collectionVariables.set('orderPaymentUrl', String(j.data.payment.payment_url));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"amount\": {{quoteDepositAmount}},\n  \"payment_method\": \"online\",\n  \"notes\": \"Quote deposit — Razorpay test\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/quotes/{{quoteId}}/convert-to-order",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "user",
+                    "quotes",
+                    "{{quoteId}}",
+                    "convert-to-order"
+                  ]
+                },
+                "description": "Convert with **online** deposit. **202** + `data.payment.payment_url`. Sets `orderId` and `orderPaymentId` collection vars for payment-status poll."
               },
               "response": []
             }
@@ -7305,6 +7573,12 @@
       "value": "",
       "type": "string",
       "description": "Order service line _id (service_items[0]._id) — optional when order has one line"
+    },
+    {
+      "key": "orderPaymentUrl",
+      "value": "",
+      "type": "string",
+      "description": "Razorpay checkout URL from order payment or quote convert (202 response)"
     },
     {
       "key": "orderPaymentId",

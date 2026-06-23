@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Help PR — Order refunds",
-    "description": "**/api/refund** — Order refund APIs (list, eligible orders, detail, create).\n\n**Doc:** `docs/REFUND_API.md` (API reference + create body mapping)\n**Frontend:** `docs/REFUND_FRONTEND.md`\n\n**Access:** Super admin (5) & staff (6); franchise admin (1) & employee (3). Partner (2) & customer (4) → 403.\n\n**Flow:** 1 Login (all-APIs Auth) → 2 Eligible orders → 4 Create → 1 Get all → 3 Get by id\n\n**Variables:** `orderId` from eligible-orders `_id`; `refundMongoId` from getAll/create `data._id`.",
+    "description": "**/api/refund** — Order refund APIs (list, eligible orders, detail, create).\n\n**Doc:** `docs/REFUND_API.md` (API reference + create body mapping)\n**Frontend:** `docs/REFUND_FRONTEND.md`\n\n**Access:** Super admin (5) & staff (6); franchise admin (1) & employee (3). Partner (2) & customer (4) → 403.\n\n**Flow (manual):** 1 Login → 2 Eligible orders → 4 Create → 1 Get all → 3 Get by id\n**Flow (Razorpay):** 2 Eligible orders (check `razorpay_refundable_amount`) → **4b Create — Razorpay refund**\n\n**Variables:** `orderId` from eligible-orders `_id`; `refundMongoId` from getAll/create `data._id`.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -64,7 +64,7 @@
               "if (json.success && json.data?.records?.length) {",
               "  const row = json.data.records[0];",
               "  pm.collectionVariables.set('orderId', row._id);",
-              "  console.log('Set orderId:', row._id, 'refundable:', row.refundable_amount ?? row.user_paid);",
+              "  console.log('Set orderId:', row._id, 'refundable:', row.refundable_amount ?? row.user_paid, 'razorpay:', row.razorpay_refundable_amount);",
               "}",
               "pm.test('Status 200', () => pm.response.to.have.status(200));"
             ]
@@ -88,7 +88,7 @@
             { "key": "sort_order", "value": "asc" }
           ]
         },
-        "description": "**GET /api/refund/eligible-orders** — Orders with refundable balance.\n\nSee `docs/REFUND_API.md` §2.\n\n`partner_payable_amount` + `admin_payable_amount` = `refundable_amount` (admin includes tax)."
+        "description": "**GET /api/refund/eligible-orders** — Orders with refundable balance.\n\nSee `docs/REFUND_API.md` §2.\n\n`razorpay_refundable_amount` = max refundable via Razorpay API. `partner_payable_amount` + `admin_payable_amount` = `refundable_amount`."
       }
     },
     {
@@ -138,7 +138,45 @@
           "host": ["{{baseUrl}}"],
           "path": ["api", "refund", "create"]
         },
-        "description": "**POST /api/refund/create** — See `docs/REFUND_API.md` §4.\n\n**Required:** `order_id` (Mongo), `refund_amount`, `date`.\n**Split:** `from_admin_commission + from_partner_wallet` = `refund_amount`.\n**Cap:** `refund_amount` ≤ customer net paid (not order total).\n\n**Creates:** `order_payment` (refunded), `order_refund`, optional partner ledger debit; syncs order payment status."
+        "description": "**POST /api/refund/create** — Manual ledger refund (cash/bank already returned offline).\n\nSee `docs/REFUND_API.md` §4."
+      }
+    },
+    {
+      "name": "4b. Create — Razorpay refund (admin)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const json = pm.response.json();",
+              "if (json.success && json.data?._id) {",
+              "  pm.collectionVariables.set('refundMongoId', json.data._id);",
+              "  console.log('Razorpay refund:', json.data._id, json.data.razorpay_refund_details);",
+              "}",
+              "pm.test('Status 201', () => pm.response.to.have.status(201));",
+              "pm.test('Razorpay channel', () => pm.expect(json.data?.refund_channel).to.eql('razorpay'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"order_id\": \"{{orderId}}\",\n  \"refund_amount\": 1000,\n  \"from_admin_commission\": 1000,\n  \"from_partner_wallet\": 0,\n  \"date\": \"2026-06-20T10:00:00.000Z\",\n  \"notes\": \"Razorpay refund via Postman\",\n  \"refund_via_razorpay\": true\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/refund/create",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "refund", "create"]
+        },
+        "description": "**POST /api/refund/create** with `refund_via_razorpay: true`.\n\n**Admin only** (same JWT as other refund routes). Calls Razorpay Refund API, then records `order_refund` + ledger.\n\n**Prerequisites:** Order paid online (Razorpay); `refund_amount` ≤ `razorpay_refundable_amount` from **2. Eligible orders**.\n\n**Response:** `refund_channel: razorpay`, `razorpay_refund_details[].razorpay_refund_id` (`rfnd_xxx`)."
       }
     }
   ]

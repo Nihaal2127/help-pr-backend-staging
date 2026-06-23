@@ -22,6 +22,11 @@ const {
     touchOrderStatusInfo,
     clearPendingAmountsForTerminalOrder,
 } = require('../enum/order_status_enum');
+const { GATEWAY_PAYMENT_METHOD } = require('../src/modules/payments/constants/payment.constants');
+const {
+    getRazorpayRefundableBalanceForOrder,
+    initiateRazorpayRefundsForOrder,
+} = require('../src/modules/payments/services/orderRazorpayRefund.service');
 
 /** Canonical + legacy numeric values for completed and cancelled (refund-eligible lifecycle). */
 const ELIGIBLE_REFUND_ORDER_STATUS_VALUES = [
@@ -134,6 +139,8 @@ const mapRefundRecord = (row) => ({
     refund_date: row.refund_date,
     franchise_id: row.franchise_id || null,
     notes: row.notes || '',
+    refund_channel: row.refund_channel || 'manual',
+    razorpay_refund_details: row.razorpay_refund_details || [],
     created_at: row.created_at,
 });
 
@@ -451,11 +458,20 @@ const listEligibleOrders = async (query, scopeFilter = {}) => {
         const orderIds = rows.map((row) => row._id);
         const partnerLedgerNetMap = await getPartnerWalletNetByOrderIds(orderIds);
 
+        const razorpayRefundableEntries = await Promise.all(
+            orderIds.map(async (orderId) => [
+                orderId.toString(),
+                await getRazorpayRefundableBalanceForOrder(orderId),
+            ])
+        );
+        const razorpayRefundableMap = new Map(razorpayRefundableEntries);
+
         const records = rows.map((row) => {
                 const refundable = roundAmount(row.refundable_amount);
                 const ledgerNet = partnerLedgerNetMap.get(row._id.toString()) ?? 0;
                 const partnerShare = resolvePartnerRefundShare(refundable, ledgerNet);
                 const settlement = computeRefundSettlementAmounts(refundable, partnerShare);
+                const razorpayRefundable = razorpayRefundableMap.get(row._id.toString()) ?? 0;
 
                 return {
                     _id: row._id,
@@ -464,6 +480,7 @@ const listEligibleOrders = async (query, scopeFilter = {}) => {
                     total_amount: roundAmount(row.total_amount),
                     user_paid: refundable,
                     refundable_amount: refundable,
+                    razorpay_refundable_amount: roundAmount(razorpayRefundable),
                     partner_payable_amount: settlement.partner_payable_amount,
                     admin_payable_amount: settlement.admin_payable_amount,
                     payment_status: row.payment_status,
@@ -537,6 +554,14 @@ const applyOrderRefundedStatus = async (orderId) => {
     return order;
 };
 
+const parseRefundViaRazorpay = (body) => {
+    if (body?.refund_via_razorpay === true || body?.refund_via_razorpay === 'true') {
+        return true;
+    }
+    const channel = String(body?.refund_channel || '').trim().toLowerCase();
+    return channel === 'razorpay';
+};
+
 const createRefund = async (body, createdById = null) => {
     try {
         const pOrder = parseObjectId(body.order_id, 'Order ID');
@@ -606,6 +631,33 @@ const createRefund = async (body, createdById = null) => {
         const customerResult = await resolveCustomerFromOrder(order);
         if (!customerResult.ok) return fail(400, customerResult.message);
 
+        const refundViaRazorpay = parseRefundViaRazorpay(body);
+        let razorpayRefundResult = null;
+
+        if (refundViaRazorpay) {
+            const razorpayRefundable = await getRazorpayRefundableBalanceForOrder(order._id);
+            if (refundAmount > razorpayRefundable + PAYMENT_STATUS_TOLERANCE) {
+                return fail(
+                    400,
+                    `Refund amount exceeds Razorpay refundable balance (${roundAmount(razorpayRefundable)}).`
+                );
+            }
+
+            razorpayRefundResult = await initiateRazorpayRefundsForOrder(order._id, refundAmount, {
+                notes: body.notes || '',
+            });
+
+            if (!razorpayRefundResult.ok) {
+                return fail(
+                    razorpayRefundResult.status || 502,
+                    razorpayRefundResult.message || 'Razorpay refund failed.',
+                    razorpayRefundResult.partial_refunds
+                        ? { partial_refunds: razorpayRefundResult.partial_refunds }
+                        : {}
+                );
+            }
+        }
+
         const totalAmount = roundAmount(order.total_price);
         const userPaid = roundAmount(breakdown.customer_paid_amount);
         const partnerId = order.partner_id || null;
@@ -616,11 +668,18 @@ const createRefund = async (body, createdById = null) => {
             order_id: order._id,
             payer_type: 'customer',
             amount: refundAmount,
-            payment_method: String(body.payment_method || '').trim() || 'cash',
+            payment_method: refundViaRazorpay
+                ? GATEWAY_PAYMENT_METHOD
+                : String(body.payment_method || '').trim() || 'cash',
             status: 'refunded',
-            transaction_reference: body.transaction_reference || '',
+            transaction_reference:
+                razorpayRefundResult?.transaction_reference ||
+                body.transaction_reference ||
+                '',
             paid_at: dateParsed.value,
-            notes: body.notes || `Refund recorded via refund API`,
+            notes:
+                body.notes ||
+                (refundViaRazorpay ? 'Refund via Razorpay' : 'Refund recorded via refund API'),
             created_at: now,
             updated_at: now,
         });
@@ -659,6 +718,8 @@ const createRefund = async (body, createdById = null) => {
             notes: body.notes || '',
             created_by_id: createdById || null,
             order_payment_id: payment._id,
+            refund_channel: refundViaRazorpay ? 'razorpay' : 'manual',
+            razorpay_refund_details: razorpayRefundResult?.refunds || [],
             created_at: now,
             updated_at: now,
         });
@@ -669,7 +730,9 @@ const createRefund = async (body, createdById = null) => {
         await syncAllPartnerOrderPaymentsForOrder(order._id);
 
         return ok(201, {
-            message: 'Refund created successfully.',
+            message: refundViaRazorpay
+                ? 'Refund created and processed via Razorpay.'
+                : 'Refund created successfully.',
             data: mapRefundRecord(refund.toObject()),
         });
     } catch (err) {

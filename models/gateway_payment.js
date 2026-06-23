@@ -37,6 +37,8 @@ const gatewayPaymentSchema = new mongoose.Schema(
             index: true,
         },
         amount: { type: Number, required: true, min: 0 },
+        /** Cumulative amount refunded via Razorpay for this capture (INR). */
+        refunded_amount: { type: Number, default: 0, min: 0 },
         currency: { type: String, default: 'INR', trim: true },
         status: {
             type: String,

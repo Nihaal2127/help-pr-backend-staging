@@ -12331,7 +12331,7 @@
     },
     {
       "name": "38 — Refunds",
-      "description": "**/api/refund** — Order refunds (4 endpoints).\n\n**Docs:** `docs/REFUND_API.md` (API + create body mapping) · `docs/REFUND_FRONTEND.md` (UI)\n**Standalone Postman:** `postman/Help-PR-Refunds.postman_collection.json`\n\n**Access:** Super admin (5) & staff (6) — optional `franchise_id`. Franchise admin (1) & employee (3) — own franchise. Partner (2) & customer (4) → **403**.\n\n**Flow:** 2 eligible-orders → 4 create → 1 getAll → 3 getById\n\n**Variables:** `orderId` = eligible-orders `_id` · `refundMongoId` = getAll/create `data._id`",
+      "description": "**/api/refund** — Order refunds (admin only).\n\n**Docs:** `docs/REFUND_API.md` · `docs/REFUND_FRONTEND.md`\n**Standalone Postman:** `postman/Help-PR-Refunds.postman_collection.json`\n\n**Access:** Super admin (5) & staff (6); franchise admin (1) & employee (3). Partner (2) & customer (4) → **403**.\n\n**Flow (manual):** 2 eligible-orders → 4 create → 1 getAll → 3 getById\n**Flow (Razorpay):** 2 eligible-orders (`razorpay_refundable_amount`) → **4b Create — Razorpay refund**\n\n**Variables:** `orderId` = eligible-orders `_id` · `refundMongoId` = getAll/create `data._id`",
       "item": [
         {
           "name": "1. Get all — refund list",
@@ -12577,9 +12577,65 @@
                 "create"
               ]
             },
-            "description": "**POST /api/refund/create** — Record refund (append-only).\n\n**Doc:** `docs/REFUND_API.md` §4 (request body → DB updates)\n\n**Required:** `order_id` (Mongo from eligible-orders), `refund_amount`, `date`\n**Optional:** `from_admin_commission`, `from_partner_wallet`, `notes`, `payment_method`, `transaction_reference`\n**Split:** `from_admin_commission + from_partner_wallet` = `refund_amount`\n**Caps:** `refund_amount` ≤ net paid; `from_partner_wallet` ≤ ledger credits for this order; `from_admin_commission` ≤ remainder (incl. tax, not commission-only)\n\n**Writes:** `order_payment` (refunded), `order_refund`, optional partner ledger debit; syncs order `payment_status`.\n\nTest script sets `refundMongoId` on 201."
+            "description": "**POST /api/refund/create** — Manual ledger refund (cash/bank already returned offline).\n\n**Doc:** `docs/REFUND_API.md` §4"
           },
           "description": "\n\n_Source: builtin:refund → Order refunds_"
+        },
+        {
+          "name": "4b. Create — Razorpay refund (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.success && json.data?._id) {",
+                  "  pm.collectionVariables.set('refundMongoId', json.data._id);",
+                  "}",
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Razorpay channel', () => pm.expect(json.data?.refund_channel).to.eql('razorpay'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"{{orderId}}\",\n  \"refund_amount\": 1000,\n  \"from_admin_commission\": 1000,\n  \"from_partner_wallet\": 0,\n  \"date\": \"2026-06-20T10:00:00.000Z\",\n  \"notes\": \"Razorpay refund via Postman\",\n  \"refund_via_razorpay\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/refund/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "refund",
+                "create"
+              ]
+            },
+            "description": "**POST /api/refund/create** with `refund_via_razorpay: true` — admin initiates Razorpay refund to customer card/UPI, then records ledger.\n\n`refund_amount` ≤ `razorpay_refundable_amount` from **2. Eligible orders**."
+          },
+          "description": "\n\n_Source: builtin:refund → Order refunds (Razorpay)_"
         }
       ]
     },

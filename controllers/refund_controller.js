@@ -9,9 +9,11 @@ const { fieldLabel } = require('../utils/field_labels');
 
 const sendServiceResult = (res, result) => {
     if (!result.ok) {
-        return res.status(result.status).json({
+        const { status, message, ok: _ok, ...extra } = result;
+        return res.status(status).json({
             success: false,
-            message: result.message,
+            message,
+            ...extra,
         });
     }
     return res.status(result.status).json({

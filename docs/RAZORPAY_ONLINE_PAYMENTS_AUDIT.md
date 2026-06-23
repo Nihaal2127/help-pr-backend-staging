@@ -17,6 +17,7 @@
 | Additional service charges | ⚠️ Metadata only | ⚠️ No pay endpoint | ❌ | — |
 | Partner subscription upgrade | — | ✅ `POST .../subscription/change` (`online_amount`) | ✅ | ✅ |
 | Partner payouts (wallet → bank) | ❌ Manual (`/api/partner_payout`) | ❌ | ❌ | — |
+| **Order refunds (customer)** | ✅ `POST /api/refund/create` + `refund_via_razorpay: true` | ❌ **403** | ✅ Refund API | ✅ `refunded_amount` on capture |
 
 **Additional charges:** `payment_method` on a charge is a **label**; it does not create a Razorpay link. After a charge is added, the customer pays the increased `customer_due_amount` via **order payments** (mobile online flow).
 

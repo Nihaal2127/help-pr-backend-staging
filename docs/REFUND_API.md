@@ -168,6 +168,7 @@ Orders eligible for a refund. **All conditions must pass:**
 | `order_id` | Display id only |
 | `total_amount` | `order.total_price` (context only; not the refund cap) |
 | `user_paid` / `refundable_amount` | **Max `refund_amount`** = net customer paid |
+| `razorpay_refundable_amount` | Max refundable **via Razorpay API** on this order (completed online captures minus prior gateway refunds) |
 | `partner_payable_amount` | Max partner clawback for this order — **only** `partner_wallet_ledger` credits − debits where `order_id` matches (not global wallet, not order entitlement) |
 | `admin_payable_amount` | Admin share on full refund — `refundable_amount − partner_payable_amount` (commission, taxes, and remainder) |
 
@@ -209,8 +210,10 @@ Records a refund. **Append-only.**
 | `from_admin_commission` | No | Default `0`. Admin/platform portion of this refund (commission, tax, fees, etc.). **Chosen by the client**; must satisfy the split rule below — **not** capped at `order.admin_commission` alone |
 | `from_partner_wallet` | No | Default `0`. Partner wallet debit portion |
 | `notes` | No | Stored on refund + payment |
-| `payment_method` | No | Default `"cash"` on payment row |
-| `transaction_reference` | No | External reference on payment row |
+| `payment_method` | No | Default `"cash"` on payment row (ignored when `refund_via_razorpay: true` → stored as `online`) |
+| `transaction_reference` | No | External reference on payment row (auto-filled with Razorpay `rfnd_xxx` when using Razorpay) |
+| `refund_via_razorpay` | No | When `true`, calls Razorpay Refund API before recording ledger rows. **Admin only** (same as all refund routes). |
+| `refund_channel` | No | Alias: send `"razorpay"` instead of `refund_via_razorpay: true` |
 | `franchise_id` | No | Access scope only (not stored on refund) |
 
 **Do not send:** `user_id`, `partner_id`, `user_name`, `total_amount`, `user_paid` — derived from order.
@@ -221,7 +224,7 @@ Records a refund. **Append-only.**
 from_admin_commission + from_partner_wallet = refund_amount   (± ₹0.01)
 ```
 
-### Example request
+### Example request (manual / offline refund)
 
 ```json
 {
@@ -235,6 +238,27 @@ from_admin_commission + from_partner_wallet = refund_amount   (± ₹0.01)
   "transaction_reference": "TXN-REF-001"
 }
 ```
+
+### Example request (Razorpay — money returned to customer card/UPI)
+
+```json
+{
+  "order_id": "664a1b2c3d4e5f6789012345",
+  "refund_amount": 1000,
+  "from_admin_commission": 200,
+  "from_partner_wallet": 800,
+  "date": "2026-05-15T10:00:00.000Z",
+  "notes": "Customer requested Razorpay refund",
+  "refund_via_razorpay": true
+}
+```
+
+**Razorpay rules:**
+
+- `refund_amount` must be ≤ `razorpay_refundable_amount` from **eligible-orders** (and ≤ overall `refundable_amount`).
+- Server calls `POST /v1/payments/:pay_id/refund` on Razorpay (FIFO across captures if multiple online payments).
+- Response `data.refund_channel` = `razorpay`; `data.razorpay_refund_details` lists `rfnd_xxx` ids.
+- Partner wallet clawback (`from_partner_wallet`) still applies in your ledger — Razorpay only returns money to the customer.
 
 ### Success `201`
 
@@ -261,6 +285,8 @@ from_admin_commission + from_partner_wallet = refund_amount   (± ₹0.01)
 | `Refund amount exceeds refundable balance (X)` | Refund amount &gt; customer net paid |
 | `Admin portion and partner wallet portion must add up to the refund amount.` | Split mismatch |
 | `Partner wallet portion exceeds partner credits for this order (X)` | `from_partner_wallet` &gt; partner wallet ledger net (credits − debits) for **this order** |
+| `Refund amount exceeds Razorpay refundable balance (X)` | `refund_via_razorpay` but amount &gt; online capture balance |
+| `No Razorpay payments available to refund for this order.` | `refund_via_razorpay` but order has no completed Razorpay captures |
 | `Order has no partner; partner wallet portion must be 0` | Partner debit without partner |
 
 ---

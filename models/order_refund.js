@@ -43,6 +43,22 @@ const orderRefundSchema = new mongoose.Schema(
             ref: 'order_payment',
             default: null,
         },
+        /** manual = ledger only; razorpay = money returned via Razorpay API */
+        refund_channel: {
+            type: String,
+            enum: ['manual', 'razorpay'],
+            default: 'manual',
+        },
+        razorpay_refund_details: {
+            type: [
+                {
+                    gateway_payment_id: { type: String, default: '', trim: true },
+                    razorpay_refund_id: { type: String, default: '', trim: true },
+                    amount: { type: Number, default: 0, min: 0 },
+                },
+            ],
+            default: [],
+        },
         created_at: { type: Date, default: Date.now },
         updated_at: { type: Date, default: Date.now },
         deleted_at: { type: Date, default: null },

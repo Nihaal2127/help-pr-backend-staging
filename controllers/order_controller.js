@@ -35,7 +35,7 @@ const {
   touchPartnerWorkStatusInfo,
 } = require('../enum/partner_work_status_enum');
 const { assertOrderCanBeMarkedCompleted } = require('../services/order_completion_validation');
-const { generatePaymentLink } = require('./razorpay_controller');
+const { initiateOnlineOrderPayment } = require('../src/modules/payments/services/orderOnlinePayment.service');
 const { escapeRegExp } = require('../utils/string_helpers');
 const { isMongoObjectIdHex, buildObjectIdQueryFilters } = require('../utils/mongoose_helpers');
 const {
@@ -527,35 +527,42 @@ const create = async (req, res) => {
     }
 
     if (newOrder.payment_mode_id === "2") {
-      const responsePaymentLink = await generatePaymentLink(
-        name,
-        email,
-        contact,
-        newOrder.total_price
-      );
-      if (responsePaymentLink.success === true) {
-        newOrder.transaction_id = responsePaymentLink.transaction_id;
-        const { order: savedOrder, nested } = await persistOrderAndLinkQuote(draft, {
-          requestBody: req.body,
-          actorUserId: getCallerId(req),
-        });
-        const result = {
-          payment_url: responsePaymentLink.payment_url,
-          order_id: savedOrder._id,
-          pricing: pricingMeta,
-          ...(nested ? { nested } : {}),
-        };
-        return res.status(200).json({
-          success: true,
-          status: 200,
-          message: "Order placed successfully and payment link send to customer.",
-          record: result,
+      const { order: savedOrder, nested } = await persistOrderAndLinkQuote(draft, {
+        requestBody: req.body,
+        actorUserId: getCallerId(req),
+      });
+
+      const onlineResult = await initiateOnlineOrderPayment({
+        order: savedOrder,
+        customer: {
+          name,
+          email,
+          phone_number: contact,
+        },
+        amount: savedOrder.total_price,
+        notes: 'Admin order — Razorpay payment link',
+      });
+
+      if (!onlineResult.ok) {
+        return res.status(onlineResult.status).json({
+          success: false,
+          status: onlineResult.status,
+          message: onlineResult.message,
         });
       }
-      return res.status(502).json({
-        success: false,
-        status: 502,
-        message: responsePaymentLink.error || "Failed to create payment link.",
+
+      const result = {
+        payment_url: onlineResult.payment_url,
+        order_id: savedOrder._id,
+        payment_id: onlineResult.payment._id,
+        pricing: pricingMeta,
+        ...(nested ? { nested } : {}),
+      };
+      return res.status(200).json({
+        success: true,
+        status: 200,
+        message: "Order placed successfully and payment link send to customer.",
+        record: result,
       });
     }
 

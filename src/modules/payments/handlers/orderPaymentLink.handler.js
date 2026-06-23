@@ -1,50 +1,151 @@
 const Order = require('../../../../models/order');
 const OrderPayment = require('../../../../models/order_payment');
-const { syncOrderPaymentStatus } = require('../../../../services/order_payment_status_service');
-const { syncAllPartnerOrderPaymentsForOrder } = require('../../../../services/partner_wallet_order_service');
-const { GATEWAY_PAYMENT_METHOD } = require('../constants/payment.constants');
+const { GATEWAY_PAYMENT_METHOD, PAYMENT_PURPOSES } = require('../constants/payment.constants');
+const {
+    findOrderPaymentForPaymentLink,
+    completeOrderPaymentFromWebhook,
+    finalizeCompletedOrderPaymentSideEffects,
+} = require('../services/orderOnlinePayment.service');
+const { recordGatewayPayment } = require('../services/gatewayPayment.service');
 
 /**
- * Handle payment_link.paid for an order (legacy: order.transaction_id = payment link id).
+ * Handle payment_link.paid for order payments (pending row or legacy order.transaction_id).
  * @param {string} paymentLinkId
+ * @param {{ paymentLinkEntity?: object, paidAmountPaise?: number, paymentEntity?: object }} context
  */
-const handleOrderPaymentLinkPaid = async (paymentLinkId) => {
-    const order = await Order.findOne({ transaction_id: paymentLinkId });
+const handleOrderPaymentLinkPaid = async (paymentLinkId, context = {}) => {
+    const { paymentLinkEntity, paidAmountPaise, paymentEntity } = context;
+
+    const paymentRow = await findOrderPaymentForPaymentLink(paymentLinkId, paymentLinkEntity);
+
+    if (paymentRow) {
+        const order = await Order.findById(paymentRow.order_id).select('user_id').lean();
+        const result = await completeOrderPaymentFromWebhook(
+            paymentRow._id,
+            paymentLinkId,
+            paidAmountPaise,
+            {
+                gateway_payment_id: paymentEntity?.id || null,
+                instrument_type: paymentEntity?.method || null,
+                paid_at: paymentEntity?.created_at
+                    ? new Date(Number(paymentEntity.created_at) * 1000)
+                    : new Date(),
+                payer_id: order?.user_id || null,
+            }
+        );
+
+        if (result.ok) {
+            console.log(`Order payment ${paymentRow._id} completed from Razorpay`);
+            return {
+                handled: true,
+                order_id: result.order_id,
+                payment_id: result.payment_id,
+                already_completed: !!result.already_completed,
+            };
+        }
+
+        console.error('order payment webhook completion failed', result.message);
+        if (result.status === 409 || result.status === 400) {
+            return {
+                handled: false,
+                fatal: true,
+                noRetry: true,
+                reason: result.message,
+                payment_id: paymentRow._id,
+            };
+        }
+        return {
+            handled: false,
+            fatal: true,
+            reason: result.message,
+            payment_id: paymentRow._id,
+        };
+    }
+
+    const order = await Order.findOne({ transaction_id: paymentLinkId, deleted_at: null });
     if (!order) {
         return { handled: false, reason: 'order_not_found' };
     }
 
     const amount = Number(order.total_price) || 0;
-    const existing = await OrderPayment.findOne({
+    let paymentRowDoc = await OrderPayment.findOne({
         order_id: order._id,
         payer_type: 'customer',
         transaction_reference: paymentLinkId,
         deleted_at: null,
     });
 
-    if (!existing && amount > 0) {
-        await OrderPayment.create({
+    if (paymentRowDoc && paymentRowDoc.status === 'pending') {
+        const result = await completeOrderPaymentFromWebhook(
+            paymentRowDoc._id,
+            paymentLinkId,
+            paidAmountPaise,
+            {
+                gateway_payment_id: paymentEntity?.id || null,
+                instrument_type: paymentEntity?.method || null,
+                paid_at: paymentEntity?.created_at
+                    ? new Date(Number(paymentEntity.created_at) * 1000)
+                    : new Date(),
+                payer_id: order.user_id || null,
+            }
+        );
+        if (result.ok) {
+            console.log(`Order ${order._id} legacy pending payment completed from Razorpay`);
+            return { handled: true, order_id: order._id, legacy: true };
+        }
+        return {
+            handled: false,
+            fatal: true,
+            reason: result.message || 'legacy_pending_completion_failed',
+        };
+    }
+
+    if (!paymentRowDoc && amount > 0) {
+        paymentRowDoc = await OrderPayment.create({
             order_id: order._id,
             payer_type: 'customer',
             amount,
             payment_method: GATEWAY_PAYMENT_METHOD,
             status: 'completed',
-            transaction_reference: paymentLinkId,
-            paid_at: new Date(),
-            notes: 'Razorpay payment link',
+            transaction_reference: paymentEntity?.id || paymentLinkId,
+            paid_at: paymentEntity?.created_at
+                ? new Date(Number(paymentEntity.created_at) * 1000)
+                : new Date(),
+            notes: 'Razorpay payment link (legacy admin flow)',
         });
-    } else if (existing && existing.status !== 'completed') {
-        existing.status = 'completed';
-        existing.paid_at = new Date();
-        existing.updated_at = new Date();
-        await existing.save();
+    } else if (paymentRowDoc && paymentRowDoc.status !== 'completed') {
+        paymentRowDoc.status = 'completed';
+        paymentRowDoc.paid_at = paymentEntity?.created_at
+            ? new Date(Number(paymentEntity.created_at) * 1000)
+            : new Date();
+        paymentRowDoc.transaction_reference = paymentEntity?.id || paymentLinkId;
+        paymentRowDoc.updated_at = new Date();
+        await paymentRowDoc.save();
     }
 
-    await syncOrderPaymentStatus(order._id);
-    await syncAllPartnerOrderPaymentsForOrder(order._id);
-    console.log(`Order ${order._id} payment synced from Razorpay`);
+    if (paymentRowDoc) {
+        await recordGatewayPayment({
+            purpose: PAYMENT_PURPOSES.ORDER,
+            referenceId: paymentRowDoc._id,
+            payerType: 'customer',
+            payerId: order.user_id,
+            amount: Number(paymentRowDoc.amount) || amount,
+            gatewayPaymentLinkId: paymentLinkId,
+            gatewayPaymentId: paymentEntity?.id || null,
+            instrumentType: paymentEntity?.method || null,
+            paidAt: paymentRowDoc.paid_at,
+            notes: 'Order payment — Razorpay online payment (legacy admin flow)',
+        });
 
-    return { handled: true, order_id: order._id };
+        await finalizeCompletedOrderPaymentSideEffects(order._id, {
+            payment: paymentRowDoc,
+            notify: true,
+        });
+    }
+
+    console.log(`Order ${order._id} payment synced from Razorpay (legacy)`);
+
+    return { handled: true, order_id: order._id, legacy: true };
 };
 
 module.exports = {

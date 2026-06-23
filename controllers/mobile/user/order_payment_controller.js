@@ -4,6 +4,7 @@ const {
   createCustomerOrderPayment,
   updateCustomerOrderPayment,
   deleteCustomerOrderPayment,
+  getCustomerOrderPaymentStatus,
 } = require('../../../services/mobile/user/order_payment_service');
 const {
   getCallerId,
@@ -49,9 +50,9 @@ const createOrderPaymentHandler = wrapMobileHandler(
       return sendServiceError(res, result);
     }
 
-    return res.status(201).json({
+    return res.status(result.status || 201).json({
       success: true,
-      status: 201,
+      status: result.status || 201,
       message: result.data.message,
       record: result.data.record,
       order: result.data.order,
@@ -103,10 +104,32 @@ const deleteOrderPaymentHandler = wrapMobileHandler(
   }
 );
 
+const getOrderPaymentStatusHandler = wrapMobileHandler(
+  'mobile user get order payment status handler',
+  async (req, res) => {
+    const result = await getCustomerOrderPaymentStatus(
+      getCallerId(req),
+      req.params.orderId,
+      req.params.paymentId
+    );
+    if (!result.ok) {
+      return sendServiceError(res, result);
+    }
+
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: result.data.message,
+      data: result.data.data,
+    });
+  }
+);
+
 module.exports = {
   listAllOrderPaymentsHandler,
   listOrderPaymentsHandler,
   createOrderPaymentHandler,
   updateOrderPaymentHandler,
   deleteOrderPaymentHandler,
+  getOrderPaymentStatusHandler,
 };

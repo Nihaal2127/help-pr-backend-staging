@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-all-apis-merged",
     "name": "Help PR — All APIs (single collection)",
-    "description": "**Single Postman collection** for `help-pr-backend-staging`. Import only this file.\n\n**Generated:** 2026-05-20 via `node postman/merge-all-collections.mjs`\n\n**Sources merged (8) from `postman/archive/`:**\n- `archive/Help-PR-Orders-Module.postman_collection.json`\n- `archive/Help-PR-Order-Charges-Payments.postman_collection.json`\n- `archive/Help-PR-Partner-Franchise-Dropdowns.postman_collection.json`\n- `archive/content-expense-expense-category-management.postman_collection (1).json`\n- `archive/Area-Management.postman_collection.json`\n- `archive/Help-PR-Area-Franchise-Subscription-UserTypes.postman_collection.json`\n- `archive/Help-PR-Area-Franchise-Subscription.postman_collection.json`\n- `archive/Help-PR-Admin-Dashboard.postman_collection.json`\n- Built-in: Partner payout (4 requests)\n- Built-in: Order refunds (4 requests)\n- Built-in: Partners browse — admin `GET /api/partners` (2 requests)\n- Built-in: Partner post management — admin `/api/partner-post` (4 requests)\n- Built-in: Appointment calendar — admin `/api/appointment` (6 requests)\n\n**Dedup:** Same HTTP method + path template (+ getCount `type` in body) → one request; higher-priority source wins.\n\n**Setup:** Set `baseUrl`. Run **00 — Auth → Login** to set `accessToken` / `token`.\n\n**Docs:** `docs/ORDER_MODULE_FRONTEND.md`, `docs/ORDER_GETALL_API_CHANGES.md`, `docs/APPOINTMENT_MODULE_FRONTEND.md`, `docs/PARTNER_PAYOUT_FRONTEND.md`, `docs/PARTNER_POST_FRONTEND.md`, `docs/REFUND_API.md`, `docs/REFUND_FRONTEND.md`, `postman/Help-PR-Refunds.postman_collection.json`\n\n**Mobile:** folder **Mobile → Partner** / **Mobile → User** — run `node postman/build-mobile-folder.mjs` to refresh.",
+    "description": "**Single Postman collection** for `help-pr-backend-staging`. Import only this file.\n\n**Generated:** 2026-05-20 via `node postman/merge-all-collections.mjs`\n\n**Sources merged (8) from `postman/archive/`:**\n- `archive/Help-PR-Orders-Module.postman_collection.json`\n- `archive/Help-PR-Order-Charges-Payments.postman_collection.json`\n- `archive/Help-PR-Partner-Franchise-Dropdowns.postman_collection.json`\n- `archive/content-expense-expense-category-management.postman_collection (1).json`\n- `archive/Area-Management.postman_collection.json`\n- `archive/Help-PR-Area-Franchise-Subscription-UserTypes.postman_collection.json`\n- `archive/Help-PR-Area-Franchise-Subscription.postman_collection.json`\n- `archive/Help-PR-Admin-Dashboard.postman_collection.json`\n- Built-in: Partner payout (4 requests)\n- Built-in: Order refunds (4 requests)\n- Built-in: Partners browse — admin `GET /api/partners` (2 requests)\n- Built-in: Partner post management — admin `/api/partner-post` (4 requests)\n- Built-in: Appointment calendar — admin `/api/appointment` (6 requests)\n\n**Dedup:** Same HTTP method + path template (+ getCount `type` in body) → one request; higher-priority source wins.\n\n**Setup:** Set `baseUrl`. Run **00 — Auth → Login** to set `accessToken` / `token`.\n\n**Docs:** `docs/ORDER_MODULE_FRONTEND.md`, `docs/RAZORPAY_ONLINE_PAYMENTS_AUDIT.md`, `docs/SUBSCRIPTION_CHANGE_FRONTEND.md`, `docs/ORDER_GETALL_API_CHANGES.md`, `docs/APPOINTMENT_MODULE_FRONTEND.md`, `docs/PARTNER_PAYOUT_FRONTEND.md`, `docs/PARTNER_POST_FRONTEND.md`, `docs/REFUND_API.md`, `docs/REFUND_FRONTEND.md`, `postman/Help-PR-Refunds.postman_collection.json`\n\n**Mobile:** folder **Mobile → Partner** / **Mobile → User** — run `node postman/build-mobile-folder.mjs` to refresh.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -7281,7 +7281,7 @@
     },
     {
       "name": "21 — Order",
-      "description": "**/api/order** — 18 request(s). Duplicates merged across source collections.",
+      "description": "**/api/order** — Orders, nested charges/payments on create/update.\n\n**Razorpay online at checkout:** **3a. Create order (Razorpay online)** — `payment_mode_id: \"2\"` + `name`, `email`, `contact` → `record.payment_url`. Mid-order customer Razorpay: use **mobile** `POST /api/mobile/user/orders/:id/payments` (admin **23 — Order payments** `online` is label-only). See `docs/RAZORPAY_ONLINE_PAYMENTS_AUDIT.md`.",
       "item": [
         {
           "name": "1. Get all orders",
@@ -7542,10 +7542,71 @@
                 "create"
               ]
             },
-            "description": "**POST /api/order/create** — creates order + **exactly one** `order_service`.\n\n**Nested (optional):**\n- **`additional_charges`**: array or `{ create: [...] }` — each item: `amount` (required), `label`, `description`, `payment_method`, `charge_type`.\n- **`order_payments`**: array or `{ create: [...] }` — each item: `payer_type` (`customer`|`partner`), `amount`, optional `status`, `payment_method`, `transaction_reference`, `paid_at`, `notes`.\n\nServer recalculates **`total_price`** and **`payment_status`** after nested rows. Response may include **`record.nested`** with created ids.\n\nOmit both arrays for order-only create. See `docs/ORDER_MODULE_FRONTEND.md` §7."
+            "description": "**POST /api/order/create** — creates order + **exactly one** `order_service`.\n\n**Razorpay:** use **3a. Create order (Razorpay online)** for `payment_mode_id: \"2\"` (not this request's empty `payment_mode_id`).\n\n**Nested (optional):**\n- **`additional_charges`**: array or `{ create: [...] }` — each item: `amount` (required), `label`, `description`, `payment_method`, `charge_type`.\n- **`order_payments`**: array or `{ create: [...] }` — each item: `payer_type` (`customer`|`partner`), `amount`, optional `status`, `payment_method`, `transaction_reference`, `paid_at`, `notes`.\n\nServer recalculates **`total_price`** and **`payment_status`** after nested rows. Response may include **`record.nested`** with created ids.\n\nOmit both arrays for order-only create. See `docs/ORDER_MODULE_FRONTEND.md` §7."
           },
           "response": [],
           "description": "\n\n_Source: Help-PR-Orders-Module.postman_collection.json_"
+        },
+        {
+          "name": "3a. Create order (Razorpay online)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Order created with Razorpay link', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.record?.payment_url).to.be.a('string');",
+                  "  });",
+                  "  if (j?.record?.order_id) pm.collectionVariables.set('orderId', String(j.record.order_id));",
+                  "  if (j?.record?.payment_id) pm.collectionVariables.set('orderPaymentId', String(j.record.payment_id));",
+                  "  if (j?.record?.payment_url) pm.collectionVariables.set('orderPaymentUrl', String(j.record.payment_url));",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{customerUserId}}\",\n  \"user_unique_id\": \"CUST001\",\n  \"city_id\": \"{{cityId}}\",\n  \"category_id\": \"{{categoryId}}\",\n  \"created_by_id\": \"{{userId}}\",\n  \"is_paid\": false,\n  \"payment_mode_id\": \"2\",\n  \"name\": \"Test Customer\",\n  \"email\": \"customer.razorpay.test@example.com\",\n  \"contact\": \"9876543210\",\n  \"order_date\": \"2026-06-01\",\n  \"address\": \"123 Sample Street, City\",\n  \"total_service_charge\": 3000,\n  \"service_id\": \"{{serviceId}}\",\n  \"type\": 2,\n  \"partner_id\": \"{{partnerId}}\",\n  \"order_description\": \"Admin order — Razorpay test\",\n  \"service_items\": [\n    {\n      \"user_id\": \"{{customerUserId}}\",\n      \"partner_id\": \"{{partnerId}}\",\n      \"category_id\": \"{{categoryId}}\",\n      \"service_id\": \"{{serviceId}}\",\n      \"service_date\": \"2026-06-01T00:00:00.000Z\",\n      \"service_from_time\": \"2026-06-01T09:00:00.000Z\",\n      \"service_to_time\": \"2026-06-01T17:00:00.000Z\",\n      \"total_service_charge\": 3000\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/order/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "order",
+                "create"
+              ]
+            },
+            "description": "**POST /api/order/create** with **`payment_mode_id: \"2\"`** (online).\n\n**Required for Razorpay:** `name`, `email`, `contact` on body (customer contact for payment link).\n\n**200** `record`: `payment_url`, `order_id`, `payment_id` (pending `order_payment`). Open `payment_url`; webhook completes payment. Sets `{{orderId}}`, `{{orderPaymentId}}`, `{{orderPaymentUrl}}`.\n\nTest: card `4111111111111111` or UPI `success@razorpay`."
+          },
+          "response": []
         },
         {
           "name": "4. Update order",
@@ -7985,7 +8046,7 @@
     },
     {
       "name": "22 — Order additional charges",
-      "description": "**/api/order-additional-charges** — 4 request(s). Duplicates merged across source collections.",
+      "description": "**/api/order-additional-charges** — CRUD extra line items; **recalculates `order.total_price`**.\n\n**`payment_method`** on a charge is a **label only** (cash/upi/online/…) — **no Razorpay link** is created here. Customer pays the increased balance via **order payments** (mobile: `POST /api/mobile/user/orders/:id/payments` with `payment_method: online`). See `docs/RAZORPAY_ONLINE_PAYMENTS_AUDIT.md`.",
       "item": [
         {
           "name": "Create charge",
@@ -8023,7 +8084,7 @@
                 "create"
               ]
             },
-            "description": "**POST /create**\n\n**Required:** `order_id`, `amount` (> 0).\n\n**Optional:** `label`, `description`, `charge_type`, **`payment_method`**: `cash` | `upi` | `card` | `online` | `bank_transfer` | `other` (invalid → stored as `other`).\n\nTax on charge uses order's saved tax rules. Saves charge id → `additionalChargeId`."
+            "description": "**POST /create**\n\n**Required:** `order_id`, `amount` (> 0).\n\n**Optional:** `label`, `description`, `charge_type`, **`payment_method`**: `cash` | `upi` | `card` | `online` | `bank_transfer` | `other` (invalid → stored as `other`) — **metadata only**, not Razorpay.\n\nCustomer pays via mobile order payments after charge. Tax uses order rules. Saves `additionalChargeId`."
           },
           "response": [],
           "description": "\n\n_Source: Help-PR-Order-Charges-Payments.postman_collection.json → Additional charges_"
@@ -8130,7 +8191,7 @@
     },
     {
       "name": "23 — Order payments",
-      "description": "**/api/order-payments** — 4 request(s). Duplicates merged across source collections.",
+      "description": "**/api/order-payments** — Customer/partner payment ledger on an order.\n\n**Razorpay (customer):** `POST /create` with `payment_method: online` → **202** + `record.payment_url`; poll **`GET /payment-status/:id`**. Optional `name`, `email`, `contact` on create (else from customer profile). Also **21 → 3a** for full checkout.\n\n**Partner `payer_type: partner`:** credits wallet when `completed` (see **37 — Partner payout**). Audit: `docs/RAZORPAY_ONLINE_PAYMENTS_AUDIT.md`.",
       "item": [
         {
           "name": "Create payment",
@@ -8168,10 +8229,98 @@
                 "create"
               ]
             },
-            "description": "**POST /create**\n\n**Required:** `order_id`, **`payer_type`**: `customer` | `partner`, `amount`.\n\n**Optional:** `payment_method`, **`status`**: `pending` | `completed` | `failed` | `refunded`, `transaction_reference`, `installment_index`, `due_date`, `paid_at`, `notes`.\n\n**Customer + completed:** updates `payment_status` (`partially_paid` / `paid`) and `is_paid` when sum ≥ `total_price`.\n\n**Partner example:** `\"payer_type\": \"partner\"`, `\"status\": \"pending\"`, `\"due_date\": \"2026-06-15T00:00:00.000Z\"`.\n\n**Refund example:** `\"payer_type\": \"customer\"`, `\"status\": \"refunded\"` → may set `partially_refund` / `refund` on order."
+            "description": "**POST /create**\n\n**Required:** `order_id`, **`payer_type`**: `customer` | `partner`, `amount`.\n\n**Optional:** `payment_method`, **`status`**: `pending` | `completed` | `failed` | `refunded`, `transaction_reference`, `installment_index`, `due_date`, `paid_at`, `notes`.\n\n**`payment_method: online`** (customer only, `amount` > 0): **202** + `record.payment_url`. Optional `name`, `email`, `contact` for Razorpay. Poll **GET /payment-status/:id**.\n\n**Offline customer + completed:** updates `payment_status` when sum ≥ `total_price`.\n\n**Partner:** `\"payer_type\": \"partner\"`. **Refund:** `\"status\": \"refunded\"`."
           },
           "response": [],
           "description": "\n\n_Source: Help-PR-Order-Charges-Payments.postman_collection.json → Order payments (ledger)_"
+        },
+        {
+          "name": "Create payment (Razorpay online)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Admin online payment initiated', function () {",
+                  "    pm.expect([200, 201, 202]).to.include(pm.response.code);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.record?._id || j.record?.payment_url).to.be.ok;",
+                  "  });",
+                  "  const id = j?.record?._id;",
+                  "  if (id) pm.collectionVariables.set('orderPaymentId', String(id));",
+                  "  if (j?.record?.payment_url) pm.collectionVariables.set('orderPaymentUrl', String(j.record.payment_url));",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"{{orderId}}\",\n  \"payer_type\": \"customer\",\n  \"amount\": {{orderPaymentAmount}},\n  \"payment_method\": \"online\",\n  \"notes\": \"Admin order payment — Razorpay test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/order-payments/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "order-payments",
+                "create"
+              ]
+            },
+            "description": "**POST /create** with `payment_method: online`. **202** + `record.payment_url`. Customer profile must have email or phone (or pass `name`, `email`, `contact`). Then **Get payment status (Razorpay)**."
+          },
+          "response": []
+        },
+        {
+          "name": "Get payment status (Razorpay)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/order-payments/payment-status/{{orderPaymentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "order-payments",
+                "payment-status",
+                "{{orderPaymentId}}"
+              ]
+            },
+            "description": "**GET /api/order-payments/payment-status/:id** — poll after Razorpay pay. `data.status` → `completed` when applied; `sync.synced: true` if webhook missed."
+          },
+          "response": []
         },
         {
           "name": "Delete payment (soft)",
@@ -9920,7 +10069,7 @@
     },
     {
       "name": "31 — Razorpay",
-      "description": "**/api/razorpay** — 4 request(s). Duplicates merged across source collections.",
+      "description": "**/api/razorpay** — Payment Links (collect from customer/partner) + webhook.\n\n| Route | Who calls | Purpose |\n|-------|-----------|--------|\n| `POST /razorpayWebhook` | Razorpay servers | `payment_link.paid` → complete order payment or subscription change |\n| `GET /callback` | Browser after pay | Success redirect page |\n\n**Configured in Razorpay dashboard:** Webhook URL = `{RAZORPAY_BASE_URL}/api/razorpay/razorpayWebhook` (env on Lambda, not Postman `{{baseUrl}}` unless same).\n\n**Flows that create links:** Admin **21 → 3a**; Mobile user order payment / quote convert; Partner subscription `online_amount`.\n\n**Not Razorpay:** Partner wallet **payout** (`/api/partner_payout`) — manual bank transfer.\n\nAudit: `docs/RAZORPAY_ONLINE_PAYMENTS_AUDIT.md`",
       "item": [
         {
           "name": "Callback",
@@ -9951,14 +10100,14 @@
               ]
             }
           },
-          "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 08 — Financials & Tax_"
+          "description": "**GET /api/razorpay/callback** — Browser redirect after customer pays a Payment Link."
         },
         {
           "name": "Razorpay — webhook",
           "request": {
             "method": "POST",
             "header": [],
-            "description": "Payment provider webhook; usually no Bearer token.",
+            "description": "Payment provider webhook; no Bearer token. Raw JSON body required for signature.",
             "url": {
               "raw": "{{baseUrl}}/api/razorpay/razorpayWebhook",
               "host": [
@@ -9971,7 +10120,7 @@
               ]
             }
           },
-          "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 08 — Financials & Tax_"
+          "description": "**POST /api/razorpay/razorpayWebhook** — Razorpay → server. Handles `payment_link.paid` for **order** and **subscription_change**. Configure in Razorpay dashboard. Returns **500** on retryable errors."
         },
         {
           "name": "Webhook",
@@ -11961,7 +12110,7 @@
     },
     {
       "name": "37 — Partner payout",
-      "description": "**/api/partner_payout** — Partner wallet (credits from orders, debits from withdrawals).\n\n**Frontend doc:** `docs/PARTNER_PAYOUT_FRONTEND.md`\n\n**Access:** Super admin (5) & staff (6) — all franchises; optional `franchise_id`. Franchise admin (1) & employee (3) — own franchise only; wrong `franchise_id` → **403**. Partner (2) & customer (4) → **403**.\n\n**Flow:** 1 getAll → 2 partners (pay modal) → 3 show (ledger) → 4 create.\n\n**Variable:** Set `partnerMongoId` to a row `_id` from getAll (Mongo ObjectId, not business `partner_id`).",
+      "description": "**/api/partner_payout** — Partner wallet (credits from completed partner **order_payments**, debits from admin withdrawals).\n\n**Not Razorpay:** manual payout to partner bank (`upi`, `bank_transfer`, `cash`, `cheque`). Inbound online pay uses Payment Links (orders / subscription); outbound bank transfer is separate.\n\n**Frontend doc:** `docs/PARTNER_PAYOUT_FRONTEND.md` · **Audit:** `docs/RAZORPAY_ONLINE_PAYMENTS_AUDIT.md`\n\n**Access:** Super admin (5) & staff (6) — all franchises; optional `franchise_id`. Franchise admin (1) & employee (3) — own franchise only. Partner (2) & customer (4) → **403**.\n\n**Flow:** 1 getAll → 2 partners → 3 show (ledger) → 4 create.\n\n**Variable:** `partnerMongoId` from getAll (Mongo `_id`).",
       "item": [
         {
           "name": "1. Get all — wallet list",
@@ -14053,7 +14202,7 @@
                     ],
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"name\": \"Ravi Kumar\",\n  \"date_of_birth\": \"1995-06-15\",\n  \"phone_number\": \"+919876543210\",\n  \"email\": \"partner.mobile+1781080795012@example.com\",\n  \"password\": \"123456\"\n}",
+                      "raw": "{\n  \"name\": \"Ravi Kumar\",\n  \"date_of_birth\": \"1995-06-15\",\n  \"phone_number\": \"+919876543210\",\n  \"email\": \"partner.mobile+1782188512831@example.com\",\n  \"password\": \"123456\"\n}",
                       "options": {
                         "raw": {
                           "language": "json"
@@ -17012,7 +17161,7 @@
             },
             {
               "name": "13 — Orders & quotes",
-              "description": "**32** request(s)",
+              "description": "**35** request(s)",
               "item": [
                 {
                   "name": "1. Get all orders",
@@ -17273,7 +17422,7 @@
                         "create"
                       ]
                     },
-                    "description": "**POST /api/order/create** — creates order + **exactly one** `order_service`.\n\n**Nested (optional):**\n- **`additional_charges`**: array or `{ create: [...] }` — each item: `amount` (required), `label`, `description`, `payment_method`, `charge_type`.\n- **`order_payments`**: array or `{ create: [...] }` — each item: `payer_type` (`customer`|`partner`), `amount`, optional `status`, `payment_method`, `transaction_reference`, `paid_at`, `notes`.\n\nServer recalculates **`total_price`** and **`payment_status`** after nested rows. Response may include **`record.nested`** with created ids.\n\nOmit both arrays for order-only create. See `docs/ORDER_MODULE_FRONTEND.md` §7."
+                    "description": "**POST /api/order/create** — creates order + **exactly one** `order_service`.\n\n**Razorpay:** use **3a. Create order (Razorpay online)** for `payment_mode_id: \"2\"` (not this request's empty `payment_mode_id`).\n\n**Nested (optional):**\n- **`additional_charges`**: array or `{ create: [...] }` — each item: `amount` (required), `label`, `description`, `payment_method`, `charge_type`.\n- **`order_payments`**: array or `{ create: [...] }` — each item: `payer_type` (`customer`|`partner`), `amount`, optional `status`, `payment_method`, `transaction_reference`, `paid_at`, `notes`.\n\nServer recalculates **`total_price`** and **`payment_status`** after nested rows. Response may include **`record.nested`** with created ids.\n\nOmit both arrays for order-only create. See `docs/ORDER_MODULE_FRONTEND.md` §7."
                   },
                   "response": [],
                   "description": "\n\n_Source: Help-PR-Orders-Module.postman_collection.json_"
@@ -17535,6 +17684,61 @@
                   "description": "\n\n_Source: Help-PR-Area-Franchise-Subscription.postman_collection.json → Quote_"
                 },
                 {
+                  "name": "Create",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "if (pm.response.code === 200) {",
+                          "  try {",
+                          "    const j = pm.response.json();",
+                          "    if (j && j.record && j.record._id) {",
+                          "      pm.collectionVariables.set('quote_settings_id', String(j.record._id));",
+                          "      pm.collectionVariables.set('id', String(j.record._id));",
+                          "    }",
+                          "  } catch (e) {}",
+                          "}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{auth_token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"free_quotes_per_user\": 3,\n  \"no_of_quotes\": 10,\n  \"quotes_price\": 99\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": "{{base_url}}/api/quote_settings/create"
+                  }
+                },
+                {
                   "name": "Create charge",
                   "request": {
                     "method": "POST",
@@ -17570,7 +17774,7 @@
                         "create"
                       ]
                     },
-                    "description": "**POST /create**\n\n**Required:** `order_id`, `amount` (> 0).\n\n**Optional:** `label`, `description`, `charge_type`, **`payment_method`**: `cash` | `upi` | `card` | `online` | `bank_transfer` | `other` (invalid → stored as `other`).\n\nTax on charge uses order's saved tax rules. Saves charge id → `additionalChargeId`."
+                    "description": "**POST /create**\n\n**Required:** `order_id`, `amount` (> 0).\n\n**Optional:** `label`, `description`, `charge_type`, **`payment_method`**: `cash` | `upi` | `card` | `online` | `bank_transfer` | `other` (invalid → stored as `other`) — **metadata only**, not Razorpay.\n\nCustomer pays via mobile order payments after charge. Tax uses order rules. Saves `additionalChargeId`."
                   },
                   "response": [],
                   "description": "\n\n_Source: Help-PR-Order-Charges-Payments.postman_collection.json → Additional charges_"
@@ -17611,7 +17815,7 @@
                         "create"
                       ]
                     },
-                    "description": "**POST /create**\n\n**Required:** `order_id`, **`payer_type`**: `customer` | `partner`, `amount`.\n\n**Optional:** `payment_method`, **`status`**: `pending` | `completed` | `failed` | `refunded`, `transaction_reference`, `installment_index`, `due_date`, `paid_at`, `notes`.\n\n**Customer + completed:** updates `payment_status` (`partially_paid` / `paid`) and `is_paid` when sum ≥ `total_price`.\n\n**Partner example:** `\"payer_type\": \"partner\"`, `\"status\": \"pending\"`, `\"due_date\": \"2026-06-15T00:00:00.000Z\"`.\n\n**Refund example:** `\"payer_type\": \"customer\"`, `\"status\": \"refunded\"` → may set `partially_refund` / `refund` on order."
+                    "description": "**POST /create**\n\n**Required:** `order_id`, **`payer_type`**: `customer` | `partner`, `amount`.\n\n**Optional:** `payment_method`, **`status`**: `pending` | `completed` | `failed` | `refunded`, `transaction_reference`, `installment_index`, `due_date`, `paid_at`, `notes`.\n\n**⚠️ `payment_method: online`:** admin create records label only — **no** `payment_url`. Use **21 → 3a** or mobile order payments.\n\n**Customer + completed:** updates `payment_status` when sum ≥ `total_price`.\n\n**Partner:** `\"payer_type\": \"partner\"`. **Refund:** `\"status\": \"refunded\"`."
                   },
                   "response": [],
                   "description": "\n\n_Source: Help-PR-Order-Charges-Payments.postman_collection.json → Order payments (ledger)_"
@@ -17690,6 +17894,24 @@
                   },
                   "response": [],
                   "description": "\n\n_Source: Help-PR-Order-Charges-Payments.postman_collection.json → Order payments (ledger)_"
+                },
+                {
+                  "name": "Get",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{auth_token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [],
+                    "url": "{{base_url}}/api/quote_settings/get"
+                  }
                 },
                 {
                   "name": "Get all",
@@ -17965,6 +18187,42 @@
                     }
                   },
                   "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 06 — Quote Management_"
+                },
+                {
+                  "name": "Update",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{auth_token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "PUT",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"quotes_price\": 149\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": "{{base_url}}/api/quote_settings/update/{{quote_settings_id}}"
+                  }
                 },
                 {
                   "name": "Update charge",
@@ -18330,12 +18588,23 @@
               "item": [
                 {
                   "name": "Chat — add members",
+                  "event": [],
                   "request": {
                     "method": "POST",
                     "header": [
                       {
                         "key": "Authorization",
                         "value": "Bearer {{accessToken}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
                         "type": "text"
                       }
                     ],
@@ -18350,12 +18619,37 @@
                         "{{chatId}}",
                         "members"
                       ]
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"userIds\": [\n    \"{{employee_id}}\"\n  ]\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
                     }
                   },
-                  "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 16 — Chat & Messages_"
+                  "description": "**POST /api/chat/:id/members**\n\nAdd users to a group chat (e.g. order chat).\n\nBody: `{ \"userIds\": [\"...\"] }`",
+                  "response": []
                 },
                 {
-                  "name": "Chat — convert",
+                  "name": "Chat — create (manual)",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  const id = j?.record?._id;",
+                          "  if (id) pm.collectionVariables.set('chatId', String(id));",
+                          "} catch (e) {}"
+                        ]
+                      }
+                    }
+                  ],
                   "request": {
                     "method": "POST",
                     "header": [
@@ -18363,36 +18657,20 @@
                         "key": "Authorization",
                         "value": "Bearer {{accessToken}}",
                         "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/chat/{{chatId}}/convert",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "chat",
-                        "{{chatId}}",
-                        "convert"
-                      ]
-                    }
-                  },
-                  "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 16 — Chat & Messages_"
-                },
-                {
-                  "name": "Chat — create",
-                  "request": {
-                    "method": "POST",
-                    "header": [
+                      },
                       {
-                        "key": "Authorization",
-                        "value": "Bearer {{accessToken}}",
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
                         "type": "text"
                       }
                     ],
                     "url": {
-                      "raw": "{{baseUrl}}/api/chat/",
+                      "raw": "{{baseUrl}}/api/chat",
                       "host": [
                         "{{baseUrl}}"
                       ],
@@ -18400,12 +18678,37 @@
                         "api",
                         "chat"
                       ]
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"type\": \"support\",\n  \"isGroup\": false,\n  \"participants\": [\n    \"{{userId}}\",\n    \"{{employee_id}}\"\n  ],\n  \"assignedTo\": \"{{employee_id}}\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
                     }
                   },
-                  "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 16 — Chat & Messages_"
+                  "description": "**POST /api/chat** — manual chat create (prefer auto order / support / dispute flows).\n\n`type`: `support` | `order` | `quote` | `dispute`",
+                  "response": []
                 },
                 {
-                  "name": "Chat — getById",
+                  "name": "Chat — get order chat",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  const id = j?.record?._id;",
+                          "  if (id) pm.collectionVariables.set('chatId', String(id));",
+                          "} catch (e) {}"
+                        ]
+                      }
+                    }
+                  ],
                   "request": {
                     "method": "GET",
                     "header": [
@@ -18416,21 +18719,38 @@
                       }
                     ],
                     "url": {
-                      "raw": "{{baseUrl}}/api/chat/{{chatId}}",
+                      "raw": "{{baseUrl}}/api/chat/by-order/{{orderId}}",
                       "host": [
                         "{{baseUrl}}"
                       ],
                       "path": [
                         "api",
                         "chat",
-                        "{{chatId}}"
+                        "by-order",
+                        "{{orderId}}"
                       ]
                     }
                   },
-                  "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 16 — Chat & Messages_"
+                  "description": "**GET /api/chat/by-order/:orderId**\n\nOrder group chat (auto-created on order). Requires access to the order chat.\n\nSets `{{chatId}}` from `record._id`.",
+                  "response": []
                 },
                 {
-                  "name": "Chat — list",
+                  "name": "Chat — list (with unreadCount)",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  const c0 = j?.records?.[0];",
+                          "  if (c0?._id) pm.collectionVariables.set('chatId', String(c0._id));",
+                          "} catch (e) {}"
+                        ]
+                      }
+                    }
+                  ],
                   "request": {
                     "method": "GET",
                     "header": [
@@ -18441,7 +18761,7 @@
                       }
                     ],
                     "url": {
-                      "raw": "{{baseUrl}}/api/chat/",
+                      "raw": "{{baseUrl}}/api/chat",
                       "host": [
                         "{{baseUrl}}"
                       ],
@@ -18451,43 +18771,88 @@
                       ]
                     }
                   },
-                  "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 16 — Chat & Messages_"
+                  "description": "**GET /api/chat**\n\nInbox for logged-in user. Each chat includes **`unreadCount`**.\n\nSets `{{chatId}}` from first row.",
+                  "response": []
                 },
                 {
-                  "name": "Chat — remove member",
-                  "request": {
-                    "method": "DELETE",
-                    "header": [
-                      {
-                        "key": "Authorization",
-                        "value": "Bearer {{accessToken}}",
-                        "type": "text"
+                  "name": "Chat — start support (back-office)",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  const id = j?.record?._id;",
+                          "  if (id) pm.collectionVariables.set('chatId', String(id));",
+                          "} catch (e) {}"
+                        ]
                       }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/chat/{{chatId}}/members/{{userId}}",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "chat",
-                        "{{chatId}}",
-                        "members",
-                        "{{userId}}"
-                      ]
                     }
-                  },
-                  "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 16 — Chat & Messages_"
-                },
-                {
-                  "name": "Chat — transfer",
+                  ],
                   "request": {
                     "method": "POST",
                     "header": [
                       {
                         "key": "Authorization",
                         "value": "Bearer {{accessToken}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/chat/support",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "chat",
+                        "support"
+                      ]
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"customer_id\": \"{{userId}}\",\n  \"employee_id\": \"{{employee_id}}\",\n  \"initial_message\": \"Hello, how can we help?\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "description": "**POST /api/chat/support**\n\nStart or resume **support** chat (customer ↔ employee).\n\n| Field | Required | Notes |\n|-------|----------|--------|\n| `customer_id` | Yes* | Required when caller is admin/staff/employee starting for a customer |\n| `employee_id` | Yes* | Required when caller is **admin/staff** (not employee) |\n| `franchise_id` | No | Franchise scope hint |\n| `initial_message` | No | First text message |\n\nEmployee caller: omit `employee_id` (uses self). Customer uses mobile route instead.",
+                  "response": []
+                },
+                {
+                  "name": "Chat — transfer (reassign agent)",
+                  "event": [],
+                  "request": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{accessToken}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
                         "type": "text"
                       }
                     ],
@@ -18502,12 +18867,70 @@
                         "{{chatId}}",
                         "transfer"
                       ]
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"newAssignedTo\": \"{{employee_id}}\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
                     }
                   },
-                  "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 16 — Chat & Messages_"
+                  "description": "**POST /api/chat/:id/transfer**\n\nReassign handler (`assignedTo`).\n\n**Support & dispute (full handoff):** swaps employee participant — customer stays, previous employee removed, new employee added, `dispute.employee_id` updated, system message posted. Message history unchanged.\n\n**Order group chats:** only updates `assignedTo` (participants unchanged).\n\n| Field | Required |\n|-------|----------|\n| `newAssignedTo` | Yes — active employee `_id` in same franchise |\n\n**Socket:** `transfer_chat` → `chat_assigned`, `chat_updated`, `receive_message` (system).",
+                  "response": []
+                },
+                {
+                  "name": "Chat — update status",
+                  "event": [],
+                  "request": {
+                    "method": "PATCH",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{accessToken}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/chat/{{chatId}}/status",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "chat",
+                        "{{chatId}}",
+                        "status"
+                      ]
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"status\": \"closed\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "description": "**PATCH /api/chat/:id/status**\n\nClose or reopen chat.\n\n`status`: `open` | `closed` | `pending`",
+                  "response": []
                 },
                 {
                   "name": "Messages — list",
+                  "event": [],
                   "request": {
                     "method": "GET",
                     "header": [
@@ -18526,19 +18949,41 @@
                         "api",
                         "chat",
                         "messages"
+                      ],
+                      "query": [
+                        {
+                          "key": "chatId",
+                          "value": "{{chatId}}"
+                        },
+                        {
+                          "key": "limit",
+                          "value": "50"
+                        }
                       ]
                     }
                   },
-                  "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 16 — Chat & Messages_"
+                  "description": "**GET /api/chat/messages?chatId=**\n\nPaginated history. Optional `after` (ISO date), `limit` (1–200).",
+                  "response": []
                 },
                 {
                   "name": "Messages — send",
+                  "event": [],
                   "request": {
                     "method": "POST",
                     "header": [
                       {
                         "key": "Authorization",
                         "value": "Bearer {{accessToken}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
                         "type": "text"
                       }
                     ],
@@ -18552,9 +18997,19 @@
                         "chat",
                         "messages"
                       ]
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"chatId\": \"{{chatId}}\",\n  \"type\": \"text\",\n  \"content\": \"Test message from Postman\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
                     }
                   },
-                  "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 16 — Chat & Messages_"
+                  "description": "**POST /api/chat/messages**\n\nREST fallback when Socket.IO unavailable.\n\n`type`: `text` | `image` | `file`",
+                  "response": []
                 }
               ]
             },
@@ -19512,7 +19967,7 @@
             },
             {
               "name": "Subscription",
-              "description": "Bearer required. **GET /subscription** — current plan + wallet balance. **GET /subscription-plans** — catalog. **POST /subscription/change/preview** and **POST /subscription/change** — upgrade (wallet + cash) or downgrade (wallet credit).",
+              "description": "Bearer required. **GET /subscription** — current plan + wallet balance. **GET /subscription-plans** — catalog. **POST /subscription/change/preview** then **POST /subscription/change** — upgrade (wallet + cash, or wallet + Razorpay `online_amount`) or downgrade (wallet credit). **GET /subscription/change/:changeId/payment-status** — poll after online payment. See `docs/SUBSCRIPTION_CHANGE_FRONTEND.md`.",
               "item": [
                 {
                   "name": "List change history",
@@ -19694,7 +20149,117 @@
                         "change"
                       ]
                     },
-                    "description": "**POST /api/mobile/partner/subscription/change**\n\n**Upgrade:** `wallet_amount` + `cash_amount` must equal `amount_to_pay` from preview. Omitted amounts default to 0.\n\n**Downgrade:** send only `target_plan_id` (no payment). Unused value credited to wallet; new plan period starts immediately."
+                    "description": "**POST /api/mobile/partner/subscription/change**\n\n**Upgrade (cash):** `wallet_amount` + `cash_amount` must equal `amount_to_pay` from preview. Omitted amounts default to 0. Use **Apply plan change (upgrade — Razorpay online)** for `online_amount` instead of cash.\n\n**Downgrade:** send only `target_plan_id` (no payment). Unused value credited to wallet; new plan period starts immediately."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Apply plan change (upgrade — Razorpay online)",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  const changeId = j?.data?.change?._id;",
+                          "  if (changeId) pm.collectionVariables.set('subscriptionChangeId', String(changeId));",
+                          "  const paymentUrl = j?.data?.change?.payment_url;",
+                          "  if (paymentUrl) pm.collectionVariables.set('subscriptionPaymentUrl', String(paymentUrl));",
+                          "  pm.test('Online change initiated or completed', function () {",
+                          "    pm.expect([200, 202]).to.include(pm.response.code);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "  });",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"target_plan_id\": \"{{targetSubscriptionPlanId}}\",\n  \"wallet_amount\": {{upgradeWalletAmount}},\n  \"online_amount\": {{upgradeOnlineAmount}}\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/subscription/change",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "subscription",
+                        "change"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/partner/subscription/change** — upgrade via Razorpay (UPI / card / netbanking).\n\n- **Body:** `target_plan_id`, `wallet_amount` (optional), `online_amount` (required for gateway portion)\n- `wallet_amount + online_amount` must equal `amount_to_pay` from **Preview plan change**\n- Use **either** `cash_amount` **or** `online_amount`, not both\n- Partner profile must have `email` or `phone_number`\n\n**202** `data.change.payment_url` — open in browser/WebView to pay; sets `{{subscriptionChangeId}}` and `{{subscriptionPaymentUrl}}`\n\n**200** if no online portion (wallet-only)\n\nAfter payment, Razorpay webhook completes the change. Poll **Get change payment status** or **Get current subscription**."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get change payment status",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/subscription/change/{{subscriptionChangeId}}/payment-status",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "subscription",
+                        "change",
+                        "{{subscriptionChangeId}}",
+                        "payment-status"
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/subscription/change/:changeId/payment-status**\n\n- **Auth:** Bearer `{{token}}`\n- **Path:** `changeId` — from **Apply plan change (upgrade — Razorpay online)** (`{{subscriptionChangeId}}`)\n\n**200** `data`: `status`, `payment_status`, `target_plan`, `applied_at`, `wallet_balance`, optional `sync` object\n\nPoll after paying until `status` is `completed`. If still `pending` after payment, **call again** — backend polls Razorpay and applies the change when paid (`sync.synced: true`)."
                   },
                   "response": []
                 },
@@ -20074,7 +20639,7 @@
             },
             {
               "name": "Orders",
-              "description": "Partner assigned orders. **Auth:** Bearer partner JWT (`type` 2) after **Login**.\n\n**Flow:** List order → optional **Additional charges** (`POST .../additional-charges`, same rules as admin web) → **Start work** (`PUT .../work-status`) → customer pays in full → **Complete** (`POST .../complete` with proof photos). Optional `publish_as_post=true` creates a user-feed post.",
+              "description": "Partner assigned orders. **Auth:** Bearer partner JWT (`type` 2) after **Login**.\n\n**Flow:** List order → optional **Additional charges** (`POST .../additional-charges`) — increases order `total_price`; **customer pays via mobile order payments** (Razorpay online on `POST /api/mobile/user/orders/:id/payments`, not on charge create) → **Start work** → **Complete** (proof photos). Optional `publish_as_post=true`.",
               "item": [
                 {
                   "name": "List orders",
@@ -20280,7 +20845,60 @@
                         "{{orderId}}"
                       ]
                     },
-                    "description": "**GET /api/mobile/partner/orders/:orderId**\n\n- **Auth:** Bearer partner — order must be assigned to caller (`partner_id`)\n- **Path `orderId`:** order Mongo `_id` (24-char hex)\n\n**200 `record`:** full order detail including `partner_work_status`, `work_proof_image_urls`, `work_completion_description`, `work_completed_at`, `partner_post_id`, `service_items[]`, payments, additional charges, refunds when applicable.\n\n**404** order not found or not assigned to partner | **400** invalid order id"
+                    "description": "**GET /api/mobile/partner/orders/:orderId**\n\n- **Auth:** Bearer partner — order must be assigned to caller (`partner_id`)\n- **Path `orderId`:** order Mongo `_id` (24-char hex)\n\n**200 `record`:** full order detail including `partner_summary` (partner earnings rollup), `partner_work_status`, `work_proof_image_urls`, `service_items[]`, `additional_charges[]`, payments, refunds when applicable. Use `partner_summary` for money UI; extra charges: partner `amount`, not `total_amount`.\n\n**404** order not found or not assigned to partner | **400** invalid order id"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Download order invoice",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "pm.test('Order invoice downloaded', function () {",
+                          "  pm.response.to.have.status(200);",
+                          "  pm.expect(pm.response.headers.get('Content-Type')).to.include('text/html');",
+                          "  pm.expect(pm.response.text()).to.include('INVOICE');",
+                          "});"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "text/html"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/orders/{{orderId}}/invoice",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "orders",
+                        "{{orderId}}",
+                        "invoice"
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/orders/:orderId/invoice**\n\n- **Auth:** Bearer partner\n- Downloads a printable HTML invoice for one order assigned to the caller (`partner_id`)\n- **Path `orderId`:** order Mongo `_id` (24-char hex)\n- **200:** `text/html` attachment (`invoice-<orderId>.html`) with line items, additional charges, totals, and customer payments\n- Uses the same invoice builder as user `GET /api/mobile/user/orders/:orderId/invoice` and admin `GET /api/order/invoice/:id`\n\n**404** order not found or not assigned to partner | **400** invalid order id"
                   },
                   "response": []
                 },
@@ -20318,7 +20936,7 @@
                         "additional-charges"
                       ]
                     },
-                    "description": "**GET /api/mobile/partner/orders/:orderId/additional-charges**\n\n- **Auth:** Bearer partner — order assigned to caller\n- **200:** `records[]` active charge rows for the order\n\nAlso included on **Get order details** (`record.additional_charges`)."
+                    "description": "**GET /api/mobile/partner/orders/:orderId/additional-charges**\n\n- **Auth:** Bearer partner — order assigned to caller\n- **200:** `records[]` (each with `partner_amount`, `customer_billed_total`) + `partner_summary`\n\nAlso included on **Get order details** (`record.additional_charges`)."
                   },
                   "response": []
                 },
@@ -20378,7 +20996,7 @@
                         "additional-charges"
                       ]
                     },
-                    "description": "**POST /api/mobile/partner/orders/:orderId/additional-charges**\n\n- **Auth:** Bearer partner — order must be assigned to caller\n- **Required:** `amount` (≥ 0)\n- **Optional:** `label`, `description`, `payment_method` (`cash`|`upi`|`card`|`online`|`bank_transfer`|`other`; invalid → `other`), `charge_type`\n- Same pricing + rollup behavior as **POST /api/order-additional-charges/create**\n\n**201:** `record`, `order` pricing summary"
+                    "description": "**POST /api/mobile/partner/orders/:orderId/additional-charges**\n\n- **Auth:** Bearer partner — order must be assigned to caller\n- **Required:** `amount` (≥ 0, partner portion)\n- **Optional:** `label`, `description`, `payment_method`, `charge_type`\n\n**201:** `record` (with `partner_amount`), `partner_summary`, `order` pricing rollup"
                   },
                   "response": []
                 },
@@ -20425,7 +21043,7 @@
                         "{{additionalChargeId}}"
                       ]
                     },
-                    "description": "**PUT /api/mobile/partner/orders/:orderId/additional-charges/:chargeId**\n\n- Partial body; recalculates order totals (same as admin **PUT /api/order-additional-charges/update/:id**)\n- Charge must belong to the path `orderId`"
+                    "description": "**PUT /api/mobile/partner/orders/:orderId/additional-charges/:chargeId**\n\n- Partial body; recalculates order totals\n- **200:** `record`, `partner_summary`, `order` rollup"
                   },
                   "response": []
                 },
@@ -20464,7 +21082,7 @@
                         "{{additionalChargeId}}"
                       ]
                     },
-                    "description": "**DELETE /api/mobile/partner/orders/:orderId/additional-charges/:chargeId**\n\n- Soft-deletes charge and refreshes order `total_price` / payment status (same as admin delete)"
+                    "description": "**DELETE /api/mobile/partner/orders/:orderId/additional-charges/:chargeId**\n\n- Soft-deletes charge and refreshes order totals\n- **200:** `partner_summary`, `order` rollup"
                   },
                   "response": []
                 },
@@ -20649,8 +21267,248 @@
               ]
             },
             {
+              "name": "Financial & Wallet",
+              "description": "Partner earnings overview (per-order pending/paid) and wallet balance + ledger. Same order-derived logic as admin `GET /api/order/financial-payments/getAll`. See `docs/PARTNER_FINANCIAL_MOBILE.md`.",
+              "item": [
+                {
+                  "name": "List order payments",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/financial-payments?page=1&limit=10&from_date=&to_date=&order_status=&partner_payment_status=&search=&sort_by=created_at&sort_order=desc",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "financial-payments"
+                      ],
+                      "query": [
+                        {
+                          "key": "page",
+                          "value": "1"
+                        },
+                        {
+                          "key": "limit",
+                          "value": "10"
+                        },
+                        {
+                          "key": "from_date",
+                          "value": "",
+                          "description": "Order schedule / order_date range (YYYY-MM-DD)"
+                        },
+                        {
+                          "key": "to_date",
+                          "value": "",
+                          "description": "Order schedule / order_date range (YYYY-MM-DD)"
+                        },
+                        {
+                          "key": "order_status",
+                          "value": "",
+                          "description": "in_progress | completed | cancelled | refunded"
+                        },
+                        {
+                          "key": "partner_payment_status",
+                          "value": "",
+                          "description": "unpaid | partially_paid | paid"
+                        },
+                        {
+                          "key": "search",
+                          "value": "",
+                          "description": "order_unique_id, customer name, service name"
+                        },
+                        {
+                          "key": "sort_by",
+                          "value": "created_at"
+                        },
+                        {
+                          "key": "sort_order",
+                          "value": "desc"
+                        }
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/financial-payments** — Per-order partner earnings (paid / pending). Includes `totals` for the full filtered set (not just current page)."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get order payment detail",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/financial-payments/{{orderId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "financial-payments",
+                        "{{orderId}}"
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/financial-payments/:orderId** — Order earnings summary (`record`) plus `partner_summary` and `order_payments[]` line items. `:orderId` = order Mongo `_id`."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get wallet summary",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/wallet?from_date=&to_date=&transaction_type=",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "wallet"
+                      ],
+                      "query": [
+                        {
+                          "key": "from_date",
+                          "value": "",
+                          "description": "Optional — period totals on ledger date"
+                        },
+                        {
+                          "key": "to_date",
+                          "value": "",
+                          "description": "Optional — period totals on ledger date"
+                        },
+                        {
+                          "key": "transaction_type",
+                          "value": "",
+                          "description": "Optional — credit | debit"
+                        }
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/wallet** — Current `wallet_balance` + optional filtered `totals` (credits, debits, net_change)."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "List wallet transactions",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/wallet/transactions?page=1&limit=10&from_date=&to_date=&transaction_type=&search=",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "wallet",
+                        "transactions"
+                      ],
+                      "query": [
+                        {
+                          "key": "page",
+                          "value": "1"
+                        },
+                        {
+                          "key": "limit",
+                          "value": "10"
+                        },
+                        {
+                          "key": "from_date",
+                          "value": ""
+                        },
+                        {
+                          "key": "to_date",
+                          "value": ""
+                        },
+                        {
+                          "key": "transaction_type",
+                          "value": "",
+                          "description": "credit | debit"
+                        },
+                        {
+                          "key": "search",
+                          "value": "",
+                          "description": "description, order_unique_id, payment_method"
+                        }
+                      ]
+                    },
+                    "description": "**GET /api/mobile/partner/wallet/transactions** — Paginated wallet ledger with `wallet_balance`, filtered `totals`, and `records[]`."
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
               "name": "Appointments",
-              "description": "Partner calendar — appointments on assigned orders only. **Auth:** Bearer partner JWT (`type` 2). See `docs/APPOINTMENT_MODULE_FRONTEND.md`.",
+              "description": "Partner calendar — appointments on assigned orders only. **Auth:** Bearer partner JWT (`type` 2). See `docs/APPOINTMENT_MODULE_FRONTEND.md`.\n\n**Flow:** List orders (sets `{{orderId}}`) → List appointments → Create → Update → Delete",
               "item": [
                 {
                   "name": "List appointments",
@@ -20694,7 +21552,7 @@
                       }
                     ],
                     "url": {
-                      "raw": "{{baseUrl}}/api/mobile/partner/appointments?page=1&limit=50&from_date={{from_date}}&to_date={{to_date}}&order_id={{orderId}}&keyword=",
+                      "raw": "{{baseUrl}}/api/mobile/partner/appointments?page=1&limit=50&from_date={{orderFromDate}}&to_date={{orderToDate}}&order_id={{orderId}}&keyword=",
                       "host": [
                         "{{baseUrl}}"
                       ],
@@ -20715,24 +21573,27 @@
                         },
                         {
                           "key": "from_date",
-                          "value": "{{from_date}}"
+                          "value": "{{orderFromDate}}",
+                          "description": "YYYY-MM-DD — calendar range start"
                         },
                         {
                           "key": "to_date",
-                          "value": "{{to_date}}"
+                          "value": "{{orderToDate}}",
+                          "description": "YYYY-MM-DD — calendar range end"
                         },
                         {
                           "key": "order_id",
                           "value": "{{orderId}}",
-                          "description": "Optional — Mongo order _id assigned to partner"
+                          "description": "Optional — partner's order Mongo _id"
                         },
                         {
                           "key": "keyword",
-                          "value": ""
+                          "value": "",
+                          "description": "Search title, order id, service name"
                         }
                       ]
                     },
-                    "description": "**GET /api/mobile/partner/appointments** — Calendar list scoped to `partner_id` from JWT."
+                    "description": "**GET /api/mobile/partner/appointments**\n\n- **Auth:** Bearer partner — scoped to `partner_id` from JWT\n- **Pagination:** `page`, `limit` (max 50)\n- **Date filters:** `from_date`, `to_date` on `service_date`\n- **Optional:** `order_id`, `keyword`\n- **200:** `totalItems`, `totalPages`, `currentPage`, `limit`, `records[]`"
                   },
                   "response": []
                 },
@@ -20770,7 +21631,7 @@
                         "{{orderId}}"
                       ]
                     },
-                    "description": "**GET /api/mobile/partner/appointments/order/:orderId** — Order must be assigned to caller."
+                    "description": "**GET /api/mobile/partner/appointments/order/:orderId**\n\n- Order must be assigned to caller (`partner_id`)\n- **Path `orderId`:** order Mongo `_id` (24-char hex)\n- **200:** `order_id`, `order_unique_id`, `records[]`"
                   },
                   "response": []
                 },
@@ -20783,6 +21644,11 @@
                         "exec": [
                           "try {",
                           "  const j = pm.response.json();",
+                          "  pm.test('Appointment created', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.record).to.be.an('object');",
+                          "  });",
                           "  if (j?.record?._id) pm.collectionVariables.set('appointmentId', String(j.record._id));",
                           "  if (j?.record?.unique_id) pm.collectionVariables.set('appointmentUniqueId', String(j.record.unique_id));",
                           "} catch (e) {}"
@@ -20834,7 +21700,7 @@
                         "appointments"
                       ]
                     },
-                    "description": "**POST /api/mobile/partner/appointments** — `order_id` must be partner's assigned order."
+                    "description": "**POST /api/mobile/partner/appointments**\n\n- **Required:** `order_id` (partner's assigned order), `service_date` (YYYY-MM-DD)\n- **Optional:** `title`, `start_time`, `end_time` (HH:mm)\n- Partner and service name filled server-side from order\n- **200:** `record`"
                   },
                   "response": []
                 },
@@ -20871,12 +21737,29 @@
                         "{{appointmentId}}"
                       ]
                     },
-                    "description": "**GET /api/mobile/partner/appointments/:appointmentId**"
+                    "description": "**GET /api/mobile/partner/appointments/:appointmentId**\n\n- Mongo `_id` or business id (`AP1001`) — use `{{appointmentId}}` or `{{appointmentUniqueId}}`"
                   },
                   "response": []
                 },
                 {
                   "name": "Update appointment",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Appointment updated', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "  });",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
                   "request": {
                     "auth": {
                       "type": "bearer",
@@ -20921,12 +21804,28 @@
                         "{{appointmentId}}"
                       ]
                     },
-                    "description": "**PUT /api/mobile/partner/appointments/:appointmentId**"
+                    "description": "**PUT /api/mobile/partner/appointments/:appointmentId** — partial update; at least one field required."
                   },
                   "response": []
                 },
                 {
                   "name": "Delete appointment",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  pm.test('Appointment deleted', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(pm.response.json().success).to.eql(true);",
+                          "  });",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
                   "request": {
                     "auth": {
                       "type": "bearer",
@@ -21411,121 +22310,6 @@
               ]
             },
             {
-              "name": "07 — Quote settings",
-              "description": "**3** request(s) — global singleton quote config (super admin / staff).",
-              "item": [
-                {
-                  "name": "Create",
-                  "event": [
-                    {
-                      "listen": "test",
-                      "script": {
-                        "exec": [
-                          "if (pm.response.code === 200) {",
-                          "  try {",
-                          "    const j = pm.response.json();",
-                          "    if (j && j.record && j.record._id) {",
-                          "      pm.collectionVariables.set('quote_settings_id', String(j.record._id));",
-                          "      pm.collectionVariables.set('id', String(j.record._id));",
-                          "    }",
-                          "  } catch (e) {}",
-                          "}"
-                        ],
-                        "type": "text/javascript"
-                      }
-                    }
-                  ],
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{auth_token}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "POST",
-                    "header": [
-                      {
-                        "key": "Content-Type",
-                        "value": "application/json"
-                      },
-                      {
-                        "key": "Accept",
-                        "value": "application/json"
-                      }
-                    ],
-                    "body": {
-                      "mode": "raw",
-                      "raw": "{\n  \"free_quotes_per_user\": 3,\n  \"no_of_quotes\": 10,\n  \"quotes_price\": 99\n}",
-                      "options": {
-                        "raw": {
-                          "language": "json"
-                        }
-                      }
-                    },
-                    "url": "{{base_url}}/api/quote_settings/create"
-                  }
-                },
-                {
-                  "name": "Get",
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{auth_token}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "GET",
-                    "header": [],
-                    "url": "{{base_url}}/api/quote_settings/get"
-                  }
-                },
-                {
-                  "name": "Update",
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{auth_token}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "PUT",
-                    "header": [
-                      {
-                        "key": "Content-Type",
-                        "value": "application/json"
-                      },
-                      {
-                        "key": "Accept",
-                        "value": "application/json"
-                      }
-                    ],
-                    "body": {
-                      "mode": "raw",
-                      "raw": "{\n  \"quotes_price\": 149\n}",
-                      "options": {
-                        "raw": {
-                          "language": "json"
-                        }
-                      }
-                    },
-                    "url": "{{base_url}}/api/quote_settings/update/{{quote_settings_id}}"
-                  }
-                }
-              ]
-            },
-            {
               "name": "08 — Razorpay",
               "description": "**2** request(s)",
               "item": [
@@ -21546,7 +22330,7 @@
                   "request": {
                     "method": "POST",
                     "header": [],
-                    "description": "Payment provider webhook; usually no Bearer token.",
+                    "description": "Payment provider webhook; no Bearer token. Raw JSON body required for signature.",
                     "url": {
                       "raw": "{{baseUrl}}/api/razorpay/razorpayWebhook",
                       "host": [
@@ -21559,7 +22343,7 @@
                       ]
                     }
                   },
-                  "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 08 — Financials & Tax_"
+                  "description": "**POST /api/razorpay/razorpayWebhook** — Razorpay → server. Handles `payment_link.paid` for **order** and **subscription_change**. Configure in Razorpay dashboard. Returns **500** on retryable errors."
                 }
               ]
             },
@@ -21944,8 +22728,181 @@
               ]
             },
             {
+              "name": "Orders & payments",
+              "description": "**Customer orders & Razorpay online pay.**\n\n1. **List orders** — sets `{{orderId}}`\n2. **Create order payment (Razorpay online)** — **202** + `{{orderPaymentUrl}}`\n3. Pay in browser (test card `4111…` / UPI `success@razorpay`)\n4. **Get order payment status** — poll until `data.status` is `completed`\n\n**Additional charges:** partner adds charge → customer pays increased due via step 2 (no separate Razorpay on charge API).\n\nSee `docs/RAZORPAY_ONLINE_PAYMENTS_AUDIT.md`.",
+              "item": [
+                {
+                  "name": "List orders",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  const row = (j?.records || []).find((o) => Number(o.customer_due_amount) > 0) || j?.records?.[0];",
+                          "  if (row?._id) pm.collectionVariables.set('orderId', String(row._id));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/orders?page=1&limit=10",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "orders"
+                      ],
+                      "query": [
+                        {
+                          "key": "page",
+                          "value": "1"
+                        },
+                        {
+                          "key": "limit",
+                          "value": "10"
+                        }
+                      ]
+                    },
+                    "description": "**GET /api/mobile/user/orders** — sets `orderId` from first order with due amount (or first row)."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Create order payment (Razorpay online)",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  if (j?.record?._id) pm.collectionVariables.set('orderPaymentId', String(j.record._id));",
+                          "  if (j?.record?.payment_url) pm.collectionVariables.set('orderPaymentUrl', String(j.record.payment_url));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"amount\": {{orderPaymentAmount}},\n  \"payment_method\": \"online\",\n  \"notes\": \"Mobile order payment — Razorpay test\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/orders/{{orderId}}/payments",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "orders",
+                        "{{orderId}}",
+                        "payments"
+                      ]
+                    },
+                    "description": "**POST** `payment_method: online` → **202** + `record.payment_url`."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get order payment status (Razorpay)",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/orders/{{orderId}}/payments/{{orderPaymentId}}/payment-status",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "orders",
+                        "{{orderId}}",
+                        "payments",
+                        "{{orderPaymentId}}",
+                        "payment-status"
+                      ]
+                    },
+                    "description": "**GET .../payment-status** — poll after Razorpay; `sync.synced: true` if webhook missed."
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
               "name": "Quotes",
-              "description": "Customer quote requests (Phase 1). **Auth:** Bearer customer JWT (`type` 4) after **Verify OTP**.\n\n**Prerequisites:** **Home** (`{{franchiseId}}`, `{{categoryId}}`, `{{serviceId}}`), **Addresses → Create** (`{{addressId}}`). For **with partner**, run **Partners (list)** first (`{{quotePartnerId}}`).\n\n**Two create types (same endpoint):**\n| Type | `partner_id` | Initial status |\n|------|----------------|----------------|\n| Without partner | omit or `\"\"` | **new** (franchise/admin can assign later) |\n| With partner | valid partner ObjectId | **pending** (partner can accept) |\n\nPartner flow: **Partner → Quotes → Accept**.",
+              "description": "Customer quote requests (Phase 1). **Auth:** Bearer customer JWT (`type` 4) after **Verify OTP**.\n\n**Prerequisites:** **Home** (`{{franchiseId}}`, `{{categoryId}}`, `{{serviceId}}`), **Addresses → Create** (`{{addressId}}`). For **with partner**, run **Partners (list)** first (`{{quotePartnerId}}`). Partner must **Accept** quote before convert.\n\n**Convert to order:** offline (`cash`, `upi`, …) → **200**; **`payment_method: online`** → **202** + `data.payment.payment_url` — use **Get order payment status** on the new order.\n\n**Two create types (same endpoint):**\n| Type | `partner_id` | Initial status |\n|------|----------------|----------------|\n| Without partner | omit or `\"\"` | **new** |\n| With partner | valid partner ObjectId | **pending** |",
               "item": [
                 {
                   "name": "Create quote (without partner)",
@@ -22447,7 +23404,74 @@
                         "convert-to-order"
                       ]
                     },
-                    "description": "**POST /api/mobile/user/quotes/:id/convert-to-order**\n\n- **Auth:** Bearer customer\n- Quote must be in **accepted** status and belong to logged-in customer\n- **Required:** `amount`, `payment_method`\n- **Allowed `payment_method`:** `cash` | `upi` | `card` | `online` | `bank_transfer` | `other`\n- `amount` must be >= quote `minimum_deposit_amount`\n- Creates order from quote and records customer `order_payment` row"
+                    "description": "**POST /api/mobile/user/quotes/:id/convert-to-order**\n\n- **Auth:** Bearer customer\n- Quote must be **accepted** and owned by caller\n- **Required:** `amount`, `payment_method`\n- `amount` >= `minimum_deposit_amount`\n\n**Offline (`cash`, `upi`, etc.):** **200** — order + completed/pending payment.\n\n**`payment_method: online`:** **202** — order created + `payment.payment_url`; pay deposit via Razorpay, then poll order payment status on the new order."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Convert quote to order (Razorpay deposit)",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  if (j?.data?.order?._id) pm.collectionVariables.set('orderId', String(j.data.order._id));",
+                          "  if (j?.data?.payment?._id) pm.collectionVariables.set('orderPaymentId', String(j.data.payment._id));",
+                          "  if (j?.data?.payment?.payment_url) pm.collectionVariables.set('orderPaymentUrl', String(j.data.payment.payment_url));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"amount\": {{quoteDepositAmount}},\n  \"payment_method\": \"online\",\n  \"notes\": \"Quote deposit — Razorpay test\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/quotes/{{quoteId}}/convert-to-order",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "quotes",
+                        "{{quoteId}}",
+                        "convert-to-order"
+                      ]
+                    },
+                    "description": "Convert with **online** deposit. **202** + `data.payment.payment_url`. Sets `orderId` and `orderPaymentId` collection vars for payment-status poll."
                   },
                   "response": []
                 }
@@ -22455,11 +23479,42 @@
             },
             {
               "name": "Posts",
-              "description": "Customer post feed, gallery, like, share, report — `post_routes.js`. See `docs/PARTNER_POST_FRONTEND.md`.",
+              "description": "Customer post feed, gallery, liked/saved lists, like, save, share, report — `post_routes.js`. See `docs/PARTNER_POST_FRONTEND.md`.\n\n**Suggested order:** **Home** (sets `{{franchiseId}}`) → **Feed** (sets `{{postId}}`) → **Like post** / **Save post** → **Liked posts** / **Saved posts**.",
               "item": [
                 {
                   "name": "Feed",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Feed listed', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.data?.records).to.be.an('array');",
+                          "  });",
+                          "  const rec = j?.data?.records?.[0];",
+                          "  if (rec?._id) pm.collectionVariables.set('postId', String(rec._id));",
+                          "  if (rec?.share_token) pm.collectionVariables.set('postShareToken', String(rec.share_token));",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
                   "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
                     "method": "GET",
                     "header": [
                       {
@@ -22468,7 +23523,7 @@
                       }
                     ],
                     "url": {
-                      "raw": "{{baseUrl}}/api/mobile/user/posts/feed?franchise_id={{franchiseId}}&page=1&limit=10",
+                      "raw": "{{baseUrl}}/api/mobile/user/posts/feed?franchise_id={{franchiseId}}&page={{postsPage}}&limit={{postsLimit}}",
                       "host": [
                         "{{baseUrl}}"
                       ],
@@ -22486,21 +23541,31 @@
                         },
                         {
                           "key": "page",
-                          "value": "1"
+                          "value": "{{postsPage}}"
                         },
                         {
                           "key": "limit",
-                          "value": "10"
+                          "value": "{{postsLimit}}"
                         }
                       ]
                     },
-                    "description": "**GET /api/mobile/user/posts/feed** — run Home first for `{{franchiseId}}`."
+                    "description": "**GET /api/mobile/user/posts/feed**\n\nRun **Home** first for `{{franchiseId}}`.\n\n| Query | Required | Notes |\n|-------|----------|--------|\n| `franchise_id` | Yes | Franchise ObjectId |\n| `page` | No | Default 1 (`{{postsPage}}`) |\n| `limit` | No | Default 10, max 50 (`{{postsLimit}}`) |\n\nEach record includes `partner`, `linked`, `is_liked`, `is_saved`, counts, and `share_url`. Sets `{{postId}}` and `{{postShareToken}}` from the first row."
                   },
                   "response": []
                 },
                 {
                   "name": "Partner profile posts",
                   "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
                     "method": "GET",
                     "header": [
                       {
@@ -22509,7 +23574,7 @@
                       }
                     ],
                     "url": {
-                      "raw": "{{baseUrl}}/api/mobile/user/partners/{{quotePartnerId}}/posts?franchise_id={{franchiseId}}&page=1&limit=10",
+                      "raw": "{{baseUrl}}/api/mobile/user/partners/{{quotePartnerId}}/posts?franchise_id={{franchiseId}}&page={{postsPage}}&limit={{postsLimit}}",
                       "host": [
                         "{{baseUrl}}"
                       ],
@@ -22528,21 +23593,49 @@
                         },
                         {
                           "key": "page",
-                          "value": "1"
+                          "value": "{{postsPage}}"
                         },
                         {
                           "key": "limit",
-                          "value": "10"
+                          "value": "{{postsLimit}}"
                         }
                       ]
                     },
-                    "description": "**GET /api/mobile/user/partners/:partnerId/posts**"
+                    "description": "**GET /api/mobile/user/partners/:partnerId/posts**\n\nPartner work gallery. Same post shape as feed (without nested `partner` on each card). Optional `franchise_id` for scope validation."
                   },
                   "response": []
                 },
                 {
                   "name": "Liked posts",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Liked posts listed', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.data?.records).to.be.an('array');",
+                          "  });",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
                   "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
                     "method": "GET",
                     "header": [
                       {
@@ -22551,7 +23644,7 @@
                       }
                     ],
                     "url": {
-                      "raw": "{{baseUrl}}/api/mobile/user/posts/liked?page=1&limit=10",
+                      "raw": "{{baseUrl}}/api/mobile/user/posts/liked?page={{postsPage}}&limit={{postsLimit}}",
                       "host": [
                         "{{baseUrl}}"
                       ],
@@ -22565,21 +23658,49 @@
                       "query": [
                         {
                           "key": "page",
-                          "value": "1"
+                          "value": "{{postsPage}}"
                         },
                         {
                           "key": "limit",
-                          "value": "10"
+                          "value": "{{postsLimit}}"
                         }
                       ]
                     },
-                    "description": "**GET /api/mobile/user/posts/liked** — customer's liked posts, newest like first. No `franchise_id`."
+                    "description": "**GET /api/mobile/user/posts/liked**\n\nCustomer's liked posts across franchises. **No `franchise_id`.**\n\n| Query | Notes |\n|-------|--------|\n| `page` | Default 1 (`{{postsPage}}`) |\n| `limit` | Default 10, max 50 (`{{postsLimit}}`) |\n\nOnly **published** posts are returned. Sorted by most recently liked. Each record includes `liked_at`, `is_liked: true`, `is_saved`, `partner`, and `linked`."
                   },
                   "response": []
                 },
                 {
                   "name": "Saved posts",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Saved posts listed', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.data?.records).to.be.an('array');",
+                          "  });",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
                   "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
                     "method": "GET",
                     "header": [
                       {
@@ -22588,7 +23709,7 @@
                       }
                     ],
                     "url": {
-                      "raw": "{{baseUrl}}/api/mobile/user/posts/saved?page=1&limit=10",
+                      "raw": "{{baseUrl}}/api/mobile/user/posts/saved?page={{postsPage}}&limit={{postsLimit}}",
                       "host": [
                         "{{baseUrl}}"
                       ],
@@ -22602,21 +23723,31 @@
                       "query": [
                         {
                           "key": "page",
-                          "value": "1"
+                          "value": "{{postsPage}}"
                         },
                         {
                           "key": "limit",
-                          "value": "10"
+                          "value": "{{postsLimit}}"
                         }
                       ]
                     },
-                    "description": "**GET /api/mobile/user/posts/saved** — customer's saved posts, newest save first. No `franchise_id`."
+                    "description": "**GET /api/mobile/user/posts/saved**\n\nCustomer's saved posts across franchises. **No `franchise_id`.**\n\n| Query | Notes |\n|-------|--------|\n| `page` | Default 1 (`{{postsPage}}`) |\n| `limit` | Default 10, max 50 (`{{postsLimit}}`) |\n\nOnly **published** posts are returned. Sorted by most recently saved. Each record includes `saved_at`, `is_saved: true`, `is_liked`, `partner`, and `linked`."
                   },
                   "response": []
                 },
                 {
                   "name": "Get post",
                   "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
                     "method": "GET",
                     "header": [
                       {
@@ -22643,7 +23774,7 @@
                         }
                       ]
                     },
-                    "description": "**GET /api/mobile/user/posts/:postId**"
+                    "description": "**GET /api/mobile/user/posts/:postId**\n\nSingle post detail. Optional `franchise_id` for franchise scope validation. Includes `is_liked` and `is_saved`."
                   },
                   "response": []
                 },
@@ -22681,6 +23812,16 @@
                 {
                   "name": "Like post",
                   "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
                     "method": "POST",
                     "header": [
                       {
@@ -22702,20 +23843,61 @@
                         "like"
                       ]
                     },
-                    "description": "**POST /api/mobile/user/posts/:postId/like** — toggle."
+                    "description": "**POST /api/mobile/user/posts/:postId/like**\n\nToggle like/unlike. No request body.\n\n**200 `data`:** `{ post_id, is_liked, likes_count }`"
                   },
                   "response": []
                 },
                 {
                   "name": "Save post",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Save post', function () {",
+                          "    pm.expect([200, 201]).to.include(pm.response.code);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.data?.is_saved).to.eql(true);",
+                          "  });",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
                   "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
                     "method": "POST",
                     "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
                       {
                         "key": "Accept",
                         "value": "application/json"
                       }
                     ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
                     "url": {
                       "raw": "{{baseUrl}}/api/mobile/user/posts/{{postId}}/save",
                       "host": [
@@ -22730,13 +23912,114 @@
                         "save"
                       ]
                     },
-                    "description": "**POST /api/mobile/user/posts/:postId/save** — idempotent. **201** first save; **200** if already saved. No request body."
+                    "description": "**POST /api/mobile/user/posts/:postId/save**\n\n| Input | Required | Notes |\n|-------|----------|--------|\n| Path `postId` | Yes | `{{postId}}` — from **Feed** or **Get post** |\n| Request body | **No** | API does not read the body. `{}` is a Postman placeholder only. |\n| `Authorization` | Yes | Customer Bearer `{{token}}` |\n\nPost must be **published**.\n\n**Responses**\n- **201** first save\n- **200** already saved (idempotent)\n- **404** post not found\n\n```json\n{\n  \"success\": true,\n  \"status\": 201,\n  \"message\": \"Post saved successfully.\",\n  \"data\": {\n    \"post_id\": \"...\",\n    \"franchise_id\": \"...\",\n    \"is_saved\": true,\n    \"saved_at\": \"2026-06-02T10:00:00.000Z\"\n  }\n}\n```"
                   },
-                  "response": []
+                  "response": [
+                    {
+                      "name": "201 Post saved",
+                      "originalRequest": {
+                        "method": "POST",
+                        "header": [
+                          {
+                            "key": "Accept",
+                            "value": "application/json"
+                          }
+                        ],
+                        "url": {
+                          "raw": "{{baseUrl}}/api/mobile/user/posts/{{postId}}/save",
+                          "host": [
+                            "{{baseUrl}}"
+                          ],
+                          "path": [
+                            "api",
+                            "mobile",
+                            "user",
+                            "posts",
+                            "{{postId}}",
+                            "save"
+                          ]
+                        }
+                      },
+                      "status": "Created",
+                      "code": 201,
+                      "_postman_previewlanguage": "json",
+                      "header": [
+                        {
+                          "key": "Content-Type",
+                          "value": "application/json"
+                        }
+                      ],
+                      "body": "{\n  \"success\": true,\n  \"status\": 201,\n  \"message\": \"Post saved successfully.\",\n  \"data\": {\n    \"post_id\": \"665f00000000000000000001\",\n    \"franchise_id\": \"665f00000000000000000002\",\n    \"is_saved\": true,\n    \"saved_at\": \"2026-06-02T10:00:00.000Z\"\n  }\n}"
+                    },
+                    {
+                      "name": "200 Already saved",
+                      "originalRequest": {
+                        "method": "POST",
+                        "header": [
+                          {
+                            "key": "Accept",
+                            "value": "application/json"
+                          }
+                        ],
+                        "url": {
+                          "raw": "{{baseUrl}}/api/mobile/user/posts/{{postId}}/save",
+                          "host": [
+                            "{{baseUrl}}"
+                          ],
+                          "path": [
+                            "api",
+                            "mobile",
+                            "user",
+                            "posts",
+                            "{{postId}}",
+                            "save"
+                          ]
+                        }
+                      },
+                      "status": "OK",
+                      "code": 200,
+                      "_postman_previewlanguage": "json",
+                      "header": [
+                        {
+                          "key": "Content-Type",
+                          "value": "application/json"
+                        }
+                      ],
+                      "body": "{\n  \"success\": true,\n  \"status\": 200,\n  \"message\": \"Post already saved.\",\n  \"data\": {\n    \"post_id\": \"665f00000000000000000001\",\n    \"franchise_id\": \"665f00000000000000000002\",\n    \"is_saved\": true,\n    \"saved_at\": \"2026-06-02T09:00:00.000Z\"\n  }\n}"
+                    }
+                  ]
                 },
                 {
                   "name": "Unsave post",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Unsave post', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.data?.is_saved).to.eql(false);",
+                          "  });",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
                   "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
                     "method": "DELETE",
                     "header": [
                       {
@@ -22758,13 +24041,60 @@
                         "save"
                       ]
                     },
-                    "description": "**DELETE /api/mobile/user/posts/:postId/save** — **404** if not saved."
+                    "description": "**DELETE /api/mobile/user/posts/:postId/save**\n\n| Input | Required | Notes |\n|-------|----------|--------|\n| Path `postId` | Yes | `{{postId}}` |\n| Request body | **No** | DELETE has no payload |\n| `Authorization` | Yes | Customer Bearer `{{token}}` |\n\n**Responses**\n- **200** removed from saved list\n- **404** post was not saved\n\n```json\n{\n  \"success\": true,\n  \"status\": 200,\n  \"message\": \"Post removed from saved list.\",\n  \"data\": {\n    \"post_id\": \"...\",\n    \"is_saved\": false\n  }\n}\n```"
                   },
-                  "response": []
+                  "response": [
+                    {
+                      "name": "200 Removed",
+                      "originalRequest": {
+                        "method": "DELETE",
+                        "header": [
+                          {
+                            "key": "Accept",
+                            "value": "application/json"
+                          }
+                        ],
+                        "url": {
+                          "raw": "{{baseUrl}}/api/mobile/user/posts/{{postId}}/save",
+                          "host": [
+                            "{{baseUrl}}"
+                          ],
+                          "path": [
+                            "api",
+                            "mobile",
+                            "user",
+                            "posts",
+                            "{{postId}}",
+                            "save"
+                          ]
+                        }
+                      },
+                      "status": "OK",
+                      "code": 200,
+                      "_postman_previewlanguage": "json",
+                      "header": [
+                        {
+                          "key": "Content-Type",
+                          "value": "application/json"
+                        }
+                      ],
+                      "body": "{\n  \"success\": true,\n  \"status\": 200,\n  \"message\": \"Post removed from saved list.\",\n  \"data\": {\n    \"post_id\": \"665f00000000000000000001\",\n    \"is_saved\": false\n  }\n}"
+                    }
+                  ]
                 },
                 {
                   "name": "Share post",
                   "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
                     "method": "POST",
                     "header": [
                       {
@@ -22786,13 +24116,23 @@
                         "share"
                       ]
                     },
-                    "description": "**POST /api/mobile/user/posts/:postId/share** — returns share_url."
+                    "description": "**POST /api/mobile/user/posts/:postId/share**\n\nRecords a share and returns `{ share_url, share_token, shares_count }`. No request body."
                   },
                   "response": []
                 },
                 {
                   "name": "Report post",
                   "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
                     "method": "POST",
                     "header": [
                       {
@@ -22827,7 +24167,7 @@
                         "report"
                       ]
                     },
-                    "description": "**POST /api/mobile/user/posts/:postId/report**"
+                    "description": "**POST /api/mobile/user/posts/:postId/report**\n\n**Body:** `{ reason, details? }` — reasons: `spam`, `inappropriate`, `misleading`, `other`. **409** if already reported."
                   },
                   "response": []
                 }
@@ -23140,7 +24480,14 @@
     {
       "key": "orderPaymentId",
       "value": "",
-      "type": "string"
+      "type": "string",
+      "description": "Customer order_payment _id (admin 3a or mobile)"
+    },
+    {
+      "key": "orderPaymentUrl",
+      "value": "",
+      "type": "string",
+      "description": "Razorpay Payment Link URL"
     },
     {
       "key": "customerUserId",

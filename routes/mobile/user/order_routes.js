@@ -20,6 +20,7 @@ const {
   createOrderPaymentHandler,
   updateOrderPaymentHandler,
   deleteOrderPaymentHandler,
+  getOrderPaymentStatusHandler,
 } = require('../../../controllers/mobile/user/order_payment_controller');
 
 router.get(
@@ -41,6 +42,13 @@ router.post(
   validateOrderIdParam,
   validateCreateOrderPaymentBody,
   createOrderPaymentHandler
+);
+router.get(
+  '/orders/:orderId/payments/:paymentId/payment-status',
+  userAuthMiddleware,
+  validateOrderIdParam,
+  validatePaymentIdParam,
+  getOrderPaymentStatusHandler
 );
 router.put(
   '/orders/:orderId/payments/:paymentId',

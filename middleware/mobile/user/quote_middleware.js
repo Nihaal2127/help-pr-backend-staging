@@ -325,6 +325,20 @@ const validateConvertQuoteBody = (req, res, next) => {
     }
   }
 
+  if (payment_method === 'online') {
+    if (
+      body.payment_status !== undefined &&
+      String(body.payment_status).trim().toLowerCase() === 'completed'
+    ) {
+      return sendError(
+        res,
+        400,
+        'Online payments cannot be marked completed until Razorpay confirms payment.'
+      );
+    }
+    req.body.payment_status = 'pending';
+  }
+
   next();
 };
 

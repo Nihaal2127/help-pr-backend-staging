@@ -1,6 +1,7 @@
 const {
   sendOtp,
   verifyOtpAndLogin,
+  googleLogin,
   updateUser,
   listAllPincodes,
 } = require('../../../services/mobile/user/user_service');
@@ -36,6 +37,18 @@ const verifyOtpHandler = wrapMobileHandler(
     return sendTopLevelServiceResult(res, result);
   },
   { errorMessage: 'Failed to verify OTP.' }
+);
+
+const googleLoginHandler = wrapMobileHandler(
+  'mobile user google-login',
+  async (req, res) => {
+    const result = await googleLogin({
+      id_token: req.body.id_token,
+      device_token: req.body.device_token,
+    });
+    return sendTopLevelServiceResult(res, result);
+  },
+  { errorMessage: 'Failed to sign in with Google.' }
 );
 
 const forgotPasswordHandler = wrapMobileHandler(
@@ -103,6 +116,7 @@ const getPincodesHandler = wrapMobileHandler('mobile user pincodes', async (req,
 module.exports = {
   sendOtpHandler,
   verifyOtpHandler,
+  googleLoginHandler,
   forgotPasswordHandler,
   verifyForgotPasswordOtpHandler,
   resetPasswordHandler,

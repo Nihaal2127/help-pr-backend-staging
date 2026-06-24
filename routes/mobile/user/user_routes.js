@@ -2,6 +2,7 @@ const express = require('express');
 const {
   sendOtpHandler,
   verifyOtpHandler,
+  googleLoginHandler,
   forgotPasswordHandler,
   verifyForgotPasswordOtpHandler,
   resetPasswordHandler,
@@ -30,6 +31,7 @@ const {
 } = require('../../../middleware/mobile/user/partners_middleware');
 const {
   rateLimitSendOtp,
+  validateGoogleLogin,
   validateVerifyOtp,
   userRequireMultipartMiddleware,
   userProfileImageSizeMiddleware,
@@ -50,6 +52,7 @@ const router = express.Router();
 
 // Public auth routes must be registered before sub-routers (post_routes applies auth via router.use).
 router.post('/login', rateLimitSendOtp, sendOtpHandler);
+router.post('/google-login', validateGoogleLogin, googleLoginHandler);
 router.post('/verify-otp', validateVerifyOtp, verifyOtpHandler);
 router.post('/forgot-password', validateForgotPasswordEmail, forgotPasswordHandler);
 router.post(

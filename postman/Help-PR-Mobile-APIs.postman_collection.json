@@ -3354,6 +3354,74 @@
           "response": []
         },
         {
+          "name": "Google login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const t = j?.data?.auth_token;",
+                  "  if (t) {",
+                  "    pm.collectionVariables.set('token', t);",
+                  "    pm.collectionVariables.set('accessToken', t);",
+                  "    pm.collectionVariables.set('customerToken', t);",
+                  "  }",
+                  "  if (j?.data?._id) {",
+                  "    pm.collectionVariables.set('customerId', String(j.data._id));",
+                  "    pm.collectionVariables.set('userId', String(j.data._id));",
+                  "  }",
+                  "  if (j?.data?.email) {",
+                  "    pm.collectionVariables.set('customerEmail', String(j.data.email));",
+                  "  }",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_token\": \"{{googleIdToken}}\",\n  \"device_token\": \"{{deviceToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/google-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "user",
+                "google-login"
+              ]
+            },
+            "description": "**POST /api/mobile/user/google-login**\n\n- No Authorization\n- **Required:** `id_token` (Google Sign-In ID token from the mobile app)\n- **Optional:** `device_token` (FCM)\n\n### Behavior\n- Verifies `id_token` with Google (`GOOGLE_CLIENT_ID` / platform client IDs)\n- Finds customer by `google_id`, or links existing customer by email, or creates new customer (`registration_type: 2`)\n- Returns JWT on `data.auth_token` (same shape as **Verify OTP**)\n\n**400:** Missing `id_token`\n**401:** Invalid or expired Google token\n**403:** Account blocked\n**409:** Email/Google account conflict with another account type\n**500:** Google client IDs not configured on server"
+          },
+          "response": []
+        },
+        {
           "name": "Forgot password",
           "event": [
             {
@@ -7051,6 +7119,12 @@
       "value": "fcm_example_token_replace_with_real_device_token",
       "type": "string",
       "description": "Optional FCM token on login"
+    },
+    {
+      "key": "googleIdToken",
+      "value": "",
+      "type": "string",
+      "description": "Google Sign-In ID token from the mobile app (POST /api/mobile/user/google-login)"
     },
     {
       "key": "stateId",

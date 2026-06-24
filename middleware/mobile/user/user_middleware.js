@@ -112,6 +112,20 @@ const rateLimitSendOtp = async (req, res, next) => {
   }
 };
 
+const validateGoogleLogin = (req, res, next) => {
+  const { id_token } = req.body;
+  if (id_token === undefined || id_token === null || String(id_token).trim() === '') {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'id_token is required.',
+    });
+  }
+
+  req.body.id_token = String(id_token).trim();
+  next();
+};
+
 const validateVerifyOtp = async (req, res, next) => {
   const normalized = validateAndNormalizePhone(req, res);
   if (!normalized) return;
@@ -316,6 +330,7 @@ const userUpdateMiddleware = async (req, res, next) => {
 
 module.exports = {
   rateLimitSendOtp,
+  validateGoogleLogin,
   validateVerifyOtp,
   userRequireMultipartMiddleware,
   userProfileImageSizeMiddleware,

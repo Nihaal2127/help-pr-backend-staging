@@ -144,6 +144,17 @@ User must **already exist** in the database (usually created by franchise staff)
 
 Legacy: `POST /api/auth/userLogin` (phone + device_token).
 
+### Customer mobile (phone OTP or Google)
+
+| Step | Endpoint |
+|------|----------|
+| Phone OTP | `POST /api/mobile/user/login` → `POST /api/mobile/user/verify-otp` |
+| Google | `POST /api/mobile/user/google-login` — `{ id_token, device_token? }` |
+
+Phone flow auto-creates customers on first login. Google flow verifies the ID token server-side, creates or links a customer (`registration_type: 2`), and returns the same JWT shape as verify-otp.
+
+Env: `GOOGLE_CLIENT_ID` and/or `GOOGLE_CLIENT_ID_ANDROID`, `GOOGLE_CLIENT_ID_IOS`, `GOOGLE_CLIENT_ID_WEB`.
+
 ### Partner mobile
 
 | Endpoint | Auth | Notes |

@@ -8,11 +8,14 @@ const notificationSetting = require('../../../models/notification_settings');
 const { getNewId } = require('../../../helper/id_generator');
 const { handleImageUpload } = require('../../../helper/image_uploader');
 const { getUploadType } = require('../../../enum/upload_type_enum');
-const { normalizeUserPhone } = require('../../../utils/user_contact_uniqueness');
+const { normalizeUserPhone, normalizeUserEmail, checkUserContactUniqueness } = require('../../../utils/user_contact_uniqueness');
+const { escapeRegExp } = require('../../../utils/string_helpers');
+const { verifyGoogleIdToken } = require('../../../helper/google_auth');
 const { USER_TYPE_CUSTOMER } = require('../../../constants/user_types');
 const { fail, okWithMessage } = require('../../../utils/mobile_service_result');
 
 const REGISTRATION_TYPE_NORMAL = 1;
+const REGISTRATION_TYPE_GOOGLE = 2;
 const MOBILE_USER_OTP = '123456';
 const OTP_EXPIRY_MS = 10 * 60 * 1000;
 
@@ -84,6 +87,38 @@ const buildCustomerLoginData = async (user) => {
   return data;
 };
 
+const finalizeCustomerLogin = async (user, device_token, message) => {
+  if (user.is_blocked === true) {
+    return fail(403, 'Your account is blocked. Please contact support.');
+  }
+
+  if (device_token !== undefined && device_token !== null && String(device_token).trim() !== '') {
+    user.device_token = String(device_token).trim();
+  }
+
+  user.generateAuthToken();
+  await user.save();
+
+  const data = await buildCustomerLoginData(user);
+  if (!data) {
+    return fail(500, 'Failed to load user profile.');
+  }
+
+  return okWithMessage(200, message, { data });
+};
+
+const applyGoogleProfileToUser = (user, { email, name, picture }) => {
+  if (email && !user.email) {
+    user.email = normalizeUserEmail(email);
+  }
+  if (name && !user.name) {
+    user.name = name;
+  }
+  if (picture && !user.profile_url) {
+    user.profile_url = picture;
+  }
+};
+
 const verifyOtpAndLogin = async ({ phone_number, device_token, validOtp }) => {
   const normalizedPhone = normalizeUserPhone(phone_number);
   const user = await User.findOne({
@@ -96,24 +131,83 @@ const verifyOtpAndLogin = async ({ phone_number, device_token, validOtp }) => {
     return fail(401, 'Invalid credentials.');
   }
 
-  if (user.is_blocked === true) {
-    return fail(403, 'Your account is blocked. Please contact support.');
-  }
-
-  if (device_token !== undefined && device_token !== null && String(device_token).trim() !== '') {
-    user.device_token = String(device_token).trim();
-  }
-
-  user.generateAuthToken();
-  await user.save();
   await Otp.deleteOne({ _id: validOtp._id });
 
-  const data = await buildCustomerLoginData(user);
-  if (!data) {
-    return fail(500, 'Failed to load user profile.');
+  return finalizeCustomerLogin(user, device_token, 'OTP verified successfully.');
+};
+
+const googleLogin = async ({ id_token, device_token }) => {
+  let googleProfile;
+  try {
+    googleProfile = await verifyGoogleIdToken(id_token);
+  } catch (err) {
+    console.error('googleLogin token verification', err.message);
+    if (String(err.message || '').includes('not configured')) {
+      return fail(500, 'Google sign-in is not configured on the server.');
+    }
+    return fail(401, 'Invalid or expired Google token.');
   }
 
-  return okWithMessage(200, 'OTP verified successfully.', { data });
+  const { google_id, email, name, picture } = googleProfile;
+
+  let user = await User.findOne({ google_id, deleted_at: null });
+
+  if (user) {
+    if (Number(user.type) !== USER_TYPE_CUSTOMER) {
+      return fail(409, 'This Google account is registered with another account type.');
+    }
+    applyGoogleProfileToUser(user, { email, name, picture });
+    return finalizeCustomerLogin(user, device_token, 'Logged in successfully.');
+  }
+
+  if (email) {
+    const normalizedEmail = normalizeUserEmail(email);
+    user = await User.findOne({
+      email: new RegExp(`^${escapeRegExp(normalizedEmail)}$`, 'i'),
+      deleted_at: null,
+    });
+
+    if (user) {
+      if (Number(user.type) !== USER_TYPE_CUSTOMER) {
+        return fail(409, 'This email is registered with another account type.');
+      }
+      if (user.google_id && user.google_id !== google_id) {
+        return fail(409, 'This email is linked to a different Google account.');
+      }
+
+      user.google_id = google_id;
+      applyGoogleProfileToUser(user, { email, name, picture });
+      return finalizeCustomerLogin(user, device_token, 'Logged in successfully.');
+    }
+  }
+
+  const uniqueness = await checkUserContactUniqueness({ email });
+  if (!uniqueness.ok) {
+    return fail(409, uniqueness.message);
+  }
+
+  const registration_id = await getNewId(0);
+  const user_id = await getNewId(USER_TYPE_CUSTOMER);
+  const _id = new mongoose.Types.ObjectId();
+
+  user = new User({
+    _id,
+    registration_id,
+    user_id,
+    google_id,
+    email: email ? normalizeUserEmail(email) : null,
+    name: name || null,
+    profile_url: picture || null,
+    type: USER_TYPE_CUSTOMER,
+    registration_type: REGISTRATION_TYPE_GOOGLE,
+    is_from_web: false,
+    is_active: true,
+  });
+
+  await user.save();
+  await notificationSetting.create({ user_id: user._id });
+
+  return finalizeCustomerLogin(user, device_token, 'Logged in successfully.');
 };
 
 const MOBILE_USER_ALLOWED_UPDATE_FIELDS = ['name', 'phone_number', 'email', 'date_of_birth', 'gender'];
@@ -240,6 +334,7 @@ const listAllPincodes = async ({ search } = {}) => {
 module.exports = {
   sendOtp,
   verifyOtpAndLogin,
+  googleLogin,
   updateUser,
   listAllPincodes,
 };

@@ -47,6 +47,7 @@ var userSchema = new schema(
       4 for facebook
       5 for X
     */
+    google_id: { type: String, trim: true, default: null },
     device_token: { type: String, default: null },
     business_info_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: 'business_info' },
     auth_token: { type: String, default: null },
@@ -88,6 +89,7 @@ var userSchema = new schema(
 
 
 userSchema.index({ email: 1, phone_number: 1, deleted_at: 1 }, { unique: true });
+userSchema.index({ google_id: 1 }, { unique: true, sparse: true });
 userSchema.index({ type: 1 });
 userSchema.index({ state_id: 1 });
 userSchema.index({ city_id: 1 });

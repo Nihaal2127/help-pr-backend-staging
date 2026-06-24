@@ -8,7 +8,7 @@ const notificationSetting = require('../../../models/notification_settings');
 const { getNewId } = require('../../../helper/id_generator');
 const { handleImageUpload } = require('../../../helper/image_uploader');
 const { getUploadType } = require('../../../enum/upload_type_enum');
-const { normalizeUserPhone, normalizeUserEmail, checkUserContactUniqueness } = require('../../../utils/user_contact_uniqueness');
+const { normalizeUserPhone, normalizeUserEmail, checkUserContactUniqueness, getPhoneLookupVariants } = require('../../../utils/user_contact_uniqueness');
 const { escapeRegExp } = require('../../../utils/string_helpers');
 const { verifyGoogleIdToken, GOOGLE_APP_USER } = require('../../../helper/google_auth');
 const { USER_TYPE_CUSTOMER } = require('../../../constants/user_types');
@@ -21,15 +21,35 @@ const OTP_EXPIRY_MS = 10 * 60 * 1000;
 
 const hashOtp = (otp) => crypto.createHash('sha256').update(otp).digest('hex');
 
+const findCustomerByPhone = async (phone_number) => {
+  const normalizedPhone = normalizeUserPhone(phone_number);
+  const phoneVariants = getPhoneLookupVariants(normalizedPhone);
+  if (phoneVariants.length === 0) return null;
+
+  return User.findOne({
+    phone_number: { $in: phoneVariants },
+    deleted_at: null,
+  });
+};
+
 const findOrCreateCustomer = async (phone_number) => {
   const normalizedPhone = normalizeUserPhone(phone_number);
-  let user = await User.findOne({ phone_number: normalizedPhone, deleted_at: null });
+  let user = await findCustomerByPhone(phone_number);
 
   if (user) {
     if (Number(user.type) !== USER_TYPE_CUSTOMER) {
       return fail(409, 'This phone number is registered with another account type.');
     }
+    if (user.phone_number !== normalizedPhone) {
+      user.phone_number = normalizedPhone;
+      await user.save();
+    }
     return { ok: true, user };
+  }
+
+  const uniqueness = await checkUserContactUniqueness({ phone_number: normalizedPhone });
+  if (!uniqueness.ok) {
+    return fail(409, uniqueness.message);
   }
 
   const registration_id = await getNewId(0);
@@ -47,7 +67,15 @@ const findOrCreateCustomer = async (phone_number) => {
     is_active: true,
   });
 
-  await user.save();
+  try {
+    await user.save();
+  } catch (err) {
+    if (err?.code === 11000) {
+      return fail(409, 'Phone number already exists.');
+    }
+    throw err;
+  }
+
   await notificationSetting.create({ user_id: user._id });
 
   return { ok: true, user };
@@ -121,8 +149,9 @@ const applyGoogleProfileToUser = (user, { email, name, picture }) => {
 
 const verifyOtpAndLogin = async ({ phone_number, device_token, validOtp }) => {
   const normalizedPhone = normalizeUserPhone(phone_number);
+  const phoneVariants = getPhoneLookupVariants(normalizedPhone);
   const user = await User.findOne({
-    phone_number: normalizedPhone,
+    phone_number: { $in: phoneVariants },
     type: USER_TYPE_CUSTOMER,
     deleted_at: null,
   });

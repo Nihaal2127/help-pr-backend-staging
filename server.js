@@ -107,8 +107,8 @@ app.use(publicImageUrlsResponseMiddleware);
  
 // }
 
-//for ip 09-05-2025
-app.set('trust proxy', 1);
+// Behind API Gateway / load balancers (AWS Lambda uses X-Forwarded-For).
+app.set('trust proxy', true);
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],

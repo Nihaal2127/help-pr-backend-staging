@@ -1,4 +1,5 @@
 const rateLimit = require('express-rate-limit');
+const { proxySafeRateLimitOptions } = require('../../../utils/rate_limit_helpers');
 
 /**
  * Per-IP rate limit for /api/mobile/user routes.
@@ -8,8 +9,8 @@ const userRateLimiter = rateLimit({
   max: 1000,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.headers['x-forwarded-for'] || req.ip || 'unknown',
-  handler: (req, res) => {
+  ...proxySafeRateLimitOptions,
+  handler: (_req, res) => {
     res.status(429).json({
       success: false,
       status: 429,

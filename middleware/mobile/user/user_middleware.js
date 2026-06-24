@@ -6,6 +6,7 @@ const { validatePhoneNumber } = require('../../../validator/form_validator');
 const {
   normalizeUserEmail,
   normalizeUserPhone,
+  getPhoneLookupVariants,
   checkUserContactUniqueness,
 } = require('../../../utils/user_contact_uniqueness');
 const { isValidGender, normalizeGender } = require('../../../enum/gender_enum');
@@ -88,7 +89,7 @@ const rateLimitSendOtp = async (req, res, next) => {
 
   try {
     const existingOtp = await Otp.findOne({
-      phone_number: normalized,
+      phone_number: { $in: getPhoneLookupVariants(normalized) },
       expiresAt: { $gt: new Date() },
     });
 
@@ -141,7 +142,11 @@ const validateVerifyOtp = async (req, res, next) => {
 
   try {
     const hashedOtp = crypto.createHash('sha256').update(String(otp).trim()).digest('hex');
-    const otpEntry = await Otp.findOne({ phone_number: normalized, otp: hashedOtp });
+    const phoneVariants = getPhoneLookupVariants(normalized);
+    const otpEntry = await Otp.findOne({
+      phone_number: { $in: phoneVariants },
+      otp: hashedOtp,
+    });
 
     if (!otpEntry) {
       return res.status(400).json({

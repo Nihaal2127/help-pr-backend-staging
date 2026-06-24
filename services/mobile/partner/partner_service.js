@@ -22,6 +22,8 @@ const {
   normalizeUserPhone,
   checkUserContactUniqueness,
 } = require('../../../utils/user_contact_uniqueness');
+const { escapeRegExp } = require('../../../utils/string_helpers');
+const { verifyGoogleIdToken, GOOGLE_APP_PARTNER } = require('../../../helper/google_auth');
 const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
 const { fail, okWithData, okPass } = require('../../../utils/mobile_service_result');
 const { attachPartnerRatingFields } = require('../../../utils/rating_format');
@@ -32,6 +34,18 @@ const {
 } = require('../../../utils/partner_document_status');
 const DEFAULT_PARTNER_PLAN_NAME = 'basic';
 const REGISTRATION_TYPE_NORMAL = 1;
+const REGISTRATION_TYPE_GOOGLE = 2;
+
+const VERIFICATION_STATUS_MESSAGES = {
+  1: 'Your profile is under verification. We will notify you once it is approved.',
+  2: 'Your account is approved.',
+  3: 'Your registration was rejected. Please contact support or update your documents.',
+};
+
+const verificationStatusToMessage = (status) => {
+  const n = Number(status);
+  return VERIFICATION_STATUS_MESSAGES[n] ?? null;
+};
 
 const PARTNER_DOCUMENT_FILE_FIELDS = [
   'vehicle_registration',
@@ -699,6 +713,76 @@ async function replacePartnerBankAccountsForPartner(partnerId, normalizedAccount
   return okPass();
 }
 
+const assignPartnerOnboarding = async (savedUser) => {
+  await notificationSetting.create({ user_id: savedUser._id });
+
+  const basicPlan = await SubscriptionPlan.findOne({
+    plan_name: DEFAULT_PARTNER_PLAN_NAME,
+    is_active: true,
+    deleted_at: null,
+  });
+  if (!basicPlan) {
+    throw new Error('Default subscription plan "basic" is not configured.');
+  }
+
+  await PartnerSubscription.create({
+    partner_id: savedUser._id,
+    subscription_plan_id: basicPlan._id,
+    started_at: savedUser.created_at,
+    expires_at: null,
+    status: 'active',
+    notes: 'Auto-assigned on mobile registration',
+  });
+};
+
+const buildPartnerLoginData = async (user) => {
+  const populated = await User.findById(user._id).populate([{ path: 'city_id' }]).lean();
+  if (!populated) return null;
+
+  const engagementCounts = await getPartnerEngagementCounts(user._id);
+  const data = {
+    ...populated,
+    city_id: populated?.city_id?._id || null,
+    city_name: populated?.city_id?.name || null,
+    verification_status_message: verificationStatusToMessage(populated?.verification_status),
+    ...attachPartnerRatingFields(populated),
+    ...engagementCounts,
+  };
+  delete data.password;
+  return data;
+};
+
+const applyGoogleProfileToPartner = (user, { email, name, picture }) => {
+  if (email && !user.email) {
+    user.email = normalizeUserEmail(email);
+  }
+  if (name && !user.name) {
+    user.name = name;
+  }
+  if (picture && !user.profile_url) {
+    user.profile_url = picture;
+  }
+};
+
+const finalizePartnerLogin = async (user, device_token) => {
+  if (user.is_blocked === true) {
+    return fail(403, 'Your account is blocked. Please contact support.');
+  }
+
+  user.generateAuthToken();
+  if (device_token !== undefined && device_token !== null && String(device_token).trim() !== '') {
+    user.device_token = String(device_token).trim();
+  }
+  await user.save();
+
+  const data = await buildPartnerLoginData(user);
+  if (!data) {
+    return fail(500, 'Failed to load partner profile.');
+  }
+
+  return okWithData(data);
+};
+
 const registerPartner = async ({ name, email, phone_number, password, date_of_birth }) => {
   const normalizedEmail = normalizeUserEmail(email);
   const normalizedPhone = normalizeUserPhone(phone_number);
@@ -732,28 +816,10 @@ const registerPartner = async ({ name, email, phone_number, password, date_of_bi
   });
 
   newUser.password = password;
-  const token = newUser.generateAuthToken();
+  newUser.generateAuthToken();
   const savedUser = await newUser.save();
 
-  await notificationSetting.create({ user_id: savedUser._id });
-
-  const basicPlan = await SubscriptionPlan.findOne({
-    plan_name: DEFAULT_PARTNER_PLAN_NAME,
-    is_active: true,
-    deleted_at: null,
-  });
-  if (!basicPlan) {
-    throw new Error('Default subscription plan "basic" is not configured.');
-  }
-
-  await PartnerSubscription.create({
-    partner_id: savedUser._id,
-    subscription_plan_id: basicPlan._id,
-    started_at: savedUser.created_at,
-    expires_at: null,
-    status: 'active',
-    notes: 'Auto-assigned on mobile registration',
-  });
+  await assignPartnerOnboarding(savedUser);
 
   const data = savedUser.toObject();
   delete data.password;
@@ -773,34 +839,116 @@ const loginPartner = async ({ email, password, device_token }) => {
     return fail(403, 'This account is not a partner. Use the correct app to sign in.');
   }
 
-  if (user.is_blocked === true) {
-    return fail(403, 'Your account is blocked. Please contact support.');
-  }
-
   const isPasswordMatch = await user.comparePassword(password);
   if (!isPasswordMatch) {
     return fail(401, 'Invalid password.');
   }
 
-  const token = user.generateAuthToken();
-  if (device_token !== undefined && device_token !== null && String(device_token).trim() !== '') {
-    user.device_token = String(device_token).trim();
+  return finalizePartnerLogin(user, device_token);
+};
+
+const googleLoginPartner = async ({ id_token, device_token, phone_number, date_of_birth }) => {
+  let googleProfile;
+  try {
+    googleProfile = await verifyGoogleIdToken(id_token, { app: GOOGLE_APP_PARTNER });
+  } catch (err) {
+    console.error('googleLoginPartner token verification', err.message);
+    if (String(err.message || '').includes('not configured')) {
+      return fail(500, 'Google sign-in is not configured on the server.');
+    }
+    return fail(401, 'Invalid or expired Google token.');
   }
-  await user.save();
 
-  const populated = await User.findById(user._id).populate([{ path: 'city_id' }]).lean();
-  const engagementCounts = await getPartnerEngagementCounts(user._id);
-  const data = {
-    ...populated,
-    city_id: populated?.city_id?._id || null,
-    city_name: populated?.city_id?.name || null,
-    verification_status_message: verificationStatusToMessage(populated?.verification_status),
-    ...attachPartnerRatingFields(populated),
-    ...engagementCounts,
-  };
-  delete data.password;
+  const { google_id, email, name, picture } = googleProfile;
+  const normalizedPhone =
+    phone_number !== undefined && phone_number !== null && String(phone_number).trim() !== ''
+      ? normalizeUserPhone(phone_number)
+      : null;
 
-  return okWithData(data);
+  let user = await User.findOne({ google_id, deleted_at: null });
+
+  if (user) {
+    if (Number(user.type) !== USER_TYPE_PARTNER) {
+      return fail(409, 'This Google account is registered with another account type.');
+    }
+    applyGoogleProfileToPartner(user, { email, name, picture });
+    const result = await finalizePartnerLogin(user, device_token);
+    if (!result.ok) return result;
+    return { ...result, message: 'Login successfully.' };
+  }
+
+  if (email) {
+    const normalizedEmail = normalizeUserEmail(email);
+    user = await User.findOne({
+      email: new RegExp(`^${escapeRegExp(normalizedEmail)}$`, 'i'),
+      deleted_at: null,
+    });
+
+    if (user) {
+      if (Number(user.type) !== USER_TYPE_PARTNER) {
+        return fail(409, 'This email is registered with another account type.');
+      }
+      if (user.google_id && user.google_id !== google_id) {
+        return fail(409, 'This email is linked to a different Google account.');
+      }
+
+      user.google_id = google_id;
+      applyGoogleProfileToPartner(user, { email, name, picture });
+      const result = await finalizePartnerLogin(user, device_token);
+      if (!result.ok) return result;
+      return { ...result, message: 'Login successfully.' };
+    }
+  }
+
+  if (!email) {
+    return fail(400, 'Google account must include an email address to register as a partner.');
+  }
+
+  const uniqueness = await checkUserContactUniqueness({
+    email,
+    phone_number: normalizedPhone,
+  });
+  if (!uniqueness.ok) {
+    return fail(409, uniqueness.message);
+  }
+
+  const registration_id = await getNewId(0);
+  const user_id = await getNewId(USER_TYPE_PARTNER);
+  const _id = new mongoose.Types.ObjectId();
+
+  user = new User({
+    _id,
+    registration_id,
+    user_id,
+    google_id,
+    name: name || null,
+    email: normalizeUserEmail(email),
+    phone_number: normalizedPhone,
+    date_of_birth: date_of_birth || null,
+    profile_url: picture || null,
+    type: USER_TYPE_PARTNER,
+    registration_type: REGISTRATION_TYPE_GOOGLE,
+    is_from_web: false,
+    verification_status: 1,
+    verified_at: null,
+  });
+
+  user.generateAuthToken();
+  const savedUser = await user.save();
+
+  try {
+    await assignPartnerOnboarding(savedUser);
+  } catch (err) {
+    console.error('googleLoginPartner onboarding', err.message);
+    return fail(500, 'Partner account created but onboarding failed. Please contact support.');
+  }
+
+  const data = await buildPartnerLoginData(savedUser);
+  if (!data) {
+    return fail(500, 'Failed to load partner profile.');
+  }
+
+  return { ok: true, data, message: 'Partner registered successfully.' };
 };
 
 const assignFranchiseIdFromLocation = async (user) => {
@@ -848,17 +996,6 @@ const assignFranchiseIdFromLocation = async (user) => {
 
   user.franchise_id = franchise._id;
   return okPass();
-};
-
-const VERIFICATION_STATUS_MESSAGES = {
-  1: 'Your profile is under verification. We will notify you once it is approved.',
-  2: 'Your account is approved.',
-  3: 'Your registration was rejected. Please contact support or update your documents.',
-};
-
-const verificationStatusToMessage = (status) => {
-  const n = Number(status);
-  return VERIFICATION_STATUS_MESSAGES[n] ?? null;
 };
 
 const buildPartnerResponseData = async (partnerId) => {
@@ -1151,5 +1288,6 @@ const updatePartner = async ({ partnerId, body, files, section = PARTNER_UPDATE_
 module.exports = {
   registerPartner,
   loginPartner,
+  googleLoginPartner,
   updatePartner,
 };

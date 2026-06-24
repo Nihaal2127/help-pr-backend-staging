@@ -353,6 +353,73 @@
           "response": []
         },
         {
+          "name": "Google login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const t = j?.data?.auth_token;",
+                  "  if (t) {",
+                  "    pm.collectionVariables.set('token', t);",
+                  "    pm.collectionVariables.set('accessToken', t);",
+                  "  }",
+                  "  if (j?.data?._id) {",
+                  "    pm.collectionVariables.set('partnerId', String(j.data._id));",
+                  "    pm.collectionVariables.set('userId', String(j.data._id));",
+                  "  }",
+                  "  if (j?.data?.email) {",
+                  "    pm.collectionVariables.set('email', String(j.data.email));",
+                  "  }",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_token\": \"{{googleIdToken}}\",\n  \"device_token\": \"{{deviceToken}}\",\n  \"phone_number\": \"+916309654123\",\n  \"date_of_birth\": \"2003-05-23\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/partner/google-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "partner",
+                "google-login"
+              ]
+            },
+            "description": "**POST /api/mobile/partner/google-login**\n\n- No Authorization\n- **Required:** `id_token` (Google Sign-In ID token from the partner mobile app)\n- **Optional:** `device_token` (FCM), `phone_number`, `date_of_birth` (used on first-time registration only)\n\n### Behavior\n- Verifies `id_token` with Google (`GOOGLE_CLIENT_ID_ANDROID_PARTNER`, `GOOGLE_CLIENT_ID_IOS_PARTNER`, optional `GOOGLE_CLIENT_ID_PARTNER` / `GOOGLE_CLIENT_ID_WEB_PARTNER`)\n- Existing partner by `google_id` or email → login (`registration_type` unchanged)\n- New partner → creates account (`registration_type: 2`), assigns basic subscription + notification settings\n- **200** `data.auth_token` (same shape as **Login**)\n\n**400:** Missing `id_token` | Google account without email\n**401:** Invalid or expired Google token\n**403:** Account blocked\n**409:** Email/Google account conflict with customer or other account type\n**500:** Google client IDs not configured"
+          },
+          "response": []
+        },
+        {
           "name": "Forgot password",
           "event": [
             {
@@ -3417,7 +3484,7 @@
                 "google-login"
               ]
             },
-            "description": "**POST /api/mobile/user/google-login**\n\n- No Authorization\n- **Required:** `id_token` (Google Sign-In ID token from the mobile app)\n- **Optional:** `device_token` (FCM)\n\n### Behavior\n- Verifies `id_token` with Google (`GOOGLE_CLIENT_ID` / platform client IDs)\n- Finds customer by `google_id`, or links existing customer by email, or creates new customer (`registration_type: 2`)\n- Returns JWT on `data.auth_token` (same shape as **Verify OTP**)\n\n**400:** Missing `id_token`\n**401:** Invalid or expired Google token\n**403:** Account blocked\n**409:** Email/Google account conflict with another account type\n**500:** Google client IDs not configured on server"
+            "description": "**POST /api/mobile/user/google-login**\n\n- No Authorization\n- **Required:** `id_token` (Google Sign-In ID token from the mobile app)\n- **Optional:** `device_token` (FCM)\n\n### Behavior\n- Verifies `id_token` with Google (`GOOGLE_CLIENT_ID_ANDROID`, `GOOGLE_CLIENT_ID_IOS`, optional `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_ID_WEB`)\n- Finds customer by `google_id`, or links existing customer by email, or creates new customer (`registration_type: 2`)\n- Returns JWT on `data.auth_token` (same shape as **Verify OTP**)\n\n**400:** Missing `id_token`\n**401:** Invalid or expired Google token\n**403:** Account blocked\n**409:** Email/Google account conflict with another account type\n**500:** Google client IDs not configured on server"
           },
           "response": []
         },

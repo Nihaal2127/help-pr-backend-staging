@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { register, login, forgotPassword, verifyForgotPasswordOtp, resetPassword, update } = require('../../../controllers/mobile/partner/partner_controller');
+const { register, login, googleLogin, forgotPassword, verifyForgotPasswordOtp, resetPassword, update } = require('../../../controllers/mobile/partner/partner_controller');
 const {
   validateForgotPasswordEmail,
   validateVerifyForgotPasswordOtp,
@@ -11,6 +11,7 @@ const { list: listSubscriptionPlans } = require('../../../controllers/mobile/par
 const {
   partnerRegisterMiddleware,
   partnerLoginMiddleware,
+  partnerGoogleLoginMiddleware,
   partnerUpdateMiddleware,
   partnerProfileImageSizeMiddleware,
   partnerRequireMultipartMiddleware,
@@ -36,6 +37,7 @@ const partnerMultipartUpload = wrapMulterUpload(upload.fields(PARTNER_MULTIPART_
 
 router.post('/register', partnerRegisterMiddleware, register);
 router.post('/login', partnerLoginMiddleware, login);
+router.post('/google-login', partnerGoogleLoginMiddleware, googleLogin);
 router.post('/forgot-password', validateForgotPasswordEmail, forgotPassword);
 router.post(
   '/verify-forgot-password-otp',

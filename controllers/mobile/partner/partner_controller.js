@@ -1,6 +1,7 @@
 const {
   registerPartner,
   loginPartner,
+  googleLoginPartner,
   updatePartner,
 } = require('../../../services/mobile/partner/partner_service');
 const {
@@ -57,6 +58,26 @@ const login = wrapMobileHandler('mobile partner login', async (req, res) => {
     success: true,
     status: 200,
     message: 'Login successfully.',
+    data: result.data,
+  });
+});
+
+const googleLogin = wrapMobileHandler('mobile partner google-login', async (req, res) => {
+  const result = await googleLoginPartner({
+    id_token: req.body.id_token,
+    device_token: req.body.device_token,
+    phone_number: req.body.phone_number,
+    date_of_birth: req.body.date_of_birth,
+  });
+
+  if (!result.ok) {
+    return sendServiceError(res, result);
+  }
+
+  return res.status(200).json({
+    success: true,
+    status: 200,
+    message: result.message || 'Login successfully.',
     data: result.data,
   });
 });
@@ -157,6 +178,7 @@ const update = async (req, res) => {
 module.exports = {
   register,
   login,
+  googleLogin,
   forgotPassword,
   verifyForgotPasswordOtp,
   resetPassword,

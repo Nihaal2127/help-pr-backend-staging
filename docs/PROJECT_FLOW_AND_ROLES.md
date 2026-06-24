@@ -153,7 +153,9 @@ Legacy: `POST /api/auth/userLogin` (phone + device_token).
 
 Phone flow auto-creates customers on first login. Google flow verifies the ID token server-side, creates or links a customer (`registration_type: 2`), and returns the same JWT shape as verify-otp.
 
-Env: `GOOGLE_CLIENT_ID` and/or `GOOGLE_CLIENT_ID_ANDROID`, `GOOGLE_CLIENT_ID_IOS`, `GOOGLE_CLIENT_ID_WEB`.
+Env (customer app): `GOOGLE_CLIENT_ID_ANDROID`, `GOOGLE_CLIENT_ID_IOS`, optional `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_ID_WEB`.
+
+Env (partner app): `GOOGLE_CLIENT_ID_ANDROID_PARTNER`, `GOOGLE_CLIENT_ID_IOS_PARTNER`, optional `GOOGLE_CLIENT_ID_PARTNER` / `GOOGLE_CLIENT_ID_WEB_PARTNER`.
 
 ### Partner mobile
 
@@ -161,6 +163,7 @@ Env: `GOOGLE_CLIENT_ID` and/or `GOOGLE_CLIENT_ID_ANDROID`, `GOOGLE_CLIENT_ID_IOS
 |----------|------|-------|
 | `POST /api/mobile/partner/register` | None | Creates partner (`type: 2`), returns token |
 | `POST /api/mobile/partner/login` | None | Email/password |
+| `POST /api/mobile/partner/google-login` | None | Google Sign-In — `{ id_token, device_token?, phone_number?, date_of_birth? }` |
 | `PUT /api/mobile/partner/update` | Bearer | Profile, docs, catalog (rules apply) |
 
 ### Public partner registration (web)

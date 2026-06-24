@@ -138,6 +138,38 @@ const PARTNER_FOLDER_LABELS = {
   legacy_register: '99 — Legacy register-partner (full form)',
 };
 
+/** Partner mobile auth routes (flat items under Help-PR-Mobile-APIs → Partner; excludes /register). */
+const MOBILE_PARTNER_AUTH_PATH_SUFFIXES = [
+  '/api/mobile/partner/login',
+  '/api/mobile/partner/google-login',
+  '/api/mobile/partner/forgot-password',
+  '/api/mobile/partner/verify-forgot-password-otp',
+  '/api/mobile/partner/reset-password',
+];
+
+/** Customer mobile auth routes (flat items under Help-PR-Mobile-APIs → User). */
+const MOBILE_USER_AUTH_PATH_SUFFIXES = [
+  '/api/mobile/user/login',
+  '/api/mobile/user/verify-otp',
+  '/api/mobile/user/google-login',
+  '/api/mobile/user/forgot-password',
+  '/api/mobile/user/verify-forgot-password-otp',
+  '/api/mobile/user/reset-password',
+];
+
+const MOBILE_USER_COLLECTION_VAR_KEYS = [
+  'customerPhone',
+  'customerOtp',
+  'googleIdToken',
+  'deviceToken',
+  'customerToken',
+  'customerId',
+  'customerEmail',
+  'customerName',
+  'passwordResetOtp',
+  'passwordResetToken',
+];
+
 const USER_FOLDER_LABELS = {
   register: '01 — Register (mobile app)',
   auth: '02 — Auth',
@@ -252,6 +284,116 @@ function folderHasMobilePath(folder, segment) {
   );
 }
 
+function isMobileAuthPath(pathNorm, pathSuffixes) {
+  return pathSuffixes.some((suffix) => pathNorm === suffix || pathNorm.endsWith(suffix));
+}
+
+function mobileAuthSortIndex(req, pathSuffixes) {
+  const pathNorm = normalizePath(urlToPathString(req?.url));
+  const idx = pathSuffixes.findIndex((suffix) => pathNorm.endsWith(suffix));
+  return idx === -1 ? 999 : idx;
+}
+
+/** Flat auth requests from Help-PR-Mobile-APIs (Login, Google login, forgot password, …). */
+function extractMobileAuthRequests(rootName, pathSuffixes) {
+  if (!fs.existsSync(MOBILE_ONLY_FILE)) return [];
+
+  const mobileOnly = JSON.parse(fs.readFileSync(MOBILE_ONLY_FILE, 'utf8'));
+  const root = (mobileOnly.item || []).find((i) => i.name === rootName);
+  if (!root?.item?.length) return [];
+
+  return root.item
+    .filter(
+      (entry) =>
+        entry.request &&
+        isMobileAuthPath(normalizePath(urlToPathString(entry.request.url)), pathSuffixes)
+    )
+    .map((entry) => structuredClone(entry))
+    .sort((a, b) => {
+      const orderDiff =
+        mobileAuthSortIndex(a.request, pathSuffixes) -
+        mobileAuthSortIndex(b.request, pathSuffixes);
+      if (orderDiff !== 0) return orderDiff;
+      return a.name.localeCompare(b.name);
+    });
+}
+
+function mergeMobileAuthRequests(folders, authFolderName, rootName, pathSuffixes) {
+  const authRequests = extractMobileAuthRequests(rootName, pathSuffixes);
+  if (!authRequests.length) return folders;
+
+  const foldersOut = [...folders];
+  let authIdx = foldersOut.findIndex((folder) => folder.name === authFolderName);
+
+  if (authIdx === -1) {
+    foldersOut.unshift({
+      name: authFolderName,
+      description: `**${authRequests.length}** request(s)`,
+      item: [],
+    });
+    authIdx = 0;
+  }
+
+  const authFolder = foldersOut[authIdx];
+  const seen = new Set((authFolder.item || []).map((entry) => getRequestKey(entry.request)));
+
+  for (const entry of authRequests) {
+    const key = getRequestKey(entry.request);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    authFolder.item.push(entry);
+  }
+
+  authFolder.item.sort((a, b) => {
+    const orderDiff =
+      mobileAuthSortIndex(a.request, pathSuffixes) -
+      mobileAuthSortIndex(b.request, pathSuffixes);
+    if (orderDiff !== 0) return orderDiff;
+    return a.name.localeCompare(b.name);
+  });
+  authFolder.description = `**${authFolder.item.length}** request(s)`;
+  foldersOut[authIdx] = authFolder;
+
+  return foldersOut;
+}
+
+function mergeMobileUserAuthRequests(folders) {
+  return mergeMobileAuthRequests(
+    folders,
+    USER_FOLDER_LABELS.auth,
+    'User',
+    MOBILE_USER_AUTH_PATH_SUFFIXES
+  );
+}
+
+function mergeMobilePartnerAuthRequests(folders) {
+  return mergeMobileAuthRequests(
+    folders,
+    PARTNER_FOLDER_LABELS.auth,
+    'Partner',
+    MOBILE_PARTNER_AUTH_PATH_SUFFIXES
+  );
+}
+
+function syncMobileCollectionVariables(collection) {
+  if (!fs.existsSync(MOBILE_ONLY_FILE)) return;
+
+  const mobileOnly = JSON.parse(fs.readFileSync(MOBILE_ONLY_FILE, 'utf8'));
+  const mobileVars = mobileOnly.variable || [];
+  if (!collection.variable) collection.variable = [];
+
+  const keys = new Set(collection.variable.map((variable) => variable.key));
+
+  for (const key of MOBILE_USER_COLLECTION_VAR_KEYS) {
+    if (keys.has(key)) continue;
+    const found = mobileVars.find((variable) => variable.key === key);
+    if (found) {
+      collection.variable.push(structuredClone(found));
+      keys.add(key);
+    }
+  }
+}
+
 /** Folders from Help-PR-Mobile-APIs override generated groups for dedicated mobile routes. */
 function mergeMobileOnlyFolders(builtFolders, rootName, pathSegment) {
   if (!fs.existsSync(MOBILE_ONLY_FILE)) return builtFolders;
@@ -352,22 +494,26 @@ function main() {
   const partnerFolder = {
     name: 'Partner',
     description:
-      '**Partner mobile app** — Run **01 → Register (mobile app)** first (no auth). Then use `Bearer {{token}}` for onboarding. Login (`/api/auth/login`) works after admin sets `is_active: true`.',
-    item: mergeMobileOnlyFolders(
-      buildGroupedFolder(PARTNER_FOLDER_LABELS, partnerByGroup, partnerOrder),
-      'Partner',
-      '/api/mobile/partner'
+      '**Partner mobile app** — **01 → Register** or **02 — Auth → Google login** / **Login**. Then `Bearer {{token}}` for onboarding. Email/password **Login** also works via `/api/auth/login` after admin sets `is_active: true`.',
+    item: mergeMobilePartnerAuthRequests(
+      mergeMobileOnlyFolders(
+        buildGroupedFolder(PARTNER_FOLDER_LABELS, partnerByGroup, partnerOrder),
+        'Partner',
+        '/api/mobile/partner'
+      )
     ),
   };
 
   const userFolder = {
     name: 'User',
     description:
-      '**Customer / end-user mobile app** — Auth, profile, orders, payments. Dedicated `POST /api/mobile/user/register` to be added when implemented.',
-    item: mergeMobileOnlyFolders(
-      buildGroupedFolder(USER_FOLDER_LABELS, userByGroup, userOrder),
-      'User',
-      '/api/mobile/user'
+      '**Customer / end-user mobile app** — **02 — Auth**: phone OTP (`/login` → `/verify-otp`) or **Google login** (`/google-login`). Then home, orders, addresses, quotes, profile. Regenerated from `Help-PR-Mobile-APIs.postman_collection.json`.',
+    item: mergeMobileUserAuthRequests(
+      mergeMobileOnlyFolders(
+        buildGroupedFolder(USER_FOLDER_LABELS, userByGroup, userOrder),
+        'User',
+        '/api/mobile/user'
+      )
     ),
   };
 
@@ -390,6 +536,8 @@ function main() {
 
   collection.item = collection.item.filter((i) => i.name !== 'Mobile');
   collection.item.push(mobileFolder);
+
+  syncMobileCollectionVariables(collection);
 
   collection.info.description =
     (collection.info.description || '').split('\n\n**Mobile:**')[0] +

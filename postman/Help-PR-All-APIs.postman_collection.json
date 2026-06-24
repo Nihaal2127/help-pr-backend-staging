@@ -14211,7 +14211,7 @@
       "item": [
         {
           "name": "Partner",
-          "description": "**Partner mobile app** — Run **01 → Register (mobile app)** first (no auth). Then use `Bearer {{token}}` for onboarding. Login (`/api/auth/login`) works after admin sets `is_active: true`.",
+          "description": "**Partner mobile app** — **01 → Register** or **02 — Auth → Google login** / **Login**. Then `Bearer {{token}}` for onboarding. Email/password **Login** also works via `/api/auth/login` after admin sets `is_active: true`.",
           "item": [
             {
               "name": "01 — Register (mobile app)",
@@ -14258,7 +14258,7 @@
                     ],
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"name\": \"Ravi Kumar\",\n  \"date_of_birth\": \"1995-06-15\",\n  \"phone_number\": \"+919876543210\",\n  \"email\": \"partner.mobile+1782188512831@example.com\",\n  \"password\": \"123456\"\n}",
+                      "raw": "{\n  \"name\": \"Ravi Kumar\",\n  \"date_of_birth\": \"1995-06-15\",\n  \"phone_number\": \"+919876543210\",\n  \"email\": \"partner.mobile+1782279320121@example.com\",\n  \"password\": \"123456\"\n}",
                       "options": {
                         "raw": {
                           "language": "json"
@@ -14284,8 +14284,326 @@
             },
             {
               "name": "02 — Auth",
-              "description": "**3** request(s)",
+              "description": "**8** request(s)",
               "item": [
+                {
+                  "name": "Login",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  const t = j?.data?.auth_token;",
+                          "  if (t) {",
+                          "    pm.collectionVariables.set('token', t);",
+                          "    pm.collectionVariables.set('accessToken', t);",
+                          "  }",
+                          "  if (j?.data?._id) {",
+                          "    pm.collectionVariables.set('partnerId', String(j.data._id));",
+                          "    pm.collectionVariables.set('userId', String(j.data._id));",
+                          "  }",
+                          "  if (j?.data?.email) {",
+                          "    pm.collectionVariables.set('email', String(j.data.email));",
+                          "  }",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "noauth"
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"device_token\": \"{{deviceToken}}\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/login",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "login"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/partner/login**\n\n- No Authorization\n- **Required:** `email`, `password`\n- **Optional:** `device_token` (FCM push token)\n- **200** `data`: `auth_token`, `verification_status` (1 pending, 2 approved, 3 rejected), `verification_status_message`, `rejected_reasone`, `city_name`, …\n\n**401:** `Invalid email.` | `Invalid password.`\n\nRejected partners can log in; catalog/bank/my-services **update** still requires approval."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Google login",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  const t = j?.data?.auth_token;",
+                          "  if (t) {",
+                          "    pm.collectionVariables.set('token', t);",
+                          "    pm.collectionVariables.set('accessToken', t);",
+                          "  }",
+                          "  if (j?.data?._id) {",
+                          "    pm.collectionVariables.set('partnerId', String(j.data._id));",
+                          "    pm.collectionVariables.set('userId', String(j.data._id));",
+                          "  }",
+                          "  if (j?.data?.email) {",
+                          "    pm.collectionVariables.set('email', String(j.data.email));",
+                          "  }",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "noauth"
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"id_token\": \"{{googleIdToken}}\",\n  \"device_token\": \"{{deviceToken}}\",\n  \"phone_number\": \"+916309654123\",\n  \"date_of_birth\": \"2003-05-23\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/google-login",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "google-login"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/partner/google-login**\n\n- No Authorization\n- **Required:** `id_token` (Google Sign-In ID token from the partner mobile app)\n- **Optional:** `device_token` (FCM), `phone_number`, `date_of_birth` (used on first-time registration only)\n\n### Behavior\n- Verifies `id_token` with Google (`GOOGLE_CLIENT_ID_ANDROID_PARTNER`, `GOOGLE_CLIENT_ID_IOS_PARTNER`, optional `GOOGLE_CLIENT_ID_PARTNER` / `GOOGLE_CLIENT_ID_WEB_PARTNER`)\n- Existing partner by `google_id` or email → login (`registration_type` unchanged)\n- New partner → creates account (`registration_type: 2`), assigns basic subscription + notification settings\n- **200** `data.auth_token` (same shape as **Login**)\n\n**400:** Missing `id_token` | Google account without email\n**401:** Invalid or expired Google token\n**403:** Account blocked\n**409:** Email/Google account conflict with customer or other account type\n**500:** Google client IDs not configured"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Forgot password",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Forgot password success', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.message).to.eql('If an account exists, an OTP has been sent.');",
+                          "  });",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "noauth"
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"email\": \"{{email}}\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/forgot-password",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "forgot-password"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/partner/forgot-password**\n\n- No Authorization\n- **Required:** `email` (registered partner email, `type: 2` only)\n\n### Behavior\n- Sends a 6-digit OTP to the registered email (never sends a password)\n- Always returns a generic success message to prevent email enumeration\n- Invalidates any previous password-reset OTP for the account\n- OTP expires in **5 minutes**; resend cooldown **60 seconds** per account\n\n### Response\n- **200:** `If an account exists, an OTP has been sent.`\n\n**400:** `Email is required.` | `Invalid email format.`\n\nRequires `EMAIL_USER` / `EMAIL_PASS` in server env.\n\n**Next step:** **Verify forgot password OTP** → **Reset password** → **Login** with the new password."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Verify forgot password OTP",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  if (j?.reset_token) {",
+                          "    pm.collectionVariables.set('passwordResetToken', String(j.reset_token));",
+                          "  }",
+                          "  pm.test('Verify forgot password OTP success', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.verified).to.eql(true);",
+                          "    pm.expect(j.reset_token).to.be.a('string');",
+                          "  });",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "noauth"
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"email\": \"{{email}}\",\n  \"otp\": \"{{passwordResetOtp}}\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/verify-forgot-password-otp",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "verify-forgot-password-otp"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/partner/verify-forgot-password-otp**\n\n- No Authorization\n- **Required:** `email`, `otp` (6-digit code from email)\n\n### Behavior\n- Validates OTP (max **5 attempts**, **5 min** expiry)\n- On success returns a JWT `reset_token` valid for **10 minutes**\n- Saves `reset_token` to `{{passwordResetToken}}`\n\n### Response\n- **200:** `{ verified: true, reset_token: \"...\" }`\n\n**400:** `Invalid OTP.` | `OTP has expired.` | `OTP is required.` | `OTP must be a 6-digit code.`\n**429:** `Maximum OTP verification attempts exceeded. Please request a new OTP.`\n\nSet `{{passwordResetOtp}}` from the email received after **Forgot password**."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Reset password",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Reset password success', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.message).to.eql('Password updated successfully');",
+                          "  });",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "noauth"
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"reset_token\": \"{{passwordResetToken}}\",\n  \"new_password\": \"{{password}}\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/partner/reset-password",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "partner",
+                        "reset-password"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/partner/reset-password**\n\n- No Authorization\n- **Required:** `reset_token` (from **Verify forgot password OTP**), `new_password`\n\n### Password rules\n- Min 8 chars, uppercase, lowercase, number, special character (`@$!%*?&`)\n\n### Response\n- **200:** `Password updated successfully`\n\n**400:** `Invalid or expired reset token.` | password validation errors\n\n**Next step:** **Login** with `{{email}}` and the new password."
+                  },
+                  "response": []
+                },
                 {
                   "name": "Auth — forgotPassword",
                   "request": {
@@ -17217,7 +17535,7 @@
             },
             {
               "name": "13 — Orders & quotes",
-              "description": "**35** request(s)",
+              "description": "**36** request(s)",
               "item": [
                 {
                   "name": "1. Get all orders",
@@ -17871,7 +18189,7 @@
                         "create"
                       ]
                     },
-                    "description": "**POST /create**\n\n**Required:** `order_id`, **`payer_type`**: `customer` | `partner`, `amount`.\n\n**Optional:** `payment_method`, **`status`**: `pending` | `completed` | `failed` | `refunded`, `transaction_reference`, `installment_index`, `due_date`, `paid_at`, `notes`.\n\n**⚠️ `payment_method: online`:** admin create records label only — **no** `payment_url`. Use **21 → 3a** or mobile order payments.\n\n**Customer + completed:** updates `payment_status` when sum ≥ `total_price`.\n\n**Partner:** `\"payer_type\": \"partner\"`. **Refund:** `\"status\": \"refunded\"`."
+                    "description": "**POST /create**\n\n**Required:** `order_id`, **`payer_type`**: `customer` | `partner`, `amount`.\n\n**Optional:** `payment_method`, **`status`**: `pending` | `completed` | `failed` | `refunded`, `transaction_reference`, `installment_index`, `due_date`, `paid_at`, `notes`.\n\n**`payment_method: online`** (customer only, `amount` > 0): **202** + `record.payment_url`. Optional `name`, `email`, `contact` for Razorpay. Poll **GET /payment-status/:id**.\n\n**Offline customer + completed:** updates `payment_status` when sum ≥ `total_price`.\n\n**Partner:** `\"payer_type\": \"partner\"`. **Refund:** `\"status\": \"refunded\"`."
                   },
                   "response": [],
                   "description": "\n\n_Source: Help-PR-Order-Charges-Payments.postman_collection.json → Order payments (ledger)_"
@@ -18101,6 +18419,33 @@
                     "url": "{{base_url}}/api/quote/getCustomerQuotes?user_id={{user_id}}"
                   },
                   "description": "\n\n_Source: Help-PR-Area-Franchise-Subscription.postman_collection.json → Quote_"
+                },
+                {
+                  "name": "Get payment status (Razorpay)",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{accessToken}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/order-payments/payment-status/{{orderPaymentId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "order-payments",
+                        "payment-status",
+                        "{{orderPaymentId}}"
+                      ]
+                    },
+                    "description": "**GET /api/order-payments/payment-status/:id** — poll after Razorpay pay. `data.status` → `completed` when applied; `sync.synced: true` if webhook missed."
+                  },
+                  "response": []
                 },
                 {
                   "name": "List charges by order",
@@ -22123,12 +22468,396 @@
         },
         {
           "name": "User",
-          "description": "**Customer / end-user mobile app** — Auth, profile, orders, payments. Dedicated `POST /api/mobile/user/register` to be added when implemented.",
+          "description": "**Customer / end-user mobile app** — **02 — Auth**: phone OTP (`/login` → `/verify-otp`) or **Google login** (`/google-login`). Then home, orders, addresses, quotes, profile. Regenerated from `Help-PR-Mobile-APIs.postman_collection.json`.",
           "item": [
             {
               "name": "02 — Auth",
-              "description": "**1** request(s)",
+              "description": "**7** request(s)",
               "item": [
+                {
+                  "name": "Login",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('OTP sent', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "  });",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "noauth"
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"phone_number\": \"{{customerPhone}}\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/login",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "login"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/user/login**\n\n- No Authorization\n- **Required:** `phone_number` (E.164 style, e.g. `+919876543210`)\n\n### Behavior\n- If phone is new → creates customer (`type: 4`) in `users`\n- If customer exists → reuses account\n- If phone belongs to partner/admin → **409**\n- Stores hashed OTP in `otp` collection (dev OTP: **123456**, 10 min expiry)\n- **429** if a valid OTP was already sent for this number\n\nNo SMS is sent in the current build."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Verify OTP",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  const t = j?.data?.auth_token;",
+                          "  if (t) {",
+                          "    pm.collectionVariables.set('token', t);",
+                          "    pm.collectionVariables.set('accessToken', t);",
+                          "    pm.collectionVariables.set('customerToken', t);",
+                          "  }",
+                          "  if (j?.data?._id) {",
+                          "    pm.collectionVariables.set('customerId', String(j.data._id));",
+                          "    pm.collectionVariables.set('userId', String(j.data._id));",
+                          "  }",
+                          "  if (j?.data?.phone_number) {",
+                          "    pm.collectionVariables.set('customerPhone', String(j.data.phone_number));",
+                          "  }",
+                          "  pm.test('Login success', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.data?.auth_token).to.be.a('string');",
+                          "  });",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "noauth"
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"phone_number\": \"{{customerPhone}}\",\n  \"otp\": \"{{customerOtp}}\",\n  \"device_token\": \"{{deviceToken}}\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/verify-otp",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "verify-otp"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/user/verify-otp**\n\n- No Authorization\n- **Required:** `phone_number`, `otp` (use `123456` in dev)\n- **Optional:** `device_token` (FCM)\n\n### Behavior\n- Validates OTP → issues JWT on `data.auth_token`\n- Updates `device_token`, `last_signin` on user\n- Deletes used OTP row\n\n**400:** Invalid or expired OTP\n**401:** Customer not found (run Login first)\n**403:** Account blocked"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Google login",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  const t = j?.data?.auth_token;",
+                          "  if (t) {",
+                          "    pm.collectionVariables.set('token', t);",
+                          "    pm.collectionVariables.set('accessToken', t);",
+                          "    pm.collectionVariables.set('customerToken', t);",
+                          "  }",
+                          "  if (j?.data?._id) {",
+                          "    pm.collectionVariables.set('customerId', String(j.data._id));",
+                          "    pm.collectionVariables.set('userId', String(j.data._id));",
+                          "  }",
+                          "  if (j?.data?.email) {",
+                          "    pm.collectionVariables.set('customerEmail', String(j.data.email));",
+                          "  }",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "noauth"
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"id_token\": \"{{googleIdToken}}\",\n  \"device_token\": \"{{deviceToken}}\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/google-login",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "google-login"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/user/google-login**\n\n- No Authorization\n- **Required:** `id_token` (Google Sign-In ID token from the mobile app)\n- **Optional:** `device_token` (FCM)\n\n### Behavior\n- Verifies `id_token` with Google (`GOOGLE_CLIENT_ID_ANDROID`, `GOOGLE_CLIENT_ID_IOS`, optional `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_ID_WEB`)\n- Finds customer by `google_id`, or links existing customer by email, or creates new customer (`registration_type: 2`)\n- Returns JWT on `data.auth_token` (same shape as **Verify OTP**)\n\n**400:** Missing `id_token`\n**401:** Invalid or expired Google token\n**403:** Account blocked\n**409:** Email/Google account conflict with another account type\n**500:** Google client IDs not configured on server"
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Forgot password",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Forgot password success', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.message).to.eql('If an account exists, an OTP has been sent.');",
+                          "  });",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "noauth"
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"email\": \"{{customerEmail}}\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/forgot-password",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "forgot-password"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/user/forgot-password**\n\n- No Authorization\n- **Required:** `email` (registered customer email, `type: 4` only)\n\n### Behavior\n- Sends a 6-digit OTP to the registered email (never sends a password)\n- Always returns a generic success message to prevent email enumeration\n- Invalidates any previous password-reset OTP for the account\n- OTP expires in **5 minutes**; resend cooldown **60 seconds** per account\n\n### Response\n- **200:** `If an account exists, an OTP has been sent.`\n\n**400:** `Email is required.` | `Invalid email format.`\n\nCustomer **sign-in** is normally OTP via **Login** → **Verify OTP**. Use this flow when the customer has an email on file. Set `{{customerEmail}}` via **Update** or collection variables. Requires `EMAIL_USER` / `EMAIL_PASS` on the server.\n\n**Next step:** **Verify forgot password OTP** → **Reset password**."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Verify forgot password OTP",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  if (j?.reset_token) {",
+                          "    pm.collectionVariables.set('passwordResetToken', String(j.reset_token));",
+                          "  }",
+                          "  pm.test('Verify forgot password OTP success', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.verified).to.eql(true);",
+                          "    pm.expect(j.reset_token).to.be.a('string');",
+                          "  });",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "noauth"
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"email\": \"{{customerEmail}}\",\n  \"otp\": \"{{passwordResetOtp}}\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/verify-forgot-password-otp",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "verify-forgot-password-otp"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/user/verify-forgot-password-otp**\n\n- No Authorization\n- **Required:** `email`, `otp` (6-digit code from email)\n\n### Behavior\n- Validates OTP (max **5 attempts**, **5 min** expiry)\n- On success returns a JWT `reset_token` valid for **10 minutes**\n- Saves `reset_token` to `{{passwordResetToken}}`\n\n### Response\n- **200:** `{ verified: true, reset_token: \"...\" }`\n\n**400:** `Invalid OTP.` | `OTP has expired.` | `OTP is required.` | `OTP must be a 6-digit code.`\n**429:** `Maximum OTP verification attempts exceeded. Please request a new OTP.`\n\nSet `{{passwordResetOtp}}` from the email received after **Forgot password**."
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Reset password",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "exec": [
+                          "try {",
+                          "  const j = pm.response.json();",
+                          "  pm.test('Reset password success', function () {",
+                          "    pm.response.to.have.status(200);",
+                          "    pm.expect(j.success).to.eql(true);",
+                          "    pm.expect(j.message).to.eql('Password updated successfully');",
+                          "  });",
+                          "} catch (e) {}"
+                        ],
+                        "type": "text/javascript"
+                      }
+                    }
+                  ],
+                  "request": {
+                    "auth": {
+                      "type": "noauth"
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"reset_token\": \"{{passwordResetToken}}\",\n  \"new_password\": \"Test@5678\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/api/mobile/user/reset-password",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "mobile",
+                        "user",
+                        "reset-password"
+                      ]
+                    },
+                    "description": "**POST /api/mobile/user/reset-password**\n\n- No Authorization\n- **Required:** `reset_token` (from **Verify forgot password OTP**), `new_password`\n\n### Password rules\n- Min 8 chars, uppercase, lowercase, number, special character (`@$!%*?&`)\n\n### Response\n- **200:** `Password updated successfully`\n\n**400:** `Invalid or expired reset token.` | password validation errors"
+                  },
+                  "response": []
+                },
                 {
                   "name": "Auth — userLogin",
                   "request": {
@@ -24940,6 +25669,60 @@
       "type": "string",
       "enabled": true,
       "description": "Dispute Mongo _id (from raise or list)"
+    },
+    {
+      "key": "customerPhone",
+      "value": "+919876543210",
+      "type": "string",
+      "description": "Customer OTP login phone (E.164)"
+    },
+    {
+      "key": "customerOtp",
+      "value": "123456",
+      "type": "string",
+      "description": "Dev OTP — fixed until SMS is enabled"
+    },
+    {
+      "key": "googleIdToken",
+      "value": "",
+      "type": "string",
+      "description": "Google Sign-In ID token from the mobile app (POST /api/mobile/user/google-login)"
+    },
+    {
+      "key": "customerToken",
+      "value": "",
+      "type": "string",
+      "description": "Customer JWT — alias of token after Verify OTP"
+    },
+    {
+      "key": "customerId",
+      "value": "",
+      "type": "string",
+      "description": "Set by User → Verify OTP"
+    },
+    {
+      "key": "customerEmail",
+      "value": "customer.mobile@example.com",
+      "type": "string",
+      "description": "Customer profile email for Update and forgot-password flow"
+    },
+    {
+      "key": "customerName",
+      "value": "Rahul Kumar",
+      "type": "string",
+      "description": "Customer profile name for Update"
+    },
+    {
+      "key": "passwordResetOtp",
+      "value": "",
+      "type": "string",
+      "description": "6-digit OTP from password reset email — set manually after Forgot password"
+    },
+    {
+      "key": "passwordResetToken",
+      "value": "",
+      "type": "string",
+      "description": "JWT reset token — set by Verify forgot password OTP test script"
     }
   ]
 }

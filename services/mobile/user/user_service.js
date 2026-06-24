@@ -10,7 +10,7 @@ const { handleImageUpload } = require('../../../helper/image_uploader');
 const { getUploadType } = require('../../../enum/upload_type_enum');
 const { normalizeUserPhone, normalizeUserEmail, checkUserContactUniqueness } = require('../../../utils/user_contact_uniqueness');
 const { escapeRegExp } = require('../../../utils/string_helpers');
-const { verifyGoogleIdToken } = require('../../../helper/google_auth');
+const { verifyGoogleIdToken, GOOGLE_APP_USER } = require('../../../helper/google_auth');
 const { USER_TYPE_CUSTOMER } = require('../../../constants/user_types');
 const { fail, okWithMessage } = require('../../../utils/mobile_service_result');
 
@@ -139,7 +139,7 @@ const verifyOtpAndLogin = async ({ phone_number, device_token, validOtp }) => {
 const googleLogin = async ({ id_token, device_token }) => {
   let googleProfile;
   try {
-    googleProfile = await verifyGoogleIdToken(id_token);
+    googleProfile = await verifyGoogleIdToken(id_token, { app: GOOGLE_APP_USER });
   } catch (err) {
     console.error('googleLogin token verification', err.message);
     if (String(err.message || '').includes('not configured')) {

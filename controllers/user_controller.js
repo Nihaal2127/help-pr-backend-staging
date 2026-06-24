@@ -1986,12 +1986,7 @@ const update = async (req, res) => {
       const finalName = updateData.name !== undefined ? updateData.name : user.name;
       const finalEmail = updateData.email !== undefined ? updateData.email : user.email;
       const finalPhoneNumber = updateData.phone_number !== undefined ? updateData.phone_number : user.phone_number;
-      const finalAddress = updateData.address !== undefined ? updateData.address : user.address;
-      const finalStateId = updateData.state_id !== undefined ? updateData.state_id : user.state_id;
-      const finalCityId = updateData.city_id !== undefined ? updateData.city_id : user.city_id;
-      const finalPincode = updateData.pincode !== undefined ? updateData.pincode : user.pincode;
       const finalProfileUrl = updateData.profile_url !== undefined ? updateData.profile_url : user.profile_url;
-      const skipPrimaryLocationRequiredChecks = didAddNewAddress;
 
       if (!finalName || String(finalName).trim() === '') {
         return res.status(400).json({
@@ -2030,48 +2025,7 @@ const update = async (req, res) => {
           message: 'Invalid phone number format.'
         });
       }
-      if (!skipPrimaryLocationRequiredChecks && (!finalStateId || String(finalStateId).trim() === '')) {
-        return res.status(400).json({
-          success: false,
-          status: 400,
-          message: 'State is required.'
-        });
-      }
-      if (
-        !skipPrimaryLocationRequiredChecks &&
-        !mongoose.Types.ObjectId.isValid(finalStateId)
-      ) {
-        return res.status(400).json({
-          success: false,
-          status: 400,
-          message: 'Invalid state id.'
-        });
-      }
-      if (!skipPrimaryLocationRequiredChecks && (!finalCityId || String(finalCityId).trim() === '')) {
-        return res.status(400).json({
-          success: false,
-          status: 400,
-          message: 'City is required.'
-        });
-      }
-      if (
-        !skipPrimaryLocationRequiredChecks &&
-        !mongoose.Types.ObjectId.isValid(finalCityId)
-      ) {
-        return res.status(400).json({
-          success: false,
-          status: 400,
-          message: 'Invalid city id.'
-        });
-      }
-      if (!skipPrimaryLocationRequiredChecks && (!finalPincode || String(finalPincode).trim() === '')) {
-        return res.status(400).json({
-          success: false,
-          status: 400,
-          message: 'Pincode is required.'
-        });
-      }
-      if (!skipPrimaryLocationRequiredChecks && (!finalProfileUrl || String(finalProfileUrl).trim() === '')) {
+      if (!didAddNewAddress && (!finalProfileUrl || String(finalProfileUrl).trim() === '')) {
         return res.status(400).json({
           success: false,
           status: 400,

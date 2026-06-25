@@ -1314,6 +1314,12 @@ const partnerRegisterMiddleware = async (req, res, next) => {
       success: false,
       status: 500,
       message: 'Internal server error.',
+      debug: {
+        step: 'middleware_duplicate_check',
+        error: err.message,
+        name: err.name,
+        ...(err.code !== undefined ? { code: err.code } : {}),
+      },
     });
   }
 

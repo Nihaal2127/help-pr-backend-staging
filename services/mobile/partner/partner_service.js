@@ -792,6 +792,13 @@ const finalizePartnerLogin = async (user, device_token) => {
   return okWithData(data);
 };
 
+const tagRegisterError = (step, err) => {
+  if (err && typeof err === 'object') {
+    err.registerStep = step;
+  }
+  return err;
+};
+
 const registerPartner = async ({ name, email, phone_number, password, date_of_birth }) => {
   const normalizedEmail = normalizeUserEmail(email);
   const normalizedPhone = normalizeUserPhone(phone_number);
@@ -821,7 +828,7 @@ const registerPartner = async ({ name, email, phone_number, password, date_of_bi
     console.log('[partner.register] service: user_id =', user_id);
   } catch (err) {
     console.error('[partner.register] service: getNewId failed', err.message);
-    throw err;
+    throw tagRegisterError('getNewId', err);
   }
 
   const _id = new mongoose.Types.ObjectId();
@@ -853,7 +860,7 @@ const registerPartner = async ({ name, email, phone_number, password, date_of_bi
     console.log('[partner.register] service: auth token generated');
   } catch (err) {
     console.error('[partner.register] service: generateAuthToken failed', err.message);
-    throw err;
+    throw tagRegisterError('generateAuthToken', err);
   }
 
   let savedUser;
@@ -867,7 +874,7 @@ const registerPartner = async ({ name, email, phone_number, password, date_of_bi
       code: err.code,
       name: err.name,
     });
-    throw err;
+    throw tagRegisterError('user_save', err);
   }
 
   try {
@@ -880,7 +887,7 @@ const registerPartner = async ({ name, email, phone_number, password, date_of_bi
       code: err.code,
       user_id: savedUser._id,
     });
-    throw err;
+    throw tagRegisterError('onboarding', err);
   }
 
   const data = savedUser.toObject();

@@ -13,27 +13,105 @@ const extractNumber = (str) => {
     return match ? parseInt(match[0], 10) : null;
 };
 
-const nextIdFromRecords = (records, field, fallback = 1000) => {
+const USER_ID_PREFIX_BY_TYPE = {
+    1: 'A',
+    2: 'P',
+    3: 'E',
+    4: 'U',
+    5: 'SA',
+    6: 'ST',
+};
+
+const QUERY_MAX_TIME_MS = 8000;
+
+const maxNumericSuffixFromRows = (rows, field, fallback = 1000) => {
     let maxNum = fallback;
-    for (const row of records) {
+    for (const row of rows) {
         const n = extractNumber(row?.[field]);
         if (n !== null && n > maxNum) {
             maxNum = n;
         }
     }
-    return maxNum + 1;
+    return maxNum;
+};
+
+const maxNumericSuffixFromFind = async (filter, field) => {
+    const rows = await User.find(filter)
+        .select(field)
+        .lean()
+        .maxTimeMS(QUERY_MAX_TIME_MS);
+    return maxNumericSuffixFromRows(rows, field);
+};
+
+const aggregateMaxNumericSuffix = async (match, field) => {
+    const pipeline = [
+        { $match: match },
+        {
+            $project: {
+                num: {
+                    $convert: {
+                        input: {
+                            $getField: {
+                                field: 'match',
+                                input: {
+                                    $regexFind: {
+                                        input: `$${field}`,
+                                        regex: /\d+/,
+                                    },
+                                },
+                            },
+                        },
+                        to: 'int',
+                        onError: null,
+                        onNull: null,
+                    },
+                },
+            },
+        },
+        { $match: { num: { $ne: null } } },
+        { $group: { _id: null, max: { $max: '$num' } } },
+    ];
+
+    const result = await User.aggregate(pipeline).option({ maxTimeMS: QUERY_MAX_TIME_MS });
+    return result[0]?.max ?? 1000;
 };
 
 const getNewRecordId = async (type) => {
+    const resolveMax = async (match, field) => {
+        try {
+            return await aggregateMaxNumericSuffix(match, field);
+        } catch (err) {
+            console.error('getNewRecordId aggregation failed, using find fallback:', err.message);
+            return await maxNumericSuffixFromFind(match, field);
+        }
+    };
+
     if (type === 0) {
-        const records = await User.find().select('registration_id').lean();
-        if (records.length === 0) return 1001;
-        return nextIdFromRecords(records, 'registration_id', 1000);
+        const maxNum = await resolveMax(
+            { registration_id: { $type: 'string', $regex: /^R\d+/i } },
+            'registration_id'
+        );
+        return maxNum + 1;
     }
 
-    const records = await User.find({ type }).select('user_id').lean();
-    if (records.length === 0) return 1001;
-    return nextIdFromRecords(records, 'user_id', 1000);
+    const prefix = USER_ID_PREFIX_BY_TYPE[type];
+    if (!prefix) {
+        const maxNum = await resolveMax(
+            { registration_id: { $type: 'string', $regex: /^R\d+/i } },
+            'registration_id'
+        );
+        return maxNum + 1;
+    }
+
+    const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const maxNum = await resolveMax(
+        {
+            type,
+            user_id: { $type: 'string', $regex: new RegExp(`^${escapedPrefix}\\d+`, 'i') },
+        },
+        'user_id'
+    );
+    return maxNum + 1;
 };
 const getNewId = async (type) => {
     const newId = await getNewRecordId(type);
@@ -55,17 +133,19 @@ const getNewId = async (type) => {
 
 };
 const getVerificationId = async () => {
-
-    const records = await User.find({ type: 2, verification_status: 2 })
-        .select('verification_id')
-        .lean();
-
-    if (records.length === 0) {
-        return 'V1001';
+    const match = {
+        type: 2,
+        verification_status: 2,
+        verification_id: { $type: 'string', $regex: /^V\d+/i },
+    };
+    let maxNum = 1000;
+    try {
+        maxNum = await aggregateMaxNumericSuffix(match, 'verification_id');
+    } catch (err) {
+        console.error('getVerificationId aggregation failed, using find fallback:', err.message);
+        maxNum = await maxNumericSuffixFromFind(match, 'verification_id');
     }
-
-    const incId = nextIdFromRecords(records, 'verification_id', 1000);
-    return 'V' + incId;
+    return 'V' + (maxNum + 1);
 };
 const getCategoryId = async () => {
 

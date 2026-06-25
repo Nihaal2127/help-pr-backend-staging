@@ -1218,7 +1218,8 @@ const validatePersonName = (name, res) => {
 };
 
 const partnerRegisterMiddleware = async (req, res, next) => {
-  const { name, email, phone_number, password, date_of_birth } = req.body;
+  try {
+    const { name, email, phone_number, password, date_of_birth } = req.body;
 
   if (!name || String(name).trim() === '') {
     return res.status(400).json({
@@ -1324,6 +1325,24 @@ const partnerRegisterMiddleware = async (req, res, next) => {
   }
 
   next();
+  } catch (err) {
+    console.error('[partner.register] middleware: unhandled error', {
+      message: err.message,
+      code: err.code,
+      stack: err.stack,
+    });
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Internal server error.',
+      debug: {
+        step: 'middleware_unhandled',
+        error: err.message,
+        name: err.name,
+        ...(err.code !== undefined ? { code: err.code } : {}),
+      },
+    });
+  }
 };
 
 const partnerLoginMiddleware = (req, res, next) => {

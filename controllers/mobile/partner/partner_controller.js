@@ -15,7 +15,27 @@ const {
   sendServiceError,
 } = require('../../../utils/mobile_controller_helpers');
 
+const logPartnerRegisterError = (step, error) => {
+  console.error('[partner.register] FAILED at step:', step);
+  console.error('[partner.register] error.message:', error?.message);
+  console.error('[partner.register] error.name:', error?.name);
+  if (error?.code !== undefined) {
+    console.error('[partner.register] error.code:', error.code);
+  }
+  if (error?.stack) {
+    console.error('[partner.register] error.stack:', error.stack);
+  }
+};
+
 const register = async (req, res) => {
+  const maskedEmail = String(req.body?.email || '').replace(/(.{2}).*(@.*)/, '$1***$2');
+  console.log('[partner.register] request received', {
+    email: maskedEmail,
+    phone_number: req.body?.phone_number ? '***' + String(req.body.phone_number).slice(-4) : null,
+    has_password: Boolean(req.body?.password),
+    date_of_birth: req.body?.date_of_birth,
+  });
+
   try {
     const { name, email, phone_number, password, date_of_birth } = req.body;
     const { data } = await registerPartner({
@@ -26,6 +46,8 @@ const register = async (req, res) => {
       date_of_birth,
     });
 
+    console.log('[partner.register] success', { user_id: data?.user_id, _id: data?._id });
+
     return res.status(200).json({
       success: true,
       status: 200,
@@ -33,7 +55,7 @@ const register = async (req, res) => {
       data,
     });
   } catch (error) {
-    console.error('mobile partner register', error.message);
+    logPartnerRegisterError('controller', error);
     const status = Number(error.status) || 500;
     return res.status(status).json({
       success: false,

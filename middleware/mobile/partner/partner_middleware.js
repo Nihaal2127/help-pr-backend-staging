@@ -1287,19 +1287,29 @@ const partnerRegisterMiddleware = async (req, res, next) => {
   }
 
   try {
+    console.log('[partner.register] middleware: duplicate check starting', {
+      email: normalizedEmail,
+      phone_number: normalizedPhone,
+    });
     const uniqueness = await checkUserContactUniqueness({
       email: normalizedEmail,
       phone_number: normalizedPhone,
     });
     if (!uniqueness.ok) {
+      console.log('[partner.register] middleware: duplicate found', { message: uniqueness.message });
       return res.status(409).json({
         success: false,
         status: 409,
         message: uniqueness.message,
       });
     }
+    console.log('[partner.register] middleware: validation passed, calling register handler');
   } catch (err) {
-    console.error('partnerRegisterMiddleware duplicate check', err.message);
+    console.error('[partner.register] middleware: duplicate check threw', {
+      message: err.message,
+      code: err.code,
+      stack: err.stack,
+    });
     return res.status(500).json({
       success: false,
       status: 500,

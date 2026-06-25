@@ -714,17 +714,25 @@ async function replacePartnerBankAccountsForPartner(partnerId, normalizedAccount
 }
 
 const assignPartnerOnboarding = async (savedUser) => {
+  console.log('[partner.register] onboarding: creating notification settings', {
+    user_id: savedUser._id,
+  });
   await notificationSetting.create({ user_id: savedUser._id });
+  console.log('[partner.register] onboarding: notification settings created');
 
+  console.log('[partner.register] onboarding: looking up basic subscription plan');
   const basicPlan = await SubscriptionPlan.findOne({
     plan_name: DEFAULT_PARTNER_PLAN_NAME,
     is_active: true,
     deleted_at: null,
   });
   if (!basicPlan) {
+    console.error('[partner.register] onboarding: basic plan not found in DB');
     throw new Error('Default subscription plan "basic" is not configured.');
   }
+  console.log('[partner.register] onboarding: basic plan found', { plan_id: basicPlan._id });
 
+  console.log('[partner.register] onboarding: creating partner subscription');
   await PartnerSubscription.create({
     partner_id: savedUser._id,
     subscription_plan_id: basicPlan._id,
@@ -733,6 +741,7 @@ const assignPartnerOnboarding = async (savedUser) => {
     status: 'active',
     notes: 'Auto-assigned on mobile registration',
   });
+  console.log('[partner.register] onboarding: partner subscription created');
 };
 
 const buildPartnerLoginData = async (user) => {
@@ -786,19 +795,37 @@ const finalizePartnerLogin = async (user, device_token) => {
 const registerPartner = async ({ name, email, phone_number, password, date_of_birth }) => {
   const normalizedEmail = normalizeUserEmail(email);
   const normalizedPhone = normalizeUserPhone(phone_number);
+  console.log('[partner.register] service: checking email/phone uniqueness');
+
   const uniqueness = await checkUserContactUniqueness({
     email: normalizedEmail,
     phone_number: normalizedPhone,
   });
   if (!uniqueness.ok) {
+    console.log('[partner.register] service: uniqueness conflict', { message: uniqueness.message });
     const err = new Error(uniqueness.message);
     err.status = 409;
     throw err;
   }
+  console.log('[partner.register] service: uniqueness check passed');
 
-  const registration_id = await getNewId(0);
-  const user_id = await getNewId(USER_TYPE_PARTNER);
+  let registration_id;
+  let user_id;
+  try {
+    console.log('[partner.register] service: generating registration_id');
+    registration_id = await getNewId(0);
+    console.log('[partner.register] service: registration_id =', registration_id);
+
+    console.log('[partner.register] service: generating user_id');
+    user_id = await getNewId(USER_TYPE_PARTNER);
+    console.log('[partner.register] service: user_id =', user_id);
+  } catch (err) {
+    console.error('[partner.register] service: getNewId failed', err.message);
+    throw err;
+  }
+
   const _id = new mongoose.Types.ObjectId();
+  console.log('[partner.register] service: building user document', { _id, registration_id, user_id });
 
   const newUser = new User({
     _id,
@@ -816,10 +843,45 @@ const registerPartner = async ({ name, email, phone_number, password, date_of_bi
   });
 
   newUser.password = password;
-  newUser.generateAuthToken();
-  const savedUser = await newUser.save();
 
-  await assignPartnerOnboarding(savedUser);
+  try {
+    console.log('[partner.register] service: generating auth token');
+    if (!process.env.JWT_SECRET) {
+      console.error('[partner.register] service: JWT_SECRET is missing');
+    }
+    newUser.generateAuthToken();
+    console.log('[partner.register] service: auth token generated');
+  } catch (err) {
+    console.error('[partner.register] service: generateAuthToken failed', err.message);
+    throw err;
+  }
+
+  let savedUser;
+  try {
+    console.log('[partner.register] service: saving user to database');
+    savedUser = await newUser.save();
+    console.log('[partner.register] service: user saved', { _id: savedUser._id, user_id: savedUser.user_id });
+  } catch (err) {
+    console.error('[partner.register] service: user save failed', {
+      message: err.message,
+      code: err.code,
+      name: err.name,
+    });
+    throw err;
+  }
+
+  try {
+    console.log('[partner.register] service: starting onboarding');
+    await assignPartnerOnboarding(savedUser);
+    console.log('[partner.register] service: onboarding completed');
+  } catch (err) {
+    console.error('[partner.register] service: onboarding failed', {
+      message: err.message,
+      code: err.code,
+      user_id: savedUser._id,
+    });
+    throw err;
+  }
 
   const data = savedUser.toObject();
   delete data.password;

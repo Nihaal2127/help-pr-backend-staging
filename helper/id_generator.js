@@ -8,26 +8,32 @@ const Ticket = require('../models/ticket');
 const Appointment = require('../models/appointment');
 
 const extractNumber = (str) => {
-    const match = str.match(/\d+/); // Match one or more digits
-    return match ? parseInt(match[0], 10) : null; // Convert to a number
+    if (str === undefined || str === null || str === '') return null;
+    const match = String(str).match(/\d+/);
+    return match ? parseInt(match[0], 10) : null;
+};
+
+const nextIdFromRecords = (records, field, fallback = 1000) => {
+    let maxNum = fallback;
+    for (const row of records) {
+        const n = extractNumber(row?.[field]);
+        if (n !== null && n > maxNum) {
+            maxNum = n;
+        }
+    }
+    return maxNum + 1;
 };
 
 const getNewRecordId = async (type) => {
-    let records = [];
     if (type === 0) {
-        records = await User.find().sort({ _id: -1 });
-    } else {
-        records = await User.find({ type: type }).sort({ _id: -1 });
+        const records = await User.find().select('registration_id').lean();
+        if (records.length === 0) return 1001;
+        return nextIdFromRecords(records, 'registration_id', 1000);
     }
-    if (records.length > 0) {
-        const lastRecord = records[0];
-        const registration_id = lastRecord.registration_id;
-        const result = extractNumber(registration_id);
-        const incId = result + 1;
-        return incId;
-    } else {
-        return 1001;
-    }
+
+    const records = await User.find({ type }).select('user_id').lean();
+    if (records.length === 0) return 1001;
+    return nextIdFromRecords(records, 'user_id', 1000);
 };
 const getNewId = async (type) => {
     const newId = await getNewRecordId(type);
@@ -50,17 +56,16 @@ const getNewId = async (type) => {
 };
 const getVerificationId = async () => {
 
-    let records = await User.find({type:2, verification_status: 2 }).sort({ _id: -1 });
+    const records = await User.find({ type: 2, verification_status: 2 })
+        .select('verification_id')
+        .lean();
 
-    if (records.length > 0) {
-        const lastRecord = records[0];
-        const registration_id = lastRecord.verification_id;
-        const result = extractNumber(registration_id);
-        const incId = result + 1;
-        return 'V' + incId;
-    } else {
+    if (records.length === 0) {
         return 'V1001';
     }
+
+    const incId = nextIdFromRecords(records, 'verification_id', 1000);
+    return 'V' + incId;
 };
 const getCategoryId = async () => {
 

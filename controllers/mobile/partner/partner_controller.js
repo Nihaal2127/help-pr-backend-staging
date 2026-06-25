@@ -57,11 +57,20 @@ const register = async (req, res) => {
   } catch (error) {
     logPartnerRegisterError('controller', error);
     const status = Number(error.status) || 500;
-    return res.status(status).json({
+    const payload = {
       success: false,
       status,
       message: status === 409 ? error.message : 'Internal server error.',
-    });
+    };
+    if (status === 500) {
+      payload.debug = {
+        step: error.registerStep || 'unknown',
+        error: error.message,
+        name: error.name,
+        ...(error.code !== undefined ? { code: error.code } : {}),
+      };
+    }
+    return res.status(status).json(payload);
   }
 };
 

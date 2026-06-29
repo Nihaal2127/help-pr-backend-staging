@@ -1,7 +1,6 @@
 const mongoose = require("mongoose");
 const Dispute = require("../models/dispute");
 const Order = require("../models/order");
-const Chat = require("../src/modules/chat/models/chat.model");
 const { getDisputeId } = require("../helper/id_generator");
 const { ORDER_STATUS_COMPLETED } = require("../enum/order_status_enum");
 const {
@@ -16,8 +15,10 @@ const {
   USER_TYPE_CUSTOMER,
   USER_TYPE_EMPLOYEE,
 } = require("../constants/user_types");
-const { createDisputeChat } = require("../src/modules/chat/services/chatProvisioning.service");
-const { createSystemMessage } = require("../src/modules/chat/services/message.service");
+const {
+  provisionDisputeChatForRecord,
+  applyDisputeStatusChatEffects,
+} = require("./chat_integration");
 const { safeNotifyDisputeRaised } = require("../src/modules/notifications/services/domainHooks");
 const { applyPagination } = require("../utils/pagination");
 const { resolveFranchiseListScope, assertFranchiseRecordAccess } = require("../utils/franchise_scope_access");
@@ -136,27 +137,22 @@ const raiseDisputeForCustomer = async (customerId, body) => {
     throw error;
   }
 
-  const chat = await createDisputeChat({
+  const chatResult = await provisionDisputeChatForRecord({
     dispute,
     order,
-    systemMessage: `Dispute ${unique_id} opened.`,
+    reason,
+    description,
+    unique_id,
   });
 
-  if (!chat) {
+  if (!chatResult.ok) {
     await Dispute.deleteOne({ _id: dispute._id });
-    return fail(500, "Failed to create dispute chat. Please try again.");
+    return fail(500, chatResult.message || "Failed to create dispute chat. Please try again.");
   }
 
+  const chat = chatResult.chat;
   dispute.chat_id = chat._id;
   await dispute.save();
-
-  const intro = [reason, description]
-    .map((value) => (value ? String(value).trim() : ""))
-    .filter(Boolean)
-    .join("\n");
-  if (intro) {
-    await createSystemMessage(chat._id, `Customer dispute reason:\n${intro}`);
-  }
 
   void safeNotifyDisputeRaised({
     dispute,
@@ -309,14 +305,9 @@ const updateDisputeStatus = async (req, disputeId, body) => {
   if ([DISPUTE_STATUS_RESOLVED, DISPUTE_STATUS_CLOSED].includes(nextStatus)) {
     dispute.resolved_at = new Date();
     dispute.resolved_by_id = access.callerId;
-
-    if (dispute.chat_id) {
-      await Chat.updateOne({ _id: dispute.chat_id }, { $set: { status: "closed" } });
-      await createSystemMessage(dispute.chat_id, `Dispute marked as ${nextStatus}.`);
-    }
-  } else if (nextStatus === DISPUTE_STATUS_IN_REVIEW && dispute.chat_id) {
-    await createSystemMessage(dispute.chat_id, "Dispute is now in review.");
   }
+
+  await applyDisputeStatusChatEffects({ dispute, nextStatus });
 
   await dispute.save();
 

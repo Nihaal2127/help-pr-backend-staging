@@ -80,13 +80,21 @@ server.js        App entry (local server + Lambda handler)
 
 ## Environment variables
 
-Typical variables (set in `.env`):
+Typical variables (set in `.env` or Lambda console):
 
 - `MONGO_URI` — MongoDB connection string
 - `JWT_SECRET` — JWT signing secret
 - `PORT` — Local port (default `5001`)
 - `MOBILE_APP_DEEP_LINK_BASE` — Base URL for post share deep links (default `helppr://post`)
 - AWS / S3, Razorpay, Firebase, mail — per integration
+
+**Chat Service on VPS** (when using remote chat):
+
+- `CHAT_SERVICE_ENABLED` — `true` to provision chats via VPS HTTP API
+- `CHAT_SERVICE_BASE_URL` — e.g. `http://13.201.79.72:5001`
+- `CHAT_SERVICE_INTERNAL_API_KEY` — shared secret with VPS (header `X-Internal-Api-Key`)
+
+Deploy steps: **[docs/LAMBDA_VPS_DEPLOY.md](docs/LAMBDA_VPS_DEPLOY.md)**
 
 ## Scripts
 

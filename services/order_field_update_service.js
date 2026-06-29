@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const { fieldLabel } = require("../utils/field_labels");
+const { normalizeAdminDescription } = require("../utils/admin_description_access");
 const Order = require("../models/order");
 const OrderService = require("../models/order_services");
 const User = require("../models/user");
@@ -150,6 +151,10 @@ const applyOrderLevelFields = async (order, body) => {
 
   if (body.customer_description !== undefined) {
     order.customer_description = String(body.customer_description ?? "").trim();
+  }
+
+  if (body.admin_description !== undefined) {
+    order.admin_description = normalizeAdminDescription(body.admin_description);
   }
 
   if (body.from_date !== undefined) {

@@ -32,6 +32,10 @@ const {
   getListCollectionNames,
 } = require("../utils/list_aggregation");
 const { fieldLabel } = require("../utils/field_labels");
+const {
+  normalizeAdminDescription,
+  formatRecordsForCaller,
+} = require("../utils/admin_description_access");
 
 const QUOTE_LIST_SEARCH_FIELDS = [
   "quote_sequence_id",
@@ -276,6 +280,10 @@ const create = async (req, res) => {
         typeof body.quote_description === "string"
           ? body.quote_description.trim()
           : "",
+      admin_description:
+        body.admin_description !== undefined
+          ? normalizeAdminDescription(body.admin_description)
+          : null,
     });
 
     applyPricingToQuote(quote, pricing);
@@ -618,7 +626,7 @@ const getCustomerQuotes = async (req, res) => {
       totalItems: totalCount,
       totalPages,
       currentPage,
-      records: formatQuoteRecords(quotes),
+      records: formatRecordsForCaller(formatQuoteRecords(quotes), req),
     });
   } catch (err) {
     console.error("Error fetching customer quotes:", err);
@@ -646,6 +654,7 @@ const QUOTE_FIELD_UPDATE_KEYS = [
   "work_end_time",
   "created_by_id",
   "quote_description",
+  "admin_description",
 ];
 
 const applyQuoteFieldUpdates = (quote, body) => {
@@ -669,6 +678,8 @@ const applyQuoteFieldUpdates = (quote, body) => {
     } else if (key === "quote_description") {
       quote.quote_description =
         typeof body[key] === "string" ? body[key].trim() : "";
+    } else if (key === "admin_description") {
+      quote.admin_description = normalizeAdminDescription(body[key]);
     } else {
       quote[key] = body[key];
     }

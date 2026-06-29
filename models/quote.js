@@ -64,6 +64,8 @@ var quoteSchema = new schema(
     cancellation_reason: { type: String, default: "", trim: true },
     rejection_reason: { type: String, default: "", trim: true },
     quote_description: { type: String, default: "", trim: true },
+    /** Internal admin-only notes; optional. */
+    admin_description: { type: String, default: null, trim: true },
     history: { type: [quoteHistoryEventSchema], default: [] },
     created_at: { type: Date, default: Date.now },
     updated_at: { type: Date, default: Date.now },

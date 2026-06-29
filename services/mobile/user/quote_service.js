@@ -51,6 +51,14 @@ const {
 const { syncOrderPaymentStatus } = require('../../order_payment_status_service');
 const { syncAllPartnerOrderPaymentsForOrder } = require('../../partner_wallet_order_service');
 const { formatOrderForApi } = require('../../../utils/order_api_format');
+const { stripAdminDescriptionForPublicApi } = require('../../../utils/admin_description_access');
+
+const formatMobileQuoteForApi = (quote) =>
+  stripAdminDescriptionForPublicApi(formatQuoteForApi(quote));
+const formatMobileQuoteRecords = (records) =>
+  formatQuoteRecords(records).map(stripAdminDescriptionForPublicApi);
+const formatMobileOrderForApi = (order) =>
+  stripAdminDescriptionForPublicApi(formatOrderForApi(order));
 const {
   loadCustomerProfile,
   initiateOnlineOrderPayment,
@@ -231,7 +239,7 @@ const createCustomerQuote = async (customerId, body) => {
 
     return ok(200, {
       message: 'Quote created successfully.',
-      data: formatQuoteForApi(populated),
+      data: formatMobileQuoteForApi(populated),
     });
   } catch (err) {
     console.error('mobile user create quote', err.message);
@@ -276,7 +284,7 @@ const listCustomerQuotes = async (customerId, query) => {
         totalPages,
         currentPage,
         limit,
-        records: formatQuoteRecords(data),
+        records: formatMobileQuoteRecords(data),
       },
     });
   } catch (err) {
@@ -306,7 +314,7 @@ const getCustomerQuoteById = async (customerId, quoteId) => {
 
     return ok(200, {
       message: 'Quote fetched successfully.',
-      data: formatQuoteForApi(quote),
+      data: formatMobileQuoteForApi(quote),
     });
   } catch (err) {
     console.error('mobile user get quote', err.message);
@@ -421,7 +429,7 @@ const updateCustomerQuote = async (customerId, quoteId, body) => {
 
     return ok(200, {
       message: 'Quote updated successfully.',
-      data: formatQuoteForApi(populated),
+      data: formatMobileQuoteForApi(populated),
     });
   } catch (err) {
     console.error('mobile user update quote', err.message);
@@ -497,7 +505,7 @@ const cancelCustomerQuote = async (customerId, quoteId, body) => {
 
     return ok(200, {
       message: 'Quote cancelled successfully.',
-      data: formatQuoteForApi(populated),
+      data: formatMobileQuoteForApi(populated),
     });
   } catch (err) {
     console.error('mobile user cancel quote', err.message);
@@ -597,8 +605,8 @@ const convertCustomerQuoteToOrder = async (customerId, quoteId, body) => {
             ? 'Quote converted to order and payment completed successfully.'
             : 'Quote converted to order. Complete payment to confirm deposit.',
         data: {
-          quote: formatQuoteForApi(linkedQuote),
-          order: formatOrderForApi(latestOrder),
+          quote: formatMobileQuoteForApi(linkedQuote),
+          order: formatMobileOrderForApi(latestOrder),
           payment: {
             ...paymentRow,
             payment_url: onlineResult.payment_url || null,
@@ -649,8 +657,8 @@ const convertCustomerQuoteToOrder = async (customerId, quoteId, body) => {
     return ok(200, {
       message: 'Quote converted to order successfully.',
       data: {
-        quote: formatQuoteForApi(linkedQuote),
-        order: formatOrderForApi(created.order),
+        quote: formatMobileQuoteForApi(linkedQuote),
+        order: formatMobileOrderForApi(created.order),
         payment: orderPayment.toObject(),
         deposit: {
           minimum_deposit_amount: minimumDeposit,

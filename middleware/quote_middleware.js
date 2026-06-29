@@ -9,6 +9,10 @@ const { checkObjectIdExists } = require("../validator/id_validator");
 const { QUOTE_STATUSES, normalizeQuoteStatus } = require("../enum/quote_status_enum");
 const { resolveTotalServiceCharge } = require("../utils/order_pricing");
 const { FIELD_LABELS, fieldLabel } = require("../utils/field_labels");
+const {
+  validateAdminDescriptionValue,
+} = require("../utils/admin_description_access");
+const { assertCanEditQuoteAdminDescription } = require("../utils/quote_access");
 
 const USER_TYPE_ADMIN = 1;
 const USER_TYPE_PARTNER = 2;
@@ -126,6 +130,7 @@ const validateCommonFields = async (body, { partial } = { partial: false }) => {
     work_start_time,
     work_end_time,
     quote_description,
+    admin_description,
   } = body;
 
   if (!partial || user_id !== undefined) {
@@ -254,6 +259,9 @@ const validateCommonFields = async (body, { partial } = { partial: false }) => {
     }
   }
 
+  const adminDescValidation = validateAdminDescriptionValue(admin_description);
+  if (!adminDescValidation.ok) return adminDescValidation;
+
   return { ok: true };
 };
 
@@ -267,6 +275,20 @@ const createQuoteMiddleware = async (req, res, next) => {
       message: result.message,
     });
   }
+
+  if (req.body.admin_description !== undefined) {
+    const access = await assertCanEditQuoteAdminDescription(req, {
+      franchise_id: req.body.franchise_id,
+    });
+    if (!access.ok) {
+      return res.status(access.status).json({
+        success: false,
+        status: access.status,
+        message: access.message,
+      });
+    }
+  }
+
   next();
 };
 
@@ -290,6 +312,7 @@ const updateQuoteMiddleware = async (req, res, next) => {
     "work_end_time",
     "created_by_id",
     "quote_description",
+    "admin_description",
     "status",
     "rejection_reason",
     "cancellation_reason",
@@ -343,8 +366,9 @@ const updateQuoteMiddleware = async (req, res, next) => {
     partialBody.from_date !== undefined ||
     partialBody.to_date !== undefined;
   const needsDescriptionAuth = partialBody.quote_description !== undefined;
+  const needsAdminDescriptionAuth = partialBody.admin_description !== undefined;
 
-  if (needsCrossValidation || needsDescriptionAuth) {
+  if (needsCrossValidation || needsDescriptionAuth || needsAdminDescriptionAuth) {
     const quoteId = req.params.id;
     if (!mongoose.Types.ObjectId.isValid(quoteId)) {
       return res.status(409).json({
@@ -371,6 +395,17 @@ const updateQuoteMiddleware = async (req, res, next) => {
           status: 403,
           message:
             "Only the customer, the assigned employee, the franchise admin, super admin, or staff can edit the quote description.",
+        });
+      }
+    }
+
+    if (needsAdminDescriptionAuth) {
+      const access = await assertCanEditQuoteAdminDescription(req, existing);
+      if (!access.ok) {
+        return res.status(access.status).json({
+          success: false,
+          status: access.status,
+          message: access.message,
         });
       }
     }

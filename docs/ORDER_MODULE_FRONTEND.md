@@ -85,6 +85,7 @@ Order (1) ──has──▶ service_items[] ──▶ OrderService (1 per order
 | `order_date` | Fitting / primary date — responses: **`YYYY-MM-DD`** |
 | `customer_description`, `rejection_reason` | Text (legacy / extra customer notes) |
 | **`order_description`** | Free-text summary of the job — same role as **`quote.quote_description`** on quotes |
+| **`admin_description`** | Optional internal admin notes (`null` when unset). Editable by super admin, staff, franchise admin, or franchise employee (scoped). Hidden from customer/partner mobile APIs. |
 | **`quote_id`** | Reference to **`quote`** when the order was created from a quote (**`convertToOrder`** sets this); populated in **`GET /api/order/get/:id`** as **`quote_info`** |
 
 ### Money and payment (order-level)
@@ -319,7 +320,7 @@ Top-level fields validated by **`createOrderMiddleware`** (in addition to **`ser
 
 **Optional pricing mirrors** (compared to server; server wins on mismatch): `commission_amount`, `tax_amount`, `sub_total`, `total_price`, `minimum_deposit_amount`, `discount_amount`.
 
-**Optional order extensions**: `partner_id`, `employee_id`, `franchise_id`, `address_id`, `from_date`, `to_date`, `work_*`, `customer_description`, **`order_description`**, **`quote_id`**, `payment_schedule_type`, `customer_payment_method`, `partner_earning`, `admin_earning`.
+**Optional order extensions**: `partner_id`, `employee_id`, `franchise_id`, `address_id`, `from_date`, `to_date`, `work_*`, `customer_description`, **`order_description`**, **`admin_description`**, **`quote_id`**, `payment_schedule_type`, `customer_payment_method`, `partner_earning`, `admin_earning`.
 
 **Create response** may include `record.pricing` with `pricing_mismatch`, `saved`, and `mismatches`.
 
@@ -392,7 +393,7 @@ Standalone **`/api/order-additional-charges`** and **`/api/order-payments`** rou
 | `city_id`, `category_id`, `service_id` | Catalog references |
 | `address`, `address_id` | Display / linked address |
 | `order_date` | Order date |
-| `order_description`, `customer_description` | Text fields |
+| `order_description`, `customer_description`, `admin_description` | Text fields (`admin_description`: admin roles only; send `null` to clear) |
 | `from_date`, `to_date`, `work_hours_per_day`, `total_work_hours`, `work_start_time`, `work_end_time` | Schedule |
 | `payment_schedule_type` | `single` \| `installments` |
 | `customer_payment_method` | e.g. `upi`, `cash` |

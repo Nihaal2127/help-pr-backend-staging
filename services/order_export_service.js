@@ -117,6 +117,7 @@ const ORDER_EXPORT_HEADERS = [
   'Customer Paid',
   'Partner Paid',
   'Payment Mode',
+  'Admin Description',
   'Created At',
 ];
 
@@ -280,6 +281,7 @@ const mapOrderToExportRow = (order) => {
     customer_paid: order.customer_net_paid ?? order.customer_paid_amount ?? '',
     partner_paid: order.partner_paid_amount ?? '',
     payment_mode: resolvePaymentModeLabel(order),
+    admin_description: order.admin_description ?? '',
     created_at: formatDateOnly(order.created_at) || '',
   };
 };

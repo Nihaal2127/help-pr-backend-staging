@@ -129,10 +129,15 @@ const { safeSyncOrderChatForOrder } = require('../src/modules/chat/services/chat
 const {
   resolveOrderListScope,
   assertOrderRecordAccess,
+  assertCanEditOrderAdminDescription,
   assertCallerCanManageOrders,
   assertCallerCanAssignFranchise,
   resolveCallerFranchiseId,
 } = require('../utils/order_access');
+const {
+  validateAdminDescriptionValue,
+  formatRecordsForCaller,
+} = require('../utils/admin_description_access');
 
 /**
  * Resolve order by Mongo _id (24-char hex) or business unique_id (e.g. O1001, SOS-…).
@@ -420,7 +425,7 @@ const getCustomerOrder = async (req, res) => {
       totalItems: totalCount,
       totalPages,
       currentPage,
-      records: formatOrderRecords(orders),
+      records: formatRecordsForCaller(formatOrderRecords(orders), req),
     });
   } catch (err) {
     console.error("Error fetching orders list:", err);
@@ -489,6 +494,17 @@ const create = async (req, res) => {
       });
     }
 
+    if (req.body.admin_description !== undefined) {
+      const validation = validateAdminDescriptionValue(req.body.admin_description);
+      if (!validation.ok) {
+        return res.status(409).json({
+          success: false,
+          status: 409,
+          message: validation.message,
+        });
+      }
+    }
+
     const callerFranchiseId = await resolveCallerFranchiseId(
       managerCheck.caller,
       managerCheck.callerId
@@ -513,6 +529,17 @@ const create = async (req, res) => {
     }
 
     const { newOrder, order_id, pricingMeta } = draft;
+
+    if (req.body.admin_description !== undefined) {
+      const adminAccess = await assertCanEditOrderAdminDescription(req, newOrder);
+      if (!adminAccess.ok) {
+        return res.status(adminAccess.status).json({
+          success: false,
+          status: adminAccess.status,
+          message: adminAccess.message,
+        });
+      }
+    }
 
     const franchiseCheck = await assertCallerCanAssignFranchise(
       req,
@@ -638,6 +665,26 @@ const update = async (req, res) => {
         status: access.status,
         message: access.message,
       });
+    }
+
+    if (req.body.admin_description !== undefined) {
+      const validation = validateAdminDescriptionValue(req.body.admin_description);
+      if (!validation.ok) {
+        return res.status(409).json({
+          success: false,
+          status: 409,
+          message: validation.message,
+        });
+      }
+
+      const adminAccess = await assertCanEditOrderAdminDescription(req, order);
+      if (!adminAccess.ok) {
+        return res.status(adminAccess.status).json({
+          success: false,
+          status: adminAccess.status,
+          message: adminAccess.message,
+        });
+      }
     }
 
     if (Object.prototype.hasOwnProperty.call(req.body, 'franchise_id')) {

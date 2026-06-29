@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Quote = require('../../../models/quote');
 const { attachPartnerServiceToQuotes } = require('../../../utils/quote_partner_service');
 const { formatQuoteRecords } = require('../../../enum/quote_status_enum');
+const { stripAdminDescriptionForPublicApi } = require('../../../utils/admin_description_access');
 const { QUOTE_MOBILE_DETAIL_POPULATE } = require('../../../utils/mobile_quote_constants');
 
 const HOME_QUOTES_PER_STATUS_LIMIT = 10;
@@ -32,8 +33,8 @@ const loadPartnerHomeQuotes = async (partnerId) => {
   }
 
   return {
-    pending: formatQuoteRecords(pendingRows),
-    accepted: formatQuoteRecords(acceptedRows),
+    pending: formatQuoteRecords(pendingRows).map(stripAdminDescriptionForPublicApi),
+    accepted: formatQuoteRecords(acceptedRows).map(stripAdminDescriptionForPublicApi),
   };
 };
 

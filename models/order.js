@@ -94,6 +94,8 @@ var orderSchema = new schema(
     customer_description: { type: String, default: "", trim: true },
     /** Free-text job / order notes (parallel to quote.quote_description). */
     order_description: { type: String, default: "", trim: true },
+    /** Internal admin-only notes; optional. */
+    admin_description: { type: String, default: null, trim: true },
     /** Set when this order was created from a quote (convert flow or explicit link on create). */
     quote_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "quote" },
 

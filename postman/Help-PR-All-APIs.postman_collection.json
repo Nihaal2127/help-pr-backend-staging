@@ -7524,7 +7524,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user_id\": \"REPLACE_CUSTOMER_OBJECT_ID\",\n  \"user_unique_id\": \"CUST001\",\n  \"city_id\": \"REPLACE_CITY_OBJECT_ID\",\n  \"category_id\": \"REPLACE_CATEGORY_OBJECT_ID\",\n  \"created_by_id\": \"REPLACE_STAFF_OR_CUSTOMER_OBJECT_ID\",\n  \"is_paid\": false,\n  \"payment_mode_id\": \"\",\n  \"transaction_id\": \"\",\n  \"order_date\": \"2026-06-01\",\n  \"address\": \"123 Sample Street, City\",\n  \"total_service_charge\": 3000,\n  \"service_id\": \"REPLACE_SERVICE_OBJECT_ID\",\n  \"type\": 2,\n  \"partner_id\": \"REPLACE_PARTNER_OBJECT_ID\",\n  \"order_description\": \"Optional notes\",\n  \"service_items\": [\n    {\n      \"user_id\": \"REPLACE_CUSTOMER_OBJECT_ID\",\n      \"partner_id\": \"REPLACE_PARTNER_OBJECT_ID\",\n      \"category_id\": \"REPLACE_CATEGORY_OBJECT_ID\",\n      \"service_id\": \"REPLACE_SERVICE_OBJECT_ID\",\n      \"service_date\": \"2026-06-01T00:00:00.000Z\",\n      \"service_from_time\": \"2026-06-01T09:00:00.000Z\",\n      \"service_to_time\": \"2026-06-01T17:00:00.000Z\",\n      \"total_service_charge\": 3000\n    }\n  ],\n  \"additional_charges\": [\n    {\n      \"amount\": 150,\n      \"label\": \"Transport\",\n      \"payment_method\": \"upi\",\n      \"charge_type\": \"transport\"\n    }\n  ],\n  \"order_payments\": [\n    {\n      \"payer_type\": \"customer\",\n      \"amount\": 500,\n      \"status\": \"completed\",\n      \"payment_method\": \"upi\",\n      \"transaction_reference\": \"UPIREF123\"\n    }\n  ]\n}",
+              "raw": "{\n  \"user_id\": \"REPLACE_CUSTOMER_OBJECT_ID\",\n  \"user_unique_id\": \"CUST001\",\n  \"city_id\": \"REPLACE_CITY_OBJECT_ID\",\n  \"category_id\": \"REPLACE_CATEGORY_OBJECT_ID\",\n  \"created_by_id\": \"REPLACE_STAFF_OR_CUSTOMER_OBJECT_ID\",\n  \"is_paid\": false,\n  \"payment_mode_id\": \"\",\n  \"transaction_id\": \"\",\n  \"order_date\": \"2026-06-01\",\n  \"address\": \"123 Sample Street, City\",\n  \"total_service_charge\": 3000,\n  \"service_id\": \"REPLACE_SERVICE_OBJECT_ID\",\n  \"type\": 2,\n  \"partner_id\": \"REPLACE_PARTNER_OBJECT_ID\",\n  \"order_description\": \"Optional customer-facing notes\",\n  \"admin_description\": \"Optional internal admin note (omit or null if unset)\",\n  \"service_items\": [\n    {\n      \"user_id\": \"REPLACE_CUSTOMER_OBJECT_ID\",\n      \"partner_id\": \"REPLACE_PARTNER_OBJECT_ID\",\n      \"category_id\": \"REPLACE_CATEGORY_OBJECT_ID\",\n      \"service_id\": \"REPLACE_SERVICE_OBJECT_ID\",\n      \"service_date\": \"2026-06-01T00:00:00.000Z\",\n      \"service_from_time\": \"2026-06-01T09:00:00.000Z\",\n      \"service_to_time\": \"2026-06-01T17:00:00.000Z\",\n      \"total_service_charge\": 3000\n    }\n  ],\n  \"additional_charges\": [\n    {\n      \"amount\": 150,\n      \"label\": \"Transport\",\n      \"payment_method\": \"upi\",\n      \"charge_type\": \"transport\"\n    }\n  ],\n  \"order_payments\": [\n    {\n      \"payer_type\": \"customer\",\n      \"amount\": 500,\n      \"status\": \"completed\",\n      \"payment_method\": \"upi\",\n      \"transaction_reference\": \"UPIREF123\"\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -7542,7 +7542,7 @@
                 "create"
               ]
             },
-            "description": "**POST /api/order/create** — creates order + **exactly one** `order_service`.\n\n**Razorpay:** use **3a. Create order (Razorpay online)** for `payment_mode_id: \"2\"` (not this request's empty `payment_mode_id`).\n\n**Nested (optional):**\n- **`additional_charges`**: array or `{ create: [...] }` — each item: `amount` (required), `label`, `description`, `payment_method`, `charge_type`.\n- **`order_payments`**: array or `{ create: [...] }` — each item: `payer_type` (`customer`|`partner`), `amount`, optional `status`, `payment_method`, `transaction_reference`, `paid_at`, `notes`.\n\nServer recalculates **`total_price`** and **`payment_status`** after nested rows. Response may include **`record.nested`** with created ids.\n\nOmit both arrays for order-only create. See `docs/ORDER_MODULE_FRONTEND.md` §7."
+            "description": "**POST /api/order/create** — creates order + **exactly one** `order_service`.\n\n**Optional text:** `order_description` (customer-facing), `admin_description` (internal — super admin, staff, franchise admin/employee only; omit or `null`). Not copied from linked quote.\n\n**Razorpay:** use **3a. Create order (Razorpay online)** for `payment_mode_id: \"2\"` (not this request's empty `payment_mode_id`).\n\n**Nested (optional):**\n- **`additional_charges`**: array or `{ create: [...] }` — each item: `amount` (required), `label`, `description`, `payment_method`, `charge_type`.\n- **`order_payments`**: array or `{ create: [...] }` — each item: `payer_type` (`customer`|`partner`), `amount`, optional `status`, `payment_method`, `transaction_reference`, `paid_at`, `notes`.\n\nServer recalculates **`total_price`** and **`payment_status`** after nested rows. Response may include **`record.nested`** with created ids.\n\nOmit both arrays for order-only create. See `docs/ORDER_MODULE_FRONTEND.md` §7."
           },
           "response": [],
           "description": "\n\n_Source: Help-PR-Orders-Module.postman_collection.json_"
@@ -7586,7 +7586,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user_id\": \"{{customerUserId}}\",\n  \"user_unique_id\": \"CUST001\",\n  \"city_id\": \"{{cityId}}\",\n  \"category_id\": \"{{categoryId}}\",\n  \"created_by_id\": \"{{userId}}\",\n  \"is_paid\": false,\n  \"payment_mode_id\": \"2\",\n  \"name\": \"Test Customer\",\n  \"email\": \"customer.razorpay.test@example.com\",\n  \"contact\": \"9876543210\",\n  \"order_date\": \"2026-06-01\",\n  \"address\": \"123 Sample Street, City\",\n  \"total_service_charge\": 3000,\n  \"service_id\": \"{{serviceId}}\",\n  \"type\": 2,\n  \"partner_id\": \"{{partnerId}}\",\n  \"order_description\": \"Admin order — Razorpay test\",\n  \"service_items\": [\n    {\n      \"user_id\": \"{{customerUserId}}\",\n      \"partner_id\": \"{{partnerId}}\",\n      \"category_id\": \"{{categoryId}}\",\n      \"service_id\": \"{{serviceId}}\",\n      \"service_date\": \"2026-06-01T00:00:00.000Z\",\n      \"service_from_time\": \"2026-06-01T09:00:00.000Z\",\n      \"service_to_time\": \"2026-06-01T17:00:00.000Z\",\n      \"total_service_charge\": 3000\n    }\n  ]\n}",
+              "raw": "{\n  \"user_id\": \"{{customerUserId}}\",\n  \"user_unique_id\": \"CUST001\",\n  \"city_id\": \"{{cityId}}\",\n  \"category_id\": \"{{categoryId}}\",\n  \"created_by_id\": \"{{userId}}\",\n  \"is_paid\": false,\n  \"payment_mode_id\": \"2\",\n  \"name\": \"Test Customer\",\n  \"email\": \"customer.razorpay.test@example.com\",\n  \"contact\": \"9876543210\",\n  \"order_date\": \"2026-06-01\",\n  \"address\": \"123 Sample Street, City\",\n  \"total_service_charge\": 3000,\n  \"service_id\": \"{{serviceId}}\",\n  \"type\": 2,\n  \"partner_id\": \"{{partnerId}}\",\n  \"order_description\": \"Admin order — Razorpay test\",\n  \"admin_description\": \"Optional internal admin note\",\n  \"service_items\": [\n    {\n      \"user_id\": \"{{customerUserId}}\",\n      \"partner_id\": \"{{partnerId}}\",\n      \"category_id\": \"{{categoryId}}\",\n      \"service_id\": \"{{serviceId}}\",\n      \"service_date\": \"2026-06-01T00:00:00.000Z\",\n      \"service_from_time\": \"2026-06-01T09:00:00.000Z\",\n      \"service_to_time\": \"2026-06-01T17:00:00.000Z\",\n      \"total_service_charge\": 3000\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -7626,7 +7626,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user_id\": \"REPLACE_CUSTOMER_OBJECT_ID\",\n  \"partner_id\": \"REPLACE_PARTNER_OBJECT_ID\",\n  \"employee_id\": null,\n  \"franchise_id\": null,\n  \"city_id\": \"REPLACE_CITY_OBJECT_ID\",\n  \"category_id\": \"REPLACE_CATEGORY_OBJECT_ID\",\n  \"service_id\": \"REPLACE_SERVICE_OBJECT_ID\",\n  \"address\": \"456 Updated Street\",\n  \"address_id\": null,\n  \"order_date\": \"2026-06-15\",\n  \"order_description\": \"Updated job notes\",\n  \"customer_description\": \"Customer note\",\n  \"from_date\": \"2026-06-15\",\n  \"to_date\": \"2026-06-16\",\n  \"work_start_time\": \"09:00\",\n  \"work_end_time\": \"18:00\",\n  \"payment_schedule_type\": \"single\",\n  \"customer_payment_method\": \"upi\",\n  \"order_status\": \"completed\",\n  \"total_service_charge\": 4000,\n  \"offer_id\": null,\n  \"service_items\": {\n    \"update\": [\n      {\n        \"_id\": \"{{orderServiceId}}\",\n        \"partner_id\": \"REPLACE_PARTNER_OBJECT_ID\",\n        \"service_date\": \"2026-06-15T00:00:00.000Z\",\n        \"service_from_time\": \"2026-06-15T09:00:00.000Z\",\n        \"service_to_time\": \"2026-06-15T18:00:00.000Z\",\n        \"total_service_charge\": 4000,\n        \"service_status\": \"completed\"\n      }\n    ]\n  },\n  \"additional_charges\": {\n    \"create\": [{ \"amount\": 100, \"label\": \"Materials\", \"charge_type\": \"misc\" }],\n    \"update\": [{ \"_id\": \"REPLACE_CHARGE_OBJECT_ID\", \"amount\": 200 }],\n    \"delete\": []\n  },\n  \"order_payments\": {\n    \"create\": [\n      {\n        \"payer_type\": \"customer\",\n        \"amount\": 1000,\n        \"status\": \"completed\",\n        \"payment_method\": \"upi\"\n      }\n    ],\n    \"update\": [],\n    \"delete\": []\n  }\n}",
+              "raw": "{\n  \"user_id\": \"REPLACE_CUSTOMER_OBJECT_ID\",\n  \"partner_id\": \"REPLACE_PARTNER_OBJECT_ID\",\n  \"employee_id\": null,\n  \"franchise_id\": null,\n  \"city_id\": \"REPLACE_CITY_OBJECT_ID\",\n  \"category_id\": \"REPLACE_CATEGORY_OBJECT_ID\",\n  \"service_id\": \"REPLACE_SERVICE_OBJECT_ID\",\n  \"address\": \"456 Updated Street\",\n  \"address_id\": null,\n  \"order_date\": \"2026-06-15\",\n  \"order_description\": \"Updated job notes\",\n  \"customer_description\": \"Customer note\",\n  \"admin_description\": \"Updated internal admin note (null to clear)\",\n  \"from_date\": \"2026-06-15\",\n  \"to_date\": \"2026-06-16\",\n  \"work_start_time\": \"09:00\",\n  \"work_end_time\": \"18:00\",\n  \"payment_schedule_type\": \"single\",\n  \"customer_payment_method\": \"upi\",\n  \"order_status\": \"completed\",\n  \"total_service_charge\": 4000,\n  \"offer_id\": null,\n  \"service_items\": {\n    \"update\": [\n      {\n        \"_id\": \"{{orderServiceId}}\",\n        \"partner_id\": \"REPLACE_PARTNER_OBJECT_ID\",\n        \"service_date\": \"2026-06-15T00:00:00.000Z\",\n        \"service_from_time\": \"2026-06-15T09:00:00.000Z\",\n        \"service_to_time\": \"2026-06-15T18:00:00.000Z\",\n        \"total_service_charge\": 4000,\n        \"service_status\": \"completed\"\n      }\n    ]\n  },\n  \"additional_charges\": {\n    \"create\": [{ \"amount\": 100, \"label\": \"Materials\", \"charge_type\": \"misc\" }],\n    \"update\": [{ \"_id\": \"REPLACE_CHARGE_OBJECT_ID\", \"amount\": 200 }],\n    \"delete\": []\n  },\n  \"order_payments\": {\n    \"create\": [\n      {\n        \"payer_type\": \"customer\",\n        \"amount\": 1000,\n        \"status\": \"completed\",\n        \"payment_method\": \"upi\"\n      }\n    ],\n    \"update\": [],\n    \"delete\": []\n  }\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -7645,7 +7645,7 @@
                 "{{orderId}}"
               ]
             },
-            "description": "**PUT /api/order/update/:id** — single payload for header, line, pricing, charges, and payments. **Remove keys you are not changing.**\n\n**Header:** `user_id`, `partner_id`, `employee_id`, `franchise_id`, `city_id`, `category_id`, `service_id`, `address`, `address_id`, `order_date`, descriptions, schedule, `payment_schedule_type`, `customer_payment_method`.\n\n**Pricing:** `total_service_charge`, `offer_id` (`null` = remove).\n\n**Status:** `order_status`.\n\n**Line:** `service_items.update[]` with `_id` = `{{orderServiceId}}` (optional when order has one line).\n\n**Nested:** `additional_charges`, `order_payments` — `{ create, update, delete }`.\n\n**Do not send** order `is_paid`. Response: `record`, optional `nested`, optional `pricing`.\n\nSee `docs/ORDER_MODULE_FRONTEND.md` §8."
+            "description": "**PUT /api/order/update/:id** — single payload for header, line, pricing, charges, and payments. **Remove keys you are not changing.**\n\n**Header:** `user_id`, `partner_id`, `employee_id`, `franchise_id`, `city_id`, `category_id`, `service_id`, `address`, `address_id`, `order_date`, `order_description`, `customer_description`, **`admin_description`** (admin roles only; `null` to clear), schedule, `payment_schedule_type`, `customer_payment_method`.\n\n**Pricing:** `total_service_charge`, `offer_id` (`null` = remove).\n\n**Status:** `order_status`.\n\n**Line:** `service_items.update[]` with `_id` = `{{orderServiceId}}` (optional when order has one line).\n\n**Nested:** `additional_charges`, `order_payments` — `{ create, update, delete }`.\n\n**Do not send** order `is_paid`. Response: `record`, optional `nested`, optional `pricing`.\n\nSee `docs/ORDER_MODULE_FRONTEND.md` §8."
           },
           "response": [],
           "description": "\n\n_Source: Help-PR-Orders-Module.postman_collection.json_"
@@ -8684,7 +8684,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"category_id\": \"{{category_id}}\",\n  \"service_id\": \"{{service_id}}\",\n  \"partner_id\": \"{{partner_id}}\",\n  \"employee_id\": \"{{employee_id}}\",\n  \"service_price\": 1000,\n  \"franchise_id\": \"{{franchise_id}}\",\n  \"address_id\": \"{{address_id}}\",\n  \"created_by_id\": \"{{id}}\",\n  \"from_date\": \"2026-05-08\",\n  \"to_date\": \"2026-05-10\",\n  \"work_hours_per_day\": 8,\n  \"total_work_hours\": 24,\n  \"work_start_time\": \"09:00\",\n  \"work_end_time\": \"17:00\"\n}",
+              "raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"category_id\": \"{{category_id}}\",\n  \"service_id\": \"{{service_id}}\",\n  \"partner_id\": \"{{partner_id}}\",\n  \"employee_id\": \"{{employee_id}}\",\n  \"service_price\": 1000,\n  \"franchise_id\": \"{{franchise_id}}\",\n  \"address_id\": \"{{address_id}}\",\n  \"created_by_id\": \"{{id}}\",\n  \"from_date\": \"2026-05-08\",\n  \"to_date\": \"2026-05-10\",\n  \"work_hours_per_day\": 8,\n  \"total_work_hours\": 24,\n  \"work_start_time\": \"09:00\",\n  \"work_end_time\": \"17:00\",\n  \"quote_description\": \"Customer-visible job summary\",\n  \"admin_description\": \"Optional internal admin note (omit or null if unset)\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -8858,8 +8858,22 @@
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
                 "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
               }
             ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{customerUserId}}\",\n  \"partner_id\": \"{{partnerId}}\",\n  \"employee_id\": null,\n  \"category_id\": \"{{categoryId}}\",\n  \"service_id\": \"{{serviceId}}\",\n  \"franchise_id\": \"{{franchiseId}}\",\n  \"address_id\": \"{{addressId}}\",\n  \"created_by_id\": \"{{userId}}\",\n  \"total_service_charge\": 3000,\n  \"from_date\": \"2026-06-01\",\n  \"to_date\": \"2026-06-02\",\n  \"work_hours_per_day\": 8,\n  \"total_work_hours\": 16,\n  \"work_start_time\": \"09:00\",\n  \"work_end_time\": \"17:00\",\n  \"quote_description\": \"Customer-visible job summary\",\n  \"admin_description\": \"{{adminDescription}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": {
               "raw": "{{baseUrl}}/api/quote/create",
               "host": [
@@ -8872,7 +8886,7 @@
               ]
             }
           },
-          "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 06 — Quote Management_"
+          "description": "**POST /api/quote/create** — back-office quote.\n\n**Optional text:** `quote_description` (customer-visible), `admin_description` (internal — super admin, staff, franchise admin/employee only; omit or `null`).\n\n**Pricing:** send `total_service_charge` (or `service_price`); server computes tax/totals.\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 06 — Quote Management_"
         },
         {
           "name": "Quote — delete",
@@ -9011,8 +9025,22 @@
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
                 "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
               }
             ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quote_description\": \"Updated customer-visible summary\",\n  \"admin_description\": \"Updated internal admin note (null to clear)\",\n  \"from_date\": \"2026-06-01\",\n  \"to_date\": \"2026-06-03\",\n  \"work_hours_per_day\": 8,\n  \"total_work_hours\": 24,\n  \"work_start_time\": \"09:00\",\n  \"work_end_time\": \"17:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": {
               "raw": "{{baseUrl}}/api/quote/update/{{id}}",
               "host": [
@@ -9026,7 +9054,7 @@
               ]
             }
           },
-          "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 06 — Quote Management_"
+          "description": "**PUT /api/quote/update/:id** — field updates while status is **new** or **pending** (unless combined with status transition rules).\n\n**Optional text:** `quote_description`, **`admin_description`** (admin roles only; `null` to clear).\n\nSend only fields to change. Pricing via `total_service_charge` / `service_price`.\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 06 — Quote Management_"
         },
         {
           "name": "Reject",
@@ -9091,7 +9119,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"partner_id\": \"{{partner_id}}\",\n  \"employee_id\": \"{{employee_id}}\",\n  \"service_price\": 1200,\n  \"from_date\": \"2026-05-09\",\n  \"to_date\": \"2026-05-11\",\n  \"work_hours_per_day\": 6,\n  \"total_work_hours\": 18,\n  \"work_start_time\": \"10:00\",\n  \"work_end_time\": \"16:00\"\n}",
+              "raw": "{\n  \"partner_id\": \"{{partner_id}}\",\n  \"employee_id\": \"{{employee_id}}\",\n  \"service_price\": 1200,\n  \"from_date\": \"2026-05-09\",\n  \"to_date\": \"2026-05-11\",\n  \"work_hours_per_day\": 6,\n  \"total_work_hours\": 18,\n  \"work_start_time\": \"10:00\",\n  \"work_end_time\": \"16:00\",\n  \"quote_description\": \"Updated customer-visible summary\",\n  \"admin_description\": \"Updated internal admin note (null to clear)\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -17778,7 +17806,7 @@
                     ],
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"user_id\": \"REPLACE_CUSTOMER_OBJECT_ID\",\n  \"user_unique_id\": \"CUST001\",\n  \"city_id\": \"REPLACE_CITY_OBJECT_ID\",\n  \"category_id\": \"REPLACE_CATEGORY_OBJECT_ID\",\n  \"created_by_id\": \"REPLACE_STAFF_OR_CUSTOMER_OBJECT_ID\",\n  \"is_paid\": false,\n  \"payment_mode_id\": \"\",\n  \"transaction_id\": \"\",\n  \"order_date\": \"2026-06-01\",\n  \"address\": \"123 Sample Street, City\",\n  \"total_service_charge\": 3000,\n  \"service_id\": \"REPLACE_SERVICE_OBJECT_ID\",\n  \"type\": 2,\n  \"partner_id\": \"REPLACE_PARTNER_OBJECT_ID\",\n  \"order_description\": \"Optional notes\",\n  \"service_items\": [\n    {\n      \"user_id\": \"REPLACE_CUSTOMER_OBJECT_ID\",\n      \"partner_id\": \"REPLACE_PARTNER_OBJECT_ID\",\n      \"category_id\": \"REPLACE_CATEGORY_OBJECT_ID\",\n      \"service_id\": \"REPLACE_SERVICE_OBJECT_ID\",\n      \"service_date\": \"2026-06-01T00:00:00.000Z\",\n      \"service_from_time\": \"2026-06-01T09:00:00.000Z\",\n      \"service_to_time\": \"2026-06-01T17:00:00.000Z\",\n      \"total_service_charge\": 3000\n    }\n  ],\n  \"additional_charges\": [\n    {\n      \"amount\": 150,\n      \"label\": \"Transport\",\n      \"payment_method\": \"upi\",\n      \"charge_type\": \"transport\"\n    }\n  ],\n  \"order_payments\": [\n    {\n      \"payer_type\": \"customer\",\n      \"amount\": 500,\n      \"status\": \"completed\",\n      \"payment_method\": \"upi\",\n      \"transaction_reference\": \"UPIREF123\"\n    }\n  ]\n}",
+                      "raw": "{\n  \"user_id\": \"REPLACE_CUSTOMER_OBJECT_ID\",\n  \"user_unique_id\": \"CUST001\",\n  \"city_id\": \"REPLACE_CITY_OBJECT_ID\",\n  \"category_id\": \"REPLACE_CATEGORY_OBJECT_ID\",\n  \"created_by_id\": \"REPLACE_STAFF_OR_CUSTOMER_OBJECT_ID\",\n  \"is_paid\": false,\n  \"payment_mode_id\": \"\",\n  \"transaction_id\": \"\",\n  \"order_date\": \"2026-06-01\",\n  \"address\": \"123 Sample Street, City\",\n  \"total_service_charge\": 3000,\n  \"service_id\": \"REPLACE_SERVICE_OBJECT_ID\",\n  \"type\": 2,\n  \"partner_id\": \"REPLACE_PARTNER_OBJECT_ID\",\n  \"order_description\": \"Optional customer-facing notes\",\n  \"admin_description\": \"Optional internal admin note (omit or null if unset)\",\n  \"service_items\": [\n    {\n      \"user_id\": \"REPLACE_CUSTOMER_OBJECT_ID\",\n      \"partner_id\": \"REPLACE_PARTNER_OBJECT_ID\",\n      \"category_id\": \"REPLACE_CATEGORY_OBJECT_ID\",\n      \"service_id\": \"REPLACE_SERVICE_OBJECT_ID\",\n      \"service_date\": \"2026-06-01T00:00:00.000Z\",\n      \"service_from_time\": \"2026-06-01T09:00:00.000Z\",\n      \"service_to_time\": \"2026-06-01T17:00:00.000Z\",\n      \"total_service_charge\": 3000\n    }\n  ],\n  \"additional_charges\": [\n    {\n      \"amount\": 150,\n      \"label\": \"Transport\",\n      \"payment_method\": \"upi\",\n      \"charge_type\": \"transport\"\n    }\n  ],\n  \"order_payments\": [\n    {\n      \"payer_type\": \"customer\",\n      \"amount\": 500,\n      \"status\": \"completed\",\n      \"payment_method\": \"upi\",\n      \"transaction_reference\": \"UPIREF123\"\n    }\n  ]\n}",
                       "options": {
                         "raw": {
                           "language": "json"
@@ -17796,7 +17824,7 @@
                         "create"
                       ]
                     },
-                    "description": "**POST /api/order/create** — creates order + **exactly one** `order_service`.\n\n**Razorpay:** use **3a. Create order (Razorpay online)** for `payment_mode_id: \"2\"` (not this request's empty `payment_mode_id`).\n\n**Nested (optional):**\n- **`additional_charges`**: array or `{ create: [...] }` — each item: `amount` (required), `label`, `description`, `payment_method`, `charge_type`.\n- **`order_payments`**: array or `{ create: [...] }` — each item: `payer_type` (`customer`|`partner`), `amount`, optional `status`, `payment_method`, `transaction_reference`, `paid_at`, `notes`.\n\nServer recalculates **`total_price`** and **`payment_status`** after nested rows. Response may include **`record.nested`** with created ids.\n\nOmit both arrays for order-only create. See `docs/ORDER_MODULE_FRONTEND.md` §7."
+                    "description": "**POST /api/order/create** — creates order + **exactly one** `order_service`.\n\n**Optional text:** `order_description` (customer-facing), `admin_description` (internal — super admin, staff, franchise admin/employee only; omit or `null`). Not copied from linked quote.\n\n**Razorpay:** use **3a. Create order (Razorpay online)** for `payment_mode_id: \"2\"` (not this request's empty `payment_mode_id`).\n\n**Nested (optional):**\n- **`additional_charges`**: array or `{ create: [...] }` — each item: `amount` (required), `label`, `description`, `payment_method`, `charge_type`.\n- **`order_payments`**: array or `{ create: [...] }` — each item: `payer_type` (`customer`|`partner`), `amount`, optional `status`, `payment_method`, `transaction_reference`, `paid_at`, `notes`.\n\nServer recalculates **`total_price`** and **`payment_status`** after nested rows. Response may include **`record.nested`** with created ids.\n\nOmit both arrays for order-only create. See `docs/ORDER_MODULE_FRONTEND.md` §7."
                   },
                   "response": [],
                   "description": "\n\n_Source: Help-PR-Orders-Module.postman_collection.json_"
@@ -17819,7 +17847,7 @@
                     ],
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"user_id\": \"REPLACE_CUSTOMER_OBJECT_ID\",\n  \"partner_id\": \"REPLACE_PARTNER_OBJECT_ID\",\n  \"employee_id\": null,\n  \"franchise_id\": null,\n  \"city_id\": \"REPLACE_CITY_OBJECT_ID\",\n  \"category_id\": \"REPLACE_CATEGORY_OBJECT_ID\",\n  \"service_id\": \"REPLACE_SERVICE_OBJECT_ID\",\n  \"address\": \"456 Updated Street\",\n  \"address_id\": null,\n  \"order_date\": \"2026-06-15\",\n  \"order_description\": \"Updated job notes\",\n  \"customer_description\": \"Customer note\",\n  \"from_date\": \"2026-06-15\",\n  \"to_date\": \"2026-06-16\",\n  \"work_start_time\": \"09:00\",\n  \"work_end_time\": \"18:00\",\n  \"payment_schedule_type\": \"single\",\n  \"customer_payment_method\": \"upi\",\n  \"order_status\": \"completed\",\n  \"total_service_charge\": 4000,\n  \"offer_id\": null,\n  \"service_items\": {\n    \"update\": [\n      {\n        \"_id\": \"{{orderServiceId}}\",\n        \"partner_id\": \"REPLACE_PARTNER_OBJECT_ID\",\n        \"service_date\": \"2026-06-15T00:00:00.000Z\",\n        \"service_from_time\": \"2026-06-15T09:00:00.000Z\",\n        \"service_to_time\": \"2026-06-15T18:00:00.000Z\",\n        \"total_service_charge\": 4000,\n        \"service_status\": \"completed\"\n      }\n    ]\n  },\n  \"additional_charges\": {\n    \"create\": [{ \"amount\": 100, \"label\": \"Materials\", \"charge_type\": \"misc\" }],\n    \"update\": [{ \"_id\": \"REPLACE_CHARGE_OBJECT_ID\", \"amount\": 200 }],\n    \"delete\": []\n  },\n  \"order_payments\": {\n    \"create\": [\n      {\n        \"payer_type\": \"customer\",\n        \"amount\": 1000,\n        \"status\": \"completed\",\n        \"payment_method\": \"upi\"\n      }\n    ],\n    \"update\": [],\n    \"delete\": []\n  }\n}",
+                      "raw": "{\n  \"user_id\": \"REPLACE_CUSTOMER_OBJECT_ID\",\n  \"partner_id\": \"REPLACE_PARTNER_OBJECT_ID\",\n  \"employee_id\": null,\n  \"franchise_id\": null,\n  \"city_id\": \"REPLACE_CITY_OBJECT_ID\",\n  \"category_id\": \"REPLACE_CATEGORY_OBJECT_ID\",\n  \"service_id\": \"REPLACE_SERVICE_OBJECT_ID\",\n  \"address\": \"456 Updated Street\",\n  \"address_id\": null,\n  \"order_date\": \"2026-06-15\",\n  \"order_description\": \"Updated job notes\",\n  \"customer_description\": \"Customer note\",\n  \"admin_description\": \"Updated internal admin note (null to clear)\",\n  \"from_date\": \"2026-06-15\",\n  \"to_date\": \"2026-06-16\",\n  \"work_start_time\": \"09:00\",\n  \"work_end_time\": \"18:00\",\n  \"payment_schedule_type\": \"single\",\n  \"customer_payment_method\": \"upi\",\n  \"order_status\": \"completed\",\n  \"total_service_charge\": 4000,\n  \"offer_id\": null,\n  \"service_items\": {\n    \"update\": [\n      {\n        \"_id\": \"{{orderServiceId}}\",\n        \"partner_id\": \"REPLACE_PARTNER_OBJECT_ID\",\n        \"service_date\": \"2026-06-15T00:00:00.000Z\",\n        \"service_from_time\": \"2026-06-15T09:00:00.000Z\",\n        \"service_to_time\": \"2026-06-15T18:00:00.000Z\",\n        \"total_service_charge\": 4000,\n        \"service_status\": \"completed\"\n      }\n    ]\n  },\n  \"additional_charges\": {\n    \"create\": [{ \"amount\": 100, \"label\": \"Materials\", \"charge_type\": \"misc\" }],\n    \"update\": [{ \"_id\": \"REPLACE_CHARGE_OBJECT_ID\", \"amount\": 200 }],\n    \"delete\": []\n  },\n  \"order_payments\": {\n    \"create\": [\n      {\n        \"payer_type\": \"customer\",\n        \"amount\": 1000,\n        \"status\": \"completed\",\n        \"payment_method\": \"upi\"\n      }\n    ],\n    \"update\": [],\n    \"delete\": []\n  }\n}",
                       "options": {
                         "raw": {
                           "language": "json"
@@ -17838,7 +17866,7 @@
                         "{{orderId}}"
                       ]
                     },
-                    "description": "**PUT /api/order/update/:id** — single payload for header, line, pricing, charges, and payments. **Remove keys you are not changing.**\n\n**Header:** `user_id`, `partner_id`, `employee_id`, `franchise_id`, `city_id`, `category_id`, `service_id`, `address`, `address_id`, `order_date`, descriptions, schedule, `payment_schedule_type`, `customer_payment_method`.\n\n**Pricing:** `total_service_charge`, `offer_id` (`null` = remove).\n\n**Status:** `order_status`.\n\n**Line:** `service_items.update[]` with `_id` = `{{orderServiceId}}` (optional when order has one line).\n\n**Nested:** `additional_charges`, `order_payments` — `{ create, update, delete }`.\n\n**Do not send** order `is_paid`. Response: `record`, optional `nested`, optional `pricing`.\n\nSee `docs/ORDER_MODULE_FRONTEND.md` §8."
+                    "description": "**PUT /api/order/update/:id** — single payload for header, line, pricing, charges, and payments. **Remove keys you are not changing.**\n\n**Header:** `user_id`, `partner_id`, `employee_id`, `franchise_id`, `city_id`, `category_id`, `service_id`, `address`, `address_id`, `order_date`, `order_description`, `customer_description`, **`admin_description`** (admin roles only; `null` to clear), schedule, `payment_schedule_type`, `customer_payment_method`.\n\n**Pricing:** `total_service_charge`, `offer_id` (`null` = remove).\n\n**Status:** `order_status`.\n\n**Line:** `service_items.update[]` with `_id` = `{{orderServiceId}}` (optional when order has one line).\n\n**Nested:** `additional_charges`, `order_payments` — `{ create, update, delete }`.\n\n**Do not send** order `is_paid`. Response: `record`, optional `nested`, optional `pricing`.\n\nSee `docs/ORDER_MODULE_FRONTEND.md` §8."
                   },
                   "response": [],
                   "description": "\n\n_Source: Help-PR-Orders-Module.postman_collection.json_"
@@ -18046,7 +18074,7 @@
                     ],
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"category_id\": \"{{category_id}}\",\n  \"service_id\": \"{{service_id}}\",\n  \"partner_id\": \"{{partner_id}}\",\n  \"employee_id\": \"{{employee_id}}\",\n  \"service_price\": 1000,\n  \"franchise_id\": \"{{franchise_id}}\",\n  \"address_id\": \"{{address_id}}\",\n  \"created_by_id\": \"{{id}}\",\n  \"from_date\": \"2026-05-08\",\n  \"to_date\": \"2026-05-10\",\n  \"work_hours_per_day\": 8,\n  \"total_work_hours\": 24,\n  \"work_start_time\": \"09:00\",\n  \"work_end_time\": \"17:00\"\n}",
+                      "raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"category_id\": \"{{category_id}}\",\n  \"service_id\": \"{{service_id}}\",\n  \"partner_id\": \"{{partner_id}}\",\n  \"employee_id\": \"{{employee_id}}\",\n  \"service_price\": 1000,\n  \"franchise_id\": \"{{franchise_id}}\",\n  \"address_id\": \"{{address_id}}\",\n  \"created_by_id\": \"{{id}}\",\n  \"from_date\": \"2026-05-08\",\n  \"to_date\": \"2026-05-10\",\n  \"work_hours_per_day\": 8,\n  \"total_work_hours\": 24,\n  \"work_start_time\": \"09:00\",\n  \"work_end_time\": \"17:00\",\n  \"quote_description\": \"Customer-visible job summary\",\n  \"admin_description\": \"Optional internal admin note (omit or null if unset)\"\n}",
                       "options": {
                         "raw": {
                           "language": "json"
@@ -18572,8 +18600,22 @@
                         "key": "Authorization",
                         "value": "Bearer {{accessToken}}",
                         "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
                       }
                     ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"quote_description\": \"Updated customer-visible summary\",\n  \"admin_description\": \"Updated internal admin note (null to clear)\",\n  \"from_date\": \"2026-06-01\",\n  \"to_date\": \"2026-06-03\",\n  \"work_hours_per_day\": 8,\n  \"total_work_hours\": 24,\n  \"work_start_time\": \"09:00\",\n  \"work_end_time\": \"17:00\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
                     "url": {
                       "raw": "{{baseUrl}}/api/quote/update/{{id}}",
                       "host": [
@@ -18587,7 +18629,7 @@
                       ]
                     }
                   },
-                  "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 06 — Quote Management_"
+                  "description": "**PUT /api/quote/update/:id** — field updates while status is **new** or **pending** (or before status side-effects). **`admin_description`**: super admin, staff, franchise admin/employee only; send `null` to clear. See web **Quote — update** in folder 21.\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 06 — Quote Management_"
                 },
                 {
                   "name": "Update",
@@ -23757,7 +23799,7 @@
                         "create"
                       ]
                     },
-                    "description": "**POST /api/mobile/user/quotes/create** — no partner\n\n- **No `partner_id` in body** → quote status **new**, `partner_id` null\n- **Pricing:** `total_service_charge` / `total_price` are **0** until a partner is assigned (**Update** with `partner_id` → server sets charge from `partner_service.price`)\n- Do not send `total_service_charge` on this flow\n- Franchise admin sees quote under `franchise_id`; partner assigned later via **Update** or admin"
+                    "description": "**POST /api/mobile/user/quotes/create** — no partner\n\n- **No `partner_id` in body** → quote status **new**, `partner_id` null\n- **Pricing:** `total_service_charge` / `total_price` are **0** until a partner is assigned (**Update** with `partner_id` → server sets charge from `partner_service.price`)\n- Do not send `total_service_charge` on this flow\n- **`admin_description`** is web back-office only (not accepted on mobile customer API)\n- Franchise admin sees quote under `franchise_id`; partner assigned later via **Update** or admin"
                   },
                   "response": []
                 },
@@ -23829,7 +23871,7 @@
                         "create"
                       ]
                     },
-                    "description": "**POST /api/mobile/user/quotes/create** — with partner\n\n- **Required:** `partner_id` (run **Partners (list)** or **Home** to set `{{quotePartnerId}}`)\n- **`total_service_charge` optional:** resolved from that partner's `partner_service.price` when omitted\n- Status **pending**; partner can **Accept** under **Partner → Quotes**"
+                    "description": "**POST /api/mobile/user/quotes/create** — with partner\n\n- **Required:** `partner_id` (run **Partners (list)** or **Home** to set `{{quotePartnerId}}`)\n- **`total_service_charge` optional:** resolved from that partner's `partner_service.price` when omitted\n- **`admin_description`** is web back-office only (not accepted on mobile customer API)\n- Status **pending**; partner can **Accept** under **Partner → Quotes**"
                   },
                   "response": []
                 },
@@ -24049,7 +24091,7 @@
                         "{{quoteId}}"
                       ]
                     },
-                    "description": "**PUT /api/mobile/user/quotes/:id**\n\n- **Auth:** Bearer customer\n- Allowed only while status is **new** or **pending**\n- **Cannot update:** `total_service_charge`, `service_price`, `status`, `franchise_id`\n- Assigning `partner_id` on a **new** quote moves status to **pending**\n- Send only fields to change"
+                    "description": "**PUT /api/mobile/user/quotes/:id**\n\n- **Auth:** Bearer customer\n- Allowed only while status is **new** or **pending**\n- **Cannot update:** `total_service_charge`, `service_price`, `status`, `franchise_id`, **`admin_description`** (web back-office only)\n- Assigning `partner_id` on a **new** quote moves status to **pending**\n- Send only fields to change"
                   },
                   "response": []
                 },
@@ -25723,6 +25765,12 @@
       "value": "",
       "type": "string",
       "description": "JWT reset token — set by Verify forgot password OTP test script"
+    },
+    {
+      "key": "adminDescription",
+      "value": "Internal ops note — franchise scoped",
+      "type": "string",
+      "description": "Optional admin-only note for POST /api/quote/create, PUT /api/quote/update/:id, POST /api/order/create, PUT /api/order/update/:id. Omit or null if unset. Not available on mobile customer APIs."
     }
   ]
 }

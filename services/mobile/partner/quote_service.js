@@ -23,6 +23,12 @@ const {
   appendQuoteHistory,
 } = require('../../../utils/quote_history_helper');
 const { safeNotifyQuoteStatusChanged } = require('../../../src/modules/notifications/services/domainHooks');
+const { stripAdminDescriptionForPublicApi } = require('../../../utils/admin_description_access');
+
+const formatMobileQuoteForApi = (quote) =>
+  stripAdminDescriptionForPublicApi(formatQuoteForApi(quote));
+const formatMobileQuoteRecords = (records) =>
+  formatQuoteRecords(records).map(stripAdminDescriptionForPublicApi);
 
 const { fail, ok, parsePositiveInt } = require('../../../utils/mobile_service_result');
 
@@ -73,7 +79,7 @@ const listPartnerQuotes = async (partnerId, query) => {
         totalPages,
         currentPage,
         limit,
-        records: formatQuoteRecords(data),
+        records: formatMobileQuoteRecords(data),
       },
     });
   } catch (err) {
@@ -103,7 +109,7 @@ const getPartnerQuoteById = async (partnerId, quoteId) => {
 
     return ok(200, {
       message: 'Quote fetched successfully.',
-      data: formatQuoteForApi(quote),
+      data: formatMobileQuoteForApi(quote),
     });
   } catch (err) {
     console.error('mobile partner get quote', err.message);
@@ -221,7 +227,7 @@ const updatePartnerQuoteStatus = async (partnerId, quoteId, body) => {
         nextStatus === 'accepted'
           ? 'Quote accepted successfully.'
           : 'Quote updated successfully.',
-      data: formatQuoteForApi(populated),
+      data: formatMobileQuoteForApi(populated),
     });
   } catch (err) {
     console.error('mobile partner update quote status', err.message);

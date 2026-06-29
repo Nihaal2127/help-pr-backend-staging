@@ -18,6 +18,7 @@ const {
   applyNestedResourcesOnCreate,
 } = require("./order_nested_resources_service");
 const { combineDateAndTime } = require("../utils/order_schedule");
+const { normalizeAdminDescription } = require("../utils/admin_description_access");
 const { resolveQuoteStatus } = require("../enum/quote_status_enum");
 const {
   DEFAULT_ORDER_STATUS,
@@ -167,6 +168,7 @@ const createOrderFromBody = async (body, options = {}) => {
     payment_schedule_type,
     customer_payment_method,
     order_description,
+    admin_description,
     quote_id,
     offer_id,
   } = body;
@@ -294,6 +296,10 @@ const createOrderFromBody = async (body, options = {}) => {
     work_end_time: work_end_time ?? "",
     customer_description: customer_description ?? "",
     order_description: finalOrderDescription,
+    admin_description:
+      admin_description !== undefined
+        ? normalizeAdminDescription(admin_description)
+        : null,
     quote_id: resolvedQuoteId,
     rejection_reason: rejection_reason ?? "",
     payment_schedule_type:

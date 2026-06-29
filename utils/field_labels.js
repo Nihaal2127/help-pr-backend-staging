@@ -59,6 +59,8 @@ const FIELD_LABELS = {
     rejection_reason: 'Rejection reason',
     cancellation_reason: 'Cancellation reason',
     quote_description: 'Quote description',
+    admin_description: 'Admin description',
+    order_description: 'Order description',
     accessible_screens: 'Accessible screens',
     partner_services: 'Partner services',
     partner_categories: 'Partner categories',

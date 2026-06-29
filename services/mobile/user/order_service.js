@@ -3,6 +3,7 @@ const Order = require('../../../models/order');
 const { loadOrderDetailLean } = require('../../order_detail_service');
 const { buildOrderInvoiceHtml } = require('../../../utils/order_invoice_html');
 const { embedOrderDetailForeignKeys } = require('../../../utils/list_aggregation');
+const { stripAdminDescriptionForPublicApi } = require('../../../utils/admin_description_access');
 const { fail, ok } = require('../../../utils/mobile_service_result');
 const { assertValidCallerObjectId } = require('../shared/order_access_helpers');
 const {
@@ -139,7 +140,7 @@ const getCustomerOrderById = async (customerId, orderId) => {
 
     return ok(200, {
       message: 'Order details fetched successfully.',
-      record: embedOrderDetailForeignKeys(record),
+      record: stripAdminDescriptionForPublicApi(embedOrderDetailForeignKeys(record)),
     });
   } catch (err) {
     console.error('mobile user get order details', err.message);

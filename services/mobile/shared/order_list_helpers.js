@@ -10,6 +10,7 @@ const Address = require('../../../models/address');
 const Franchise = require('../../../models/franchise');
 const Quote = require('../../../models/quote');
 const { formatOrderRecords } = require('../../../utils/order_api_format');
+const { stripAdminDescriptionForPublicApi } = require('../../../utils/admin_description_access');
 const { escapeRegExp } = require('../../../utils/string_helpers');
 const {
   buildOrderDateRangeFilter,
@@ -327,7 +328,9 @@ const fetchPaginatedMobileOrderList = async ({
   const { data: rows, totalCount: totalItems } = parseFacetListResult(aggResult, limit);
   const totalPages = Math.max(Math.ceil(totalItems / limit), 1);
   let records = await attachRefundsToOrderRecords(
-    formatOrderRecords(rows).map(attachPartnerRatingsToOrderRecord)
+    formatOrderRecords(rows)
+      .map(attachPartnerRatingsToOrderRecord)
+      .map(stripAdminDescriptionForPublicApi)
   );
 
   if (includeCustomerReviews) {

@@ -30,7 +30,7 @@ const {
 } = require("../enum/partner_work_status_enum");
 const { resolveOrderFranchiseIdForCreate } = require("../utils/order_access");
 const { safeCreateDefaultAppointmentForOrder } = require("./appointment_service");
-const { safeCreateOrderChatForOrder } = require("../src/modules/chat/services/chatProvisioning.service");
+const { provisionOrderChatForOrder } = require("./chat_integration");
 const {
   safeNotifyOrderCreated,
   safeNotifyOrderNestedResources,
@@ -353,9 +353,7 @@ const persistOrderAndLinkQuote = async (
     actorUserId,
   });
 
-  void safeCreateOrderChatForOrder(refreshed || newOrder, {
-    actorUserId,
-  });
+  void provisionOrderChatForOrder(refreshed || newOrder);
 
   if (notifyPartners) {
     void safeNotifyOrderCreated({

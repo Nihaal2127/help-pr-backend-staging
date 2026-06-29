@@ -164,7 +164,19 @@ app.use('/api/refund', refundRoutes);
 app.use('/api/partner-post', partnerPostRoutes);
 app.use('/api/partners', partnersRoutes);
 app.use('/api/appointment', appointmentRoutes);
-app.use('/api/chat', chatRoutes);
+
+// When Chat Service runs on VPS, Lambda provisions chats via HTTP only — do not mount REST chat here.
+const isLambdaRuntime = !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+const useRemoteChatService =
+  process.env.CHAT_SERVICE_ENABLED === 'true' &&
+  Boolean(process.env.CHAT_SERVICE_BASE_URL);
+
+if (!(isLambdaRuntime && useRemoteChatService)) {
+  app.use('/api/chat', chatRoutes);
+} else {
+  console.log('Chat REST disabled on Lambda (CHAT_SERVICE_ENABLED). Use VPS Chat Service.');
+}
+
 app.use('/api/mobile', mobileRoutes);
 
 // app.use('/login', loginRoute);

@@ -23,6 +23,7 @@ phases:
       - echo "Deploying to Lambda ${LAMBDA_FUNCTION_NAME} (${AWS_DEFAULT_REGION})"
       - aws lambda update-function-code --function-name "${LAMBDA_FUNCTION_NAME}" --zip-file "fileb://deploy.zip" --region "${AWS_DEFAULT_REGION}"
       - echo "Deployment command completed."
+      - echo "Reminder - set Lambda env vars separately - CHAT_SERVICE_ENABLED, CHAT_SERVICE_BASE_URL, CHAT_SERVICE_INTERNAL_API_KEY (see docs/LAMBDA_VPS_DEPLOY.md)"
 
 artifacts:
   files:

@@ -125,7 +125,7 @@ const {
   safeNotifyOrderServiceCancelled,
   safeNotifyOrderNestedResources,
 } = require('../src/modules/notifications/services/domainHooks');
-const { safeSyncOrderChatForOrder } = require('../src/modules/chat/services/chatProvisioning.service');
+const { syncOrderChatForOrderRecord } = require('../services/chat_integration');
 const {
   resolveOrderListScope,
   assertOrderRecordAccess,
@@ -848,7 +848,7 @@ const update = async (req, res) => {
       nested,
       actorUserId: getCallerId(req),
     });
-    void safeSyncOrderChatForOrder(updatedOrder);
+    void syncOrderChatForOrderRecord(updatedOrder);
 
     return res.status(200).json({
       success: true,

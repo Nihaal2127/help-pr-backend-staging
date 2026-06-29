@@ -92,6 +92,7 @@ const QUOTE_EXPORT_HEADERS = [
   'Order ID',
   'Work Hours Per Day',
   'Total Work Hours',
+  'Admin Description',
   'Created At',
 ];
 
@@ -241,6 +242,7 @@ const mapQuoteToExportRow = (quote) => {
     order_id: order?.unique_id || '',
     work_hours_per_day: quote.work_hours_per_day ?? '',
     total_work_hours: quote.total_work_hours ?? '',
+    admin_description: quote.admin_description ?? '',
     created_at: formatDateOnly(quote.created_at) || '',
   };
 };

@@ -17,6 +17,9 @@ const {
   resolveFranchiseListScope,
   assertFranchiseRecordAccess,
 } = require("./franchise_scope_access");
+const {
+  assertCanEditAdminDescription,
+} = require("./admin_description_access");
 
 /**
  * List filter: explicit franchise_id OR legacy rows (franchise_id null) whose
@@ -215,6 +218,12 @@ const assertOrderRecordAccess = async (req, order) =>
     legacyMatchFn: legacyOrderMatchFn,
   });
 
+const assertCanEditOrderAdminDescription = async (req, order) =>
+  assertCanEditAdminDescription(req, order, {
+    entityLabel: "this order",
+    legacyMatchFn: legacyOrderMatchFn,
+  });
+
 /**
  * Back-office franchise access, or direct participant (e.g. partner on the order).
  */
@@ -246,6 +255,7 @@ const callerMatchesOrderParticipant = (reqUserId, order) => {
 module.exports = {
   resolveOrderListScope,
   assertOrderRecordAccess,
+  assertCanEditOrderAdminDescription,
   assertCallerCanManageOrders,
   assertCallerCanAssignFranchise,
   assertOrderModifyAccess,

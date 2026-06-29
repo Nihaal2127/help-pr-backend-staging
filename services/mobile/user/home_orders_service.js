@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Order = require('../../../models/order');
 const { formatOrderForApi } = require('../../../utils/order_api_format');
+const { stripAdminDescriptionForPublicApi } = require('../../../utils/admin_description_access');
 const { startOfUtcDay, endOfUtcDay } = require('../../../utils/date_bounds');
 const {
   hydrateUserRef,
@@ -116,7 +117,7 @@ const compareInProgressHomeOrders = (left, right, todayStart, todayEnd) => {
 };
 
 const mapMobileHomeOrder = (order) => {
-  const formatted = formatOrderForApi(order);
+  const formatted = stripAdminDescriptionForPublicApi(formatOrderForApi(order));
   const category = hydrateCategoryRef(formatted.category_id);
   const service = hydrateServiceRef(formatted.service_id);
   const partner = hydrateUserRef(formatted.partner_id);

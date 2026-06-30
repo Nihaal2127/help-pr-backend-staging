@@ -92,10 +92,57 @@ const applyDisputeChatStatus = async ({ disputeId, chatId, status, actorUserId }
   return { ok: true, data: result.data };
 };
 
+const getChatServiceBaseUrl = () => {
+  if (!process.env.CHAT_SERVICE_BASE_URL) return null;
+  return process.env.CHAT_SERVICE_BASE_URL.replace(/\/$/, "");
+};
+
+/**
+ * Proxy mobile support chat to Chat Service (forwards customer JWT).
+ * POST /api/mobile/user/chats/support
+ */
+const proxyMobileSupportChat = async (authorizationHeader, body) => {
+  const baseURL = getChatServiceBaseUrl();
+  if (!baseURL) {
+    return { ok: false, status: 503, message: "Chat service is not configured." };
+  }
+
+  if (!authorizationHeader) {
+    return { ok: false, status: 401, message: "Authorization header is required." };
+  }
+
+  try {
+    const response = await axios.post(`${baseURL}/api/mobile/user/chats/support`, body, {
+      headers: {
+        Authorization: authorizationHeader,
+        "Content-Type": "application/json",
+      },
+      timeout: parseInt(process.env.CHAT_SERVICE_TIMEOUT_MS || "10000", 10),
+    });
+
+    return {
+      ok: true,
+      status: response.status,
+      data: response.data,
+    };
+  } catch (error) {
+    const status = error.response?.status || 500;
+    const payload = error.response?.data || {};
+    console.error("Chat service proxy support chat:", payload.message || error.message);
+    return {
+      ok: false,
+      status,
+      message: payload.message || error.message,
+      data: payload,
+    };
+  }
+};
+
 module.exports = {
   isChatServiceEnabled,
   provisionOrderChat,
   syncOrderChat,
   provisionDisputeChat,
   applyDisputeChatStatus,
+  proxyMobileSupportChat,
 };

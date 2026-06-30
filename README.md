@@ -28,7 +28,7 @@ Health check: `GET /health` → `{ "status": "OK" }`
 
 - **Express 4** + **MongoDB** (Mongoose)
 - **JWT** authentication
-- **AWS Lambda** (`aws-serverless-express`) or local HTTP + **Socket.IO** (chat)
+- **AWS Lambda** (`aws-serverless-express`) for APIs; **Chat Service** on VPS for messaging
 - **Razorpay**, **Firebase** (push), **S3** (uploads)
 
 ## User types (`user.type`)
@@ -58,7 +58,7 @@ See [docs/PROJECT_FLOW_AND_ROLES.md](docs/PROJECT_FLOW_AND_ROLES.md) for what ea
 | `/api/order-payments`, `/api/order-additional-charges` | Order financials |
 | `/api/refund`, `/api/partner_payout` | Refunds and partner remittance |
 | `/api/mobile/partner` | Partner mobile app |
-| `/api/chat` | Messaging |
+| Chat (REST + Socket.IO) | **help-pr-chat-service** on VPS (`CHAT_SERVICE_BASE_URL`) |
 
 Auth header for protected routes: `Authorization: Bearer <jwt>`
 
@@ -72,7 +72,7 @@ models/          Mongoose schemas
 routes/          Express routers
 services/        Business logic
 utils/           Shared helpers (franchise scope, pricing, etc.)
-src/modules/chat Chat module (routes + socket)
+src/modules/notifications  In-app notifications
 docs/            Integration and flow documentation
 postman/         API collections
 server.js        App entry (local server + Lambda handler)

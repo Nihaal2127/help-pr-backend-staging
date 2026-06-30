@@ -92,7 +92,7 @@ HTTP Request
 | Order access | `utils/order_access.js` |
 | Quote access | `utils/quote_access.js` |
 | Partner mobile | `routes/mobile/`, `services/mobile/partner/` |
-| Chat | `src/modules/chat/` |
+| Chat | `help-pr-chat-service` on VPS (Lambda uses HTTP client only) |
 
 ---
 

@@ -2,7 +2,9 @@
 
 This document describes the target architecture for extracting the chat system from the Lambda monolith into a dedicated **Chat Service** on a VPS (e.g. AWS Lightsail). It supersedes the in-process chat wiring described in `server.js` for production.
 
-**Related docs:** `docs/CHAT_MODULE_FRONTEND.md` (client integration), `src/modules/chat/` (current implementation).
+**Related docs:** `docs/CHAT_MODULE_FRONTEND.md` (client integration), `help-pr-chat-service` (Chat Service implementation).
+
+**Lambda:** `src/modules/chat/` has been removed from the monolith; chat runs on VPS only.
 
 ---
 

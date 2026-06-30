@@ -5,7 +5,6 @@ const cors = require('cors');
 const connectDB = require('./config/db'); // Database connection
 const compression = require('compression'); // Compress responses
 const path = require('path');
-const { Server } = require('socket.io');
 const http = require('http');
 
 const authRoutes = require('./routes/auth_routes');
@@ -53,9 +52,7 @@ const refundRoutes = require('./routes/refund_routes');
 const partnerPostRoutes = require('./routes/partner_post_routes');
 const partnersRoutes = require('./routes/partners_routes');
 const appointmentRoutes = require('./routes/appointment_routes');
-const { chatRoutes, registerChatSocket } = require('./src/modules/chat');
 const { notificationRoutes } = require('./src/modules/notifications');
-const { setChatIo } = require('./src/modules/chat/sockets/chatEmitter');
 const mobileRoutes = require('./routes/mobile');
 const { publicImageUrlsResponseMiddleware } = require('./middleware/public_image_urls_response_middleware');
 
@@ -165,17 +162,7 @@ app.use('/api/partner-post', partnerPostRoutes);
 app.use('/api/partners', partnersRoutes);
 app.use('/api/appointment', appointmentRoutes);
 
-// When Chat Service runs on VPS, Lambda provisions chats via HTTP only — do not mount REST chat here.
-const isLambdaRuntime = !!process.env.AWS_LAMBDA_FUNCTION_NAME;
-const useRemoteChatService =
-  process.env.CHAT_SERVICE_ENABLED === 'true' &&
-  Boolean(process.env.CHAT_SERVICE_BASE_URL);
-
-if (!(isLambdaRuntime && useRemoteChatService)) {
-  app.use('/api/chat', chatRoutes);
-} else {
-  console.log('Chat REST disabled on Lambda (CHAT_SERVICE_ENABLED). Use VPS Chat Service.');
-}
+// Chat REST and Socket.IO run on the separate Chat Service (VPS). Lambda provisions via HTTP only.
 
 app.use('/api/mobile', mobileRoutes);
 
@@ -216,23 +203,14 @@ app.use((err, req, res, next) => {
 // serves static files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Start the HTTP server for local / VM / container deploys. Lambda uses exports.handler only.
+// Start the HTTP server for local / VM deploys. Lambda uses exports.handler only.
 const isLambda = !!process.env.AWS_LAMBDA_FUNCTION_NAME;
 
 if (!isLambda) {
   const PORT = process.env.PORT || 5001;
-  const httpServer = http.createServer(app);
-  const io = new Server(httpServer, {
-    cors: {
-      origin: '*',
-      methods: ['GET', 'POST'],
-    },
-  });
-  setChatIo(io);
-  registerChatSocket(io);
-
-  httpServer.listen(PORT, () => {
+  http.createServer(app).listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
+    console.log('Chat APIs: use help-pr-chat-service (CHAT_SERVICE_BASE_URL).');
   }).on('error', (err) => {
     console.error('HTTP server failed to start:', err.message);
   });

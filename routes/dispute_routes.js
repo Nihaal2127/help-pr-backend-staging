@@ -6,7 +6,7 @@ const {
   disputeIdValidator,
   listDisputesQueryValidator,
 } = require("../middleware/dispute_middleware");
-const validateRequest = require("../src/modules/chat/validators/validateRequest");
+const validateRequest = require("../utils/validateRequest");
 
 const router = express.Router();
 

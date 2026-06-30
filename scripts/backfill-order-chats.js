@@ -1,24 +1,35 @@
 /**
- * Backfill order group chats for orders missing chat_id.
+ * Backfill order group chats for orders missing chat_id via Chat Service.
+ *
+ * Requires:
+ *   CHAT_SERVICE_ENABLED=true
+ *   CHAT_SERVICE_BASE_URL
+ *   CHAT_SERVICE_INTERNAL_API_KEY
+ *   MONGO_URI (or MONGODB_URI)
  *
  * Usage: node scripts/backfill-order-chats.js
  */
 require("dotenv").config();
 const mongoose = require("mongoose");
 const Order = require("../models/order");
-const { createOrderChatForOrder } = require("../src/modules/chat/services/chatProvisioning.service");
+const { provisionOrderChat, isChatServiceEnabled } = require("../services/chat_service_client");
 
 const BATCH_SIZE = 100;
 
 const run = async () => {
-  const uri = process.env.MONGODB_URI || process.env.DB_URL;
+  if (!isChatServiceEnabled()) {
+    console.error("Set CHAT_SERVICE_ENABLED=true, CHAT_SERVICE_BASE_URL, and CHAT_SERVICE_INTERNAL_API_KEY");
+    process.exit(1);
+  }
+
+  const uri = process.env.MONGO_URI || process.env.MONGODB_URI || process.env.DB_URL;
   if (!uri) {
-    console.error("Set MONGODB_URI or DB_URL");
+    console.error("Set MONGO_URI, MONGODB_URI, or DB_URL");
     process.exit(1);
   }
 
   await mongoose.connect(uri);
-  console.log("Connected. Backfilling order chats...");
+  console.log("Connected. Backfilling order chats via Chat Service...");
 
   let processed = 0;
   let created = 0;
@@ -47,11 +58,19 @@ const run = async () => {
     for (const order of batch) {
       processed += 1;
       try {
-        const chat = await createOrderChatForOrder(order);
-        if (chat) {
-          created += 1;
+        const result = await provisionOrderChat(order._id);
+        if (result.ok && result.chatId) {
+          await Order.updateOne(
+            { _id: order._id },
+            { $set: { chat_id: result.chatId, updated_at: new Date() } }
+          );
+          created += result.created ? 1 : 0;
+          if (!result.created) {
+            skipped += 1;
+          }
         } else {
-          skipped += 1;
+          failed += 1;
+          console.error(`Order ${order._id}:`, result.message || "provision failed");
         }
       } catch (error) {
         failed += 1;

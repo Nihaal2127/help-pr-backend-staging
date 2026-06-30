@@ -139,10 +139,8 @@ const raiseDisputeForCustomer = async (customerId, body) => {
 
   const chatResult = await provisionDisputeChatForRecord({
     dispute,
-    order,
     reason,
     description,
-    unique_id,
   });
 
   if (!chatResult.ok) {

@@ -1,6 +1,6 @@
 const express = require("express");
 const userAuthMiddleware = require("../../../middleware/mobile/user/user_auth_middleware");
-const validateRequest = require("../../../src/modules/chat/validators/validateRequest");
+const validateRequest = require("../../../utils/validateRequest");
 const {
   raiseDisputeValidator,
   disputeIdParamValidator,

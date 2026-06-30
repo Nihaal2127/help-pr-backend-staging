@@ -3,7 +3,7 @@ const {
   listCustomerDisputes,
   getDisputeById,
 } = require("../../../services/dispute_service");
-const { createOrGetSupportChat } = require("../../../src/modules/chat/services/chatProvisioning.service");
+const { proxyMobileSupportChat, isChatServiceEnabled } = require("../../../services/chat_service_client");
 const { fail, ok } = require("../../../utils/mobile_service_result");
 
 const raiseDispute = async (customerId, body) => {
@@ -61,24 +61,21 @@ const getDispute = async (req, disputeId) => {
   }
 };
 
-const startSupportChat = async (customerId, body, userType) => {
+const startSupportChat = async (authorizationHeader, body) => {
   try {
-    const result = await createOrGetSupportChat({
-      customerId,
-      employeeId: body.employee_id,
-      franchiseId: body.franchise_id,
-      initialMessage: body.initial_message,
-      actorUserId: customerId,
-      userType,
-    });
+    if (!isChatServiceEnabled()) {
+      return fail(503, "Chat service is not configured.");
+    }
 
+    const result = await proxyMobileSupportChat(authorizationHeader, body);
     if (!result.ok) {
       return fail(result.status, result.message);
     }
 
-    return ok(result.created ? 201 : 200, {
-      message: result.created ? "Support chat created." : "Support chat fetched.",
-      record: result.chat,
+    const payload = result.data || {};
+    return ok(result.status, {
+      message: payload.message,
+      record: payload.record,
     });
   } catch (error) {
     console.error("startSupportChat:", error.message);

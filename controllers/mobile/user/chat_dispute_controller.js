@@ -41,7 +41,7 @@ const getDisputeHandler = wrapMobileHandler("mobile user get dispute handler", a
 });
 
 const startSupportChatHandler = wrapMobileHandler("mobile user start support chat handler", async (req, res) => {
-  const result = await startSupportChat(getCallerId(req), req.body, req.user.type);
+  const result = await startSupportChat(req.header("Authorization"), req.body);
   if (!result.ok) {
     return sendServiceError(res, result);
   }

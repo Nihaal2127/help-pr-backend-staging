@@ -55,10 +55,12 @@ const appointmentRoutes = require('./routes/appointment_routes');
 const { notificationRoutes } = require('./src/modules/notifications');
 const mobileRoutes = require('./routes/mobile');
 const { publicImageUrlsResponseMiddleware } = require('./middleware/public_image_urls_response_middleware');
+const { logPublicImageUrlConfig } = require('./helper/publicImageUrl');
 
 // Load environment variables
 dotenv.config();
- 
+logPublicImageUrlConfig();
+
 // Connect to the database
 connectDB();
 // let isDbConnected = false;

@@ -11,7 +11,7 @@ const IMAGE_FIELD_KEYS = new Set([
 ]);
 
 const getCdnBase = () =>
-  String(process.env.AWS_S3_BUCKET || process.env.AWS_S3_BUCKET || '').replace(
+  String(process.env.IMAGE_CDN_BASE_URL || process.env.CDN_BASE_URL || '').replace(
     /\/+$/,
     ''
   );
@@ -55,9 +55,47 @@ const deepApplyPublicImageUrls = (value) => {
   return out;
 };
 
+/** Startup diagnostics — check CloudWatch on Lambda cold start or local console on boot. */
+const logPublicImageUrlConfig = () => {
+  const imageCdn = process.env.IMAGE_CDN_BASE_URL || '';
+  const cdnBase = process.env.CDN_BASE_URL || '';
+  const resolved = getCdnBase();
+  const s3Bucket = process.env.AWS_S3_BUCKET || '';
+  const sampleKey = 'category/example.png';
+  const sampleUrl = toPublicImageUrl(sampleKey);
+
+  const source = imageCdn
+    ? 'IMAGE_CDN_BASE_URL'
+    : cdnBase
+      ? 'CDN_BASE_URL'
+      : '(none)';
+
+  console.log('[publicImageUrl] Image URL config:', {
+    source,
+    IMAGE_CDN_BASE_URL: imageCdn || '(unset)',
+    CDN_BASE_URL: cdnBase || '(unset)',
+    resolvedCdnBase: resolved || '(unset)',
+    AWS_S3_BUCKET: s3Bucket || '(unset)',
+    sampleInput: sampleKey,
+    sampleOutput: sampleUrl,
+  });
+
+  if (resolved && !/^https?:\/\//i.test(resolved)) {
+    console.warn(
+      '[publicImageUrl] resolvedCdnBase is not a full URL (missing https://). Image links may not load in clients.'
+    );
+  }
+  if (resolved && s3Bucket && resolved === s3Bucket) {
+    console.warn(
+      '[publicImageUrl] resolvedCdnBase equals AWS_S3_BUCKET — use CloudFront/S3 HTTPS URL for IMAGE_CDN_BASE_URL instead.'
+    );
+  }
+};
+
 module.exports = {
   toPublicImageUrl,
   deepApplyPublicImageUrls,
   getCdnBase,
+  logPublicImageUrlConfig,
   IMAGE_FIELD_KEYS,
 };

@@ -13,7 +13,7 @@ Postman: **`postman/Help-PR-All-APIs.postman_collection.json`** → **39 — Cha
 | Type | `chat.type` | Participants | Created when |
 |------|-------------|--------------|--------------|
 | Order | `order` | Customer, partner, assigned employee, franchise admin | **Automatically** on order create |
-| Dispute | `dispute` | Customer + order employee | Customer raises dispute on a **completed** order |
+| Dispute | `dispute` | Customer + order employee | Customer raises dispute on an **eligible completed** order — see [§7](#7-dispute-chats) |
 | General / support | `support` | Customer + employee | Customer or employee starts support chat |
 
 ---
@@ -354,7 +354,7 @@ Use REST for **setup, inbox, history bootstrap, and socket fallback** — not fo
 | `GET` | `/:id` | Single chat metadata |
 | `GET` | `/by-order/:orderId` | Resolve order group chat |
 | `POST` | `/support` | Start or resume support chat |
-| `PATCH` | `/:id/status` | Close/reopen chat `{ "status": "closed" }` |
+| `PATCH` | `/:id/status` | Close/reopen chat `{ "status": "closed" \| "open" }` — see [§13](#13-closing-chats) |
 | `POST` | `/:id/transfer` | Reassign handler `{ "newAssignedTo": "<employee_id>" }` |
 | `POST` | `/messages` | **Fallback only** — send when socket unavailable; include `clientMessageId` |
 | `GET` | `/messages?chatId=…&after=…&limit=50` | Initial load or post-reconnect gap fill — **not polling** |
@@ -401,26 +401,255 @@ If some roles are missing at create time (e.g. no `employee_id` yet), the chat i
 
 ---
 
-## 7. Raise dispute (customer)
+## 7. Dispute chats
 
-**POST** `/api/mobile/user/disputes`
+Dispute chats are **not** started like support chats. Only the **customer** can create a dispute (which auto-provisions the chat). Admin and employee web clients **open an existing** dispute thread — they cannot initiate a new dispute chat.
+
+### Overview
+
+| Property | Value |
+|----------|--------|
+| `chat.type` | `"dispute"` |
+| `isGroup` | `false` (1:1) |
+| **Participants** | Customer + order’s assigned `employee_id` |
+| **`assignedTo`** | Same employee |
+| **`context`** | `{ orderId, disputeId }` |
+| **Separate from order chat** | Dispute has its **own** `chat_id` — do not reuse `order.chat_id` |
+
+| Who | Can initiate dispute chat? |
+|-----|----------------------------|
+| **Customer** (mobile) | **Yes** — `POST /api/mobile/user/disputes` |
+| **Admin / employee** (web) | **No** — open `chat_id` from dispute record |
+| **Any client** | **No** `POST /api/chat` for disputes — chat is auto-provisioned server-side |
+
+### Order eligibility (which orders can get a dispute chat)
+
+Only the **logged-in customer** can raise a dispute, and only via **`POST /api/mobile/user/disputes`**. There is no web or admin API to start a dispute.
+
+An order is **eligible** when **all** of the following are true:
+
+| # | Rule | Why |
+|---|------|-----|
+| 1 | Order **`user_id`** matches the logged-in customer | Disputes are customer-initiated on their own orders |
+| 2 | Order **`order_status`** is **`completed`** | Disputes are post-service only |
+| 3 | Order has **`employee_id`** set | Dispute chat is 1:1 customer ↔ assigned employee |
+| 4 | Order is **not** soft-deleted (`deleted_at: null`) | Deleted orders are ignored |
+| 5 | No **open** dispute already exists for that order | “Open” = status `open` or `in_review` |
+
+**Not checked by the API today** (do not rely on these for eligibility unless product adds them later):
+
+- Payment status, refund state, or partner assignment
+- Whether the order group chat (`order.chat_id`) exists
+- Franchise or service category
+
+#### Eligible vs ineligible (examples)
+
+| Order state | Can raise dispute? |
+|-------------|------------------|
+| `completed` + has `employee_id` + customer’s order + no open dispute | **Yes** |
+| `pending`, `in_progress`, `cancelled`, or any non-`completed` status | **No** — `409` “Disputes can only be raised for completed orders.” |
+| `completed` but **`employee_id` is null** | **No** — `409` “This order has no assigned employee for dispute chat.” |
+| Another customer’s order | **No** — `404` “Order not found.” |
+| Already has dispute `open` or `in_review` | **No** — `409` “An open dispute already exists…” — use `record.chat_id` from response |
+| Previous dispute **`resolved`** or **`closed`** on same order | **Yes** — a **new** dispute may be raised (new dispute record + new chat) |
+
+Show **“Raise dispute”** on mobile only when the order passes rules 1–5. Hide or disable for in-progress/cancelled orders and when an open dispute already exists (deep-link to existing `chat_id` instead).
+
+#### API errors (eligibility)
+
+| HTTP | Message | Meaning |
+|------|---------|---------|
+| `400` | Valid `order_id` required | Invalid or missing `order_id` |
+| `404` | Order not found | Wrong id or not this customer’s order |
+| `409` | Disputes can only be raised for completed orders | `order_status !== completed` |
+| `409` | This order has no assigned employee… | Missing `employee_id` |
+| `409` | An open dispute already exists… | Use existing `record.chat_id` |
+| `500` | Failed to create dispute chat | Dispute rolled back — retry later |
+
+#### Who the dispute chat connects
+
+When eligible and raised successfully:
+
+- **Customer** = `order.user_id`
+- **Employee** = `order.employee_id` at time of raise (handler for dispute chat)
+- **Franchise** = `order.franchise_id` (used for admin inbox scoping, not a separate participant)
+
+The dispute chat is **separate** from the order **group** chat (`order.chat_id`). A completed order may have both threads.
+
+### Backend flow (automatic — not called by clients)
+
+```text
+Customer (mobile)
+    │
+    ▼
+POST {lambdaApiUrl}/api/mobile/user/disputes
+    │
+    ▼
+Lambda: create dispute record (status: open)
+    │
+    ▼
+Lambda → Chat Service: POST /internal/chats/dispute
+    │
+    ▼
+Chat Service: create chat (type: dispute)
+  • participants: customer + order.employee_id
+  • assignedTo: employee
+  • context: { orderId, disputeId }
+  • system message with reason / description
+    │
+    ▼
+Lambda: save dispute.chat_id → return to customer
+```
+
+Clients never call the internal VPS provisioning endpoint.
+
+### Mobile (customer app)
+
+#### 1. Raise dispute (creates chat)
+
+```http
+POST {lambdaApiUrl}/api/mobile/user/disputes
+Authorization: Bearer <customer_jwt>
+Content-Type: application/json
+```
 
 ```json
 {
-  "order_id": "<order_mongo_id>",
+  "order_id": "<completed_order_mongo_id>",
   "reason": "Service not completed properly",
   "description": "Optional longer text"
 }
 ```
 
-Rules:
+**Requirements** — same as [Order eligibility](#order-eligibility-which-orders-can-get-a-dispute-chat) above:
 
-- Order must belong to the logged-in customer.
+- Order belongs to the logged-in customer.
 - `order_status` must be **`completed`**.
-- Order must have an **`employee_id`**.
-- Only **one open dispute** per order (`409` if one already exists).
+- Order must have **`employee_id`**.
+- Only **one open dispute** per order (`open` or `in_review`; `409` if one already exists — use `record.chat_id` from the response to reopen the thread).
 
-Response includes `record.chat_id` — open that chat for messaging.
+**Success `201`**
+
+```json
+{
+  "success": true,
+  "status": 201,
+  "message": "Dispute raised successfully.",
+  "record": {
+    "_id": "...",
+    "chat_id": "674a1b2c3d4e5f6789012345",
+    "order_id": "...",
+    "employee_id": "...",
+    "status": "open"
+  }
+}
+```
+
+#### 2. Open chat and message
+
+Use `record.chat_id` on the **Chat Service**:
+
+1. Connect socket → `{chatServiceUrl}`
+2. `join_chat(chat_id)`
+3. `GET {chatServiceUrl}/api/chat/messages?chatId=…` (bootstrap history)
+4. `send_message` / `receive_message` for live messaging
+5. Upload attachments via `{lambdaApiUrl}/api/document_upload/files` with `type: 7`, then send `fileUrl` in the message (see [§4 Attachments](#attachments-images--documents))
+
+#### 3. List or reopen existing dispute
+
+```http
+GET {lambdaApiUrl}/api/mobile/user/disputes
+GET {lambdaApiUrl}/api/mobile/user/disputes/:disputeId
+Authorization: Bearer <customer_jwt>
+```
+
+Both return `chat_id` — use it to open the same thread (no new chat is created).
+
+### Web (admin / employee)
+
+Web has **no** `POST /api/dispute/create`. Staff work with disputes the customer already raised.
+
+#### 1. Find dispute
+
+```http
+GET {lambdaApiUrl}/api/dispute/getAll?page=1&limit=10
+GET {lambdaApiUrl}/api/dispute/get/:disputeId
+Authorization: Bearer <admin_or_employee_jwt>
+```
+
+Response includes **`chat_id`**.
+
+#### 2. Open chat (Chat Service)
+
+1. Connect socket → `{chatServiceUrl}`
+2. `join_chat(dispute.chat_id)`
+3. `GET {chatServiceUrl}/api/chat/:id` (optional metadata)
+4. `GET {chatServiceUrl}/api/chat/messages?chatId=…`
+5. `send_message` for replies
+
+Show **`assignedToUser`** in the thread header (employee handling the dispute).
+
+#### 3. Update dispute status (Lambda)
+
+```http
+PUT {lambdaApiUrl}/api/dispute/update/:id
+Authorization: Bearer <admin_or_employee_jwt>
+Content-Type: application/json
+```
+
+```json
+{ "status": "in_review" | "resolved" | "closed" }
+```
+
+| Status | Chat side effect |
+|--------|------------------|
+| `in_review` | System message: “Dispute is now in review.” |
+| `resolved` / `closed` | System message + linked chat `status` set to **`closed`** — see [§13 Closing chats](#13-closing-chats) |
+
+Customers **cannot** update dispute status (`403`).
+
+#### 4. Reassign handler (optional)
+
+```http
+POST {chatServiceUrl}/api/chat/:chatId/transfer
+```
+
+```json
+{ "newAssignedTo": "<employee_mongo_id>" }
+```
+
+Or socket **`transfer_chat`**. For disputes this is a **full handoff**: customer stays; previous employee is removed from `participants`; new employee is added; `assignedTo` and `dispute.employee_id` are updated. Prior messages stay on the same `chatId`. See [§9 Transfer chat](#9-transfer-chat-reassign-handler) for permissions and per-type behavior.
+
+### Web vs mobile summary
+
+| Step | Mobile (customer) | Web (admin / employee) |
+|------|-------------------|------------------------|
+| **Start dispute chat** | `POST {lambda}/api/mobile/user/disputes` | Not available — customer must raise first |
+| **Get `chat_id`** | From raise / list / get dispute | From `GET /api/dispute/getAll` or `get/:id` |
+| **Messaging** | `{chatServiceUrl}` socket + `/api/chat/messages` | Same |
+| **File upload** | `{lambda}/api/document_upload/files` `type: 7` | Same |
+| **Update status** | Not allowed (`403`) | `PUT {lambda}/api/dispute/update/:id` |
+| **Transfer employee** | Not typical | `POST {chatService}/api/chat/:id/transfer` |
+
+### UI flows
+
+**Mobile:** Completed order → “Raise dispute” → `POST /disputes` → navigate to chat screen with `record.chat_id`.
+
+**Web:** Disputes list or notification → open dispute detail → read `chat_id` → `join_chat` → message thread. Employee replies immediately; admin may update status or transfer.
+
+### Common mistakes
+
+| Mistake | Fix |
+|---------|-----|
+| Calling `POST /api/chat/support` to start a dispute | Use `POST /api/mobile/user/disputes` (customer only) |
+| Admin trying to “create” a dispute chat | Open existing `chat_id` from dispute record |
+| Using `order.chat_id` for a dispute | Use **`dispute.chat_id`** (separate thread) |
+| Raising dispute before order is completed | Wait until `order_status = completed` — see [§7 Order eligibility](#order-eligibility-which-orders-can-get-a-dispute-chat) |
+| Polling dispute APIs for new messages | Use Socket.IO on `{chatServiceUrl}` |
+
+### Inbox filtering
+
+Dispute threads appear in `GET {chatServiceUrl}/api/chat` with `type: "dispute"`. Optional filter: `?type=dispute&status=open`.
 
 ---
 
@@ -461,26 +690,122 @@ Staff may target a specific employee; customers cannot. Returns existing **open*
 
 ## 9. Transfer chat (reassign handler)
 
-**POST** `/api/chat/:id/transfer` or socket **`transfer_chat`**
+Reassign the **handler** (`assignedTo`) for a chat. Used mainly on **web** (admin / employee) — customers and partners **cannot** transfer.
+
+**Host:** `{chatServiceUrl}` only (not Lambda).
+
+### API
+
+**REST**
+
+```http
+POST {chatServiceUrl}/api/chat/:chatId/transfer
+Authorization: Bearer <jwt>
+Content-Type: application/json
+```
+
+**Socket (preferred when thread is open)**
 
 ```json
 {
+  "chatId": "<mongo_chat_id>",
   "newAssignedTo": "<employee_mongo_id>"
 }
 ```
 
-| Chat type | Behavior |
-|-----------|----------|
-| `support`, `dispute` | **Full handoff** — customer stays; previous employee removed from `participants`; new employee added; `assignedTo` updated; `isGroup: false`. For disputes, `dispute.employee_id` is updated too. Prior messages stay on the same `chatId`. |
-| `order` (and others) | Only **`assignedTo`** changes; group participants are unchanged. |
+Emit: **`transfer_chat`**  
+Listen: **`chat_assigned`**, **`chat_updated`**, **`receive_message`** (system line).
 
-Validation for support/dispute handoff:
+**Pick transfer targets:** use Lambda `GET {lambdaApiUrl}/api/user/getAll?type=3` (active employees in franchise) — there is no dedicated chat transfer-targets endpoint.
 
-- New assignee must be an **active employee** with `chat !== false`.
-- Employee must belong to the **same franchise** as the chat.
-- Customer must remain a participant.
+### Which chats can be transferred?
 
-On success, backend posts a **system message** (`type: "system"`) and emits **`receive_message`** so open threads show the transfer line. Also listen for **`chat_assigned`** and **`chat_updated`**.
+All chat types support transfer at the API level. Behavior depends on `chat.type`:
+
+| Chat type | Transfer behavior |
+|-----------|-------------------|
+| **`support`** | **Full handoff** — customer stays; previous employee removed from `participants`; new employee added; `assignedTo` updated; `isGroup: false`; system message posted |
+| **`dispute`** | Same as support **plus** `dispute.employee_id` updated in MongoDB |
+| **`order`** | Only **`assignedTo`** changes — group **participants unchanged** (customer, partner, employee, franchise admin) |
+| **`quote`** (if used) | Same as order — only `assignedTo` changes |
+
+Prior messages always stay on the **same** `chatId` — transfer does not create a new thread.
+
+**Typical use**
+
+| Chat type | Who usually transfers | Why |
+|-----------|----------------------|-----|
+| Support | Franchise admin, assigned employee | Hand off to another support agent |
+| Dispute | Franchise admin, assigned employee | Reassign dispute handler |
+| Order | Franchise admin, assigned employee | Change handling employee without reshaping the group |
+
+Closed chats are **not** blocked by the server today — hide or disable transfer in UI when `chat.status === "closed"` if that matches product rules.
+
+### Who can transfer?
+
+Transfer requires **manage** permission (`assertChatManageAccess`), not just inbox/read access.
+
+| Role | Can transfer? |
+|------|----------------|
+| **Super admin** (`type: 5`) | **Yes** — any chat |
+| **Franchise admin** (`type: 1`) | **Yes** — chats in their franchise (even if not a participant) |
+| **Assigned employee** (`assignedTo` matches caller) | **Yes** |
+| **Employee** participant with `roles[].role = "employee"` on that chat | **Yes** |
+| **Admin** participant with `roles[].role = "admin"` on that chat (e.g. order group) | **Yes** |
+| **Staff** (`type: 6`) | **Only if** assigned or has `admin` / `employee` role on that chat — not franchise-wide like franchise admin |
+| **Customer** (`type: 4`) | **No** |
+| **Partner** (`type: 2`) | **No** |
+
+**Mobile:** do not show transfer UI to customers.  
+**Web:** show transfer on support, dispute, and order threads for admin and eligible employees.
+
+### New assignee rules
+
+#### Support and dispute (full handoff)
+
+| Rule | Error if violated |
+|------|-------------------|
+| `newAssignedTo` must be an **active employee** (`type: 3`, `is_active: true`) | `400` Invalid assignee |
+| Employee must have **`chat !== false`** | `403` Not available for chat |
+| Employee must be in the **same franchise** as the chat (when franchise is known) | `403` Franchise mismatch |
+| Chat must include a **customer** in `participants` | `409` Chat invalid |
+| Same as current `assignedTo` | No-op (chat returned unchanged) |
+
+#### Order (and other non-handoff types)
+
+- Only `assignedTo` is updated.
+- Employee / franchise validation for `newAssignedTo` is **not** enforced in code today — still pass a valid employee id from your employee picker.
+
+### Response and UI events
+
+On success:
+
+1. Chat record updated (`assignedTo`, and for support/dispute: `participants`, `isGroup`).
+2. **System message** posted: `"Chat transferred from … to …"`.
+3. Socket emits **`receive_message`** (system bubble), **`chat_assigned`**, **`chat_updated`**.
+
+REST `200`:
+
+```json
+{
+  "success": true,
+  "status": 200,
+  "message": "Chat transferred successfully.",
+  "record": { "...": "updated chat with assignedToUser, participantUsers" }
+}
+```
+
+Update thread header from `record.assignedToUser` after transfer.
+
+### Common mistakes
+
+| Mistake | Result |
+|---------|--------|
+| Customer calls transfer | `403` No manage permission |
+| Transfer to employee from another franchise (support/dispute) | `403` Franchise mismatch |
+| Transfer to employee with `chat: false` | `403` Not available for chat |
+| Expecting order group members to change on transfer | Only `assignedTo` changes for `order` |
+| Calling Lambda instead of Chat Service | Wrong host — transfer is VPS-only |
 
 ---
 
@@ -490,7 +815,7 @@ On success, backend posts a **system message** (`type: "system"`) and emits **`r
 |--------|---------|----------------------------|
 | App session | **Connect socket** once | — |
 | Order detail → Chat tab | `join_chat` | `order.chat_id` or `GET /by-order/:orderId` to get `chatId` |
-| Completed order → Raise dispute | — (Lambda) | `POST /disputes` → navigate to `chat_id` |
+| Completed order → Raise dispute | — (Lambda) | `POST /disputes` → navigate to `chat_id` (see [§7](#7-dispute-chats)) |
 | Support / Help | `join_chat` after create | `POST …/chats/support` or `/api/chat/support` |
 | Chat inbox | Refresh list on `receive_message` / `messages_read` | `GET /api/chat` on open / pull-to-refresh |
 | Chat thread — live | **`send_message` → `message_sent`**; others via `receive_message` | `GET /messages` once on open; `before` on scroll-up only |
@@ -500,7 +825,7 @@ On success, backend posts a **system message** (`type: "system"`) and emits **`r
 | Online / last seen | **`presence_updated`** | `GET /presence/...` on thread open |
 | Edit / delete bubble | **`edit_message` / `delete_message`** | `PATCH` / `DELETE` if socket down |
 | Unread badge | Update on `receive_message`; clear via **`read_messages`** | `unreadCount` from inbox `GET` |
-| Reassign support/dispute | `transfer_chat` or REST | `POST /:id/transfer` |
+| Reassign support/dispute/order | `transfer_chat` or REST | `POST /:id/transfer` — see [§9](#9-transfer-chat-reassign-handler) |
 
 ---
 
@@ -533,7 +858,7 @@ Store two base URLs in app config (`.env`, flavors, etc.):
 | Order chat by order | `GET` | `{chatServiceUrl}/api/chat/by-order/:orderId` |
 | Message history / fallback send | `GET` / `POST` | `{chatServiceUrl}/api/chat/messages` |
 | Start support chat | `POST` | `{chatServiceUrl}/api/mobile/user/chats/support` |
-| Raise dispute | `POST` | `{lambdaApiUrl}/api/mobile/user/disputes` |
+| Raise dispute | `POST` | `{lambdaApiUrl}/api/mobile/user/disputes` — see [§7](#7-dispute-chats) |
 | List / get dispute | `GET` | `{lambdaApiUrl}/api/mobile/user/disputes` |
 | Socket.IO | connect | `{chatServiceUrl}` |
 
@@ -654,10 +979,124 @@ Use **HTTPS** on production Chat Service and drop cleartext exceptions.
 
 ---
 
-## 13. Notes
+## 13. Closing chats
+
+Chat `status` is one of: **`open`**, **`closed`**, **`pending`**. Closing is **not** the same as leaving a thread — it marks the conversation as finished in the inbox (`?status=open` filters closed chats out).
+
+**Host:** status changes use **`{chatServiceUrl}`** except dispute auto-close, which is triggered from **Lambda** when dispute status is updated.
+
+### Who can close a chat?
+
+Uses the same **manage** permission as transfer ([§9](#9-transfer-chat-reassign-handler)):
+
+| Role | Can close via `PATCH /api/chat/:id/status`? |
+|------|---------------------------------------------|
+| **Super admin** | **Yes** |
+| **Franchise admin** (franchise-scoped) | **Yes** |
+| **Assigned employee** (`assignedTo`) | **Yes** |
+| **Employee / admin** with manage role on that chat | **Yes** |
+| **Customer** | **No** |
+| **Partner** | **No** |
+
+Customers cannot close order, dispute, or support chats through the API today.
+
+### API — manual close / reopen
+
+```http
+PATCH {chatServiceUrl}/api/chat/:chatId/status
+Authorization: Bearer <jwt>
+Content-Type: application/json
+```
+
+```json
+{ "status": "closed" }
+```
+
+Reopen with `{ "status": "open" }`. `pending` is also allowed but rarely used in UI.
+
+**Who typically uses this:** franchise admin or assigned employee on **web** — e.g. “Close conversation” on support or order threads.
+
+There is **no** Socket.IO event for close — use REST `PATCH` (or refresh chat metadata after close).
+
+### By chat type — when does a chat close?
+
+| Chat type | Automatic close | Manual close |
+|-----------|-----------------|--------------|
+| **`dispute`** | **Yes** — when dispute is set to **`resolved`** or **`closed`** via Lambda `PUT /api/dispute/update/:id` | Admin/employee may also `PATCH` chat status |
+| **`order`** | **No** — order completion does **not** close the group chat | Admin/employee `PATCH` only |
+| **`support`** | **No** | Admin/employee `PATCH` only |
+| **`quote`** (if used) | **No** | Admin/employee `PATCH` only |
+
+#### Dispute chats (automatic)
+
+When back-office updates dispute status on **Lambda**:
+
+```http
+PUT {lambdaApiUrl}/api/dispute/update/:disputeId
+Authorization: Bearer <admin_or_employee_jwt>
+```
+
+```json
+{ "status": "resolved" }
+```
+
+or `"closed"`.
+
+Lambda calls Chat Service internally → linked dispute chat `status` becomes **`closed`**, system message posted (`"Dispute marked as resolved."` / `"…closed."`).
+
+| Dispute status change | Chat effect |
+|----------------------|-------------|
+| → `in_review` | Chat stays **open**; system message only |
+| → `resolved` or `closed` | Chat set to **`closed`** + system message |
+| Reopen dispute status to `open` | Chat is **not** auto-reopened — use `PATCH` with `"open"` if product allows |
+
+Customers **cannot** call `PUT /api/dispute/update` (`403`).
+
+#### Order chats (manual only)
+
+- Created when the order is created; stays **`open`** when the order moves to **`completed`**, **`cancelled`**, etc.
+- There is **no** auto-close tied to order lifecycle in code today.
+- Franchise admin or assigned employee may close via `PATCH` when the conversation should end (product decision).
+- **Partners and customers** cannot close the group chat.
+
+#### Support chats (manual only)
+
+- Same as order — close only via `PATCH` by admin / assigned employee.
+- Starting a **new** support chat later uses load balancing / resume rules ([§8](#8-general-support-chat)) — separate from closing an old thread.
+
+### After a chat is closed
+
+| Behavior | Detail |
+|----------|--------|
+| **Inbox** | Filter with `GET /api/chat?status=open`; closed threads drop out unless you omit the filter |
+| **Read access** | Participants with access can still **open history** (`GET /messages`, `GET /:id`) if your UI allows |
+| **Send messages** | Server does **not** block `send_message` on closed chats today — **disable compose in UI** when `chat.status === "closed"` |
+| **Transfer** | Not blocked server-side — hide transfer when closed ([§9](#9-transfer-chat-reassign-handler)) |
+
+### UI recommendations
+
+| Chat type | Show “Close” to | When to show |
+|-----------|-----------------|--------------|
+| **Dispute** | Admin, employee | Optional manual close; usually let **Resolve / Close dispute** on Lambda close the chat automatically |
+| **Order** | Admin, assigned employee | After order is complete and conversation is done (manual) |
+| **Support** | Admin, assigned employee | When issue is resolved (manual) |
+| **All** | Customer | **Do not show** close — customers cannot close |
+
+### Common mistakes
+
+| Mistake | Fix |
+|---------|-----|
+| Customer expects “end chat” to close server-side | Only staff with manage permission can `PATCH` status |
+| Assuming order completion closes order chat | It does not — close manually if needed |
+| Resolving dispute but chat still open | Ensure Lambda `CHAT_SERVICE_ENABLED` and dispute update path ran; check dispute `chat_id` |
+| Closed chat still accepts sends | Block send in client UI until server enforces closed threads |
+
+---
+
+## 14. Notes
 
 - **Do not poll** `GET /messages` for new messages — that is what Socket.IO is for.
 - Chat REST + Socket.IO run on the **Chat Service VPS**, not Lambda. Use `{chatServiceUrl}` for all chat endpoints.
-- Disputes and orders remain on **Lambda** — only `chat_id` and provisioning are shared.
+- Disputes and orders remain on **Lambda** — only `chat_id` and provisioning are shared. Full dispute chat flow: [§7](#7-dispute-chats).
 - Dispute and support chats are **1:1** (customer + employee). Order chats are **group**.
-- Closing a resolved dispute also closes the linked chat (`status: closed`) via Lambda → Chat Service internal API.
+- Closing chats: [§13](#13-closing-chats). Dispute resolve/close auto-closes linked chat via Lambda → Chat Service internal API.

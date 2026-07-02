@@ -212,7 +212,7 @@ The chat service stores a **URL reference** only — it does **not** accept mult
 | Part | Value |
 |------|--------|
 | `files` | One or more files (multipart field name **`files`**, max **5** per request) |
-| `type` | Integer upload category (see table below) |
+| `type` | **`7`** for all chat attachments (images and PDFs) |
 
 **Auth:** `Authorization: Bearer <jwt>` (same user sending the chat message).
 
@@ -227,25 +227,30 @@ The chat service stores a **URL reference** only — it does **not** accept mult
   "status": 200,
   "message": "File uploaded successfully",
   "records": [
-    "https://cdn.example.com/partner_post/abc123_invoice.pdf"
+    "https://cdn.example.com/chat_attachment/abc123_invoice.pdf"
   ]
 }
 ```
 
-Use `records[0]` (or each entry for multiple files) as `fileUrl` in the chat message.
+Use **`records[0]` exactly** as `fileUrl` in the chat message. Do **not** rebuild the URL from `type`, user role, or filename.
 
 **Upload `type` values** (`body.type`):
 
 | `type` | Folder | Public URL in response? |
 |--------|--------|-------------------------|
-| `1` | `partner_document` | No — private; avoid for chat attachments |
+| `1` | `partner_document` | No — private |
 | `2` | `category` | Yes |
 | `3` | `service` | Yes |
 | `4` | `user_profile` | Yes |
-| `5` | `partner_post` | Yes — **recommended** for general chat images/docs until a dedicated chat type exists |
+| `5` | `partner_post` | Yes |
 | `6` | `order_work_proof` | Yes |
+| **`7`** | **`chat_attachment`** | **Yes — required for all chat images & documents** |
 
-Chat participants must be able to open the URL in a browser — use a **public** type (`2`–`6`), not `1`.
+**Chat uploads must use `type: 7`.** Files are stored under `chat_attachment/<uuid>_<filename>` in S3 and returned as `https://<cdn>/chat_attachment/...`.
+
+Do not use `type: 2` (category) or other folders for chat — that mixes chat files with catalog assets and makes CDN path bugs harder to spot.
+
+Invalid or missing `type` returns `400` from the upload API.
 
 **Step 2 — Send chat message (Chat Service)**
 
@@ -262,7 +267,7 @@ Pick `type` from the file:
 {
   "chatId": "674a1b2c3d4e5f6789012345",
   "type": "image",
-  "fileUrl": "https://cdn.example.com/partner_post/abc123_photo.jpg",
+  "fileUrl": "https://cdn.example.com/chat_attachment/abc123_photo.jpg",
   "content": "Optional caption",
   "clientMessageId": "tmp-upload-1",
   "metadata": {
@@ -279,7 +284,7 @@ Pick `type` from the file:
 {
   "chatId": "674a1b2c3d4e5f6789012345",
   "type": "file",
-  "fileUrl": "https://cdn.example.com/partner_post/abc123_invoice.pdf",
+  "fileUrl": "https://cdn.example.com/chat_attachment/abc123_invoice.pdf",
   "content": "Please review this invoice",
   "clientMessageId": "tmp-upload-2",
   "metadata": {
@@ -308,6 +313,17 @@ Push notifications show **“Sent an image”** or **“Sent a file”** when th
 **Client upload progress:** Track locally while calling `document_upload`; the chat service does not report upload percent. Show bubble `status: "sending"` only after upload succeeds and the chat `send_message` / `POST /messages` call starts.
 
 **Edit / delete:** `edit_message` and `PATCH /messages/:id` only change **text** (`content`), not the attachment. `delete_message` soft-deletes and clears `fileUrl` on the server.
+
+**Common mistakes**
+
+| Mistake | Result |
+|---------|--------|
+| Rebuilding URL as `${cdn}/${uploadType}${userType}/${fileName}` | Wrong path (e.g. `24/...`) → CloudFront `AccessDenied` |
+| Using `type: 2` (category) for chat | Files mixed with catalog images; wrong folder in S3 |
+| Using `{chatServiceUrl}` as CDN base | 404 — chat VPS does not host uploaded files |
+| Skipping upload and sending a local/blob URL | Other participants cannot open the file |
+
+**Ops:** New uploads use the S3 prefix `chat_attachment/`. CloudFront must serve that prefix the same way as `category/` and `partner_post/` (OAC/bucket policy). Existing files under other folders are not moved automatically.
 
 **Message fields (delivery / read receipts):**
 

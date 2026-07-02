@@ -1,8 +1,21 @@
 const { handleImageUpload } = require('../helper/image_uploader');
-const { getUploadType } = require('../enum/upload_type_enum');
+const {
+  getUploadType,
+  isValidUploadType,
+  isPrivateUploadType,
+} = require('../enum/upload_type_enum');
 const { toPublicImageUrl } = require('../helper/publicImageUrl');
+
+const parseUploadType = (rawType) => {
+  const type = parseInt(rawType, 10);
+  if (!Number.isInteger(type) || !isValidUploadType(type)) {
+    return null;
+  }
+  return type;
+};
+
 const uploadDocument = async (req, res) => {
-    const type = parseInt(req.body.type);
+    const type = parseUploadType(req.body.type);
 
     const files = req.files;
 
@@ -14,11 +27,16 @@ const uploadDocument = async (req, res) => {
         });
     }
 
+    if (type === null) {
+        return res.status(400).json({
+            success: false,
+            status: 400,
+            message: 'Invalid upload type. Use 1–7 (chat attachments: type 7).',
+        });
+    }
+
     try {
-        let isPublic = true;
-        if (type === 1) {
-            isPublic = false;
-        }
+        const isPublic = !isPrivateUploadType(type);
 
         const image_urls = [];
         
@@ -39,7 +57,7 @@ const uploadDocument = async (req, res) => {
     }
 };
 const updateDocument = async (req, res) => {
-    const type = parseInt(req.body.type);
+    const type = parseUploadType(req.body.type);
     const update_file_urls = JSON.parse(req.body.update_file_urls);// req.body.update_file_urls;
     const files = req.files;
 
@@ -48,6 +66,14 @@ const updateDocument = async (req, res) => {
             success: false,
             status: 400,
             message: 'No file uploaded.'
+        });
+    }
+
+    if (type === null) {
+        return res.status(400).json({
+            success: false,
+            status: 400,
+            message: 'Invalid upload type. Use 1–7 (chat attachments: type 7).',
         });
     }
 
@@ -68,10 +94,7 @@ const updateDocument = async (req, res) => {
     }
 
     try {
-        let isPublic = true;
-        if (type === 1) {
-            isPublic = false;
-        }
+        const isPublic = !isPrivateUploadType(type);
         const image_urls = [];
         for (let i = 0; i < files.length; i++) {
             const file = files[i];

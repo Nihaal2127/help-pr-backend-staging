@@ -11,7 +11,7 @@ const IMAGE_FIELD_KEYS = new Set([
 ]);
 
 const getCdnBase = () =>
-  String(process.env.IMAGE_CDN_BASE_URL || process.env.CDN_BASE_URL || '').replace(
+  String(process.env.AWS_S3_BUCKET || process.env.AWS_S3_BUCKET || '').replace(
     /\/+$/,
     ''
   );

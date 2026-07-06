@@ -1415,6 +1415,50 @@ const partnerGoogleLoginMiddleware = async (req, res, next) => {
   next();
 };
 
+const partnerAppleLoginMiddleware = async (req, res, next) => {
+  const { id_token, phone_number, date_of_birth, name } = req.body;
+
+  if (id_token === undefined || id_token === null || String(id_token).trim() === '') {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'id_token is required.',
+    });
+  }
+  req.body.id_token = String(id_token).trim();
+
+  if (phone_number !== undefined && phone_number !== null && String(phone_number).trim() !== '') {
+    const phoneRegex = /^\+?[1-9]\d{1,14}$/;
+    const normalizedPhone = normalizeUserPhone(phone_number);
+    if (!phoneRegex.test(normalizedPhone)) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: 'Invalid phone number format.',
+      });
+    }
+    req.body.phone_number = normalizedPhone;
+  } else {
+    delete req.body.phone_number;
+  }
+
+  if (date_of_birth !== undefined && date_of_birth !== null && String(date_of_birth).trim() !== '') {
+    const validatedDob = validateDateOfBirth(date_of_birth, res);
+    if (validatedDob === null) return;
+    req.body.date_of_birth = validatedDob;
+  } else {
+    delete req.body.date_of_birth;
+  }
+
+  if (name !== undefined && name !== null && String(name).trim() !== '') {
+    req.body.name = String(name).trim();
+  } else {
+    delete req.body.name;
+  }
+
+  next();
+};
+
 const partnerRequireMultipartMiddleware = (req, res, next) => {
   const ct = String(req.headers['content-type'] || '').toLowerCase();
   if (!ct.includes('multipart/form-data')) {
@@ -1727,6 +1771,7 @@ module.exports = {
   partnerRegisterMiddleware,
   partnerLoginMiddleware,
   partnerGoogleLoginMiddleware,
+  partnerAppleLoginMiddleware,
   partnerUpdateMiddleware,
   partnerUpdateBasicDetailsMiddleware,
   partnerUpdateDocumentsMiddleware,

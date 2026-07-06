@@ -11,11 +11,13 @@ const { getUploadType } = require('../../../enum/upload_type_enum');
 const { normalizeUserPhone, normalizeUserEmail, checkUserContactUniqueness, getPhoneLookupVariants } = require('../../../utils/user_contact_uniqueness');
 const { escapeRegExp } = require('../../../utils/string_helpers');
 const { verifyGoogleIdToken, GOOGLE_APP_USER } = require('../../../helper/google_auth');
+const { verifyAppleIdToken, APPLE_APP_USER } = require('../../../helper/apple_auth');
 const { USER_TYPE_CUSTOMER } = require('../../../constants/user_types');
 const { fail, okWithMessage } = require('../../../utils/mobile_service_result');
 
 const REGISTRATION_TYPE_NORMAL = 1;
 const REGISTRATION_TYPE_GOOGLE = 2;
+const REGISTRATION_TYPE_APPLE = 3;
 const MOBILE_USER_OTP = '123456';
 const OTP_EXPIRY_MS = 10 * 60 * 1000;
 
@@ -147,6 +149,15 @@ const applyGoogleProfileToUser = (user, { email, name, picture }) => {
   }
 };
 
+const applyAppleProfileToUser = (user, { email, name }) => {
+  if (email && !user.email) {
+    user.email = normalizeUserEmail(email);
+  }
+  if (name && !user.name) {
+    user.name = name;
+  }
+};
+
 const verifyOtpAndLogin = async ({ phone_number, device_token, validOtp }) => {
   const normalizedPhone = normalizeUserPhone(phone_number);
   const phoneVariants = getPhoneLookupVariants(normalizedPhone);
@@ -229,6 +240,81 @@ const googleLogin = async ({ id_token, device_token }) => {
     profile_url: picture || null,
     type: USER_TYPE_CUSTOMER,
     registration_type: REGISTRATION_TYPE_GOOGLE,
+    is_from_web: false,
+    is_active: true,
+  });
+
+  await user.save();
+  await notificationSetting.create({ user_id: user._id });
+
+  return finalizeCustomerLogin(user, device_token, 'Logged in successfully.');
+};
+
+const appleLogin = async ({ id_token, device_token, name }) => {
+  let appleProfile;
+  try {
+    appleProfile = await verifyAppleIdToken(id_token, { app: APPLE_APP_USER });
+  } catch (err) {
+    console.error('appleLogin token verification', err.message);
+    if (String(err.message || '').includes('not configured')) {
+      return fail(500, 'Apple sign-in is not configured on the server.');
+    }
+    return fail(401, 'Invalid or expired Apple token.');
+  }
+
+  const { apple_id, email } = appleProfile;
+  const displayName =
+    name !== undefined && name !== null && String(name).trim() !== '' ? String(name).trim() : null;
+
+  let user = await User.findOne({ apple_id, deleted_at: null });
+
+  if (user) {
+    if (Number(user.type) !== USER_TYPE_CUSTOMER) {
+      return fail(409, 'This Apple account is registered with another account type.');
+    }
+    applyAppleProfileToUser(user, { email, name: displayName });
+    return finalizeCustomerLogin(user, device_token, 'Logged in successfully.');
+  }
+
+  if (email) {
+    const normalizedEmail = normalizeUserEmail(email);
+    user = await User.findOne({
+      email: new RegExp(`^${escapeRegExp(normalizedEmail)}$`, 'i'),
+      deleted_at: null,
+    });
+
+    if (user) {
+      if (Number(user.type) !== USER_TYPE_CUSTOMER) {
+        return fail(409, 'This email is registered with another account type.');
+      }
+      if (user.apple_id && user.apple_id !== apple_id) {
+        return fail(409, 'This email is linked to a different Apple account.');
+      }
+
+      user.apple_id = apple_id;
+      applyAppleProfileToUser(user, { email, name: displayName });
+      return finalizeCustomerLogin(user, device_token, 'Logged in successfully.');
+    }
+  }
+
+  const uniqueness = await checkUserContactUniqueness({ email });
+  if (!uniqueness.ok) {
+    return fail(409, uniqueness.message);
+  }
+
+  const registration_id = await getNewId(0);
+  const user_id = await getNewId(USER_TYPE_CUSTOMER);
+  const _id = new mongoose.Types.ObjectId();
+
+  user = new User({
+    _id,
+    registration_id,
+    user_id,
+    apple_id,
+    email: email ? normalizeUserEmail(email) : null,
+    name: displayName || null,
+    type: USER_TYPE_CUSTOMER,
+    registration_type: REGISTRATION_TYPE_APPLE,
     is_from_web: false,
     is_active: true,
   });
@@ -364,6 +450,7 @@ module.exports = {
   sendOtp,
   verifyOtpAndLogin,
   googleLogin,
+  appleLogin,
   updateUser,
   listAllPincodes,
 };

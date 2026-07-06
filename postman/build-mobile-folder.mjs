@@ -142,6 +142,7 @@ const PARTNER_FOLDER_LABELS = {
 const MOBILE_PARTNER_AUTH_PATH_SUFFIXES = [
   '/api/mobile/partner/login',
   '/api/mobile/partner/google-login',
+  '/api/mobile/partner/apple-login',
   '/api/mobile/partner/forgot-password',
   '/api/mobile/partner/verify-forgot-password-otp',
   '/api/mobile/partner/reset-password',
@@ -152,6 +153,7 @@ const MOBILE_USER_AUTH_PATH_SUFFIXES = [
   '/api/mobile/user/login',
   '/api/mobile/user/verify-otp',
   '/api/mobile/user/google-login',
+  '/api/mobile/user/apple-login',
   '/api/mobile/user/forgot-password',
   '/api/mobile/user/verify-forgot-password-otp',
   '/api/mobile/user/reset-password',
@@ -494,7 +496,7 @@ function main() {
   const partnerFolder = {
     name: 'Partner',
     description:
-      '**Partner mobile app** — **01 → Register** or **02 — Auth → Google login** / **Login**. Then `Bearer {{token}}` for onboarding. Email/password **Login** also works via `/api/auth/login` after admin sets `is_active: true`.',
+      '**Partner mobile app** — **01 → Register** or **02 — Auth → Google login** / **Apple login** / **Login**. Then `Bearer {{token}}` for onboarding. Email/password **Login** also works via `/api/auth/login` after admin sets `is_active: true`.',
     item: mergeMobilePartnerAuthRequests(
       mergeMobileOnlyFolders(
         buildGroupedFolder(PARTNER_FOLDER_LABELS, partnerByGroup, partnerOrder),
@@ -507,7 +509,7 @@ function main() {
   const userFolder = {
     name: 'User',
     description:
-      '**Customer / end-user mobile app** — **02 — Auth**: phone OTP (`/login` → `/verify-otp`) or **Google login** (`/google-login`). Then home, orders, addresses, quotes, profile. Regenerated from `Help-PR-Mobile-APIs.postman_collection.json`.',
+      '**Customer / end-user mobile app** — **02 — Auth**: phone OTP (`/login` → `/verify-otp`), **Google login** (`/google-login`), or **Apple login** (`/apple-login`). Then home, orders, addresses, quotes, profile. Regenerated from `Help-PR-Mobile-APIs.postman_collection.json`.',
     item: mergeMobileUserAuthRequests(
       mergeMobileOnlyFolders(
         buildGroupedFolder(USER_FOLDER_LABELS, userByGroup, userOrder),

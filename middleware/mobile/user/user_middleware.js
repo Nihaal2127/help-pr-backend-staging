@@ -127,6 +127,25 @@ const validateGoogleLogin = (req, res, next) => {
   next();
 };
 
+const validateAppleLogin = (req, res, next) => {
+  const { id_token, name } = req.body;
+  if (id_token === undefined || id_token === null || String(id_token).trim() === '') {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'id_token is required.',
+    });
+  }
+
+  req.body.id_token = String(id_token).trim();
+  if (name !== undefined && name !== null && String(name).trim() !== '') {
+    req.body.name = String(name).trim();
+  } else {
+    delete req.body.name;
+  }
+  next();
+};
+
 const validateVerifyOtp = async (req, res, next) => {
   const normalized = validateAndNormalizePhone(req, res);
   if (!normalized) return;
@@ -336,6 +355,7 @@ const userUpdateMiddleware = async (req, res, next) => {
 module.exports = {
   rateLimitSendOtp,
   validateGoogleLogin,
+  validateAppleLogin,
   validateVerifyOtp,
   userRequireMultipartMiddleware,
   userProfileImageSizeMiddleware,

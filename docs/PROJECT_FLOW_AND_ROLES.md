@@ -144,18 +144,23 @@ User must **already exist** in the database (usually created by franchise staff)
 
 Legacy: `POST /api/auth/userLogin` (phone + device_token).
 
-### Customer mobile (phone OTP or Google)
+### Customer mobile (phone OTP, Google, or Apple)
 
 | Step | Endpoint |
 |------|----------|
 | Phone OTP | `POST /api/mobile/user/login` → `POST /api/mobile/user/verify-otp` |
 | Google | `POST /api/mobile/user/google-login` — `{ id_token, device_token? }` |
+| Apple | `POST /api/mobile/user/apple-login` — `{ id_token, device_token?, name? }` |
 
-Phone flow auto-creates customers on first login. Google flow verifies the ID token server-side, creates or links a customer (`registration_type: 2`), and returns the same JWT shape as verify-otp.
+Phone flow auto-creates customers on first login. Google flow verifies the ID token server-side, creates or links a customer (`registration_type: 2`), and returns the same JWT shape as verify-otp. Apple flow mirrors Google (`registration_type: 3`, `apple_id` from token `sub`); send `name` from the client on first authorization only.
 
 Env (customer app): `GOOGLE_CLIENT_ID_ANDROID`, `GOOGLE_CLIENT_ID_IOS`, optional `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_ID_WEB`.
 
+Env (customer Apple): `APPLE_CLIENT_ID_IOS`, optional `APPLE_CLIENT_ID` / `APPLE_CLIENT_ID_WEB`.
+
 Env (partner app): `GOOGLE_CLIENT_ID_ANDROID_PARTNER`, `GOOGLE_CLIENT_ID_IOS_PARTNER`, optional `GOOGLE_CLIENT_ID_PARTNER` / `GOOGLE_CLIENT_ID_WEB_PARTNER`.
+
+Env (partner Apple): `APPLE_CLIENT_ID_IOS_PARTNER`, optional `APPLE_CLIENT_ID_PARTNER` / `APPLE_CLIENT_ID_WEB_PARTNER`.
 
 ### Partner mobile
 
@@ -164,6 +169,7 @@ Env (partner app): `GOOGLE_CLIENT_ID_ANDROID_PARTNER`, `GOOGLE_CLIENT_ID_IOS_PAR
 | `POST /api/mobile/partner/register` | None | Creates partner (`type: 2`), returns token |
 | `POST /api/mobile/partner/login` | None | Email/password |
 | `POST /api/mobile/partner/google-login` | None | Google Sign-In — `{ id_token, device_token?, phone_number?, date_of_birth? }` |
+| `POST /api/mobile/partner/apple-login` | None | Apple Sign-In — `{ id_token, device_token?, phone_number?, date_of_birth?, name? }` |
 | `PUT /api/mobile/partner/update` | Bearer | Profile, docs, catalog (rules apply) |
 
 ### Public partner registration (web)

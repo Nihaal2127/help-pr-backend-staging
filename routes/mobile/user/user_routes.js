@@ -3,6 +3,7 @@ const {
   sendOtpHandler,
   verifyOtpHandler,
   googleLoginHandler,
+  appleLoginHandler,
   forgotPasswordHandler,
   verifyForgotPasswordOtpHandler,
   resetPasswordHandler,
@@ -32,6 +33,7 @@ const {
 const {
   rateLimitSendOtp,
   validateGoogleLogin,
+  validateAppleLogin,
   validateVerifyOtp,
   userRequireMultipartMiddleware,
   userProfileImageSizeMiddleware,
@@ -53,6 +55,7 @@ const router = express.Router();
 // Public auth routes must be registered before sub-routers (post_routes applies auth via router.use).
 router.post('/login', rateLimitSendOtp, sendOtpHandler);
 router.post('/google-login', validateGoogleLogin, googleLoginHandler);
+router.post('/apple-login', validateAppleLogin, appleLoginHandler);
 router.post('/verify-otp', validateVerifyOtp, verifyOtpHandler);
 router.post('/forgot-password', validateForgotPasswordEmail, forgotPasswordHandler);
 router.post(

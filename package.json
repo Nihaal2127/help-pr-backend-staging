@@ -10,7 +10,9 @@
         "sync:catalog-mappings:dry-run": "node scripts/sync-global-catalog-to-franchise-mappings.js --dry-run",
         "verify:order-pricing": "node scripts/verify-order-pricing.js",
         "verify:order-offer": "node scripts/verify-order-pricing.js",
-        "verify:order-payment-status": "node scripts/verify-order-payment-status.js"
+        "verify:order-payment-status": "node scripts/verify-order-payment-status.js",
+        "seed:bootstrap": "node scripts/seed-bootstrap-config.js",
+        "seed:bootstrap:dry-run": "node scripts/seed-bootstrap-config.js --dry-run"
     },
     "keywords": [],
     "author": "",
@@ -34,6 +36,7 @@
         "fs-extra": "^11.2.0",
         "google-auth-library": "^10.7.0",
         "jsonwebtoken": "^9.0.2",
+        "jwks-rsa": "^4.1.0",
         "moment-timezone": "^0.5.46",
         "mongoose": "^8.9.5",
         "multer": "^1.4.5-lts.1",

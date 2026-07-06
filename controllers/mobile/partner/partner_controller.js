@@ -2,6 +2,7 @@ const {
   registerPartner,
   loginPartner,
   googleLoginPartner,
+  appleLoginPartner,
   updatePartner,
 } = require('../../../services/mobile/partner/partner_service');
 const {
@@ -113,6 +114,27 @@ const googleLogin = wrapMobileHandler('mobile partner google-login', async (req,
   });
 });
 
+const appleLogin = wrapMobileHandler('mobile partner apple-login', async (req, res) => {
+  const result = await appleLoginPartner({
+    id_token: req.body.id_token,
+    device_token: req.body.device_token,
+    phone_number: req.body.phone_number,
+    date_of_birth: req.body.date_of_birth,
+    name: req.body.name,
+  });
+
+  if (!result.ok) {
+    return sendServiceError(res, result);
+  }
+
+  return res.status(200).json({
+    success: true,
+    status: 200,
+    message: result.message || 'Login successfully.',
+    data: result.data,
+  });
+});
+
 const forgotPassword = wrapMobileHandler('mobile partner forgot-password', async (req, res) => {
   const result = await requestForgotPasswordOtp({
     email: req.body.email,
@@ -210,6 +232,7 @@ module.exports = {
   register,
   login,
   googleLogin,
+  appleLogin,
   forgotPassword,
   verifyForgotPasswordOtp,
   resetPassword,

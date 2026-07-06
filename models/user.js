@@ -48,6 +48,7 @@ var userSchema = new schema(
       5 for X
     */
     google_id: { type: String, trim: true },
+    apple_id: { type: String, trim: true },
     device_token: { type: String, default: null },
     business_info_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: 'business_info' },
     auth_token: { type: String, default: null },
@@ -98,6 +99,15 @@ userSchema.index(
     },
   }
 );
+userSchema.index(
+  { apple_id: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      apple_id: { $exists: true, $type: 'string', $ne: '' },
+    },
+  }
+);
 userSchema.index({ type: 1 });
 userSchema.index({ state_id: 1 });
 userSchema.index({ city_id: 1 });
@@ -109,6 +119,13 @@ userSchema.index({ created_by_id: 1 });
 userSchema.pre('save', function omitEmptyGoogleId(next) {
   if (this.google_id == null || String(this.google_id).trim() === '') {
     this.google_id = undefined;
+  }
+  next();
+});
+
+userSchema.pre('save', function omitEmptyAppleId(next) {
+  if (this.apple_id == null || String(this.apple_id).trim() === '') {
+    this.apple_id = undefined;
   }
   next();
 });

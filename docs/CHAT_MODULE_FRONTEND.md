@@ -1,6 +1,6 @@
 # Chat — frontend integration guide
 
-Realtime messaging for **order group chats**, **disputes** (completed orders), and **general support** (customer ↔ employee).
+Realtime messaging for **order group chats**, **disputes** (completed orders), and **general support** (customer ↔ handler).
 
 Applies to **admin/employee web**, **Flutter customer mobile**, and any client using the same JWT + Socket.IO protocol.
 
@@ -13,8 +13,10 @@ Postman: **`postman/Help-PR-All-APIs.postman_collection.json`** → **39 — Cha
 | Type | `chat.type` | Participants | Created when |
 |------|-------------|--------------|--------------|
 | Order | `order` | Customer, partner, assigned employee, franchise admin | **Automatically** on order create |
-| Dispute | `dispute` | Customer + order employee | Customer raises dispute on an **eligible completed** order — see [§7](#7-dispute-chats) |
-| General / support | `support` | Customer + employee | Customer or employee starts support chat |
+| Dispute | `dispute` | Customer + **handler** (employee or franchise admin when assigned) — always **1:1** | Customer raises dispute on an **eligible completed** order — see [§7](#7-dispute-chats) |
+| General / support | `support` | Customer + **handler** (employee or franchise admin when assigned) — always **1:1** | Customer or back-office starts support chat — see [§8](#8-general-support-chat) |
+
+**Support and dispute** threads are strictly **one customer + one handler**. Franchise admin, super admin, and staff are **not** added as participants unless they become the handler (via transfer). They may still **read** threads in scope — see [Read vs write by role](#read-vs-write-by-role).
 
 ---
 
@@ -55,12 +57,32 @@ Chat list items now include **`unreadCount`** per chat.
 |------|------------------------|
 | **Customer** | Chats where they are a participant |
 | **Employee** | Support/dispute/order chats they are **assigned to** or a **participant** in |
-| **Franchise admin / Staff** | Above **plus** all franchise chats (orders, disputes, support for that franchise) |
-| **Super admin** | **All chats** platform-wide (paginated, default `limit=50`) |
+| **Franchise admin** | Above **plus** all franchise chats (orders, disputes, support for that franchise) |
+| **Staff** (`type: 6`) | **All chats** platform-wide (paginated, default `limit=50`) — **read-only** |
+| **Super admin** (`type: 5`) | **All chats** platform-wide (paginated, default `limit=50`) — **read-only** |
 
-Super admin is not auto-added as a chat participant, so the inbox uses platform-wide listing instead of participant-only matching.
+Super admin and staff are not auto-added as participants; the inbox uses platform-wide listing. Franchise admin sees franchise-wide threads even when not the handler (read-only until assigned — see below).
 
 Optional query params: `type`, `status`, `page`, `limit` (max 200).
+
+### Read vs write by role
+
+Rules differ by `chat.type`. On **support** and **dispute** (1:1 handoff threads):
+
+| Role | Read thread / history | Send messages | Transfer / close |
+|------|----------------------|---------------|------------------|
+| **Customer** | Yes (participant) | Yes | No |
+| **Assigned handler** (`assignedTo` = caller) | Yes | Yes | Yes |
+| **Franchise admin** (not `assignedTo`) | Yes (franchise scope) | **No** | Yes (franchise scope) |
+| **Previous handler** (after transfer) | Yes (franchise scope) | **No** | No |
+| **Other franchise employee** (not handler) | Yes (franchise scope) | **No** | No |
+| **Super admin / staff** | Yes (platform-wide) | **No** | No |
+
+**UI rule for support/dispute compose:** show the message input only when `chat.assignedTo === currentUserId` (or caller is the customer on mobile). Hide typing, attach, transfer, and close for read-only roles as appropriate.
+
+Server enforces write access with `403` `CHAT_READ_ONLY` when a read-only user calls `send_message`, `POST /messages`, `typing_start` / `typing_stop`, or edit/delete.
+
+**Order** group chats keep the previous model: participants and franchise-scoped roles can read/write per [§9](#9-transfer-chat-reassign-handler) manage rules.
 
 ---
 
@@ -71,7 +93,7 @@ Chat and message APIs include **display fields** so clients can show who is in t
 | Field | Purpose |
 |-------|---------|
 | `assignedTo` | Handler user id (unchanged) |
-| `assignedToUser` | `{ _id, name, type, profile_url, role }` — use for **support/dispute header** (employee name) |
+| `assignedToUser` | `{ _id, name, type, profile_url, role }` — use for **support/dispute header** (handler name; may be employee or franchise admin) |
 | `participants` | Participant ids (unchanged) |
 | `participantUsers` | Array of `{ _id, name, type, profile_url, role }` for everyone in the thread |
 | `roles` | `{ userId, role }` entries (unchanged) |
@@ -411,8 +433,8 @@ Dispute chats are **not** started like support chats. Only the **customer** can 
 |----------|--------|
 | `chat.type` | `"dispute"` |
 | `isGroup` | `false` (1:1) |
-| **Participants** | Customer + order’s assigned `employee_id` |
-| **`assignedTo`** | Same employee |
+| **Participants** | Customer + handler (`assignedTo` — initially order’s `employee_id`; may become franchise admin after transfer) |
+| **`assignedTo`** | Current handler (employee or franchise admin) |
 | **`context`** | `{ orderId, disputeId }` |
 | **Separate from order chat** | Dispute has its **own** `chat_id` — do not reuse `order.chat_id` |
 
@@ -471,8 +493,10 @@ Show **“Raise dispute”** on mobile only when the order passes rules 1–5. H
 When eligible and raised successfully:
 
 - **Customer** = `order.user_id`
-- **Employee** = `order.employee_id` at time of raise (handler for dispute chat)
+- **Handler** = `order.employee_id` at time of raise (may change via [transfer](#9-transfer-chat-reassign-handler))
 - **Franchise** = `order.franchise_id` (used for admin inbox scoping, not a separate participant)
+
+Franchise admin, super admin, and staff can **read** the dispute thread in scope but only the **assigned handler** and the **customer** may send messages until a transfer changes `assignedTo`.
 
 The dispute chat is **separate** from the order **group** chat (`order.chat_id`). A completed order may have both threads.
 
@@ -567,7 +591,7 @@ Both return `chat_id` — use it to open the same thread (no new chat is created
 
 ### Web (admin / employee)
 
-Web has **no** `POST /api/dispute/create`. Staff work with disputes the customer already raised.
+Web has **no** `POST /api/dispute/create`. Franchise admin and employees open existing dispute threads; **super admin** and **staff** may **read** any dispute chat platform-wide but cannot message or transfer.
 
 #### 1. Find dispute
 
@@ -678,19 +702,23 @@ Response includes `assignedToUser` so the app can show who they’re chatting wi
 
 ```json
 {
-  "customer_id": "<required for staff>",
+  "customer_id": "<required for admin/employee>",
   "employee_id": "<required when admin starts chat for another employee>",
   "initial_message": "Hi, how can I help?"
 }
 ```
 
-Staff may target a specific employee; customers cannot. Returns existing **open** support chat for the customer when using auto-assign, or customer + employee pair when staff specifies `employee_id`.
+Only **franchise admin** and **employee** may call this endpoint. **Super admin** and **staff** are read-only observers and cannot start support chats (`403` `CHAT_READ_ONLY`).
+
+Franchise admin / employee may target a specific `employee_id`. Customers use mobile auto-assign only. Returns existing **open** support chat for the customer when one exists, or creates customer + employee pair when `employee_id` is specified.
+
+Auto-assign on create always picks an **employee** (`type: 3`) via load balancing — not franchise admin. Admin becomes handler only through [transfer](#9-transfer-chat-reassign-handler).
 
 ---
 
 ## 9. Transfer chat (reassign handler)
 
-Reassign the **handler** (`assignedTo`) for a chat. Used mainly on **web** (admin / employee) — customers and partners **cannot** transfer.
+Reassign the **handler** (`assignedTo`) for a chat. Used mainly on **web** (franchise admin / assigned handler) — customers, partners, super admin, and staff **cannot** transfer.
 
 **Host:** `{chatServiceUrl}` only (not Lambda).
 
@@ -709,14 +737,21 @@ Content-Type: application/json
 ```json
 {
   "chatId": "<mongo_chat_id>",
-  "newAssignedTo": "<employee_mongo_id>"
+  "newAssignedTo": "<employee_or_franchise_admin_mongo_id>"
 }
 ```
 
 Emit: **`transfer_chat`**  
 Listen: **`chat_assigned`**, **`chat_updated`**, **`receive_message`** (system line).
 
-**Pick transfer targets:** use Lambda `GET {lambdaApiUrl}/api/user/getAll?type=3` (active employees in franchise) — there is no dedicated chat transfer-targets endpoint.
+**Pick transfer targets (support / dispute):** load eligible users from the chat’s franchise:
+
+- `GET {lambdaApiUrl}/api/user/getAll?type=3` — employees (`is_active`, `chat !== false`)
+- `GET {lambdaApiUrl}/api/user/getAll?type=1` — franchise admin(s) for that franchise (same filters)
+
+Merge and dedupe for the picker. Exclude current `assignedTo`. There is no dedicated chat transfer-targets endpoint.
+
+For **order** chats, `type=3` employees are usually sufficient.
 
 ### Which chats can be transferred?
 
@@ -724,8 +759,8 @@ All chat types support transfer at the API level. Behavior depends on `chat.type
 
 | Chat type | Transfer behavior |
 |-----------|-------------------|
-| **`support`** | **Full handoff** — customer stays; previous employee removed from `participants`; new employee added; `assignedTo` updated; `isGroup: false`; system message posted |
-| **`dispute`** | Same as support **plus** `dispute.employee_id` updated in MongoDB |
+| **`support`** | **Full handoff** — customer stays; previous handler removed from `participants`; new handler added; `assignedTo` updated; `isGroup: false`; system message posted. Previous handler may **read** but not **send** until transferred back. |
+| **`dispute`** | Same as support **plus** `dispute.employee_id` updated in MongoDB (stores handler id even when handler is franchise admin) |
 | **`order`** | Only **`assignedTo`** changes — group **participants unchanged** (customer, partner, employee, franchise admin) |
 | **`quote`** (if used) | Same as order — only `assignedTo` changes |
 
@@ -735,46 +770,64 @@ Prior messages always stay on the **same** `chatId` — transfer does not create
 
 | Chat type | Who usually transfers | Why |
 |-----------|----------------------|-----|
-| Support | Franchise admin, assigned employee | Hand off to another support agent |
-| Dispute | Franchise admin, assigned employee | Reassign dispute handler |
+| Support | Franchise admin, assigned handler | Hand off to another agent or take over as admin |
+| Dispute | Franchise admin, assigned handler | Reassign dispute handler |
 | Order | Franchise admin, assigned employee | Change handling employee without reshaping the group |
 
 Closed chats are **not** blocked by the server today — hide or disable transfer in UI when `chat.status === "closed"` if that matches product rules.
 
 ### Who can transfer?
 
-Transfer requires **manage** permission (`assertChatManageAccess`), not just inbox/read access.
+Transfer requires **manage** permission. Rules differ for **support/dispute** vs **order**:
+
+#### Support and dispute
 
 | Role | Can transfer? |
 |------|----------------|
-| **Super admin** (`type: 5`) | **Yes** — any chat |
-| **Franchise admin** (`type: 1`) | **Yes** — chats in their franchise (even if not a participant) |
-| **Assigned employee** (`assignedTo` matches caller) | **Yes** |
-| **Employee** participant with `roles[].role = "employee"` on that chat | **Yes** |
-| **Admin** participant with `roles[].role = "admin"` on that chat (e.g. order group) | **Yes** |
-| **Staff** (`type: 6`) | **Only if** assigned or has `admin` / `employee` role on that chat — not franchise-wide like franchise admin |
+| **Franchise admin** (`type: 1`) | **Yes** — any support/dispute in their franchise (even when not the handler) |
+| **Assigned handler** (`assignedTo` matches caller) | **Yes** — employee or franchise admin |
+| **Previous handler** (after transfer) | **No** |
+| **Super admin** (`type: 5`) | **No** — read-only |
+| **Staff** (`type: 6`) | **No** — read-only |
 | **Customer** (`type: 4`) | **No** |
 | **Partner** (`type: 2`) | **No** |
 
+#### Order (and other group types)
+
+| Role | Can transfer? |
+|------|----------------|
+| **Franchise admin** (franchise-scoped) | **Yes** |
+| **Assigned employee** (`assignedTo`) | **Yes** |
+| **Employee / admin** with `roles[].role` = `"employee"` or `"admin"` on that chat | **Yes** |
+| **Super admin / staff** | **No** — read-only |
+| **Customer / partner** | **No** |
+
 **Mobile:** do not show transfer UI to customers.  
-**Web:** show transfer on support, dispute, and order threads for admin and eligible employees.
+**Web:** show transfer on support, dispute, and order threads for franchise admin and the assigned handler (support/dispute), or eligible roles on order groups.
 
-### New assignee rules
+### Who can be the new handler? (support / dispute)
 
-#### Support and dispute (full handoff)
+| Actor transferring | Valid `newAssignedTo` targets |
+|--------------------|------------------------------|
+| **Assigned employee** | Other active franchise **employees** (`type: 3`) **or** franchise **admin** (`type: 1`) |
+| **Franchise admin** | Other franchise **employees** **or self** (self-transfer — admin becomes handler and can chat) |
+
+#### New assignee rules (support / dispute)
 
 | Rule | Error if violated |
 |------|-------------------|
-| `newAssignedTo` must be an **active employee** (`type: 3`, `is_active: true`) | `400` Invalid assignee |
-| Employee must have **`chat !== false`** | `403` Not available for chat |
-| Employee must be in the **same franchise** as the chat (when franchise is known) | `403` Franchise mismatch |
+| `newAssignedTo` must be an active **employee** (`type: 3`) **or franchise admin** (`type: 1`) | `400` Invalid assignee |
+| User must have **`chat !== false`** | `403` Not available for chat |
+| Must be in the **same franchise** as the chat (when franchise is known) | `403` Franchise mismatch |
 | Chat must include a **customer** in `participants` | `409` Chat invalid |
 | Same as current `assignedTo` | No-op (chat returned unchanged) |
+
+**After transfer:** only the new handler and the customer remain in `participants`. The previous handler (employee or admin) keeps **read-only** franchise-scoped access.
 
 #### Order (and other non-handoff types)
 
 - Only `assignedTo` is updated.
-- Employee / franchise validation for `newAssignedTo` is **not** enforced in code today — still pass a valid employee id from your employee picker.
+- Employee / franchise validation for `newAssignedTo` is **not** enforced in code today — still pass a valid employee id from your picker.
 
 ### Response and UI events
 
@@ -802,8 +855,11 @@ Update thread header from `record.assignedToUser` after transfer.
 | Mistake | Result |
 |---------|--------|
 | Customer calls transfer | `403` No manage permission |
-| Transfer to employee from another franchise (support/dispute) | `403` Franchise mismatch |
-| Transfer to employee with `chat: false` | `403` Not available for chat |
+| Super admin / staff calls transfer | `403` No manage permission (read-only) |
+| Transfer to user from another franchise (support/dispute) | `403` Franchise mismatch |
+| Transfer to user with `chat: false` | `403` Not available for chat |
+| Transfer support/dispute to partner or customer | `400` Invalid assignee |
+| Previous handler tries to send after transfer | `403` `CHAT_READ_ONLY` |
 | Expecting order group members to change on transfer | Only `assignedTo` changes for `order` |
 | Calling Lambda instead of Chat Service | Wrong host — transfer is VPS-only |
 
@@ -819,6 +875,7 @@ Update thread header from `record.assignedToUser` after transfer.
 | Support / Help | `join_chat` after create | `POST …/chats/support` or `/api/chat/support` |
 | Chat inbox | Refresh list on `receive_message` / `messages_read` | `GET /api/chat` on open / pull-to-refresh |
 | Chat thread — live | **`send_message` → `message_sent`**; others via `receive_message` | `GET /messages` once on open; `before` on scroll-up only |
+| Support/dispute compose | Show input only if `assignedTo === me` or customer | Server returns `403` `CHAT_READ_ONLY` otherwise |
 | Failed message | **`chat_error`** + retry same payload | REST `success: false` + retry `POST /messages` |
 | Typing indicator | **`typing_start` / `typing_stop`** | — |
 | Delivery / read ticks | **`message_delivered` / `read_messages`** | REST only if socket down |
@@ -826,6 +883,7 @@ Update thread header from `record.assignedToUser` after transfer.
 | Edit / delete bubble | **`edit_message` / `delete_message`** | `PATCH` / `DELETE` if socket down |
 | Unread badge | Update on `receive_message`; clear via **`read_messages`** | `unreadCount` from inbox `GET` |
 | Reassign support/dispute/order | `transfer_chat` or REST | `POST /:id/transfer` — see [§9](#9-transfer-chat-reassign-handler) |
+| Transfer picker (web, support/dispute) | — | `getAll?type=3` + `getAll?type=1` (franchise); exclude current `assignedTo` |
 
 ---
 
@@ -991,10 +1049,11 @@ Uses the same **manage** permission as transfer ([§9](#9-transfer-chat-reassign
 
 | Role | Can close via `PATCH /api/chat/:id/status`? |
 |------|---------------------------------------------|
-| **Super admin** | **Yes** |
-| **Franchise admin** (franchise-scoped) | **Yes** |
-| **Assigned employee** (`assignedTo`) | **Yes** |
-| **Employee / admin** with manage role on that chat | **Yes** |
+| **Franchise admin** (franchise-scoped) | **Yes** — support/dispute in franchise; order per group rules |
+| **Assigned handler** (`assignedTo`) on support/dispute | **Yes** |
+| **Assigned employee** / manage role on **order** group | **Yes** |
+| **Super admin** | **No** — read-only |
+| **Staff** | **No** — read-only |
 | **Customer** | **No** |
 | **Partner** | **No** |
 
@@ -1061,7 +1120,7 @@ Customers **cannot** call `PUT /api/dispute/update` (`403`).
 
 #### Support chats (manual only)
 
-- Same as order — close only via `PATCH` by admin / assigned employee.
+- Close only via `PATCH` by **franchise admin** (franchise scope) or **assigned handler** on support/dispute.
 - Starting a **new** support chat later uses load balancing / resume rules ([§8](#8-general-support-chat)) — separate from closing an old thread.
 
 ### After a chat is closed
@@ -1069,9 +1128,9 @@ Customers **cannot** call `PUT /api/dispute/update` (`403`).
 | Behavior | Detail |
 |----------|--------|
 | **Inbox** | Filter with `GET /api/chat?status=open`; closed threads drop out unless you omit the filter |
-| **Read access** | Participants with access can still **open history** (`GET /messages`, `GET /:id`) if your UI allows |
-| **Send messages** | Server does **not** block `send_message` on closed chats today — **disable compose in UI** when `chat.status === "closed"` |
-| **Transfer** | Not blocked server-side — hide transfer when closed ([§9](#9-transfer-chat-reassign-handler)) |
+| **Read access** | Users with read scope can still **open history** (`GET /messages`, `GET /:id`) |
+| **Send messages** | On **support/dispute**, server blocks non-handlers with `403` `CHAT_READ_ONLY`. On all types, **disable compose in UI** when `chat.status === "closed"` |
+| **Transfer** | Not blocked server-side for eligible roles — hide transfer when closed ([§9](#9-transfer-chat-reassign-handler)) |
 
 ### UI recommendations
 
@@ -1086,7 +1145,7 @@ Customers **cannot** call `PUT /api/dispute/update` (`403`).
 
 | Mistake | Fix |
 |---------|-----|
-| Customer expects “end chat” to close server-side | Only staff with manage permission can `PATCH` status |
+| Customer expects “end chat” to close server-side | Only franchise admin or assigned handler with manage permission can `PATCH` status |
 | Assuming order completion closes order chat | It does not — close manually if needed |
 | Resolving dispute but chat still open | Ensure Lambda `CHAT_SERVICE_ENABLED` and dispute update path ran; check dispute `chat_id` |
 | Closed chat still accepts sends | Block send in client UI until server enforces closed threads |
@@ -1098,5 +1157,5 @@ Customers **cannot** call `PUT /api/dispute/update` (`403`).
 - **Do not poll** `GET /messages` for new messages — that is what Socket.IO is for.
 - Chat REST + Socket.IO run on the **Chat Service VPS**, not Lambda. Use `{chatServiceUrl}` for all chat endpoints.
 - Disputes and orders remain on **Lambda** — only `chat_id` and provisioning are shared. Full dispute chat flow: [§7](#7-dispute-chats).
-- Dispute and support chats are **1:1** (customer + employee). Order chats are **group**.
+- Dispute and support chats are **1:1** (customer + handler — employee or franchise admin when assigned). Order chats are **group**.
 - Closing chats: [§13](#13-closing-chats). Dispute resolve/close auto-closes linked chat via Lambda → Chat Service internal API.

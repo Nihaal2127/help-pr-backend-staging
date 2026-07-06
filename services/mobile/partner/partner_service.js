@@ -24,6 +24,7 @@ const {
 } = require('../../../utils/user_contact_uniqueness');
 const { escapeRegExp } = require('../../../utils/string_helpers');
 const { verifyGoogleIdToken, GOOGLE_APP_PARTNER } = require('../../../helper/google_auth');
+const { verifyAppleIdToken, APPLE_APP_PARTNER } = require('../../../helper/apple_auth');
 const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
 const { fail, okWithData, okPass } = require('../../../utils/mobile_service_result');
 const { attachPartnerRatingFields } = require('../../../utils/rating_format');
@@ -35,6 +36,7 @@ const {
 const DEFAULT_PARTNER_PLAN_NAME = 'basic';
 const REGISTRATION_TYPE_NORMAL = 1;
 const REGISTRATION_TYPE_GOOGLE = 2;
+const REGISTRATION_TYPE_APPLE = 3;
 
 const VERIFICATION_STATUS_MESSAGES = {
   1: 'Your profile is under verification. We will notify you once it is approved.',
@@ -773,6 +775,15 @@ const applyGoogleProfileToPartner = (user, { email, name, picture }) => {
   }
 };
 
+const applyAppleProfileToPartner = (user, { email, name }) => {
+  if (email && !user.email) {
+    user.email = normalizeUserEmail(email);
+  }
+  if (name && !user.name) {
+    user.name = name;
+  }
+};
+
 const finalizePartnerLogin = async (user, device_token) => {
   if (user.is_blocked === true) {
     return fail(403, 'Your account is blocked. Please contact support.');
@@ -1009,6 +1020,111 @@ const googleLoginPartner = async ({ id_token, device_token, phone_number, date_o
     await assignPartnerOnboarding(savedUser);
   } catch (err) {
     console.error('googleLoginPartner onboarding', err.message);
+    return fail(500, 'Partner account created but onboarding failed. Please contact support.');
+  }
+
+  const data = await buildPartnerLoginData(savedUser);
+  if (!data) {
+    return fail(500, 'Failed to load partner profile.');
+  }
+
+  return { ok: true, data, message: 'Partner registered successfully.' };
+};
+
+const appleLoginPartner = async ({ id_token, device_token, phone_number, date_of_birth, name }) => {
+  let appleProfile;
+  try {
+    appleProfile = await verifyAppleIdToken(id_token, { app: APPLE_APP_PARTNER });
+  } catch (err) {
+    console.error('appleLoginPartner token verification', err.message);
+    if (String(err.message || '').includes('not configured')) {
+      return fail(500, 'Apple sign-in is not configured on the server.');
+    }
+    return fail(401, 'Invalid or expired Apple token.');
+  }
+
+  const { apple_id, email } = appleProfile;
+  const displayName =
+    name !== undefined && name !== null && String(name).trim() !== '' ? String(name).trim() : null;
+  const normalizedPhone =
+    phone_number !== undefined && phone_number !== null && String(phone_number).trim() !== ''
+      ? normalizeUserPhone(phone_number)
+      : null;
+
+  let user = await User.findOne({ apple_id, deleted_at: null });
+
+  if (user) {
+    if (Number(user.type) !== USER_TYPE_PARTNER) {
+      return fail(409, 'This Apple account is registered with another account type.');
+    }
+    applyAppleProfileToPartner(user, { email, name: displayName });
+    const result = await finalizePartnerLogin(user, device_token);
+    if (!result.ok) return result;
+    return { ...result, message: 'Login successfully.' };
+  }
+
+  if (email) {
+    const normalizedEmail = normalizeUserEmail(email);
+    user = await User.findOne({
+      email: new RegExp(`^${escapeRegExp(normalizedEmail)}$`, 'i'),
+      deleted_at: null,
+    });
+
+    if (user) {
+      if (Number(user.type) !== USER_TYPE_PARTNER) {
+        return fail(409, 'This email is registered with another account type.');
+      }
+      if (user.apple_id && user.apple_id !== apple_id) {
+        return fail(409, 'This email is linked to a different Apple account.');
+      }
+
+      user.apple_id = apple_id;
+      applyAppleProfileToPartner(user, { email, name: displayName });
+      const result = await finalizePartnerLogin(user, device_token);
+      if (!result.ok) return result;
+      return { ...result, message: 'Login successfully.' };
+    }
+  }
+
+  if (!email) {
+    return fail(400, 'Apple account must include an email address to register as a partner.');
+  }
+
+  const uniqueness = await checkUserContactUniqueness({
+    email,
+    phone_number: normalizedPhone,
+  });
+  if (!uniqueness.ok) {
+    return fail(409, uniqueness.message);
+  }
+
+  const registration_id = await getNewId(0);
+  const user_id = await getNewId(USER_TYPE_PARTNER);
+  const _id = new mongoose.Types.ObjectId();
+
+  user = new User({
+    _id,
+    registration_id,
+    user_id,
+    apple_id,
+    name: displayName || null,
+    email: normalizeUserEmail(email),
+    phone_number: normalizedPhone,
+    date_of_birth: date_of_birth || null,
+    type: USER_TYPE_PARTNER,
+    registration_type: REGISTRATION_TYPE_APPLE,
+    is_from_web: false,
+    verification_status: 1,
+    verified_at: null,
+  });
+
+  user.generateAuthToken();
+  const savedUser = await user.save();
+
+  try {
+    await assignPartnerOnboarding(savedUser);
+  } catch (err) {
+    console.error('appleLoginPartner onboarding', err.message);
     return fail(500, 'Partner account created but onboarding failed. Please contact support.');
   }
 
@@ -1358,5 +1474,6 @@ module.exports = {
   registerPartner,
   loginPartner,
   googleLoginPartner,
+  appleLoginPartner,
   updatePartner,
 };

@@ -2,6 +2,7 @@ const {
   sendOtp,
   verifyOtpAndLogin,
   googleLogin,
+  appleLogin,
   updateUser,
   listAllPincodes,
 } = require('../../../services/mobile/user/user_service');
@@ -49,6 +50,19 @@ const googleLoginHandler = wrapMobileHandler(
     return sendTopLevelServiceResult(res, result);
   },
   { errorMessage: 'Failed to sign in with Google.' }
+);
+
+const appleLoginHandler = wrapMobileHandler(
+  'mobile user apple-login',
+  async (req, res) => {
+    const result = await appleLogin({
+      id_token: req.body.id_token,
+      device_token: req.body.device_token,
+      name: req.body.name,
+    });
+    return sendTopLevelServiceResult(res, result);
+  },
+  { errorMessage: 'Failed to sign in with Apple.' }
 );
 
 const forgotPasswordHandler = wrapMobileHandler(
@@ -117,6 +131,7 @@ module.exports = {
   sendOtpHandler,
   verifyOtpHandler,
   googleLoginHandler,
+  appleLoginHandler,
   forgotPasswordHandler,
   verifyForgotPasswordOtpHandler,
   resetPasswordHandler,

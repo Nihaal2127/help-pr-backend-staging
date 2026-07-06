@@ -1,10 +1,12 @@
+const axios = require('axios');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
-const jwksClient = require('jwks-rsa');
 
 const APPLE_APP_USER = 'user';
 const APPLE_APP_PARTNER = 'partner';
 const APPLE_ISSUER = 'https://appleid.apple.com';
 const APPLE_JWKS_URI = 'https://appleid.apple.com/auth/keys';
+const JWKS_CACHE_MS = 24 * 60 * 60 * 1000;
 
 const USER_APPLE_CLIENT_ID_ENV_KEYS = [
   'APPLE_CLIENT_ID',
@@ -18,11 +20,8 @@ const PARTNER_APPLE_CLIENT_ID_ENV_KEYS = [
   'APPLE_CLIENT_ID_WEB_PARTNER',
 ];
 
-const jwks = jwksClient({
-  jwksUri: APPLE_JWKS_URI,
-  cache: true,
-  cacheMaxAge: 86400000,
-});
+/** @type {{ fetchedAt: number, keys: object[] }} */
+let jwksCache = { fetchedAt: 0, keys: [] };
 
 const collectClientIdsFromEnv = (envKeys) => {
   const ids = envKeys
@@ -41,13 +40,41 @@ const getAppleClientIds = (app = APPLE_APP_USER) => {
   return collectClientIdsFromEnv(keys);
 };
 
-const getSigningKey = (kid) =>
-  new Promise((resolve, reject) => {
-    jwks.getSigningKey(kid, (err, key) => {
-      if (err) return reject(err);
-      resolve(key.getPublicKey());
-    });
-  });
+const fetchAppleJwks = async (forceRefresh = false) => {
+  const now = Date.now();
+  if (!forceRefresh && jwksCache.keys.length > 0 && now - jwksCache.fetchedAt < JWKS_CACHE_MS) {
+    return jwksCache.keys;
+  }
+
+  const { data } = await axios.get(APPLE_JWKS_URI, { timeout: 10000 });
+  const keys = Array.isArray(data?.keys) ? data.keys : [];
+  if (keys.length === 0) {
+    throw new Error('Apple JWKS response did not include keys.');
+  }
+
+  jwksCache = { fetchedAt: now, keys };
+  return keys;
+};
+
+const findJwkByKid = (keys, kid) => keys.find((key) => key.kid === kid);
+
+const jwkToPublicKey = (jwk) => crypto.createPublicKey({ key: jwk, format: 'jwk' });
+
+const getSigningKey = async (kid) => {
+  let keys = await fetchAppleJwks();
+  let jwk = findJwkByKid(keys, kid);
+
+  if (!jwk) {
+    keys = await fetchAppleJwks(true);
+    jwk = findJwkByKid(keys, kid);
+  }
+
+  if (!jwk) {
+    throw new Error('Unable to find Apple signing key.');
+  }
+
+  return jwkToPublicKey(jwk);
+};
 
 /**
  * Verify a Sign in with Apple identity token from a mobile app.

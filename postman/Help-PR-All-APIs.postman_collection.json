@@ -10035,13 +10035,13 @@
       ]
     },
     {
-      "name": "30 — Notification",
-      "description": "**/api/notification** — 2 request(s). Duplicates merged across source collections.",
+      "name": "30 — Notifications (inbox API)",
+      "description": "**Inbox APIs** — web back-office and mobile apps poll these endpoints (JWT). Web users get **in-app records only** (no FCM push).\n\n| Surface | Base path |\n|---------|----------|\n| Web (Super Admin, Staff, Franchise Admin, Employee) | `GET/PUT {{baseUrl}}/api/notifications` |\n| Mobile customer | `GET/PUT {{baseUrl}}/api/mobile/user/notifications` |\n| Mobile partner | `GET/PUT {{baseUrl}}/api/mobile/partner/notifications` |\n\n### List query filters (`GET /`)\n| Param | Example | Description |\n|-------|---------|-------------|\n| `page` | `1` | Page number (default 1) |\n| `limit` | `20` | Page size (max 100) |\n| `is_read` | `false` | Filter read/unread |\n| `category` | `admin` | `order`, `quote`, `subscription`, `wallet`, `ticket`, `chat`, `system`, `reminder`, `admin` |\n| `event` | `BACKOFFICE_ORDER_CREATED` | Filter by event key |\n| `from_date` | `2026-07-01` | `created_at` on/after (UTC day) |\n| `to_date` | `2026-07-08` | `created_at` on/before (UTC day) |\n| `franchise_id` | `{{franchise_id}}` | Optional franchise filter |\n\n**Web tip:** use `category=admin` for dashboard alerts; use `category=order` etc. for franchise lifecycle items.\n\nUnread count (`GET /unread-count`) accepts the same filters except `page`/`limit`/`is_read`.",
       "item": [
         {
-          "name": "Notification — send (test)",
+          "name": "Web — List notifications",
           "request": {
-            "method": "POST",
+            "method": "GET",
             "header": [
               {
                 "key": "Authorization",
@@ -10049,6 +10049,271 @@
                 "type": "text"
               }
             ],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications?page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "is_read",
+                  "value": "false",
+                  "disabled": true
+                },
+                {
+                  "key": "category",
+                  "value": "admin",
+                  "disabled": true
+                },
+                {
+                  "key": "from_date",
+                  "value": "2026-07-01",
+                  "disabled": true
+                },
+                {
+                  "key": "to_date",
+                  "value": "2026-07-08",
+                  "disabled": true
+                },
+                {
+                  "key": "event",
+                  "value": "BACKOFFICE_ORDER_CREATED",
+                  "disabled": true
+                },
+                {
+                  "key": "franchise_id",
+                  "value": "{{franchise_id}}",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "description": "**GET /api/notifications** — Paginated inbox for logged-in web user. Response: `records`, `totalItems`, `totalPages`, `currentPage`, `limit`, `unreadCount`."
+        },
+        {
+          "name": "Web — Unread count",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications/unread-count",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "notifications",
+                "unread-count"
+              ],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "admin",
+                  "disabled": true
+                },
+                {
+                  "key": "from_date",
+                  "value": "2026-07-01",
+                  "disabled": true
+                },
+                {
+                  "key": "to_date",
+                  "value": "2026-07-08",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "description": "**GET /api/notifications/unread-count** — Supports `category`, `event`, `from_date`, `to_date`, `franchise_id`."
+        },
+        {
+          "name": "Web — Mark notification read",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications/{{notification_id}}/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "notifications",
+                "{{notification_id}}",
+                "read"
+              ]
+            }
+          },
+          "description": "**PUT /api/notifications/:id/read**"
+        },
+        {
+          "name": "Web — Mark all read",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category\": \"admin\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications/read-all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "notifications",
+                "read-all"
+              ]
+            }
+          },
+          "description": "**PUT /api/notifications/read-all** — Optional body/query `category` to mark only one category."
+        },
+        {
+          "name": "Mobile user — List notifications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/notifications?page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "user",
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "category",
+                  "value": "order",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "description": "**GET /api/mobile/user/notifications** — Same filters as web inbox."
+        },
+        {
+          "name": "Mobile partner — List notifications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{partner_access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/partner/notifications?page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "partner",
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "category",
+                  "value": "order",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "description": "**GET /api/mobile/partner/notifications**"
+        },
+        {
+          "name": "Notification — send (test FCM)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceToken\": \"\",\n  \"title\": \"Test\",\n  \"body\": \"Test notification\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": {
               "raw": "{{baseUrl}}/api/notification/send",
               "host": [
@@ -10061,37 +10326,7 @@
               ]
             }
           },
-          "description": "\n\n_Source: Help-PR-Admin-Dashboard.postman_collection.json → 14 — Notifications (test)_"
-        },
-        {
-          "name": "Send",
-          "request": {
-            "auth": {
-              "type": "noauth"
-            },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": "{{base_url}}/api/notification/send"
-          },
-          "description": "\n\n_Source: Help-PR-Area-Franchise-Subscription.postman_collection.json → Notification (test)_"
+          "description": "**POST /api/notification/send** — Dev/test FCM only (admin JWT). Disabled in production unless `ALLOW_NOTIFICATION_TEST=true`."
         }
       ]
     },
@@ -25624,6 +25859,13 @@
       "type": "string",
       "enabled": true,
       "description": "Notification settings document _id."
+    },
+    {
+      "key": "notification_id",
+      "value": "",
+      "type": "string",
+      "enabled": true,
+      "description": "Inbox notification _id (from GET /api/notifications records)."
     },
     {
       "key": "user_home_counts_id",

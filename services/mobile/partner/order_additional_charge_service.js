@@ -73,7 +73,10 @@ const createPartnerOrderAdditionalCharge = async (partnerId, orderId, body) => {
       return fail(404, 'Order not found.');
     }
 
-    const doc = await createAdditionalCharge(order, body);
+    const doc = await createAdditionalCharge(order, {
+      ...body,
+      actorUserId: partnerId,
+    });
     const orderSummary = await reloadOrderSummary(order._id);
 
     return ok(201, {
@@ -119,7 +122,9 @@ const updatePartnerOrderAdditionalCharge = async (partnerId, orderId, chargeId, 
     const loaded = await loadPartnerChargeOnOrder(partnerId, orderId, chargeId);
     if (!loaded.ok) return loaded;
 
-    const row = await updateAdditionalCharge(loaded.data.order, loaded.data.charge, body);
+    const row = await updateAdditionalCharge(loaded.data.order, loaded.data.charge, body, {
+      actorUserId: partnerId,
+    });
     const orderSummary = await reloadOrderSummary(loaded.data.order._id);
 
     return ok(200, {
@@ -139,7 +144,7 @@ const deletePartnerOrderAdditionalCharge = async (partnerId, orderId, chargeId) 
     const loaded = await loadPartnerChargeOnOrder(partnerId, orderId, chargeId);
     if (!loaded.ok) return loaded;
 
-    await deleteAdditionalCharge(loaded.data.charge);
+    await deleteAdditionalCharge(loaded.data.charge, { actorUserId: partnerId });
     const orderSummary = await reloadOrderSummary(loaded.data.order._id);
 
     return ok(200, {

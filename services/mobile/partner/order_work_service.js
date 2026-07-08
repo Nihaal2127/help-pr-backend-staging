@@ -30,6 +30,10 @@ const {
 } = require('../../partner_post_common_service');
 
 const { fail, ok } = require('../../../utils/mobile_service_result');
+const {
+  safeNotifyPartnerWorkStarted,
+  safeNotifyPartnerWorkCompleted,
+} = require('../../../src/modules/notifications/services/domainHooks');
 
 const TERMINAL_ORDER_STATUSES = new Set([
   ORDER_STATUS_COMPLETED,
@@ -92,6 +96,11 @@ const updatePartnerWorkStatus = async (partnerId, orderId, body) => {
     touchPartnerWorkStatusInfo(order, nextStatus, partnerId, 'partner');
     order.updated_at = new Date();
     await order.save();
+
+    void safeNotifyPartnerWorkStarted({
+      order,
+      actorUserId: partnerId,
+    });
 
     const record = await loadOrderDetailLean(order._id);
     return ok(200, {
@@ -194,6 +203,11 @@ const completePartnerOrderWork = async (partnerId, orderId, body, files) => {
       },
       { $set: { service_status: ORDER_STATUS_COMPLETED, updated_at: now } }
     );
+
+    void safeNotifyPartnerWorkCompleted({
+      order,
+      actorUserId: partnerId,
+    });
 
     let post = null;
     let postError = null;

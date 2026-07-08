@@ -1,11 +1,15 @@
 const User = require("../../../../models/user");
 const NotificationSettings = require("../../../../models/notification_settings");
+const { BACKOFFICE_TYPES } = require("../../../../constants/user_types");
 const { safeSendPushNotification } = require("../../../../service/firebase/push_service");
 
-const isPushAllowedForUser = async (userId) => {
+const isPushAllowedForUser = async (userId, pushPreference = "update") => {
   try {
     const settings = await NotificationSettings.findOne({ user_id: userId });
     if (!settings) return true;
+    if (pushPreference === "reminder") {
+      return settings.is_reminder_allow !== false;
+    }
     return settings.is_update_allow !== false;
   } catch (error) {
     console.error("[notifications] push settings lookup failed:", error.message);
@@ -13,12 +17,21 @@ const isPushAllowedForUser = async (userId) => {
   }
 };
 
-const sendPushForNotification = async ({ userId, title, body, data }) => {
+const sendPushForNotification = async ({
+  userId,
+  title,
+  body,
+  data,
+  pushPreference = "update",
+}) => {
   try {
-    const allowed = await isPushAllowedForUser(userId);
+    const allowed = await isPushAllowedForUser(userId, pushPreference);
     if (!allowed) return false;
 
-    const user = await User.findById(userId).select("device_token").lean();
+    const user = await User.findById(userId).select("device_token type").lean();
+    if (user && BACKOFFICE_TYPES.has(Number(user.type))) {
+      return false;
+    }
     const deviceToken = user?.device_token;
     if (!deviceToken) return false;
 

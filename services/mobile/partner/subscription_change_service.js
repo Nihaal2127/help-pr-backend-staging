@@ -12,7 +12,7 @@ const {
     computeProration,
     validateUpgradePaymentSplit,
 } = require('../../../utils/subscription_proration');
-const { safeNotifyWalletTransaction } = require('../../../src/modules/notifications/services/domainHooks');
+const { safeNotifyWalletTransaction, safeNotifySubscriptionPlanChanged } = require('../../../src/modules/notifications/services/domainHooks');
 const { createSubscriptionChangePaymentLink, fetchPaymentLink } = require('../../../src/modules/payments');
 const { PAYMENT_PURPOSES } = require('../../../src/modules/payments/constants/payment.constants');
 const {
@@ -1090,6 +1090,15 @@ const executeChangeInTransaction = async ({
         throw new SubscriptionChangeError(500, 'Subscription change could not be completed.');
     }
 
+    if (result.updatedSubscription && result.updatedPlan) {
+        void safeNotifySubscriptionPlanChanged({
+            subscription: result.updatedSubscription,
+            planName: result.updatedPlan.plan_name,
+            paymentCompleted: false,
+            actorUserId: partner._id,
+        });
+    }
+
     return result;
 };
 
@@ -1392,6 +1401,20 @@ const completeOnlineChangeFromWebhook = async (
         return { ok: false, message: 'Failed to complete subscription change.' };
     } finally {
         await endMongoSession(session);
+    }
+
+    if (
+        result?.ok &&
+        !result?.already_completed &&
+        result.updatedSubscription &&
+        result.updatedPlan
+    ) {
+        void safeNotifySubscriptionPlanChanged({
+            subscription: result.updatedSubscription,
+            planName: result.updatedPlan.plan_name,
+            paymentCompleted: true,
+            actorUserId: result.updatedSubscription.partner_id,
+        });
     }
 
     return result || { ok: false, message: 'Failed to complete subscription change.' };

@@ -27,6 +27,10 @@ const {
   findExistingCatalogNames,
   importFileDuplicateNamesMessage,
 } = require('../utils/catalog_name_uniqueness');
+const {
+  safeNotifyBackofficeCategoryRequested,
+  safeNotifyBackofficeCatalogReviewed,
+} = require('../src/modules/notifications/services/backofficeHooks');
 
 const asBodyBool = (value, defaultValue) => {
   if (value === undefined) return defaultValue;
@@ -523,6 +527,12 @@ const create = async (req, res) => {
     });
 
     const savedCategory = await newCategory.save();
+    if (savedCategory.is_request) {
+      void safeNotifyBackofficeCategoryRequested({
+        category: savedCategory,
+        actorUserId: req.user?.id || req.user?._id || null,
+      });
+    }
     return res.status(200).json({
       success: true,
       status: 200,
@@ -578,6 +588,7 @@ const update = async (req, res) => {
     }
 
     const wasGloballyActive = isGlobalCatalogRowActive(category);
+    const previousApprovalStatus = category.approval_status;
 
     if (req.body.name) {
       const trimmedName = normalizeCatalogName(req.body.name);
@@ -700,6 +711,18 @@ const update = async (req, res) => {
 
     category.updated_at = Date.now();
     const updatedCategory = await category.save();
+
+    if (
+      updatedCategory.approval_status !== previousApprovalStatus &&
+      ["approve", "rejected"].includes(String(updatedCategory.approval_status || "").toLowerCase())
+    ) {
+      void safeNotifyBackofficeCatalogReviewed({
+        entityType: "category",
+        entity: updatedCategory,
+        approvalStatus: updatedCategory.approval_status,
+        actorUserId: req.user?.id || req.user?._id || null,
+      });
+    }
 
     if (wasGloballyActive && updatedCategory.is_active === false) {
       try {

@@ -9,6 +9,7 @@ const {
   updateAdditionalCharge,
   deleteAdditionalCharge,
 } = require("../services/order_additional_charge_service");
+const { getCallerId } = require("../utils/auth_caller");
 
 const create = async (req, res) => {
   try {
@@ -65,6 +66,7 @@ const create = async (req, res) => {
       amount,
       payment_method,
       charge_type,
+      actorUserId: getCallerId(req),
     });
 
     return res.status(201).json({
@@ -185,7 +187,7 @@ const update = async (req, res) => {
       amount,
       payment_method,
       charge_type,
-    });
+    }, { actorUserId: getCallerId(req) });
 
     return res.status(200).json({
       success: true,
@@ -243,7 +245,7 @@ const remove = async (req, res) => {
       });
     }
 
-    await deleteAdditionalCharge(row);
+    await deleteAdditionalCharge(row, { actorUserId: getCallerId(req) });
 
     return res.status(200).json({
       success: true,

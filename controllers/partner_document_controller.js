@@ -9,6 +9,7 @@ const {
   partnerDocumentFieldsAfterImageUpload,
   applyPartnerUserStatusAfterDocumentUpload,
 } = require('../utils/partner_document_status');
+const { safeNotifyPartnerVerificationUpdated } = require('../src/modules/notifications/services/domainHooks');
 
 const getAll = async (req, res) => {
 
@@ -201,6 +202,7 @@ const updateDocumentStatus = async (req, res) => {
     }
 
     const user = await User.findById({ _id: partnerDocument.partner_id });
+    const previousVerificationStatus = Number(user.verification_status);
 
     if (numericStatus === 2) {
       if (isVerified === true) {
@@ -217,6 +219,19 @@ const updateDocumentStatus = async (req, res) => {
     user.is_active = user.verification_status === 2;
 
     await user.save();
+
+    const nextVerificationStatus = Number(user.verification_status);
+    if (
+      nextVerificationStatus !== previousVerificationStatus &&
+      [2, 3].includes(nextVerificationStatus)
+    ) {
+      void safeNotifyPartnerVerificationUpdated({
+        partnerUserId: user._id,
+        verificationStatus: nextVerificationStatus,
+        actorUserId: req.user?.id || req.user?._id || null,
+      });
+    }
+
     res.status(200).json({
       success: true,
       status: 200,

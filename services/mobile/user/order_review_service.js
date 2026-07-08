@@ -5,6 +5,7 @@ const User = require("../../../models/user");
 const Service = require("../../../models/service");
 const PartnerServiceRating = require("../../../models/partner_service_rating");
 const { ORDER_STATUS_COMPLETED } = require("../../../enum/order_status_enum");
+const { safeNotifyOrderReviewReceived } = require("../../../src/modules/notifications/services/domainHooks");
 
 const { fail, ok } = require('../../../utils/mobile_service_result');
 
@@ -170,6 +171,14 @@ const submitOrderReview = async (customerId, orderId, payload = {}) => {
           },
         }
       );
+    }
+
+    if (isNewReview && serviceLine.partner_id) {
+      void safeNotifyOrderReviewReceived({
+        order,
+        partnerUserId: serviceLine.partner_id,
+        actorUserId: customerId,
+      });
     }
 
     return ok(200, {

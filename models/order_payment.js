@@ -6,8 +6,17 @@ const orderPaymentSchema = new schema(
   {
     order_id: {
       type: mongoose.Schema.Types.ObjectId,
-      required: true,
+      required: false,
+      default: null,
       ref: "order",
+      index: true,
+    },
+    /** Set for quote-deposit online payments before order exists; cleared path uses order_id only. */
+    quote_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: false,
+      default: null,
+      ref: "quote",
       index: true,
     },
     /** customer = payer is customer; partner = payout / partner-side payment */
@@ -38,5 +47,12 @@ const orderPaymentSchema = new schema(
 );
 
 orderPaymentSchema.index({ order_id: 1, payer_type: 1, deleted_at: 1 });
+orderPaymentSchema.index({ quote_id: 1, payer_type: 1, status: 1, deleted_at: 1 });
+
+orderPaymentSchema.pre("validate", function validateOrderOrQuoteRef() {
+  if (!this.order_id && !this.quote_id) {
+    this.invalidate("order_id", "Either order_id or quote_id is required.");
+  }
+});
 
 module.exports = mongoose.model("order_payment", orderPaymentSchema);

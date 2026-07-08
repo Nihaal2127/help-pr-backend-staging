@@ -280,7 +280,7 @@ Same pattern as partner subscription online pay (`docs/SUBSCRIPTION_CHANGE_FRONT
 | 2 | Open **`record.payment_url`** (HTTP **202**) |
 | 3 | `GET /api/mobile/user/orders/:orderId/payments/:paymentId/payment-status` — poll until `data.status` is `completed` |
 
-**Quote deposit:** `POST /api/mobile/user/quotes/:id/convert-to-order` with `payment_method: online` creates the order first, then returns **`data.payment.payment_url`** (**202**).
+**Quote deposit:** `POST /api/mobile/user/quotes/:id/convert-to-order` with `payment_method: online` returns **`data.payment.payment_url`** (**202**) without creating an order. Poll **`GET /api/mobile/user/quotes/:id/deposit-payment/:paymentId/payment-status`**; the order is created after Razorpay confirms payment (webhook or poll).
 
 **Resume:** posting the same online amount again while a pending link exists returns the same URL (`resumed: true`).
 

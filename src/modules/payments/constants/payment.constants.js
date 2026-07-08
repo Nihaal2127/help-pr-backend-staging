@@ -1,6 +1,7 @@
 /** Razorpay payment link purposes — used in notes and webhook routing. */
 const PAYMENT_PURPOSES = {
     ORDER: 'order',
+    QUOTE_DEPOSIT: 'quote_deposit',
     SUBSCRIPTION_CHANGE: 'subscription_change',
 };
 

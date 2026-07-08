@@ -63,9 +63,18 @@ const formatMobileOrderForApi = (order) =>
   stripAdminDescriptionForPublicApi(formatOrderForApi(order));
 const {
   loadCustomerProfile,
-  initiateOnlineOrderPayment,
-  finalizeCompletedOrderPaymentSideEffects,
-} = require('../../../src/modules/payments/services/orderOnlinePayment.service');
+  initiateQuoteDepositPayment,
+  syncPendingQuoteDepositPayment,
+  hasPendingQuoteDepositPayment,
+  buildQuoteDepositSummary,
+} = require('../../../src/modules/payments/services/quoteDepositPayment.service');
+const { fetchPaymentLink } = require('../../../src/modules/payments/razorpay.client');
+const GatewayPayment = require('../../../models/gateway_payment');
+const {
+  PAYMENT_PURPOSES,
+  GATEWAY_PAYMENT_METHOD,
+} = require('../../../src/modules/payments/constants/payment.constants');
+const { RAZORPAY_LINK_RESUMABLE } = require('../../../src/modules/payments/services/orderOnlinePayment.service');
 const { escapeRegExp } = require('../../../utils/string_helpers');
 const {
   buildQuoteDateRangeFilter,
@@ -482,6 +491,13 @@ const cancelCustomerQuote = async (customerId, quoteId, body) => {
       );
     }
 
+    if (await hasPendingQuoteDepositPayment(quote._id)) {
+      return fail(
+        409,
+        'A pending online deposit payment exists for this quote. Wait for it to complete or expire before cancelling.'
+      );
+    }
+
     const oldStatus = quote.status;
     const oldCancellation = quote.cancellation_reason;
 
@@ -569,16 +585,6 @@ const convertCustomerQuoteToOrder = async (customerId, quoteId, body) => {
       return fail(409, 'Amount cannot exceed quote total_price.');
     }
 
-    let created;
-    try {
-      created = await createOrderFromQuote(quote, { actorUserId: customerId });
-    } catch (error) {
-      if (error instanceof OrderCreationError) {
-        return fail(error.status, error.message);
-      }
-      throw error;
-    }
-
     const paymentMethod = String(body.payment_method || '').trim().toLowerCase();
 
     if (paymentMethod === 'online') {
@@ -587,11 +593,12 @@ const convertCustomerQuoteToOrder = async (customerId, quoteId, body) => {
         return fail(profile.status, profile.message);
       }
 
-      const onlineResult = await initiateOnlineOrderPayment({
-        order: created.order,
+      const onlineResult = await initiateQuoteDepositPayment({
+        quote,
         customer: profile.user,
         amount: paidAmount,
         notes: body.notes ? String(body.notes).trim() : 'Quote deposit — Razorpay online payment',
+        actorUserId: customerId,
       });
 
       if (!onlineResult.ok) {
@@ -599,13 +606,11 @@ const convertCustomerQuoteToOrder = async (customerId, quoteId, body) => {
       }
 
       let paymentRow = onlineResult.payment;
-      if (onlineResult.already_completed) {
-        await finalizeCompletedOrderPaymentSideEffects(created.order._id, {
-          payment: paymentRow,
-          actorUserId: customerId,
-          notify: true,
-        });
+      let latestOrder = null;
+
+      if (onlineResult.already_completed && onlineResult.order_id) {
         paymentRow = await OrderPayment.findById(paymentRow._id).lean();
+        latestOrder = await Order.findById(onlineResult.order_id).lean();
       }
 
       const linkedQuote = await Quote.findById(quote._id)
@@ -613,39 +618,36 @@ const convertCustomerQuoteToOrder = async (customerId, quoteId, body) => {
         .lean();
       await attachPartnerServiceToQuote(linkedQuote);
 
-      void safeNotifyQuoteStatusChanged({
-        quote: linkedQuote,
-        previousStatus: quoteStatusBeforeConvert,
-        newStatus: resolveQuoteStatus(linkedQuote),
-        actorUserId: customerId,
-      });
-
-      const latestOrder =
-        onlineResult.already_completed
-          ? await Order.findById(created.order._id).lean()
-          : created.order;
+      const depositCollected =
+        onlineResult.already_completed && paymentRow?.status === 'completed';
 
       return ok(onlineResult.status, {
         message: onlineResult.resumed
-          ? 'Continue your pending payment to complete quote conversion.'
+          ? 'Continue your pending payment to convert this quote to an order.'
           : onlineResult.already_completed
             ? 'Quote converted to order and payment completed successfully.'
-            : 'Quote converted to order. Complete payment to confirm deposit.',
+            : 'Complete payment to convert quote to order.',
         data: {
           quote: formatMobileQuoteForApi(linkedQuote),
-          order: formatMobileOrderForApi(latestOrder),
+          ...(latestOrder ? { order: formatMobileOrderForApi(latestOrder) } : {}),
           payment: {
             ...paymentRow,
             payment_url: onlineResult.payment_url || null,
             resumed: Boolean(onlineResult.resumed),
           },
-          deposit: {
-            minimum_deposit_amount: minimumDeposit,
-            paid_amount: paidAmount,
-            remaining_deposit_due: Math.max(0, minimumDeposit - paidAmount),
-          },
+          deposit: buildQuoteDepositSummary(minimumDeposit, paidAmount, depositCollected),
         },
       });
+    }
+
+    let created;
+    try {
+      created = await createOrderFromQuote(quote, { actorUserId: customerId });
+    } catch (error) {
+      if (error instanceof OrderCreationError) {
+        return fail(error.status, error.message);
+      }
+      throw error;
     }
 
     const paymentStatus = body.payment_status ? String(body.payment_status).trim() : 'completed';
@@ -704,15 +706,136 @@ const convertCustomerQuoteToOrder = async (customerId, quoteId, body) => {
         quote: formatMobileQuoteForApi(linkedQuote),
         order: formatMobileOrderForApi(created.order),
         payment: orderPayment.toObject(),
-        deposit: {
-          minimum_deposit_amount: minimumDeposit,
-          paid_amount: paidAmount,
-          remaining_deposit_due: Math.max(0, minimumDeposit - paidAmount),
-        },
+        deposit: buildQuoteDepositSummary(
+          minimumDeposit,
+          paidAmount,
+          paymentStatus === 'completed'
+        ),
       },
     });
   } catch (err) {
     console.error('mobile user convert quote', err.message);
+    return fail(500, 'Internal server error.');
+  }
+};
+
+const getCustomerQuoteDepositPaymentStatus = async (customerId, quoteId, paymentId) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(String(quoteId))) {
+      return fail(400, 'Invalid quote id.');
+    }
+    if (!mongoose.Types.ObjectId.isValid(String(paymentId))) {
+      return fail(400, 'Invalid payment id.');
+    }
+
+    const quote = await Quote.findOne({ _id: quoteId, deleted_at: null });
+    if (!quote) {
+      return fail(404, 'Quote not found.');
+    }
+
+    const access = assertCustomerOwnsQuote(customerId, quote);
+    if (!access.ok) return access;
+
+    const payment = await OrderPayment.findOne({
+      _id: paymentId,
+      quote_id: quote._id,
+      payer_type: 'customer',
+      deleted_at: null,
+    }).lean();
+
+    if (!payment) {
+      return fail(404, 'Quote deposit payment not found.');
+    }
+
+    let syncResult = null;
+    if (
+      payment.status === 'pending' &&
+      payment.payment_method === GATEWAY_PAYMENT_METHOD &&
+      payment.transaction_reference
+    ) {
+      syncResult = await syncPendingQuoteDepositPayment(payment._id);
+    }
+
+    let latestPayment = payment;
+    if (syncResult?.synced) {
+      latestPayment = await OrderPayment.findById(payment._id).lean();
+    }
+
+    let paymentUrl = null;
+    if (latestPayment.status === 'pending' && latestPayment.transaction_reference) {
+      try {
+        const link = await fetchPaymentLink(latestPayment.transaction_reference);
+        if (RAZORPAY_LINK_RESUMABLE.has(link.status) && link.short_url) {
+          paymentUrl = link.short_url;
+        }
+      } catch (err) {
+        console.error('getCustomerQuoteDepositPaymentStatus fetchPaymentLink', err?.response?.data || err.message);
+      }
+    }
+
+    let gatewayPayment = null;
+    if (latestPayment.status === 'completed') {
+      gatewayPayment = await GatewayPayment.findOne({
+        purpose: PAYMENT_PURPOSES.ORDER,
+        reference_id: latestPayment._id,
+        deleted_at: null,
+      })
+        .select(
+          'amount currency status payment_method gateway_payment_link_id gateway_payment_id instrument_type paid_at created_at'
+        )
+        .lean();
+    }
+
+    let latestOrder = null;
+    if (latestPayment.order_id) {
+      latestOrder = await Order.findById(latestPayment.order_id).lean();
+    }
+
+    const linkedQuote = await Quote.findById(quote._id)
+      .populate(QUOTE_MOBILE_DETAIL_POPULATE)
+      .lean();
+    await attachPartnerServiceToQuote(linkedQuote);
+
+    const minimumDeposit = Number(quote.minimum_deposit_amount) || 0;
+    const depositAmount = Number(latestPayment.amount) || 0;
+    const depositCollected = latestPayment.status === 'completed';
+
+    return ok(200, {
+      message: syncResult?.synced
+        ? syncResult.refunded
+          ? 'Payment was received but the quote is no longer valid; deposit was refunded.'
+          : 'Payment verified with Razorpay and quote converted to order.'
+        : 'Quote deposit payment status fetched successfully.',
+      data: {
+        payment_id: latestPayment._id,
+        quote_id: latestPayment.quote_id,
+        order_id: latestPayment.order_id || null,
+        status: latestPayment.status,
+        amount: latestPayment.amount,
+        payment_method: latestPayment.payment_method,
+        transaction_reference: latestPayment.transaction_reference,
+        payment_url: paymentUrl,
+        paid_at: latestPayment.paid_at,
+        gateway_payment: gatewayPayment,
+        quote: formatMobileQuoteForApi(linkedQuote),
+        ...(latestOrder ? { order: formatMobileOrderForApi(latestOrder) } : {}),
+        deposit: buildQuoteDepositSummary(minimumDeposit, depositAmount, depositCollected),
+        ...(syncResult
+          ? {
+              sync: {
+                attempted: payment.status === 'pending',
+                synced: syncResult.synced,
+                refunded: Boolean(syncResult.refunded),
+                reason: syncResult.reason || null,
+                razorpay_status: syncResult.razorpay_status || null,
+                message: syncResult.message || null,
+              },
+            }
+          : {}),
+      },
+    });
+  } catch (err) {
+    console.error('mobile user get quote deposit payment status', err.message);
     return fail(500, 'Internal server error.');
   }
 };
@@ -724,4 +847,5 @@ module.exports = {
   updateCustomerQuote,
   cancelCustomerQuote,
   convertCustomerQuoteToOrder,
+  getCustomerQuoteDepositPaymentStatus,
 };

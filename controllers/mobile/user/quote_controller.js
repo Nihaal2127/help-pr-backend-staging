@@ -5,6 +5,7 @@ const {
   updateCustomerQuote,
   cancelCustomerQuote,
   convertCustomerQuoteToOrder,
+  getCustomerQuoteDepositPaymentStatus,
 } = require('../../../services/mobile/user/quote_service');
 const {
   getCallerId,
@@ -43,6 +44,18 @@ const convertQuoteToOrderHandler = wrapMobileHandler('mobile user quote convert 
   return sendServiceResult(res, result);
 });
 
+const getQuoteDepositPaymentStatusHandler = wrapMobileHandler(
+  'mobile user quote deposit payment status handler',
+  async (req, res) => {
+    const result = await getCustomerQuoteDepositPaymentStatus(
+      getCallerId(req),
+      req.params.id,
+      req.params.paymentId
+    );
+    return sendServiceResult(res, result);
+  }
+);
+
 module.exports = {
   createQuoteHandler,
   listQuotesHandler,
@@ -50,4 +63,5 @@ module.exports = {
   updateQuoteHandler,
   cancelQuoteHandler,
   convertQuoteToOrderHandler,
+  getQuoteDepositPaymentStatusHandler,
 };

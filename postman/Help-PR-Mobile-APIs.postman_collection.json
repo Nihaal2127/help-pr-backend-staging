@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-mobile-apis-only",
     "name": "Help PR — Mobile APIs only",
-    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Razorpay online payments (test mode)\n\n| Flow | Where in collection |\n|------|---------------------|\n| Partner subscription upgrade | **Partner → Subscription** — Apply (Razorpay online) → Get payment status |\n| Customer order payment | **User** — Create order payment (Razorpay online) → Get order payment status |\n| Quote deposit | **User → Quotes** — Convert quote to order (Razorpay deposit) → payment status on new order |\n\n**Env (Lambda):** `RAZORPAY_*` on server; set `{{baseUrl}}` in Postman. Webhook: `{RAZORPAY_BASE_URL}/api/razorpay/razorpayWebhook`.\n\n**Additional charges:** no separate Razorpay API — customer pays updated due via **order payments**. **Partner payouts:** admin `/api/partner_payout` (manual bank transfer), not Razorpay.\n\nFull audit: `docs/RAZORPAY_ONLINE_PAYMENTS_AUDIT.md`\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** → Register/Login → **Forgot password** (3-step OTP reset: forgot → verify OTP → reset password) → **Home** (assigned quotes + orders) → **Quotes** (accept/reject pending) → **Orders** (assigned jobs) → **Appointments** (calendar on partner orders) → Update → **Bank accounts (list)** → Catalog → My services\n\n## Customer (User)\n1. **Login** → **Verify OTP** (dev OTP: `123456`) — or **Forgot password** (3-step email OTP reset when customer has email on file)\n2. **Pincodes (search)** or set `{{homeLocation}}` — e.g. `500032,Gachibowli,Hyderabad,Telangana`\n3. **Home** — categories, services, partners for franchise (Bearer + `location` query)\n4. **Partners** — list → **Get partner profile** (catalog + professional summary) → **Create quote** with `partner_id`\n5. **Addresses** — create / get / update / delete\n6. **Quotes** — create / list / get / update / cancel / **convert-to-order** (`franchise_id` required on create)\n7. **Posts** — feed, liked/saved lists, like, save, share, report\n8. **Orders & payments** — list orders → **Create order payment (Razorpay online)** or cash/offline → **Get order payment status**\n9. **Update** — multipart `profile_photo` + profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.\n\n**Appointments:** `docs/APPOINTMENT_MODULE_FRONTEND.md`\n\n**Chat & disputes:** User → **Chat & Disputes** (support chat, raise/list disputes). See `docs/CHAT_MODULE_FRONTEND.md`.",
+    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Razorpay online payments (test mode)\n\n| Flow | Where in collection |\n|------|---------------------|\n| Partner subscription upgrade | **Partner → Subscription** — Apply (Razorpay online) → Get payment status |\n| Customer order payment | **User** — Create order payment (Razorpay online) → Get order payment status |\n| Quote deposit | **User → Quotes** — Convert quote to order (Razorpay deposit) → Get quote deposit payment status |\n\n**Env (Lambda):** `RAZORPAY_*` on server; set `{{baseUrl}}` in Postman. Webhook: `{RAZORPAY_BASE_URL}/api/razorpay/razorpayWebhook`.\n\n**Additional charges:** no separate Razorpay API — customer pays updated due via **order payments**. **Partner payouts:** admin `/api/partner_payout` (manual bank transfer), not Razorpay.\n\nFull audit: `docs/RAZORPAY_ONLINE_PAYMENTS_AUDIT.md`\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** → Register/Login → **Forgot password** (3-step OTP reset: forgot → verify OTP → reset password) → **Home** (assigned quotes + orders) → **Quotes** (accept/reject pending) → **Orders** (assigned jobs) → **Appointments** (calendar on partner orders) → Update → **Bank accounts (list)** → Catalog → My services\n\n## Customer (User)\n1. **Login** → **Verify OTP** (dev OTP: `123456`) — or **Forgot password** (3-step email OTP reset when customer has email on file)\n2. **Pincodes (search)** or set `{{homeLocation}}` — e.g. `500032,Gachibowli,Hyderabad,Telangana`\n3. **Home** — categories, services, partners for franchise (Bearer + `location` query)\n4. **Partners** — list → **Get partner profile** (catalog + professional summary) → **Create quote** with `partner_id`\n5. **Addresses** — create / get / update / delete\n6. **Quotes** — create / list / get / update / cancel / **convert-to-order** (`franchise_id` required on create)\n7. **Posts** — feed, liked/saved lists, like, save, share, report\n8. **Orders & payments** — list orders → **Create order payment (Razorpay online)** or cash/offline → **Get order payment status**\n9. **Update** — multipart `profile_photo` + profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.\n\n**Appointments:** `docs/APPOINTMENT_MODULE_FRONTEND.md`\n\n**Chat & disputes:** User → **Chat & Disputes** (support chat, raise/list disputes). See `docs/CHAT_MODULE_FRONTEND.md`.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -6027,7 +6027,7 @@
                     "convert-to-order"
                   ]
                 },
-                "description": "**POST /api/mobile/user/quotes/:id/convert-to-order**\n\n- **Auth:** Bearer customer\n- Quote must be **accepted** and owned by caller\n- **Required:** `amount`, `payment_method`\n- `amount` >= `minimum_deposit_amount`\n\n**Offline (`cash`, `upi`, etc.):** **200** — order + completed/pending payment.\n\n**`payment_method: online`:** **202** — order created + `payment.payment_url`; pay deposit via Razorpay, then poll order payment status on the new order."
+                "description": "**POST /api/mobile/user/quotes/:id/convert-to-order**\n\n- **Auth:** Bearer customer\n- Quote must be **accepted** and owned by caller\n- **Required:** `amount`, `payment_method`\n- `amount` >= `minimum_deposit_amount`\n\n**Offline (`cash`, `upi`, etc.):** **200** — order + completed/pending payment.\n\n**`payment_method: online`:** **202** — pending `order_payment` + `payment.payment_url` (no order yet). Pay via Razorpay, then poll **`GET .../quotes/:id/deposit-payment/:paymentId/payment-status`**; order is created after payment confirms."
               },
               "response": []
             },
@@ -6041,7 +6041,10 @@
                       "try {",
                       "  const j = pm.response.json();",
                       "  if (j?.data?.order?._id) pm.collectionVariables.set('orderId', String(j.data.order._id));",
-                      "  if (j?.data?.payment?._id) pm.collectionVariables.set('orderPaymentId', String(j.data.payment._id));",
+                      "  if (j?.data?.payment?._id) {",
+                      "    pm.collectionVariables.set('orderPaymentId', String(j.data.payment._id));",
+                      "    pm.collectionVariables.set('quoteDepositPaymentId', String(j.data.payment._id));",
+                      "  }",
                       "  if (j?.data?.payment?.payment_url) pm.collectionVariables.set('orderPaymentUrl', String(j.data.payment.payment_url));",
                       "} catch (e) {}"
                     ],
@@ -6094,7 +6097,63 @@
                     "convert-to-order"
                   ]
                 },
-                "description": "Convert with **online** deposit. **202** + `data.payment.payment_url`. Sets `orderId` and `orderPaymentId` collection vars for payment-status poll."
+                "description": "Convert with **online** deposit. **202** + `data.payment.payment_url`. Sets `orderPaymentId` and `quoteDepositPaymentId` collection vars for deposit payment-status poll."
+              },
+              "response": []
+            },
+            {
+              "name": "Get quote deposit payment status",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  if (j?.data?.order?._id) pm.collectionVariables.set('orderId', String(j.data.order._id));",
+                      "  if (j?.data?.payment_id) pm.collectionVariables.set('quoteDepositPaymentId', String(j.data.payment_id));",
+                      "  if (j?.data?.payment_url) pm.collectionVariables.set('orderPaymentUrl', String(j.data.payment_url));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/user/quotes/{{quoteId}}/deposit-payment/{{quoteDepositPaymentId}}/payment-status",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "user",
+                    "quotes",
+                    "{{quoteId}}",
+                    "deposit-payment",
+                    "{{quoteDepositPaymentId}}",
+                    "payment-status"
+                  ]
+                },
+                "description": "**GET /api/mobile/user/quotes/:id/deposit-payment/:paymentId/payment-status**\n\n- **Auth:** Bearer customer\n- Poll after **Convert quote to order (Razorpay deposit)**\n- Uses `{{quoteDepositPaymentId}}` from convert response (`data.payment._id`)\n- Syncs with Razorpay when still pending; returns `order` once deposit is applied and quote converts"
               },
               "response": []
             }
@@ -7666,6 +7725,12 @@
       "value": "1000",
       "type": "string",
       "description": "Deposit amount used for convert-to-order (must be >= minimum_deposit_amount)"
+    },
+    {
+      "key": "quoteDepositPaymentId",
+      "value": "",
+      "type": "string",
+      "description": "Set by Convert quote to order (Razorpay deposit) — use for deposit payment-status poll"
     },
     {
       "key": "quotePaymentMethod",

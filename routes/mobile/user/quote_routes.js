@@ -8,6 +8,7 @@ const {
   updateQuoteHandler,
   cancelQuoteHandler,
   convertQuoteToOrderHandler,
+  getQuoteDepositPaymentStatusHandler,
 } = require('../../../controllers/mobile/user/quote_controller');
 const {
   validateCreateQuoteBody,
@@ -17,6 +18,7 @@ const {
   validateCancelQuoteBody,
   validateConvertQuoteBody,
 } = require('../../../middleware/mobile/user/quote_middleware');
+const { validatePaymentIdParam } = require('../../../middleware/mobile/user/order_payment_middleware');
 
 router.post('/quotes/create', userAuthMiddleware, validateCreateQuoteBody, createQuoteHandler);
 router.get('/quotes', userAuthMiddleware, validateListQuotesQuery, listQuotesHandler);
@@ -41,6 +43,13 @@ router.post(
   validateQuoteIdParam,
   validateConvertQuoteBody,
   convertQuoteToOrderHandler
+);
+router.get(
+  '/quotes/:id/deposit-payment/:paymentId/payment-status',
+  userAuthMiddleware,
+  validateQuoteIdParam,
+  validatePaymentIdParam,
+  getQuoteDepositPaymentStatusHandler
 );
 
 module.exports = router;

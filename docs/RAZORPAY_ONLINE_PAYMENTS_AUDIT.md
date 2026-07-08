@@ -88,9 +88,12 @@ All paths call `finalizeCompletedOrderPaymentSideEffects` (order rollups + walle
 
 ### 4. Mobile — quote deposit online
 
-- **Route:** `POST /api/mobile/user/quotes/:id/convert-to-order`
-- **Behavior:** Creates order, then Razorpay link for deposit `amount`
-- **Response:** **202** + `data.payment.payment_url`
+- **Route:** `POST /api/mobile/user/quotes/:id/convert-to-order` (`payment_method: online`)
+- **Poll:** `GET /api/mobile/user/quotes/:id/deposit-payment/:paymentId/payment-status`
+- **Behavior:** Pending `order_payment` with `quote_id` (no `order_id`) + Razorpay link; **order is created on webhook/poll** after payment
+- **Cancel guard:** Customer cannot cancel quote while a pending online deposit exists
+- **Invalid quote after pay:** Auto Razorpay refund; payment row → `refunded`
+- **Response:** **202** + `data.payment.payment_url` (no `order` until paid). Deposit fields: `deposit_amount` and `paid_amount` (same value)
 
 ### 5. Mobile — partner subscription online
 

@@ -64,6 +64,10 @@ const markPaymentFailed = async (paymentId) => {
     return null;
   }
 
+  if (!payment.order_id) {
+    return payment;
+  }
+
   const order = await Order.findById(payment.order_id).lean();
   if (order) {
     void safeNotifyOrderPaymentFailed({
@@ -126,6 +130,13 @@ const completeOrderPaymentFromWebhook = async (
     }
 
     if (payment.status === 'completed') {
+        if (!payment.order_id) {
+            return {
+                ok: false,
+                status: 409,
+                message: 'Completed payment is missing order_id.',
+            };
+        }
         const syncResult = await finalizeCompletedOrderPaymentSideEffects(payment.order_id, {
             payment,
             actorUserId: gatewayMeta.actor_user_id || null,
@@ -215,6 +226,10 @@ const syncPendingOrderPayment = async (paymentId) => {
     }
     if (payment.status !== 'pending' || !payment.transaction_reference) {
         return { synced: false, reason: 'not_pending_online' };
+    }
+
+    if (!payment.order_id) {
+        return { synced: false, reason: 'missing_order_id' };
     }
 
     const linkId = payment.transaction_reference;
@@ -425,4 +440,5 @@ module.exports = {
     syncPendingOrderPayment,
     findOrderPaymentForPaymentLink,
     RAZORPAY_LINK_RESUMABLE,
+    RAZORPAY_LINK_TERMINAL_UNPAID,
 };

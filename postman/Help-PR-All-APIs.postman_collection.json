@@ -24466,7 +24466,7 @@
                         "convert-to-order"
                       ]
                     },
-                    "description": "**POST /api/mobile/user/quotes/:id/convert-to-order**\n\n- **Auth:** Bearer customer\n- Quote must be **accepted** and owned by caller\n- **Required:** `amount`, `payment_method`\n- `amount` >= `minimum_deposit_amount`\n\n**Offline (`cash`, `upi`, etc.):** **200** — order + completed/pending payment.\n\n**`payment_method: online`:** **202** — order created + `payment.payment_url`; pay deposit via Razorpay, then poll order payment status on the new order."
+                    "description": "**POST /api/mobile/user/quotes/:id/convert-to-order**\n\n- **Auth:** Bearer customer\n- Quote must be **accepted** and owned by caller\n- **Required:** `amount`, `payment_method`\n- `amount` >= `minimum_deposit_amount`\n\n**Offline (`cash`, `upi`, etc.):** **200** — order + completed/pending payment.\n\n**`payment_method: online`:** **202** — pending `order_payment` + `payment.payment_url` (no order yet). Pay via Razorpay, then poll **`GET .../quotes/:id/deposit-payment/:paymentId/payment-status`**; order is created after payment confirms."
                   },
                   "response": []
                 },

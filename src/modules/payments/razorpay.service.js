@@ -49,6 +49,49 @@ const createOrderPaymentLink = async ({
 };
 
 /**
+ * Create a Razorpay payment link for a quote deposit (order created after payment).
+ */
+const createQuoteDepositPaymentLink = async ({
+    name,
+    email,
+    contact,
+    amount,
+    quoteId,
+    orderPaymentId,
+}) => {
+    try {
+        const notes = {
+            purpose: PAYMENT_PURPOSES.QUOTE_DEPOSIT,
+            quote_id: String(quoteId),
+        };
+        if (orderPaymentId) {
+            notes.order_payment_id = String(orderPaymentId);
+        }
+
+        const link = await razorpayClient.createPaymentLink({
+            amount,
+            customer: { name, email, contact },
+            notes,
+            referenceId: orderPaymentId ? `quote_deposit_${orderPaymentId}` : `quote_${quoteId}`,
+            description: 'Quote deposit payment',
+        });
+
+        return {
+            success: true,
+            payment_url: link.payment_url,
+            transaction_id: link.payment_link_id,
+            payment_link_id: link.payment_link_id,
+        };
+    } catch (error) {
+        console.error('createQuoteDepositPaymentLink', error?.response?.data || error.message);
+        return {
+            success: false,
+            error: error?.response?.data?.error?.description || 'Failed to create payment link',
+        };
+    }
+};
+
+/**
  * Create a Razorpay payment link for a subscription change.
  */
 const createSubscriptionChangePaymentLink = async ({
@@ -95,6 +138,7 @@ const generatePaymentLink = async (name, email, contact, amount) =>
 
 module.exports = {
     createOrderPaymentLink,
+    createQuoteDepositPaymentLink,
     createSubscriptionChangePaymentLink,
     generatePaymentLink,
     fetchPaymentLink: razorpayClient.fetchPaymentLink,

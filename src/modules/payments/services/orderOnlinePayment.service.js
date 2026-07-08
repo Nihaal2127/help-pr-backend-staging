@@ -4,7 +4,10 @@ const OrderPayment = require('../../../../models/order_payment');
 const User = require('../../../../models/user');
 const { syncOrderPaymentStatus } = require('../../../../services/order_payment_status_service');
 const { syncAllPartnerOrderPaymentsForOrder } = require('../../../../services/partner_wallet_order_service');
-const { safeNotifyOrderPaymentReceived } = require('../../notifications/services/domainHooks');
+const {
+  safeNotifyOrderPaymentReceived,
+  safeNotifyOrderPaymentFailed,
+} = require('../../notifications/services/domainHooks');
 const { createOrderPaymentLink, fetchPaymentLink } = require('../razorpay.service');
 const { PAYMENT_PURPOSES, GATEWAY_PAYMENT_METHOD } = require('../constants/payment.constants');
 const {
@@ -51,10 +54,26 @@ const findPendingOnlinePayment = async (orderId, amount = null) => {
 };
 
 const markPaymentFailed = async (paymentId) => {
-    await OrderPayment.findOneAndUpdate(
-        { _id: paymentId, status: 'pending', deleted_at: null },
-        { $set: { status: 'failed', updated_at: new Date() } }
-    );
+  const payment = await OrderPayment.findOneAndUpdate(
+    { _id: paymentId, status: 'pending', deleted_at: null },
+    { $set: { status: 'failed', updated_at: new Date() } },
+    { new: true }
+  );
+
+  if (!payment) {
+    return null;
+  }
+
+  const order = await Order.findById(payment.order_id).lean();
+  if (order) {
+    void safeNotifyOrderPaymentFailed({
+      order,
+      payment,
+      actorUserId: null,
+    });
+  }
+
+  return payment;
 };
 
 /**

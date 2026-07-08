@@ -27,6 +27,10 @@ const {
     getRazorpayRefundableBalanceForOrder,
     initiateRazorpayRefundsForOrder,
 } = require('../src/modules/payments/services/orderRazorpayRefund.service');
+const {
+    safeNotifyOrderRefundProcessed,
+    safeNotifyWalletTransaction,
+} = require('../src/modules/notifications/services/domainHooks');
 
 /** Canonical + legacy numeric values for completed and cancelled (refund-eligible lifecycle). */
 const ELIGIBLE_REFUND_ORDER_STATUS_VALUES = [
@@ -685,7 +689,7 @@ const createRefund = async (body, createdById = null) => {
         });
 
         if (fromPartnerWallet > 0 && order.partner_id) {
-            await PartnerWalletLedger.create({
+            const ledgerEntry = await PartnerWalletLedger.create({
                 partner_id: order.partner_id,
                 franchise_id: order.franchise_id || null,
                 transaction_type: 'debit',
@@ -699,6 +703,10 @@ const createRefund = async (body, createdById = null) => {
                 payout_id: null,
                 created_at: now,
                 updated_at: now,
+            });
+            void safeNotifyWalletTransaction({
+                ledgerEntry,
+                actorUserId: createdById || null,
             });
         }
 
@@ -725,9 +733,17 @@ const createRefund = async (body, createdById = null) => {
         });
 
         await syncOrderPaymentStatus(order._id);
-        await applyOrderRefundedStatus(order._id);
+        const refreshedOrder = await applyOrderRefundedStatus(order._id);
         await syncOrderPaymentStatus(order._id);
         await syncAllPartnerOrderPaymentsForOrder(order._id);
+
+        if (refreshedOrder) {
+            void safeNotifyOrderRefundProcessed({
+                order: refreshedOrder,
+                amount: refundAmount,
+                actorUserId: createdById || null,
+            });
+        }
 
         return ok(201, {
             message: refundViaRazorpay

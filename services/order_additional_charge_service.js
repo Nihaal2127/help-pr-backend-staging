@@ -2,7 +2,11 @@ const OrderAdditionalCharge = require('../models/order_additional_charge');
 const Order = require('../models/order');
 const { computeAdditionalChargeLine } = require('../utils/order_pricing');
 const { recalculateOrderTotals } = require('../utils/order_financials');
-const { safeNotifyOrderAdditionalChargeAdded } = require('../src/modules/notifications/services/domainHooks');
+const {
+  safeNotifyOrderAdditionalChargeAdded,
+  safeNotifyOrderAdditionalChargeUpdated,
+  safeNotifyOrderAdditionalChargeRemoved,
+} = require('../src/modules/notifications/services/domainHooks');
 
 const ALLOWED_CHARGE_METHODS = new Set([
   'cash',
@@ -85,7 +89,8 @@ const createAdditionalCharge = async (order, item) => {
   return doc;
 };
 
-const updateAdditionalCharge = async (order, row, updates) => {
+const updateAdditionalCharge = async (order, row, updates, options = {}) => {
+  const actorUserId = options.actorUserId || null;
   const payload = normalizeChargeUpdateInput(updates);
   if (payload.label !== undefined) row.label = payload.label;
   if (payload.description !== undefined) row.description = payload.description;
@@ -103,14 +108,33 @@ const updateAdditionalCharge = async (order, row, updates) => {
   row.updated_at = new Date();
   await row.save();
   await recalculateOrderTotals(row.order_id);
+  const refreshedOrder = await Order.findById(row.order_id);
+  void safeNotifyOrderAdditionalChargeUpdated({
+    order: refreshedOrder || order,
+    charge: row,
+    actorUserId,
+  });
   return row;
 };
 
-const deleteAdditionalCharge = async (row) => {
+const deleteAdditionalCharge = async (row, options = {}) => {
+  const actorUserId = options.actorUserId || null;
+  const chargeLabel = row.label || "";
+  const chargeId = row._id;
+  const orderId = row.order_id;
   row.deleted_at = new Date();
   row.updated_at = new Date();
   await row.save();
-  await recalculateOrderTotals(row.order_id);
+  await recalculateOrderTotals(orderId);
+  const refreshedOrder = await Order.findById(orderId);
+  if (refreshedOrder) {
+    void safeNotifyOrderAdditionalChargeRemoved({
+      order: refreshedOrder,
+      chargeId,
+      label: chargeLabel,
+      actorUserId,
+    });
+  }
 };
 
 module.exports = {

@@ -213,6 +213,19 @@ if (!isLambda) {
   http.createServer(app).listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
     console.log('Chat APIs: use help-pr-chat-service (CHAT_SERVICE_BASE_URL).');
+
+    if (process.env.ENABLE_NOTIFICATION_REMINDER_CRON === 'true') {
+      const { runAllReminders } = require('./src/modules/notifications/services/notificationReminder.service');
+      const intervalMs = Number(process.env.NOTIFICATION_REMINDER_CRON_INTERVAL_MS || 3600000);
+      const runRemindersSafely = () => {
+        runAllReminders().catch((err) => {
+          console.error('[notifications] reminder cron failed:', err.message || err);
+        });
+      };
+      setInterval(runRemindersSafely, intervalMs);
+      setTimeout(runRemindersSafely, 15000);
+      console.log(`Notification reminder cron enabled (every ${intervalMs}ms).`);
+    }
   }).on('error', (err) => {
     console.error('HTTP server failed to start:', err.message);
   });

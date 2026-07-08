@@ -34,6 +34,11 @@ const {
   mergePartnerCatalogFromNormalizedRows,
 } = require('../services/partner_category_service');
 const partnerSubscriptionService = require('../services/partner_subscription_service');
+const { safeNotifyPartnerVerificationUpdated } = require('../src/modules/notifications/services/domainHooks');
+const {
+  safeNotifyBackofficePartnerPending,
+  safeNotifyBackofficeEmployeeAdded,
+} = require('../src/modules/notifications/services/backofficeHooks');
 const {
   normalizeUserEmail,
   normalizeUserPhone,
@@ -1805,6 +1810,10 @@ const create = async (req, res) => {
         user_id: savedUser._id,
       });
       await notificationSettings.save();
+      void safeNotifyBackofficePartnerPending({
+        partner: savedUser,
+        actorUserId: req.user?.id || req.user?._id || null,
+      });
       const { documents: _, ...userWithoutDocuments } = savedUser.toObject();
       return res.status(200).json({
         success: true,
@@ -1829,6 +1838,12 @@ const create = async (req, res) => {
       user_id: savedUser._id,
     });
     await notificationSettings.save();
+    if (userType === 3) {
+      void safeNotifyBackofficeEmployeeAdded({
+        employee: savedUser,
+        actorUserId: req.user?.id || req.user?._id || null,
+      });
+    }
     return res.status(200).json({
       success: true,
       status: 200,
@@ -1876,6 +1891,8 @@ const update = async (req, res) => {
         message: 'User not found'
       });
     }
+    const previousPartnerVerificationStatus =
+      Number(user.type) === 2 ? Number(user.verification_status) : null;
     if (req.files?.image?.[0] || req.file) {
       const profileUpload = req.files?.image?.[0] || req.file;
       updateData.profile_url = await handleImageUpload(
@@ -2106,6 +2123,20 @@ const update = async (req, res) => {
     });
 
     const updatedUser = await user.save();
+
+    if (
+      Number(updatedUser.type) === 2 &&
+      previousPartnerVerificationStatus !== null &&
+      Number(updatedUser.verification_status) !== previousPartnerVerificationStatus &&
+      [2, 3].includes(Number(updatedUser.verification_status))
+    ) {
+      void safeNotifyPartnerVerificationUpdated({
+        partnerUserId: updatedUser._id,
+        verificationStatus: updatedUser.verification_status,
+        actorUserId: req.user?.id || req.user?._id || null,
+      });
+    }
+
     if (!shouldAddNewAddress && (hasAddressPayload || hasAddressStatusPayload)) {
       const targetAddress = await findPartnerAddressForUpdate(updatedUser._id, targetAddressId);
       if (targetAddress) {

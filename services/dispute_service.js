@@ -19,7 +19,7 @@ const {
   provisionDisputeChatForRecord,
   applyDisputeStatusChatEffects,
 } = require("./chat_integration");
-const { safeNotifyDisputeRaised } = require("../src/modules/notifications/services/domainHooks");
+const { safeNotifyDisputeRaised, safeNotifyDisputeStatusChanged } = require("../src/modules/notifications/services/domainHooks");
 const { applyPagination } = require("../utils/pagination");
 const { resolveFranchiseListScope, assertFranchiseRecordAccess } = require("../utils/franchise_scope_access");
 const { loadCaller } = require("../utils/auth_caller");
@@ -297,6 +297,7 @@ const updateDisputeStatus = async (req, disputeId, body) => {
     return fail(400, `Invalid status. Use one of: ${DISPUTE_STATUSES.join(", ")}.`);
   }
 
+  const previousStatus = dispute.status;
   dispute.status = nextStatus;
   dispute.updated_at = new Date();
 
@@ -308,6 +309,15 @@ const updateDisputeStatus = async (req, disputeId, body) => {
   await applyDisputeStatusChatEffects({ dispute, nextStatus });
 
   await dispute.save();
+
+  const order = await Order.findOne({ _id: dispute.order_id, deleted_at: null }).lean();
+  void safeNotifyDisputeStatusChanged({
+    dispute,
+    order,
+    previousStatus,
+    newStatus: nextStatus,
+    actorUserId: access.callerId,
+  });
 
   return ok(200, {
     message: "Dispute updated successfully.",

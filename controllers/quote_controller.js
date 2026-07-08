@@ -91,6 +91,7 @@ const {
 const {
   safeNotifyQuoteCreated,
   safeNotifyQuoteStatusChanged,
+  safeNotifyQuoteAssigned,
 } = require("../src/modules/notifications/services/domainHooks");
 
 const QUOTE_ADDRESS_POPULATE = {
@@ -730,6 +731,7 @@ const update = async (req, res) => {
     const currentStatus = resolveQuoteStatus(quote);
     const hasStatusUpdate = body.status !== undefined;
     let previousStatusForNotify = null;
+    let notifyQuoteAssigned = false;
     const hasFieldUpdates =
       QUOTE_FIELD_UPDATE_KEYS.some((key) => body[key] !== undefined) ||
       quotePricingInputChanged(body);
@@ -795,6 +797,7 @@ const update = async (req, res) => {
           buildHistoryChange("status", currentStatus, "pending")
         );
         quote.status = "pending";
+        notifyQuoteAssigned = true;
       }
     }
 
@@ -961,7 +964,12 @@ const update = async (req, res) => {
 
     const updated = await quote.save();
 
-    if (hasStatusUpdate) {
+    if (notifyQuoteAssigned) {
+      void safeNotifyQuoteAssigned({
+        quote: updated,
+        actorUserId: getCallerId(req),
+      });
+    } else if (hasStatusUpdate) {
       void safeNotifyQuoteStatusChanged({
         quote: updated,
         previousStatus: previousStatusForNotify,

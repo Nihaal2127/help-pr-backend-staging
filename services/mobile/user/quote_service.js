@@ -29,6 +29,8 @@ const {
 const {
   safeNotifyQuoteCreated,
   safeNotifyQuoteStatusChanged,
+  safeNotifyQuoteAssigned,
+  safeNotifyOrderPaymentReceived,
 } = require('../../../src/modules/notifications/services/domainHooks');
 const {
   assertCustomerOwnsQuote,
@@ -374,6 +376,8 @@ const updateCustomerQuote = async (customerId, quoteId, body) => {
 
     const historyChanges = [];
     const previousValues = applyCustomerQuoteFieldUpdates(quote, body);
+    const previousStatus = currentStatus;
+    let assignedPartner = false;
 
     if (quotePricingInputChanged(body)) {
       try {
@@ -406,6 +410,7 @@ const updateCustomerQuote = async (customerId, quoteId, body) => {
     if (currentStatus === 'new' && quote.partner_id) {
       historyChanges.push(buildHistoryChange('status', currentStatus, 'pending'));
       quote.status = 'pending';
+      assignedPartner = true;
     }
 
     quote.updated_at = new Date();
@@ -421,6 +426,20 @@ const updateCustomerQuote = async (customerId, quoteId, body) => {
     }
 
     await quote.save();
+
+    if (assignedPartner) {
+      void safeNotifyQuoteAssigned({
+        quote,
+        actorUserId: customerId,
+      });
+    } else if (quote.status !== previousStatus) {
+      void safeNotifyQuoteStatusChanged({
+        quote,
+        previousStatus,
+        newStatus: quote.status,
+        actorUserId: customerId,
+      });
+    }
 
     const populated = await Quote.findById(quote._id)
       .populate(QUOTE_MOBILE_DETAIL_POPULATE)
@@ -534,6 +553,7 @@ const convertCustomerQuoteToOrder = async (customerId, quoteId, body) => {
     if (quote.order_id) {
       return fail(409, 'Quote is already linked to an order.');
     }
+    const quoteStatusBeforeConvert = currentStatus;
 
     const minimumDeposit = Number(quote.minimum_deposit_amount) || 0;
     const totalPrice = Number(quote.total_price) || 0;
@@ -593,6 +613,13 @@ const convertCustomerQuoteToOrder = async (customerId, quoteId, body) => {
         .lean();
       await attachPartnerServiceToQuote(linkedQuote);
 
+      void safeNotifyQuoteStatusChanged({
+        quote: linkedQuote,
+        previousStatus: quoteStatusBeforeConvert,
+        newStatus: resolveQuoteStatus(linkedQuote),
+        actorUserId: customerId,
+      });
+
       const latestOrder =
         onlineResult.already_completed
           ? await Order.findById(created.order._id).lean()
@@ -648,6 +675,23 @@ const convertCustomerQuoteToOrder = async (customerId, quoteId, body) => {
 
     await syncOrderPaymentStatus(created.order._id);
     await syncAllPartnerOrderPaymentsForOrder(created.order._id);
+
+    const refreshedOrder = await Order.findById(created.order._id).lean();
+
+    void safeNotifyQuoteStatusChanged({
+      quote: await Quote.findById(quote._id).lean(),
+      previousStatus: quoteStatusBeforeConvert,
+      newStatus: 'success',
+      actorUserId: customerId,
+    });
+
+    if (paymentStatus === 'completed') {
+      void safeNotifyOrderPaymentReceived({
+        order: refreshedOrder || created.order,
+        payment: orderPayment.toObject(),
+        actorUserId: customerId,
+      });
+    }
 
     const linkedQuote = await Quote.findById(quote._id)
       .populate(QUOTE_MOBILE_DETAIL_POPULATE)

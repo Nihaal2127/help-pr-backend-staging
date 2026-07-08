@@ -6,8 +6,13 @@ const {
   markReadHandler,
   markAllReadHandler,
 } = require("../../../../controllers/notification_controller");
+const { runRemindersHandler } = require("../../../../controllers/notification_reminder_controller");
+const { chatMessageWebhookHandler } = require("../../../../controllers/chat_notification_controller");
 
 const router = express.Router();
+
+router.post("/cron/reminders", runRemindersHandler);
+router.post("/webhooks/chat-message", chatMessageWebhookHandler);
 
 router.get("/", authMiddleware, listHandler);
 router.get("/unread-count", authMiddleware, unreadCountHandler);

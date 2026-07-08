@@ -1,7 +1,6 @@
 const mongoose = require("mongoose");
 const Ticket = require('../models/ticket');
 const User = require('../models/user');
-const NotificationSettings = require('../models/notification_settings');
 const { validationResult } = require('express-validator');
 
 const { applyPagination, } = require('../utils/pagination');
@@ -10,7 +9,7 @@ const { parseBoolean } = require('../utils/parser');
 const { getTicketId } = require('../helper/id_generator');
 const { sanitizeInput } = require('../validator/search_keyword_validator');
 const { checkObjectIdExists } = require('../validator/id_validator');
-const { sendPushNotification } = require('../service/firebase/push_service');
+const { safeNotifyTicketStatusChanged } = require('../src/modules/notifications/services/domainHooks');
 const getAll = async (req, res) => {
 
   try {
@@ -215,23 +214,14 @@ const updateTicketStatus = async (req, res) => {
 
 
     const updatedTicket = await ticket.save();
-    const notificationSetting = await NotificationSettings.findOne({ user_id: ticket.created_by_id });
-    if (notificationSetting.is_update_allow) {
-      const user = await User.findById(ticket.created_by_id);
-      const deviceToken = user.device_token
-      const title = `Ticket Update`
-      const body = `Your ticket ${ticket.unique_id} status changed to ${status === 2 ? 'Close' : 'Open'}`
-      const data = {
-        order_id: service.order_id,
-        type: "Order"
-      }
-      if (deviceToken !== null && deviceToken !== '') {
-        await sendPushNotification({deviceToken, title, body, data});
-      }
-    }
-    if (notificationSetting.is_sms_allow) {
-      // Put logic for sent sms update
-    }
+    const statusLabel = status === 2 ? 'Close' : 'Open';
+
+    void safeNotifyTicketStatusChanged({
+      ticket: updatedTicket,
+      statusLabel,
+      actorUserId: req.user?.id || req.user?._id || resolve_by_id || null,
+    });
+
     res.status(200).json({
       success: true,
       status: 200,

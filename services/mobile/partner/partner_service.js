@@ -29,6 +29,7 @@ const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
 const { fail, okWithData, okPass } = require('../../../utils/mobile_service_result');
 const { attachPartnerRatingFields } = require('../../../utils/rating_format');
 const { getPartnerEngagementCounts } = require('../../partner_post_common_service');
+const { safeNotifyBackofficePartnerPending } = require('../../../src/modules/notifications/services/backofficeHooks');
 const {
   partnerDocumentFieldsAfterImageUpload,
   applyPartnerUserStatusAfterDocumentUpload,
@@ -879,6 +880,10 @@ const registerPartner = async ({ name, email, phone_number, password, date_of_bi
     console.log('[partner.register] service: saving user to database');
     savedUser = await newUser.save();
     console.log('[partner.register] service: user saved', { _id: savedUser._id, user_id: savedUser.user_id });
+    void safeNotifyBackofficePartnerPending({
+      partner: savedUser,
+      actorUserId: savedUser._id,
+    });
   } catch (err) {
     console.error('[partner.register] service: user save failed', {
       message: err.message,

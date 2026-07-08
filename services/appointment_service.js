@@ -22,6 +22,10 @@ const { applyPagination } = require("../utils/pagination");
 const { buildFieldDateRangeFilter } = require("../utils/schedule_date_filters");
 const { sanitizeInput } = require("../validator/search_keyword_validator");
 const { formatAppointmentForApi } = require("../utils/appointment_api_format");
+const {
+  safeNotifyAppointmentScheduled,
+  safeNotifyAppointmentStatusChanged,
+} = require("../src/modules/notifications/services/domainHooks");
 
 const parseTimeInput = (value) => {
   if (value === undefined || value === null) return null;
@@ -203,6 +207,10 @@ const createDefaultAppointmentForOrder = async (order, { actorUserId } = {}) => 
   });
 
   await appointment.save();
+  void safeNotifyAppointmentScheduled({
+    appointment,
+    actorUserId: actorUserId || order.created_by_id || null,
+  });
   return appointment;
 };
 
@@ -299,6 +307,10 @@ const createAppointmentForOrder = async (req, body, { partnerId } = {}) => {
     });
 
     await appointment.save();
+    void safeNotifyAppointmentScheduled({
+      appointment,
+      actorUserId: callerId,
+    });
     return { ok: true, record: appointment };
   } catch (err) {
     console.error("createAppointmentForOrder:", err.message);
@@ -317,6 +329,9 @@ const updateAppointmentById = async (req, id, body, { partnerId } = {}) => {
     if (!access.ok) {
       return { ok: false, status: access.status, message: access.message };
     }
+
+    const previousStatus = appointment.status;
+    const callerId = partnerId || getCallerId(req);
 
     if (body.title !== undefined) {
       appointment.title = String(body.title || "").trim();
@@ -375,6 +390,16 @@ const updateAppointmentById = async (req, id, body, { partnerId } = {}) => {
 
     appointment.updated_at = new Date();
     await appointment.save();
+
+    if (body.status !== undefined && appointment.status !== previousStatus) {
+      void safeNotifyAppointmentStatusChanged({
+        appointment,
+        previousStatus,
+        newStatus: appointment.status,
+        actorUserId: callerId,
+      });
+    }
+
     return { ok: true, record: appointment };
   } catch (err) {
     console.error("updateAppointmentById:", err.message);

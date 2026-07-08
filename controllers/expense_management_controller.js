@@ -1,4 +1,7 @@
 const Expense = require("../models/expense");
+const {
+  safeNotifyBackofficeExpenseCreated,
+} = require("../src/modules/notifications/services/backofficeHooks");
 const ExpenseCategory = require("../models/expense_category");
 const ExpenseSubcategory = require("../models/expense_subcategory");
 const Franchise = require("../models/franchise");
@@ -153,6 +156,10 @@ const create = async (req, res) => {
     });
 
     const savedRecord = await record.save();
+    void safeNotifyBackofficeExpenseCreated({
+      expense: savedRecord,
+      actorUserId: req.user?.id || req.user?._id || null,
+    });
     const formattedRecord = await buildExpenseRecord(savedRecord);
 
     return res.status(201).json({

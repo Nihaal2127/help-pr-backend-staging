@@ -18,7 +18,12 @@ const send_notification = async (req, res) => {
         });
         res.status(200).json({ message: "Notification sent", response });
     } catch (err) {
-        res.status(500).json({ message: "Failed to send notification", error: err.message });
+        res.status(500).json({
+          message: "Failed to send notification",
+          error: err.message,
+          code: err.code || null,
+          details: err.errorInfo || null,
+        });
     }
 };
 

@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { send_notification } = require("../controllers/notification_test");
+const { send_notification, firebase_status } = require("../controllers/notification_test");
 const authMiddleware = require("../middleware/auth_middleware");
 
 const isNotificationTestAllowed = () =>
@@ -17,6 +17,13 @@ const blockNotificationTestUnlessAllowed = (req, res, next) => {
   }
   return next();
 };
+
+router.get(
+  "/status",
+  blockNotificationTestUnlessAllowed,
+  authMiddleware,
+  firebase_status
+);
 
 router.post(
   "/send",

@@ -7,6 +7,8 @@ const RESOURCES_DIR = path.join(__dirname, "../../resources");
 const FIREBASE_APP_TARGETS = {
   customer: {
     appName: "helppr-customer",
+    expectedProjectId: "helper-user-app",
+    expectedSenderId: "637181315442",
     paths: [
       path.join(RESOURCES_DIR, "adminsdk-customer.json"),
       path.join(RESOURCES_DIR, "adminsdk-user.json"),
@@ -15,6 +17,8 @@ const FIREBASE_APP_TARGETS = {
   },
   partner: {
     appName: "helppr-partner",
+    expectedProjectId: null,
+    expectedSenderId: null,
     paths: [
       path.join(RESOURCES_DIR, "adminsdk-partner.json"),
       path.join(RESOURCES_DIR, "adminsdk.json"),
@@ -23,10 +27,26 @@ const FIREBASE_APP_TARGETS = {
 };
 
 const readyApps = new Set();
+const appMetadata = {};
 
 const loadServiceAccount = (filePath) => {
   if (!fs.existsSync(filePath)) return null;
-  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  try {
+    const serviceAccount = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    if (!serviceAccount?.project_id || !serviceAccount?.private_key) {
+      console.error(
+        `[firebase] invalid service account file (missing project_id/private_key): ${path.basename(filePath)}`
+      );
+      return null;
+    }
+    return serviceAccount;
+  } catch (error) {
+    console.error(
+      `[firebase] failed to parse ${path.basename(filePath)}:`,
+      error.message || error
+    );
+    return null;
+  }
 };
 
 const initFirebaseApp = (target) => {
@@ -45,8 +65,20 @@ const initFirebaseApp = (target) => {
         config.appName
       );
       readyApps.add(target);
+      appMetadata[target] = {
+        ready: true,
+        projectId: serviceAccount.project_id,
+        clientEmail: serviceAccount.client_email || null,
+        sourceFile: path.basename(filePath),
+        expectedProjectId: config.expectedProjectId,
+        expectedSenderId: config.expectedSenderId,
+        projectMatchesCustomerApp:
+          config.expectedProjectId == null
+            ? null
+            : serviceAccount.project_id === config.expectedProjectId,
+      };
       console.log(
-        `[firebase] ${target} push initialized (${path.basename(filePath)})`
+        `[firebase] ${target} push initialized (${path.basename(filePath)}) project_id=${serviceAccount.project_id}`
       );
       return true;
     } catch (error) {
@@ -61,6 +93,15 @@ const initFirebaseApp = (target) => {
     }
   }
 
+  appMetadata[target] = {
+    ready: false,
+    projectId: null,
+    clientEmail: null,
+    sourceFile: null,
+    expectedProjectId: config.expectedProjectId,
+    expectedSenderId: config.expectedSenderId,
+    projectMatchesCustomerApp: null,
+  };
   return false;
 };
 
@@ -83,6 +124,18 @@ const resolveFirebaseTarget = (target) => {
   if (normalized === "partner") return "partner";
   return null;
 };
+
+const getFirebaseDiagnostics = () => ({
+  customer: appMetadata.customer || { ready: readyApps.has("customer") },
+  partner: appMetadata.partner || { ready: readyApps.has("partner") },
+  customerAppReference: {
+    projectId: "helper-user-app",
+    senderId: "637181315442",
+    androidPackage: "com.helppr",
+  },
+  hint:
+    "messaging/mismatched-credential means the deviceToken was issued by a different Firebase project than the loaded service account. Customer tokens require project_id helper-user-app (sender 637181315442).",
+});
 
 const sendPushNotification = async ({
   deviceToken,
@@ -155,4 +208,5 @@ module.exports = {
   sendPushNotification,
   safeSendPushNotification,
   mapUserTypeToFirebaseTarget,
+  getFirebaseDiagnostics,
 };

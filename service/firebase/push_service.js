@@ -2,68 +2,157 @@ const fs = require("fs");
 const path = require("path");
 const admin = require("firebase-admin");
 
-const serviceAccountPath = path.join(__dirname, "../../resources/adminsdk.json");
-let isFirebaseReady = false;
+const RESOURCES_DIR = path.join(__dirname, "../../resources");
 
-if (fs.existsSync(serviceAccountPath)) {
-  const serviceAccount = require(serviceAccountPath);
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
-  isFirebaseReady = true;
-} else {
+const FIREBASE_APP_TARGETS = {
+  customer: {
+    appName: "helppr-customer",
+    paths: [
+      path.join(RESOURCES_DIR, "adminsdk-customer.json"),
+      path.join(RESOURCES_DIR, "adminsdk-user.json"),
+      path.join(RESOURCES_DIR, "adminsdk.json"),
+    ],
+  },
+  partner: {
+    appName: "helppr-partner",
+    paths: [
+      path.join(RESOURCES_DIR, "adminsdk-partner.json"),
+      path.join(RESOURCES_DIR, "adminsdk.json"),
+    ],
+  },
+};
+
+const readyApps = new Set();
+
+const loadServiceAccount = (filePath) => {
+  if (!fs.existsSync(filePath)) return null;
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+};
+
+const initFirebaseApp = (target) => {
+  const config = FIREBASE_APP_TARGETS[target];
+  if (!config) return false;
+
+  for (const filePath of config.paths) {
+    const serviceAccount = loadServiceAccount(filePath);
+    if (!serviceAccount) continue;
+
+    try {
+      admin.initializeApp(
+        {
+          credential: admin.credential.cert(serviceAccount),
+        },
+        config.appName
+      );
+      readyApps.add(target);
+      console.log(
+        `[firebase] ${target} push initialized (${path.basename(filePath)})`
+      );
+      return true;
+    } catch (error) {
+      if (error?.code === "app/duplicate-app") {
+        readyApps.add(target);
+        return true;
+      }
+      console.error(
+        `[firebase] failed to initialize ${target} from ${filePath}:`,
+        error.message || error
+      );
+    }
+  }
+
+  return false;
+};
+
+Object.keys(FIREBASE_APP_TARGETS).forEach((target) => {
+  initFirebaseApp(target);
+});
+
+if (!readyApps.size) {
   console.warn(
-    "Firebase service account file not found. Push notifications are disabled."
+    "Firebase service account files not found. Push notifications are disabled."
+  );
+  console.warn(
+    "Expected: resources/adminsdk-customer.json and resources/adminsdk-partner.json"
   );
 }
 
-  const sendPushNotification = async ({ deviceToken, title, body, data = {} }) => {
-    if (!isFirebaseReady) {
-      throw new Error(
-        "Firebase is not configured. Missing resources/adminsdk.json service account file."
-      );
-    }
+const resolveFirebaseTarget = (target) => {
+  const normalized = String(target || "").trim().toLowerCase();
+  if (normalized === "customer" || normalized === "user") return "customer";
+  if (normalized === "partner") return "partner";
+  return null;
+};
 
-    const message = {
-      token: deviceToken, // FCM token from Android/iOS app
-      notification: {
-        title,
-        body
-      },
-      data: {
-        "click_action": "FLUTTER_NOTIFICATION_CLICK",
-        ...data, // custom key-value pairs, all string type
-      },
-      android: {
-        priority: "high",
-      },
-      apns: {
-        payload: {
-          aps: {
-            sound: "default",
-            contentAvailable: true,
-          },
+const sendPushNotification = async ({
+  deviceToken,
+  title,
+  body,
+  data = {},
+  target = "customer",
+}) => {
+  const firebaseTarget = resolveFirebaseTarget(target);
+  if (!firebaseTarget || !readyApps.has(firebaseTarget)) {
+    const expectedFile =
+      firebaseTarget === "partner"
+        ? "resources/adminsdk-partner.json"
+        : "resources/adminsdk-customer.json";
+    throw new Error(
+      `Firebase is not configured for ${firebaseTarget || target}. Missing ${expectedFile}.`
+    );
+  }
+
+  const appName = FIREBASE_APP_TARGETS[firebaseTarget].appName;
+  const message = {
+    token: deviceToken,
+    notification: {
+      title,
+      body,
+    },
+    data: {
+      click_action: "FLUTTER_NOTIFICATION_CLICK",
+      ...data,
+    },
+    android: {
+      priority: "high",
+    },
+    apns: {
+      payload: {
+        aps: {
+          sound: "default",
+          contentAvailable: true,
         },
       },
-    };
-  
-    try {
-      const response = await admin.messaging().send(message);
-      console.log("Successfully sent message:", response);
-      return response;
-    } catch (error) {
-      console.error("Error sending message:", error);
-      throw error;
-    }
-  };
-  
-  const safeSendPushNotification = async (payload) => {
-    try {
-      return await sendPushNotification(payload);
-    } catch (error) {
-      console.error("Push notification failed:", error.message || error);
-      return null;
-    }
+    },
   };
 
-  module.exports = { sendPushNotification, safeSendPushNotification };
+  const response = await admin.app(appName).messaging().send(message);
+  console.log(`Successfully sent ${firebaseTarget} message:`, response);
+  return response;
+};
+
+const safeSendPushNotification = async (payload) => {
+  try {
+    return await sendPushNotification(payload);
+  } catch (error) {
+    console.error("Push notification failed:", error.message || error);
+    return null;
+  }
+};
+
+const mapUserTypeToFirebaseTarget = (userType) => {
+  switch (Number(userType)) {
+    case 4:
+      return "customer";
+    case 2:
+      return "partner";
+    default:
+      return null;
+  }
+};
+
+module.exports = {
+  sendPushNotification,
+  safeSendPushNotification,
+  mapUserTypeToFirebaseTarget,
+};

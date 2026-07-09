@@ -8,6 +8,9 @@ node_modules/
 
 # Firebase service account (private key)
 resources/adminsdk.json
+resources/adminsdk-customer.json
+resources/adminsdk-partner.json
+resources/adminsdk-user.json
 
 # Logs and debug
 logs/

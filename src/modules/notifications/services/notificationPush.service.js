@@ -1,7 +1,7 @@
 const User = require("../../../../models/user");
 const NotificationSettings = require("../../../../models/notification_settings");
 const { BACKOFFICE_TYPES } = require("../../../../constants/user_types");
-const { safeSendPushNotification } = require("../../../../service/firebase/push_service");
+const { safeSendPushNotification, mapUserTypeToFirebaseTarget } = require("../../../../service/firebase/push_service");
 
 const isPushAllowedForUser = async (userId, pushPreference = "update") => {
   try {
@@ -35,11 +35,15 @@ const sendPushForNotification = async ({
     const deviceToken = user?.device_token;
     if (!deviceToken) return false;
 
+    const target = mapUserTypeToFirebaseTarget(user?.type);
+    if (!target) return false;
+
     await safeSendPushNotification({
       deviceToken,
       title,
       body,
       data,
+      target: mapUserTypeToFirebaseTarget(user.type),
     });
     return true;
   } catch (error) {

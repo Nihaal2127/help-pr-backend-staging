@@ -101,6 +101,16 @@ const buildNotificationQueryFilter = (userId, query = {}) => {
   return { ok: true, filter };
 };
 
+const uniqueRecipientIds = (recipientIds = []) => {
+  const seen = new Set();
+  return recipientIds.filter((id) => {
+    const key = String(id);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
 const excludeActor = (recipientIds, actorUserId) => {
   if (!actorUserId) return recipientIds;
   const actor = String(actorUserId);
@@ -139,12 +149,13 @@ const notify = async ({
     return;
   }
 
-  const recipients = excludeActor(recipientUserIds, actorUserId);
+  const recipients = excludeActor(uniqueRecipientIds(recipientUserIds), actorUserId);
   if (!recipients.length) return;
 
   const title = template.title(context);
   const body = template.body(context);
   const now = new Date();
+  const sentDeviceTokens = new Set();
 
   for (const recipientId of recipients) {
     try {
@@ -185,6 +196,7 @@ const notify = async ({
           title,
           body,
           pushPreference,
+          sentDeviceTokens,
           data: {
             type: template.category,
             notification_id: String(doc._id),

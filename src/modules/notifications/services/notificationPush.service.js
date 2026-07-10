@@ -23,6 +23,7 @@ const sendPushForNotification = async ({
   body,
   data,
   pushPreference = "update",
+  sentDeviceTokens = null,
 }) => {
   try {
     const allowed = await isPushAllowedForUser(userId, pushPreference);
@@ -32,8 +33,13 @@ const sendPushForNotification = async ({
     if (user && BACKOFFICE_TYPES.has(Number(user.type))) {
       return false;
     }
-    const deviceToken = user?.device_token;
+    const deviceToken = user?.device_token ? String(user.device_token).trim() : "";
     if (!deviceToken) return false;
+
+    if (sentDeviceTokens) {
+      if (sentDeviceTokens.has(deviceToken)) return false;
+      sentDeviceTokens.add(deviceToken);
+    }
 
     const target = mapUserTypeToFirebaseTarget(user?.type);
     if (!target) return false;

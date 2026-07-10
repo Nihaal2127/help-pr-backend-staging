@@ -57,11 +57,22 @@ const NOTIFICATION_EVENTS = {
         ? `Your ${ctx.serviceName} for order #${ctx.orderUniqueId || ""} has been cancelled`
         : `A service for order #${ctx.orderUniqueId || ""} has been cancelled`,
   },
+  ORDER_PAYMENT_COMPLETED: {
+    category: "order",
+    title: () => "Payment successful",
+    body: (ctx) =>
+      `Your payment of ${formatAmount(ctx.amount)} for order #${ctx.orderUniqueId || ""} was successful.`,
+  },
   ORDER_PAYMENT_RECEIVED: {
     category: "order",
     title: () => "Payment received",
-    body: (ctx) =>
-      `Payment of ${formatAmount(ctx.amount)} received for order #${ctx.orderUniqueId || ""}${ctx.payerType ? ` (${ctx.payerType})` : ""}.`,
+    body: (ctx) => {
+      const payer = String(ctx.payerType || "customer").toLowerCase();
+      if (payer === "partner") {
+        return `Partner payment of ${formatAmount(ctx.amount)} received for order #${ctx.orderUniqueId || ""}.`;
+      }
+      return `Customer payment of ${formatAmount(ctx.amount)} received for order #${ctx.orderUniqueId || ""}.`;
+    },
   },
   ORDER_ADDITIONAL_CHARGE_ADDED: {
     category: "order",

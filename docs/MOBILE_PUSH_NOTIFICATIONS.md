@@ -126,6 +126,8 @@ Partner only (`ledgerEntry.partner_id`).
 | `QUOTE_ASSIGNED` | Assigned partner |
 | `PARTNER_WORK_STARTED/COMPLETED` | Customer |
 | `ORDER_PAYMENT_FAILED` | Customer |
+| `ORDER_PAYMENT_COMPLETED` | Customer (when they pay) |
+| `ORDER_PAYMENT_RECEIVED` | Partner(s) / stakeholders (not the payer) |
 | `ORDER_REVIEW_RECEIVED` | Partner |
 | `DISPUTE_RAISED` | Assigned employee |
 | `DISPUTE_STATUS_CHANGED` | Customer |
@@ -148,6 +150,7 @@ All defined in `notification_events.js`. Categories: `order`, `quote`, `subscrip
 | `ORDER_SERVICE_UNASSIGNED` | order | update |
 | `ORDER_SERVICE_TIME_UPDATED` | order | update |
 | `ORDER_SERVICE_CANCELLED` | order | update |
+| `ORDER_PAYMENT_COMPLETED` | order | update |
 | `ORDER_PAYMENT_RECEIVED` | order | update |
 | `ORDER_PAYMENT_FAILED` | order | update |
 | `ORDER_REFUND_PROCESSED` | order | update |

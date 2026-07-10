@@ -418,7 +418,7 @@ const completeQuoteDepositFromWebhook = async (
 
     const syncResult = await finalizeCompletedOrderPaymentSideEffects(orderId, {
         payment: completedPayment,
-        actorUserId: gatewayMeta.actor_user_id || null,
+        actorUserId: gatewayMeta.actor_user_id || gatewayMeta.payer_id || payerId || null,
         notify: true,
     });
 
@@ -427,7 +427,7 @@ const completeQuoteDepositFromWebhook = async (
         quote: linkedQuote,
         previousStatus: quoteStatusBefore,
         newStatus: resolveQuoteStatus(linkedQuote),
-        actorUserId: gatewayMeta.actor_user_id || null,
+        actorUserId: gatewayMeta.actor_user_id || gatewayMeta.payer_id || payerId || null,
     });
 
     return {
@@ -481,10 +481,16 @@ const syncPendingQuoteDepositPayment = async (paymentId) => {
     const paidAmountPaise =
         link.amount_paid != null ? Number(link.amount_paid) : Number(link.amount);
 
+    const quote = payment.quote_id
+        ? await Quote.findOne({ _id: payment.quote_id, deleted_at: null }).select('user_id').lean()
+        : null;
+
     const completion = await completeQuoteDepositFromWebhook(payment._id, linkId, paidAmountPaise, {
         gateway_payment_id: extractPaymentIdFromLink(link),
         instrument_type: link.payments?.[0]?.method || null,
         paid_at: link.updated_at ? new Date(link.updated_at * 1000) : new Date(),
+        payer_id: quote?.user_id || null,
+        actor_user_id: quote?.user_id || null,
     });
 
     if (!completion?.ok) {

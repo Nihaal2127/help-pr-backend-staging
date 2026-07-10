@@ -168,7 +168,7 @@ For backend architecture and implementation status, see **`docs/MOBILE_PUSH_NOTI
 
 | **Payments** |
 
-| P1 | Payment | Payment recorded as completed | ✅ Customer | ✅ Partner(s) | Payment received | Payment of {amount} received for order #{order_id}{payer_type}. | Live |
+| P1 | Payment | Customer payment recorded as completed | ✅ Customer | ✅ Partner(s) | Payment successful / Payment received | Customer: Your payment of {amount} for order #{order_id} was successful. Partner: Customer payment of {amount} received for order #{order_id}. | Live |
 
 | P2 | Payment | Payment on mobile quote→order | ✅ Customer | ✅ Partner(s) | Payment received | Payment of {amount} received for order #{order_id}. | Live |
 
@@ -274,6 +274,7 @@ All templates in `src/modules/notifications/constants/notification_events.js`:
 
 | `ORDER_SERVICE_CANCELLED` | Service cancelled |
 
+| `ORDER_PAYMENT_COMPLETED` | Payment successful |
 | `ORDER_PAYMENT_RECEIVED` | Payment received |
 
 | `ORDER_PAYMENT_FAILED` | Payment failed |

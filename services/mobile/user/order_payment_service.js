@@ -205,6 +205,7 @@ const createCustomerOrderPayment = async (customerId, orderId, body) => {
       payerType: PAYER_TYPE_CUSTOMER,
       autoPaidAtOnCompleted: true,
       trimStrings: true,
+      actorUserId: customerId,
     });
     const syncedOrder = syncResult?.order;
     const breakdown = syncResult?.breakdown;

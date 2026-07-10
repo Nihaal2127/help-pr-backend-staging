@@ -1,5 +1,6 @@
 const Order = require('../../../../models/order');
 const OrderPayment = require('../../../../models/order_payment');
+const Quote = require('../../../../models/quote');
 const { GATEWAY_PAYMENT_METHOD, PAYMENT_PURPOSES } = require('../constants/payment.constants');
 const {
     findOrderPaymentForPaymentLink,
@@ -24,6 +25,11 @@ const handleOrderPaymentLinkPaid = async (paymentLinkId, context = {}) => {
 
     if (paymentRow) {
         if (isQuoteDepositPayment(paymentRow) || (paymentRow.quote_id && !paymentRow.order_id)) {
+            const quote = paymentRow.quote_id
+                ? await Quote.findOne({ _id: paymentRow.quote_id, deleted_at: null })
+                    .select('user_id')
+                    .lean()
+                : null;
             const result = await completeQuoteDepositFromWebhook(
                 paymentRow._id,
                 paymentLinkId,
@@ -34,6 +40,8 @@ const handleOrderPaymentLinkPaid = async (paymentLinkId, context = {}) => {
                     paid_at: paymentEntity?.created_at
                         ? new Date(Number(paymentEntity.created_at) * 1000)
                         : new Date(),
+                    payer_id: quote?.user_id || null,
+                    actor_user_id: quote?.user_id || null,
                 }
             );
 
@@ -85,6 +93,7 @@ const handleOrderPaymentLinkPaid = async (paymentLinkId, context = {}) => {
                     ? new Date(Number(paymentEntity.created_at) * 1000)
                     : new Date(),
                 payer_id: order?.user_id || null,
+                actor_user_id: order?.user_id || null,
             }
         );
 

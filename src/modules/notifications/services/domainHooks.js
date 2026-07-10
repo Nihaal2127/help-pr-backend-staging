@@ -48,6 +48,7 @@ const safeNotifyOrderCreated = async ({ order, actorUserId, serviceItems = [] })
       entityId: order._id,
       franchiseId: order.franchise_id,
       metadata: buildOrderMetadata(order),
+      dedupeKeyPrefix: `order.created:${order._id}`,
     });
     void safeNotifyBackofficeOrderCreated({ order, actorUserId });
   });
@@ -126,6 +127,9 @@ const safeNotifyOrderServiceStatusChanged = async ({
         service_item_id: service?._id,
         newStatus,
       }),
+      dedupeKeyPrefix: service?._id
+        ? `order.service.status:${service._id}:${newStatus}`
+        : `order.service.status:${order._id}:${newStatus}`,
     });
   });
 };
@@ -147,6 +151,7 @@ const safeNotifyOrderServiceAssigned = async ({
       entityId: order?._id,
       franchiseId: order?.franchise_id,
       metadata: buildOrderMetadata(order, { serviceName }),
+      dedupeKeyPrefix: `order.service.assigned:${order._id}:${partnerUserId}`,
     });
   });
 };
@@ -167,6 +172,7 @@ const safeNotifyOrderServiceUnassigned = async ({
       entityId: order?._id,
       franchiseId: order?.franchise_id,
       metadata: buildOrderMetadata(order),
+      dedupeKeyPrefix: `order.service.unassigned:${order._id}:${partnerUserId}`,
     });
   });
 };
@@ -188,6 +194,7 @@ const safeNotifyOrderServiceTimeUpdated = async ({
       entityId: order?._id,
       franchiseId: order?.franchise_id,
       metadata: buildOrderMetadata(order, { serviceName }),
+      dedupeKeyPrefix: `order.service.time:${order._id}:${partnerUserId}:${serviceName || "service"}`,
     });
   });
 };
@@ -212,6 +219,7 @@ const safeNotifyOrderServiceCancelled = async ({
       entityId: order?._id,
       franchiseId: order?.franchise_id,
       metadata: buildOrderMetadata(order, { serviceName }),
+      dedupeKeyPrefix: `order.service.cancelled:${order._id}:${serviceName || "service"}`,
     });
   });
 };
@@ -335,6 +343,7 @@ const safeNotifyQuoteCreated = async ({ quote, actorUserId }) => {
         quote_id: quote._id,
         quote_sequence_id: quote.quote_sequence_id,
       },
+      dedupeKeyPrefix: `quote.created:${quote._id}`,
     });
     void safeNotifyBackofficeQuoteCreated({ quote, actorUserId });
   });
@@ -390,6 +399,7 @@ const safeNotifySubscriptionAssigned = async ({
         plan_name: planName,
         status: subscription.status,
       },
+      dedupeKeyPrefix: `subscription.assigned:${subscription._id}`,
     });
     void safeNotifyBackofficeSubscriptionChanged({
       subscription,

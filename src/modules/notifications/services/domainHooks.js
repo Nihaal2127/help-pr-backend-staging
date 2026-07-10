@@ -216,35 +216,74 @@ const safeNotifyOrderServiceCancelled = async ({
   });
 };
 
+const excludeUserId = (recipientIds, userId) => {
+  if (userId == null || userId === "") return recipientIds;
+  const excluded = String(userId);
+  return recipientIds.filter((id) => String(id) !== excluded);
+};
+
+const resolveOrderPaymentPayerUserId = (order, payment, actorUserId) => {
+  const payerType = String(payment?.payer_type || "customer").toLowerCase();
+  if (payerType === "partner") {
+    return actorUserId || order?.partner_id || null;
+  }
+  return order?.user_id || actorUserId || null;
+};
+
 const safeNotifyOrderPaymentReceived = async ({
   order,
   payment,
   actorUserId,
 }) => {
   await runSafe("order.payment_received", async () => {
-    if (!payment || payment.status !== "completed") return;
+    if (!payment || payment.status !== "completed" || !order?._id) return;
 
-    const recipients = await resolveOrderRecipients(order);
-    await notify({
-      eventKey: "ORDER_PAYMENT_RECEIVED",
-      actorUserId,
-      recipientUserIds: recipients,
-      context: {
-        order,
-        amount: payment.amount,
-        payerType: payment.payer_type,
-        orderUniqueId: order?.unique_id,
-      },
-      entityType: "order",
-      entityId: order._id,
-      franchiseId: order.franchise_id,
-      metadata: buildOrderMetadata(order, {
-        payment_id: payment._id,
-        amount: payment.amount,
-        payer_type: payment.payer_type,
-      }),
-      dedupeKeyPrefix: `order.payment:${payment._id}`,
+    const payerType = String(payment.payer_type || "customer").toLowerCase();
+    const payerUserId = resolveOrderPaymentPayerUserId(order, payment, actorUserId);
+    const paymentContext = {
+      order,
+      amount: payment.amount,
+      payerType,
+      orderUniqueId: order?.unique_id,
+    };
+    const paymentMetadata = buildOrderMetadata(order, {
+      payment_id: payment._id,
+      amount: payment.amount,
+      payer_type: payerType,
     });
+
+    if (payerType === "customer" && order.user_id) {
+      await notify({
+        eventKey: "ORDER_PAYMENT_COMPLETED",
+        actorUserId: null,
+        recipientUserIds: [order.user_id],
+        context: paymentContext,
+        entityType: "order",
+        entityId: order._id,
+        franchiseId: order.franchise_id,
+        metadata: paymentMetadata,
+        dedupeKeyPrefix: `order.payment.completed:${payment._id}`,
+      });
+    }
+
+    const stakeholderRecipients = excludeUserId(
+      await resolveOrderRecipients(order),
+      payerUserId
+    );
+    if (stakeholderRecipients.length) {
+      await notify({
+        eventKey: "ORDER_PAYMENT_RECEIVED",
+        actorUserId: null,
+        recipientUserIds: stakeholderRecipients,
+        context: paymentContext,
+        entityType: "order",
+        entityId: order._id,
+        franchiseId: order.franchise_id,
+        metadata: paymentMetadata,
+        dedupeKeyPrefix: `order.payment.received:${payment._id}`,
+      });
+    }
+
     void safeNotifyBackofficeOrderPayment({ order, payment, actorUserId });
   });
 };

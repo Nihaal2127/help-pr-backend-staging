@@ -198,7 +198,7 @@ const completeOrderPaymentFromWebhook = async (
 
     const syncResult = await finalizeCompletedOrderPaymentSideEffects(payment.order_id, {
         payment,
-        actorUserId: gatewayMeta.actor_user_id || null,
+        actorUserId: gatewayMeta.actor_user_id || gatewayMeta.payer_id || null,
         notify: true,
     });
 
@@ -255,6 +255,7 @@ const syncPendingOrderPayment = async (paymentId) => {
         instrument_type: link.payments?.[0]?.method || null,
         paid_at: link.updated_at ? new Date(link.updated_at * 1000) : new Date(),
         payer_id: order?.user_id || null,
+        actor_user_id: order?.user_id || null,
     });
 
     if (!completion?.ok) {

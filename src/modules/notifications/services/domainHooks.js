@@ -35,6 +35,8 @@ const safeNotifyOrderCreated = async ({ order, actorUserId, serviceItems = [] })
     const partnerIds = (serviceItems || [])
       .map((item) => item.partner_id)
       .filter(Boolean);
+    // ORDER_CREATED: customer, partner(s), assigned employee, franchise admin(s).
+    // Mobile push when user/partner have device_token. Actor (e.g. backoffice user) excluded.
     const recipients = await resolveOrderRecipients(order, { extraUserIds: partnerIds });
 
     await notify({
@@ -279,6 +281,8 @@ const safeNotifyOrderAdditionalChargeAdded = async ({
 
 const safeNotifyQuoteCreated = async ({ quote, actorUserId }) => {
   await runSafe("quote.created", async () => {
+    // QUOTE_CREATED: customer, partner (if set), assigned employee, franchise admin(s).
+    // Mobile push when user/partner have device_token. Actor excluded.
     const recipients = await resolveQuoteRecipients(quote);
     await notify({
       eventKey: "QUOTE_CREATED",

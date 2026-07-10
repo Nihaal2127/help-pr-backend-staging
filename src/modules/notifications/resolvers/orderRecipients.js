@@ -1,28 +1,37 @@
 const mongoose = require("mongoose");
 const OrderService = require("../../../../models/order_services");
 const User = require("../../../../models/user");
-const {
-  USER_TYPE_ADMIN,
-  USER_TYPE_EMPLOYEE,
-} = require("../../../../constants/user_types");
+const { USER_TYPE_ADMIN } = require("../../../../constants/user_types");
 
 const addId = (set, value) => {
   if (value == null || value === "") return;
   set.add(String(value));
 };
 
+/**
+ * Order notification recipients:
+ * - Customer (user_id)
+ * - Order-level partner (partner_id) when set
+ * - Partners on service lines (service_items)
+ * - Assigned employee (employee_id) when set — not all franchise employees
+ * - Franchise admin(s) for order.franchise_id
+ *
+ * The actor who triggered the event is removed later in notification.service.js.
+ */
 const resolveOrderRecipients = async (order, options = {}) => {
   const {
     includeFranchiseAdmins = true,
-    includeFranchiseEmployees = true,
+    includeAssignedEmployee = true,
     extraUserIds = [],
   } = options;
 
   const ids = new Set();
 
   addId(ids, order?.user_id);
-  addId(ids, order?.employee_id);
   addId(ids, order?.partner_id);
+  if (includeAssignedEmployee) {
+    addId(ids, order?.employee_id);
+  }
 
   const serviceItemIds = order?.service_items || [];
   if (serviceItemIds.length) {
@@ -39,22 +48,16 @@ const resolveOrderRecipients = async (order, options = {}) => {
   }
 
   const franchiseId = order?.franchise_id;
-  if (franchiseId && (includeFranchiseAdmins || includeFranchiseEmployees)) {
-    const types = [];
-    if (includeFranchiseAdmins) types.push(USER_TYPE_ADMIN);
-    if (includeFranchiseEmployees) types.push(USER_TYPE_EMPLOYEE);
-
-    if (types.length) {
-      const staff = await User.find({
-        franchise_id: franchiseId,
-        type: { $in: types },
-        deleted_at: null,
-        is_active: true,
-      })
-        .select("_id")
-        .lean();
-      staff.forEach((user) => addId(ids, user._id));
-    }
+  if (franchiseId && includeFranchiseAdmins) {
+    const admins = await User.find({
+      franchise_id: franchiseId,
+      type: USER_TYPE_ADMIN,
+      deleted_at: null,
+      is_active: true,
+    })
+      .select("_id")
+      .lean();
+    admins.forEach((user) => addId(ids, user._id));
   }
 
   extraUserIds.forEach((id) => addId(ids, id));

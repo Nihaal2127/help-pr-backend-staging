@@ -186,10 +186,15 @@ const sendPushNotification = async ({
 
 const safeSendPushNotification = async (payload) => {
   try {
-    return await sendPushNotification(payload);
+    const messageId = await sendPushNotification(payload);
+    return { ok: true, messageId: messageId || null };
   } catch (error) {
     console.error("Push notification failed:", error.message || error);
-    return null;
+    return {
+      ok: false,
+      error: error.message || String(error),
+      code: error.code || error.errorInfo?.code || null,
+    };
   }
 };
 

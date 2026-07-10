@@ -4,6 +4,7 @@ const User = require("../../../../models/user");
 const { mapUserTypeToRole } = require("../../../../constants/user_types");
 const { NOTIFICATION_EVENTS } = require("../constants/notification_events");
 const { sendPushForNotification } = require("./notificationPush.service");
+const { logNotificationDelivery } = require("./notificationDeliveryLog.service");
 const { buildFieldDateRangeFilter } = require("../../../../utils/schedule_date_filters");
 
 const MAX_PAGE_SIZE = 100;
@@ -157,16 +158,48 @@ const notify = async ({
   const now = new Date();
   const sentDeviceTokens = new Set();
 
+  console.log(
+    `[notifications:delivery] batch event=${eventKey} entity=${entityType || ""}:${entityId || ""} recipients=${recipients.length} skip_push=${skipPush}`
+  );
+
   for (const recipientId of recipients) {
+    const deliveryBase = {
+      event: eventKey,
+      category: template.category,
+      actorUserId,
+      recipientUserId: recipientId,
+      title,
+      body,
+      entityType,
+      entityId,
+      franchiseId,
+      metadata,
+      inAppCreated: false,
+      pushAttempted: !skipPush,
+      pushSent: false,
+      dedupeKey: null,
+    };
+
     try {
       let dedupeKey = null;
       if (dedupeKeyPrefix) {
         dedupeKey = `${dedupeKeyPrefix}:${recipientId}`;
       }
+      deliveryBase.dedupeKey = dedupeKey;
 
       if (dedupeKey) {
         const existing = await Notification.findOne({ dedupe_key: dedupeKey }).lean();
-        if (existing) continue;
+        if (existing) {
+          logNotificationDelivery({
+            ...deliveryBase,
+            recipientRole: existing.recipient_role || "",
+            notificationId: existing._id,
+            inAppCreated: false,
+            pushAttempted: false,
+            pushSkipReason: "dedupe_skipped",
+          });
+          continue;
+        }
       }
 
       const recipientRole = await resolveRecipientRole(recipientId);
@@ -189,9 +222,17 @@ const notify = async ({
         updated_at: now,
       });
 
-      let pushSent = false;
+      deliveryBase.inAppCreated = true;
+      deliveryBase.recipientRole = recipientRole;
+      deliveryBase.notificationId = doc._id;
+
+      let pushResult = {
+        pushSent: false,
+        skipReason: skipPush ? "push_disabled_for_hook" : null,
+      };
+
       if (!skipPush) {
-        pushSent = await sendPushForNotification({
+        pushResult = await sendPushForNotification({
           userId: recipientId,
           title,
           body,
@@ -208,20 +249,41 @@ const notify = async ({
         });
       }
 
-      if (pushSent) {
+      if (pushResult.pushSent) {
         await Notification.updateOne(
           { _id: doc._id },
           { $set: { push_sent_at: new Date(), updated_at: new Date() } }
         );
       }
+
+      logNotificationDelivery({
+        ...deliveryBase,
+        pushSent: pushResult.pushSent,
+        pushSkipReason: pushResult.skipReason || "",
+        pushError: pushResult.pushError || "",
+        pushErrorCode: pushResult.pushErrorCode || "",
+        firebaseTarget: pushResult.firebaseTarget || "",
+        deviceTokenSuffix: pushResult.deviceTokenSuffix || "",
+        userType: pushResult.userType,
+      });
     } catch (error) {
       if (error?.code === 11000) {
+        logNotificationDelivery({
+          ...deliveryBase,
+          pushAttempted: false,
+          pushSkipReason: "dedupe_skipped",
+        });
         continue;
       }
       console.error(
         `[notifications] failed for recipient ${recipientId} event ${eventKey}:`,
         error.message
       );
+      logNotificationDelivery({
+        ...deliveryBase,
+        pushSkipReason: "notify_error",
+        pushError: error.message || String(error),
+      });
     }
   }
 };

@@ -343,7 +343,40 @@ Phases 1–4 are **complete** for the agreed scope. Remaining gaps:
 
 ---
 
-## 10. Document history
+## 10. Delivery logging (debug)
+
+Every `notify()` call writes one row per recipient to **`notification_delivery_log`** (unless `NOTIFICATION_DELIVERY_LOG_ENABLED=false`).
+
+Server console lines are prefixed with `[notifications:delivery]`.
+
+**Super admin / staff API:** `GET /api/notifications/delivery-logs`
+
+| Query param | Description |
+|-------------|-------------|
+| `event` | e.g. `ORDER_CREATED`, `QUOTE_STATUS_CHANGED` |
+| `recipient_user_id` | Filter by user |
+| `entity_id` | Order/quote id |
+| `entity_type` | `order`, `quote`, … |
+| `push_sent` | `true` / `false` |
+| `push_skip_reason` | e.g. `no_device_token`, `firebase_not_configured` |
+| `from_date` / `to_date` | UTC date range on `created_at` |
+| `page` / `limit` | Pagination |
+
+### Common `push_skip_reason` values
+
+| Reason | Meaning |
+|--------|---------|
+| `no_device_token` | User has no FCM token saved (login without `device_token`) |
+| `firebase_not_configured` | `adminsdk-customer.json` / `adminsdk-partner.json` missing on server |
+| `backoffice_user_no_mobile_push` | Franchise admin/employee — in-app only |
+| `settings_disabled` | User turned off update notifications |
+| `firebase_send_failed` | FCM rejected token (wrong project, expired token, etc.) |
+| `dedupe_skipped` | Duplicate event suppressed |
+| `push_disabled_for_hook` | Backoffice in-app-only hooks |
+
+---
+
+## 11. Document history
 
 | Date | Change |
 |------|--------|

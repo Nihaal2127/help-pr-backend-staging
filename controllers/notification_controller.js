@@ -5,6 +5,7 @@ const {
   markAsRead,
   markAllAsRead,
 } = require("../src/modules/notifications/services/notification.service");
+const { listDeliveryLogs } = require("../src/modules/notifications/services/notificationDeliveryLog.service");
 
 const resolveUserId = (req) => getCallerId(req);
 
@@ -144,9 +145,37 @@ const markAllReadHandler = async (req, res) => {
   }
 };
 
+const deliveryLogsHandler = async (req, res) => {
+  try {
+    const data = await listDeliveryLogs(req.query);
+    if (!data.ok) {
+      return res.status(data.status || 400).json({
+        success: false,
+        status: data.status || 400,
+        message: data.message,
+      });
+    }
+    const { ok: _ok, ...payload } = data;
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: "Notification delivery logs fetched successfully.",
+      ...payload,
+    });
+  } catch (error) {
+    console.error("notification delivery logs:", error.message);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: "Internal server error.",
+    });
+  }
+};
+
 module.exports = {
   listHandler,
   unreadCountHandler,
   markReadHandler,
   markAllReadHandler,
+  deliveryLogsHandler,
 };

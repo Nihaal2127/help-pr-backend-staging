@@ -1,6 +1,4 @@
-const crypto = require('crypto');
 const mongoose = require('mongoose');
-const Otp = require('../../../models/otp');
 const User = require('../../../models/user');
 const { validatePhoneNumber } = require('../../../validator/form_validator');
 const {
@@ -9,6 +7,10 @@ const {
   getPhoneLookupVariants,
   checkUserContactUniqueness,
 } = require('../../../utils/user_contact_uniqueness');
+const {
+  findActivePhoneOtp,
+  verifyPhoneOtpSubmission,
+} = require('../../../helper/phone_otp');
 const { isValidGender, normalizeGender } = require('../../../enum/gender_enum');
 const { parseOptionalDateField } = require('../../../utils/multipart_parser');
 const { USER_TYPE_CUSTOMER } = require('../../../constants/user_types');
@@ -88,10 +90,7 @@ const rateLimitSendOtp = async (req, res, next) => {
   if (!normalized) return;
 
   try {
-    const existingOtp = await Otp.findOne({
-      phone_number: { $in: getPhoneLookupVariants(normalized) },
-      expiresAt: { $gt: new Date() },
-    });
+    const existingOtp = await findActivePhoneOtp(normalized);
 
     if (existingOtp) {
       return res.status(429).json({
@@ -160,30 +159,20 @@ const validateVerifyOtp = async (req, res, next) => {
   }
 
   try {
-    const hashedOtp = crypto.createHash('sha256').update(String(otp).trim()).digest('hex');
-    const phoneVariants = getPhoneLookupVariants(normalized);
-    const otpEntry = await Otp.findOne({
-      phone_number: { $in: phoneVariants },
-      otp: hashedOtp,
+    const verification = await verifyPhoneOtpSubmission({
+      phone_number: normalized,
+      otp,
     });
 
-    if (!otpEntry) {
-      return res.status(400).json({
+    if (!verification.ok) {
+      return res.status(verification.status).json({
         success: false,
-        status: 400,
-        message: 'Invalid OTP.',
+        status: verification.status,
+        message: verification.message,
       });
     }
 
-    if (otpEntry.expiresAt < new Date()) {
-      return res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'OTP has expired.',
-      });
-    }
-
-    req.validOtp = otpEntry;
+    req.validOtp = verification.otpEntry;
     next();
   } catch (error) {
     console.error('mobile user verify-otp validation', error);

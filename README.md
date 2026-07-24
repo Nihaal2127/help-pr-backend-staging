@@ -19,6 +19,7 @@ Health check: `GET /health` → `{ "status": "OK" }`
 | Document | Description |
 |----------|-------------|
 | **[docs/PROJECT_FLOW_AND_ROLES.md](docs/PROJECT_FLOW_AND_ROLES.md)** | **End-to-end flows, user roles, and access matrix** |
+| **[docs/WHATSAPP_WEBHOOK_SETUP.md](docs/WHATSAPP_WEBHOOK_SETUP.md)** | **Meta WhatsApp webhook registration and delivery tracking** |
 | [docs/ORDER_MODULE_FRONTEND.md](docs/ORDER_MODULE_FRONTEND.md) | Orders, payments, pricing |
 | [docs/PARTNER_POST_FRONTEND.md](docs/PARTNER_POST_FRONTEND.md) | Partner portfolio posts, feed, like, share, report |
 | [docs/REFUND_API.md](docs/REFUND_API.md) | Refunds |
@@ -88,6 +89,25 @@ Typical variables (set in `.env` or Lambda console):
 - `MOBILE_APP_DEEP_LINK_BASE` — Base URL for post share deep links (default `helppr://post`)
 - AWS / S3, Razorpay, Firebase, mail — per integration
 
+**WhatsApp OTP (customer mobile login):**
+
+- `WHATSAPP_ENABLED` — `true` to send OTP via Meta WhatsApp Cloud API
+- `WHATSAPP_PHONE_NUMBER_ID` — WhatsApp phone number ID from Meta
+- `WHATSAPP_ACCESS_TOKEN` — permanent system user token
+- `WHATSAPP_OTP_TEMPLATE_NAME` — approved AUTHENTICATION template name
+- `WHATSAPP_OTP_TEMPLATE_LANGUAGE` — template locale (default `en`)
+- `WHATSAPP_OTP_EXPIRY_MINUTES` — OTP validity (default `10`, should match template footer)
+- `WHATSAPP_API_VERSION` — Graph API version (default `v22.0`)
+- `WHATSAPP_OTP_INCLUDE_COPY_BUTTON` — `true` if template uses copy-code button
+- `WHATSAPP_OTP_DEV_FALLBACK` — `true` in local dev to log OTP instead of calling Meta (non-production only)
+- `WHATSAPP_WEBHOOK_VERIFY_TOKEN` — shared secret for Meta webhook GET verification
+- `WHATSAPP_APP_SECRET` — Meta app secret for webhook POST signature verification
+- `WHATSAPP_WEBHOOK_SKIP_SIGNATURE_VERIFY` — `true` only for local/ngrok testing (never in production)
+
+Webhook callback URL: `https://<your-api-domain>/api/whatsapp/webhook` — see **[docs/WHATSAPP_WEBHOOK_SETUP.md](docs/WHATSAPP_WEBHOOK_SETUP.md)**
+
+Test script: `npm run verify:whatsapp-otp -- 9876543210`
+
 **Chat Service on VPS** (when using remote chat):
 
 - `CHAT_SERVICE_ENABLED` — `true` to provision chats via VPS HTTP API
@@ -104,6 +124,7 @@ Deploy steps: **[docs/LAMBDA_VPS_DEPLOY.md](docs/LAMBDA_VPS_DEPLOY.md)**
 | `npm start` | Start with node |
 | `npm run sync:catalog-mappings` | Sync global catalog to franchise mappings |
 | `npm run verify:order-pricing` | Verify order pricing script |
+| `npm run verify:whatsapp-otp -- <phone>` | Test WhatsApp OTP delivery |
 
 ## License
 

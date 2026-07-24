@@ -11,6 +11,7 @@
         "verify:order-pricing": "node scripts/verify-order-pricing.js",
         "verify:order-offer": "node scripts/verify-order-pricing.js",
         "verify:order-payment-status": "node scripts/verify-order-payment-status.js",
+        "verify:whatsapp-otp": "node scripts/verify-whatsapp-otp-send.js",
         "seed:bootstrap": "node scripts/seed-bootstrap-config.js",
         "seed:bootstrap:dry-run": "node scripts/seed-bootstrap-config.js --dry-run"
     },

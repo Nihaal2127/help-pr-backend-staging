@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-const crypto = require('crypto');
 const User = require('../../../models/user');
 const Area = require('../../../models/area');
 const City = require('../../../models/city');
@@ -14,14 +13,11 @@ const { verifyGoogleIdToken, GOOGLE_APP_USER } = require('../../../helper/google
 const { verifyAppleIdToken, APPLE_APP_USER } = require('../../../helper/apple_auth');
 const { USER_TYPE_CUSTOMER } = require('../../../constants/user_types');
 const { fail, okWithMessage } = require('../../../utils/mobile_service_result');
+const { issueAndSendPhoneOtp } = require('../shared/phone_otp_delivery_service');
 
 const REGISTRATION_TYPE_NORMAL = 1;
 const REGISTRATION_TYPE_GOOGLE = 2;
 const REGISTRATION_TYPE_APPLE = 3;
-const MOBILE_USER_OTP = '123456';
-const OTP_EXPIRY_MS = 10 * 60 * 1000;
-
-const hashOtp = (otp) => crypto.createHash('sha256').update(otp).digest('hex');
 
 const findCustomerByPhone = async (phone_number) => {
   const normalizedPhone = normalizeUserPhone(phone_number);
@@ -83,25 +79,13 @@ const findOrCreateCustomer = async (phone_number) => {
   return { ok: true, user };
 };
 
-const createMobileUserOtp = async (phone_number) => {
-  const normalizedPhone = normalizeUserPhone(phone_number);
-  await Otp.deleteMany({ phone_number: normalizedPhone });
-  return Otp.create({
-    phone_number: normalizedPhone,
-    otp: hashOtp(MOBILE_USER_OTP),
-    expiresAt: new Date(Date.now() + OTP_EXPIRY_MS),
-  });
-};
-
 const sendOtp = async ({ phone_number }) => {
   const customerResult = await findOrCreateCustomer(phone_number);
   if (!customerResult.ok) {
     return customerResult;
   }
 
-  await createMobileUserOtp(phone_number);
-
-  return okWithMessage(200, 'OTP sent successfully.');
+  return issueAndSendPhoneOtp({ phone_number });
 };
 
 const buildCustomerLoginData = async (user) => {

@@ -82,10 +82,20 @@ const app = express();
 
 // Razorpay webhook must verify HMAC against the raw body (before express.json parses it).
 const { handleRazorpayWebhook } = require('./controllers/razorpay_controller');
+const {
+  handleWhatsAppWebhookVerify,
+  handleWhatsAppWebhookEvent,
+} = require('./controllers/whatsapp_webhook_controller');
 app.post(
     '/api/razorpay/razorpayWebhook',
     express.raw({ type: 'application/json' }),
     handleRazorpayWebhook
+);
+app.get('/api/whatsapp/webhook', handleWhatsAppWebhookVerify);
+app.post(
+    '/api/whatsapp/webhook',
+    express.raw({ type: 'application/json' }),
+    handleWhatsAppWebhookEvent
 );
 
 // Middleware

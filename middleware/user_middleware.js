@@ -810,6 +810,7 @@ const createUserMiddleware = async (req, res, next) => {
       const uniqueness = await checkUserContactUniqueness({
         email: req.body.email,
         phone_number: req.body.phone_number,
+        type: Number(req.body.type),
       });
       if (!uniqueness.ok) {
         return res.status(409).json({
@@ -1292,9 +1293,11 @@ const updateUserMiddleware = async (req, res, next) => {
       (contactEmail !== undefined || contactPhone !== undefined)
     ) {
       try {
+        const existingUser = await User.findById(userId).select('type').lean();
         const uniqueness = await checkUserContactUniqueness({
           email: contactEmail,
           phone_number: contactPhone,
+          type: existingUser?.type ?? req.body.type,
           excludeUserId: userId,
         });
         if (!uniqueness.ok) {

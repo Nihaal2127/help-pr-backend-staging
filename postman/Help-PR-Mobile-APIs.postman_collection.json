@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-mobile-apis-only",
     "name": "Help PR — Mobile APIs only",
-    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Razorpay online payments (test mode)\n\n| Flow | Where in collection |\n|------|---------------------|\n| Partner subscription upgrade | **Partner → Subscription** — Apply (Razorpay online) → Get payment status |\n| Customer order payment | **User** — Create order payment (Razorpay online) → Get order payment status |\n| Quote deposit | **User → Quotes** — Convert quote to order (Razorpay deposit) → Get quote deposit payment status |\n\n**Env (Lambda):** `RAZORPAY_*` on server; set `{{baseUrl}}` in Postman. Webhook: `{RAZORPAY_BASE_URL}/api/razorpay/razorpayWebhook`.\n\n**Additional charges:** no separate Razorpay API — customer pays updated due via **order payments**. **Partner payouts:** admin `/api/partner_payout` (manual bank transfer), not Razorpay.\n\nFull audit: `docs/RAZORPAY_ONLINE_PAYMENTS_AUDIT.md`\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** → Register/Login → **Forgot password** (3-step OTP reset: forgot → verify OTP → reset password) → **Home** (assigned quotes + orders) → **Quotes** (accept/reject pending) → **Orders** (assigned jobs) → **Appointments** (calendar on partner orders) → Update → **Bank accounts (list)** → Catalog → My services\n\n## Customer (User)\n1. **Login** → **Verify OTP** (dev OTP: `123456`) — or **Forgot password** (3-step email OTP reset when customer has email on file)\n2. **Pincodes (search)** or set `{{homeLocation}}` — e.g. `500032,Gachibowli,Hyderabad,Telangana`\n3. **Home** — categories, services, partners for franchise (Bearer + `location` query)\n4. **Partners** — list → **Get partner profile** (catalog + professional summary) → **Create quote** with `partner_id`\n5. **Addresses** — create / get / update / delete\n6. **Quotes** — create / list / get / update / cancel / **convert-to-order** (`franchise_id` required on create)\n7. **Posts** — feed, liked/saved lists, like, save, share, report\n8. **Orders & payments** — list orders → **Create order payment (Razorpay online)** or cash/offline → **Get order payment status**\n9. **Update** — multipart `profile_photo` + profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.\n\n**Appointments:** `docs/APPOINTMENT_MODULE_FRONTEND.md`\n\n**Chat & disputes:** User → **Chat & Disputes** (support chat, raise/list disputes). See `docs/CHAT_MODULE_FRONTEND.md`.",
+    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Razorpay online payments (test mode)\n\n| Flow | Where in collection |\n|------|---------------------|\n| Partner subscription upgrade | **Partner → Subscription** — Apply (Razorpay online) → Get payment status |\n| Customer order payment | **User** — Create order payment (Razorpay online) → Get order payment status |\n| Quote deposit | **User → Quotes** — Convert quote to order (Razorpay deposit) → Get quote deposit payment status |\n\n**Env (Lambda):** `RAZORPAY_*` on server; set `{{baseUrl}}` in Postman. Webhook: `{RAZORPAY_BASE_URL}/api/razorpay/razorpayWebhook`.\n\n**Additional charges:** no separate Razorpay API — customer pays updated due via **order payments**. **Partner payouts:** admin `/api/partner_payout` (manual bank transfer), not Razorpay.\n\nFull audit: `docs/RAZORPAY_ONLINE_PAYMENTS_AUDIT.md`\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** → **Phone login** → **Verify OTP** (dev OTP: `123456`) — or **Login** (email/password) / Google / Apple → **Forgot password** (3-step OTP reset: forgot → verify OTP → reset password) → **Home** (assigned quotes + orders) → **Quotes** (accept/reject pending) → **Orders** (assigned jobs) → **Appointments** (calendar on partner orders) → Update → **Bank accounts (list)** → Catalog → My services\n\n## Customer (User)\n1. **Login** → **Verify OTP** (dev OTP: `123456`) — or **Forgot password** (3-step email OTP reset when customer has email on file)\n2. **Pincodes (search)** or set `{{homeLocation}}` — e.g. `500032,Gachibowli,Hyderabad,Telangana`\n3. **Home** — categories, services, partners for franchise (Bearer + `location` query)\n4. **Partners** — list → **Get partner profile** (catalog + professional summary) → **Create quote** with `partner_id`\n5. **Addresses** — create / get / update / delete\n6. **Quotes** — create / list / get / update / cancel / **convert-to-order** (`franchise_id` required on create)\n7. **Posts** — feed, liked/saved lists, like, save, share, report\n8. **Orders & payments** — list orders → **Create order payment (Razorpay online)** or cash/offline → **Get order payment status**\n9. **Update** — multipart `profile_photo` + profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.\n\n**Appointments:** `docs/APPOINTMENT_MODULE_FRONTEND.md`\n\n**Chat & disputes:** User → **Chat & Disputes** (support chat, raise/list disputes). See `docs/CHAT_MODULE_FRONTEND.md`.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -216,7 +216,7 @@
     },
     {
       "name": "Partner",
-      "description": "Partner mobile — `partner_routes.js`, `quote_routes.js`, `order_routes.js`, `my_services_routes.js`, `bank_account_routes.js`. Use **Common → Location** for dropdowns. **Auth:** Register / Login / Forgot password. **Home:** assigned quotes + orders. **Quotes:** list pending assigned quotes → accept or reject. **Orders:** list and view orders assigned to the logged-in partner. **Bank accounts:** list logged-in partner's accounts only.",
+      "description": "Partner mobile — `partner_routes.js`, `quote_routes.js`, `order_routes.js`, `my_services_routes.js`, `bank_account_routes.js`. Use **Common → Location** for dropdowns. **Auth:** **Phone login** → **Verify OTP** (or **Login** email/password / Google / Apple / **Forgot password**). Same phone may exist on a customer account with a different email. **Home:** assigned quotes + orders. **Quotes:** list pending assigned quotes → accept or reject. **Orders:** list and view orders assigned to the logged-in partner. **Bank accounts:** list, create, update, set-primary, delete (partner-only; mutations require approval).",
       "item": [
         {
           "name": "Register",
@@ -348,7 +348,142 @@
                 "login"
               ]
             },
-            "description": "**POST /api/mobile/partner/login**\n\n- No Authorization\n- **Required:** `email`, `password`\n- **Optional:** `device_token` (FCM push token)\n- **200** `data`: `auth_token`, `verification_status` (1 pending, 2 approved, 3 rejected), `verification_status_message`, `rejected_reasone`, `city_name`, …\n\n**401:** `Invalid email.` | `Invalid password.`\n\nRejected partners can log in; catalog/bank/my-services **update** still requires approval."
+            "description": "**POST /api/mobile/partner/login**\n\n- No Authorization\n- **Required:** `email`, `password`\n- **Optional:** `device_token` (FCM push token)\n- **200** `data`: `auth_token`, `verification_status` (1 pending, 2 approved, 3 rejected), `verification_status_message`, `rejected_reasone`, `city_name`, …\n\n**401:** `Invalid email.` | `Invalid password.`\n\nRejected partners can log in; catalog/bank/my-services **update** still requires approval.\n\nFor OTP sign-in use **Phone login** → **Verify OTP** instead."
+          },
+          "response": []
+        },
+        {
+          "name": "Phone login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('OTP sent', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "  });",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone_number\": \"{{partnerPhone}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/partner/phone-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "partner",
+                "phone-login"
+              ]
+            },
+            "description": "**POST /api/mobile/partner/phone-login**\n\n- No Authorization\n- **Required:** `phone_number` (E.164 style, e.g. `+916309654123`)\n\n### Behavior\n- If phone is new for partner (`type: 2`) → creates partner account (basic subscription + notification settings)\n- If partner exists → reuses account\n- Same phone on a **customer** account (`type: 4`) with a different email is allowed\n- Stores hashed OTP in `otp` collection (dev OTP: **123456**, 10 min expiry)\n- **429** if a valid OTP was already sent for this number\n\nNo SMS is sent in the current build when WhatsApp delivery is unavailable.\n\n**Next step:** **Verify OTP**"
+          },
+          "response": []
+        },
+        {
+          "name": "Verify OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const t = j?.data?.auth_token;",
+                  "  if (t) {",
+                  "    pm.collectionVariables.set('token', t);",
+                  "    pm.collectionVariables.set('accessToken', t);",
+                  "    pm.collectionVariables.set('partnerToken', t);",
+                  "  }",
+                  "  if (j?.data?._id) {",
+                  "    pm.collectionVariables.set('partnerId', String(j.data._id));",
+                  "    pm.collectionVariables.set('userId', String(j.data._id));",
+                  "  }",
+                  "  if (j?.data?.email) {",
+                  "    pm.collectionVariables.set('email', String(j.data.email));",
+                  "  }",
+                  "  if (j?.data?.phone_number) {",
+                  "    pm.collectionVariables.set('partnerPhone', String(j.data.phone_number));",
+                  "  }",
+                  "  pm.test('Partner login success', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.data?.auth_token).to.be.a('string');",
+                  "  });",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone_number\": \"{{partnerPhone}}\",\n  \"otp\": \"{{partnerOtp}}\",\n  \"device_token\": \"{{deviceToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/partner/verify-otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "partner",
+                "verify-otp"
+              ]
+            },
+            "description": "**POST /api/mobile/partner/verify-otp**\n\n- No Authorization\n- **Required:** `phone_number`, `otp` (use `123456` in dev)\n- **Optional:** `device_token` (FCM)\n\n### Behavior\n- Validates OTP for the partner account (`type: 2`) → issues JWT on `data.auth_token`\n- Updates `device_token`, `last_signin` on user\n- Deletes used OTP row\n- **200** `data`: same profile shape as **Login** (email/password), including `verification_status`\n\n**400:** Invalid or expired OTP | `OTP is required.`\n**401:** Partner not found (run **Phone login** first)\n**403:** Account blocked"
           },
           "response": []
         },
@@ -2458,7 +2593,7 @@
         },
         {
           "name": "Bank accounts",
-          "description": "Bearer required. **List** returns only the logged-in partner's bank accounts (`bank_account_routes.js`). Add or replace accounts via **Update** (`bank_account` field; requires `verification_status` = 2).",
+          "description": "Bearer required — partner `type` 2 only. **List** returns only the logged-in partner's active bank accounts. **Create / update / set-primary / delete** require `verification_status` = 2 (approved). Accounts are scoped from JWT — no `partner_id` in requests. Run **List** first to set `{{partnerBankAccountId}}`. You can still add or replace accounts via **Update profile** (`bank_account` field).",
           "item": [
             {
               "name": "List bank accounts",
@@ -2522,6 +2657,245 @@
                   ]
                 },
                 "description": "**GET /api/mobile/partner/bank-accounts/get**\n\n- **Auth:** Bearer partner `{{token}}` (`type` 2) after **Login**\n- Returns **only** the logged-in partner's active bank accounts (`deleted_at: null`)\n- No `partner_id` query — scoped from JWT `req.user.id`\n- **200** `data[]`: `_id`, `partner_id`, `bank_name`, `account_holder_name`, `account_number`, `ifsc_code`, `branch_name`, `is_primary`, `created_at`, `updated_at`, `deleted_at`\n- Sorted: primary first, then newest\n- Empty list → `data: []`\n- **401** no/invalid token | **403** not a partner account | **404** partner not found\n- Optional query: `search` (bank name, branch, holder, account number, IFSC)\n- Sets `{{partnerBankAccountId}}` from first row when present"
+              },
+              "response": []
+            },
+            {
+              "name": "Create bank account",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Bank account created', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "    pm.expect(j.record).to.be.an('object');",
+                      "  });",
+                      "  if (j?.record?._id) pm.collectionVariables.set('partnerBankAccountId', String(j.record._id));",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"bank_name\": \"HDFC Bank\",\n  \"account_holder_name\": \"Partner Name\",\n  \"account_number\": \"123456789012\",\n  \"ifsc_code\": \"HDFC0001234\",\n  \"branch_name\": \"Main Branch\",\n  \"is_primary\": true\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/bank-accounts/create",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "partner",
+                    "bank-accounts",
+                    "create"
+                  ]
+                },
+                "description": "**POST /api/mobile/partner/bank-accounts/create**\n\n- **Auth:** Bearer partner — must be **approved** (`verification_status` 2)\n- **Required:** `bank_name`, `account_holder_name`, `account_number` (9–18 digits), `ifsc_code`, `branch_name`\n- **Optional:** `is_primary` or `primary_bank_account` (boolean)\n- First account for the partner is auto-primary when `is_primary` is omitted\n- **200:** `{ success, status, message, record }`\n- **403** if not approved | **409** duplicate account number | **401/403** invalid or non-partner token\n- Sets `{{partnerBankAccountId}}` from `record._id`"
+              },
+              "response": []
+            },
+            {
+              "name": "Update bank account",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Bank account updated', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "    pm.expect(j.record).to.be.an('object');",
+                      "  });",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"bank_name\": \"HDFC Bank\",\n  \"branch_name\": \"City Branch\",\n  \"account_holder_name\": \"Partner Name Updated\",\n  \"is_primary\": false\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/bank-accounts/update/{{partnerBankAccountId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "partner",
+                    "bank-accounts",
+                    "update",
+                    "{{partnerBankAccountId}}"
+                  ]
+                },
+                "description": "**PUT /api/mobile/partner/bank-accounts/update/:id**\n\n- **Auth:** Bearer partner — must be **approved** (`verification_status` 2)\n- **Path:** `id` = bank account `_id` from **List** (`{{partnerBankAccountId}}`) — must belong to logged-in partner\n- **Body:** at least one of `bank_name`, `branch_name`, `account_holder_name`, `account_number`, `ifsc_code`, `is_primary` / `primary_bank_account`\n- **200:** `{ success, status, message, record }`\n- **403** if not approved | **404** account not found | **409** account number taken\n\nRun **List bank accounts** or **Create bank account** first."
+              },
+              "response": []
+            },
+            {
+              "name": "Set primary bank account",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Primary bank account set', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "    pm.expect(j.record.is_primary).to.eql(true);",
+                      "  });",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/bank-accounts/{{partnerBankAccountId}}/set-primary",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "partner",
+                    "bank-accounts",
+                    "{{partnerBankAccountId}}",
+                    "set-primary"
+                  ]
+                },
+                "description": "**PATCH /api/mobile/partner/bank-accounts/:id/set-primary**\n\n- **Auth:** Bearer partner — must be **approved** (`verification_status` 2)\n- **Path:** `id` = bank account `_id` (`{{partnerBankAccountId}}`) — must belong to logged-in partner\n- **Body:** none\n- Sets the account as primary and clears `is_primary` on all other active accounts for this partner\n- **200:** `{ success, status, message, record }` with `record.is_primary: true`\n- **403** if not approved | **404** account not found"
+              },
+              "response": []
+            },
+            {
+              "name": "Delete bank account",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Bank account deleted', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "  });",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/bank-accounts/delete/{{partnerBankAccountId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "partner",
+                    "bank-accounts",
+                    "delete",
+                    "{{partnerBankAccountId}}"
+                  ]
+                },
+                "description": "**DELETE /api/mobile/partner/bank-accounts/delete/:id**\n\n- **Auth:** Bearer partner — must be **approved** (`verification_status` 2)\n- **Path:** `id` = bank account `_id` (`{{partnerBankAccountId}}`) — must belong to logged-in partner\n- Soft-deletes the account (`deleted_at` set)\n- If the deleted account was primary and others remain, the oldest remaining account is promoted to primary\n- **200:** `{ success, status, message }`\n- **403** if not approved | **404** account not found"
               },
               "response": []
             }
@@ -3385,7 +3759,7 @@
                 "login"
               ]
             },
-            "description": "**POST /api/mobile/user/login**\n\n- No Authorization\n- **Required:** `phone_number` (E.164 style, e.g. `+919876543210`)\n\n### Behavior\n- If phone is new → creates customer (`type: 4`) in `users`\n- If customer exists → reuses account\n- If phone belongs to partner/admin → **409**\n- Stores hashed OTP in `otp` collection (dev OTP: **123456**, 10 min expiry)\n- **429** if a valid OTP was already sent for this number\n\nNo SMS is sent in the current build."
+            "description": "**POST /api/mobile/user/login**\n\n- No Authorization\n- **Required:** `phone_number` (E.164 style, e.g. `+919876543210`)\n\n### Behavior\n- If phone is new for customer (`type: 4`) → creates customer in `users`\n- If customer exists → reuses account\n- Same phone on a **partner** account (`type: 2`) with a different email is allowed\n- Stores hashed OTP in `otp` collection (dev OTP: **123456**, 10 min expiry)\n- **429** if a valid OTP was already sent for this number\n\nNo SMS is sent in the current build."
           },
           "response": []
         },
@@ -7325,6 +7699,24 @@
       "type": "string"
     },
     {
+      "key": "partnerPhone",
+      "value": "+916309654123",
+      "type": "string",
+      "description": "Partner OTP login phone (E.164) — may match customerPhone on a separate customer account"
+    },
+    {
+      "key": "partnerOtp",
+      "value": "123456",
+      "type": "string",
+      "description": "Dev OTP for partner phone login — fixed until SMS/WhatsApp is enabled"
+    },
+    {
+      "key": "partnerToken",
+      "value": "",
+      "type": "string",
+      "description": "Partner JWT — alias of token after Verify OTP or email Login"
+    },
+    {
       "key": "deviceToken",
       "value": "fcm_example_token_replace_with_real_device_token",
       "type": "string",
@@ -7467,6 +7859,12 @@
       "value": "true",
       "type": "string",
       "description": "From My services — is_active on first service (true | false)"
+    },
+    {
+      "key": "partnerBankAccountId",
+      "value": "",
+      "type": "string",
+      "description": "From Bank accounts → List or Create — bank account _id (24 hex)"
     },
     {
       "key": "customerPhone",

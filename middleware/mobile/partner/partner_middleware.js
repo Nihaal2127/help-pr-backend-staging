@@ -16,6 +16,11 @@ const {
   normalizeUserPhone,
   checkUserContactUniqueness,
 } = require('../../../utils/user_contact_uniqueness');
+const { validatePhoneNumber } = require('../../../validator/form_validator');
+const {
+  findActivePhoneOtp,
+  verifyPhoneOtpSubmission,
+} = require('../../../helper/phone_otp');
 
 const MIN_NAME_LENGTH = 2;
 const MAX_NAME_LENGTH = 50;
@@ -1295,6 +1300,7 @@ const partnerRegisterMiddleware = async (req, res, next) => {
     const uniqueness = await checkUserContactUniqueness({
       email: normalizedEmail,
       phone_number: normalizedPhone,
+      type: USER_TYPE_PARTNER,
     });
     if (!uniqueness.ok) {
       console.log('[partner.register] middleware: duplicate found', { message: uniqueness.message });
@@ -1640,6 +1646,7 @@ const runPartnerUpdateIdentityChecks = async (req, res) => {
         const uniqueness = await checkUserContactUniqueness({
           email: contactEmail,
           phone_number: contactPhone,
+          type: USER_TYPE_PARTNER,
           excludeUserId: partnerId,
         });
         if (!uniqueness.ok) {
@@ -1767,9 +1774,93 @@ const partnerUpdateBasicDetailsMiddleware = createPartnerUpdateMiddleware(PARTNE
 const partnerUpdateDocumentsMiddleware = createPartnerUpdateMiddleware(PARTNER_UPDATE_SECTION.DOCUMENTS);
 const partnerUpdateBankAccountsMiddleware = createPartnerUpdateMiddleware(PARTNER_UPDATE_SECTION.BANKS);
 
+const validateAndNormalizePartnerPhone = (req, res) => {
+  const { phone_number } = req.body;
+  const phoneResult = validatePhoneNumber(phone_number);
+  if (phoneResult.valid === false) {
+    res.status(400).json({
+      success: false,
+      status: 400,
+      message: phoneResult.message,
+    });
+    return null;
+  }
+  const normalized = normalizeUserPhone(phone_number);
+  req.body.phone_number = normalized;
+  return normalized;
+};
+
+const rateLimitPartnerSendOtp = async (req, res, next) => {
+  const normalized = validateAndNormalizePartnerPhone(req, res);
+  if (!normalized) return;
+
+  try {
+    const existingOtp = await findActivePhoneOtp(normalized);
+
+    if (existingOtp) {
+      return res.status(429).json({
+        success: false,
+        status: 429,
+        message:
+          'An OTP has already been sent to this phone number. Please wait before requesting again.',
+      });
+    }
+
+    next();
+  } catch (error) {
+    console.error('mobile partner send-otp rate limit', error);
+    res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Server error during OTP request validation.',
+    });
+  }
+};
+
+const validatePartnerVerifyOtp = async (req, res, next) => {
+  const normalized = validateAndNormalizePartnerPhone(req, res);
+  if (!normalized) return;
+
+  const { otp } = req.body;
+  if (otp === undefined || otp === null || String(otp).trim() === '') {
+    return res.status(400).json({
+      success: false,
+      status: 400,
+      message: 'OTP is required.',
+    });
+  }
+
+  try {
+    const verification = await verifyPhoneOtpSubmission({
+      phone_number: normalized,
+      otp,
+    });
+
+    if (!verification.ok) {
+      return res.status(verification.status).json({
+        success: false,
+        status: verification.status,
+        message: verification.message,
+      });
+    }
+
+    req.validOtp = verification.otpEntry;
+    next();
+  } catch (error) {
+    console.error('mobile partner verify-otp validation', error);
+    res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Server error during OTP validation.',
+    });
+  }
+};
+
 module.exports = {
   partnerRegisterMiddleware,
   partnerLoginMiddleware,
+  rateLimitPartnerSendOtp,
+  validatePartnerVerifyOtp,
   partnerGoogleLoginMiddleware,
   partnerAppleLoginMiddleware,
   partnerUpdateMiddleware,

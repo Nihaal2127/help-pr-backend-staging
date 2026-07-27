@@ -1563,6 +1563,7 @@ const create = async (req, res) => {
     const uniqueness = await checkUserContactUniqueness({
       email: normalizedEmail,
       phone_number: normalizedPhone,
+      type: userType,
     });
     if (!uniqueness.ok) {
       return res.status(409).json({

@@ -48,7 +48,7 @@ const issueAndSendPhoneOtp = async ({ phone_number }) => {
   return {
     ok: true,
     status: 200,
-    message: 'OTP sent successfully.',
+    message: 'OTP sent to WhatsApp successfully.',
   };
 };
 

@@ -318,6 +318,7 @@ const userUpdateMiddleware = async (req, res, next) => {
         const uniqueness = await checkUserContactUniqueness({
           email: contactEmail,
           phone_number: contactPhone,
+          type: USER_TYPE_CUSTOMER,
           excludeUserId: customerId,
         });
         if (!uniqueness.ok) {

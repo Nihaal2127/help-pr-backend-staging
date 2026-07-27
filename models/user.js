@@ -89,7 +89,24 @@ var userSchema = new schema(
 );
 
 
-userSchema.index({ email: 1, phone_number: 1, deleted_at: 1 }, { unique: true });
+userSchema.index(
+  { phone_number: 1, type: 1, deleted_at: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      phone_number: { $exists: true, $type: 'string', $ne: '' },
+    },
+  }
+);
+userSchema.index(
+  { email: 1, deleted_at: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      email: { $exists: true, $type: 'string', $ne: '' },
+    },
+  }
+);
 userSchema.index(
   { google_id: 1 },
   {

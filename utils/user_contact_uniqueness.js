@@ -42,17 +42,27 @@ const getPhoneLookupVariants = (phone_number) => {
 };
 
 /**
- * Find an active user (any type) with the same email (case-insensitive) or phone.
- * @param {{ email?: string, phone_number?: string, excludeUserId?: string|null }} params
+ * Find an active user with a conflicting email (globally) or phone (scoped by type when provided).
+ * @param {{ email?: string, phone_number?: string, type?: number|null, excludeUserId?: string|null }} params
  */
-const findActiveUserWithContact = async ({ email, phone_number, excludeUserId = null }) => {
+const findActiveUserWithContact = async ({
+  email,
+  phone_number,
+  type = null,
+  excludeUserId = null,
+}) => {
   const normalizedEmail = normalizeUserEmail(email);
   const normalizedPhone = normalizeUserPhone(phone_number);
+  const resolvedType = type != null && !Number.isNaN(Number(type)) ? Number(type) : null;
 
   const orConditions = [];
   if (normalizedPhone) {
     const phoneVariants = getPhoneLookupVariants(normalizedPhone);
-    orConditions.push({ phone_number: { $in: phoneVariants } });
+    const phoneCondition = { phone_number: { $in: phoneVariants } };
+    if (resolvedType != null) {
+      phoneCondition.type = resolvedType;
+    }
+    orConditions.push(phoneCondition);
   }
   if (normalizedEmail) {
     orConditions.push({
@@ -68,7 +78,7 @@ const findActiveUserWithContact = async ({ email, phone_number, excludeUserId = 
     filter._id = { $ne: new mongoose.Types.ObjectId(excludeUserId) };
   }
 
-  return User.findOne(filter).select('email phone_number').lean();
+  return User.findOne(filter).select('email phone_number type').lean();
 };
 
 const contactConflictMessage = (existingUser, { email, phone_number }) => {
@@ -89,13 +99,20 @@ const contactConflictMessage = (existingUser, { email, phone_number }) => {
 };
 
 /**
- * Ensure email/phone are not used by another active user (any type: admin, partner, employee, customer, etc.).
+ * Ensure email is not used by another active user (any type) and phone is not used by another
+ * active user of the same type (when type is provided).
  * @returns {Promise<{ ok: true } | { ok: false, message: string }>}
  */
-const checkUserContactUniqueness = async ({ email, phone_number, excludeUserId = null }) => {
+const checkUserContactUniqueness = async ({
+  email,
+  phone_number,
+  type = null,
+  excludeUserId = null,
+}) => {
   const existingUser = await findActiveUserWithContact({
     email,
     phone_number,
+    type,
     excludeUserId,
   });
   if (!existingUser) {

@@ -1,6 +1,8 @@
 const {
   registerPartner,
   loginPartner,
+  sendPartnerOtp,
+  verifyPartnerOtpAndLogin,
   googleLoginPartner,
   appleLoginPartner,
   updatePartner,
@@ -14,6 +16,7 @@ const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
 const {
   wrapMobileHandler,
   sendServiceError,
+  sendTopLevelServiceResult,
 } = require('../../../utils/mobile_controller_helpers');
 
 const logPartnerRegisterError = (step, error) => {
@@ -93,6 +96,28 @@ const login = wrapMobileHandler('mobile partner login', async (req, res) => {
     data: result.data,
   });
 });
+
+const sendPartnerOtpHandler = wrapMobileHandler(
+  'mobile partner send-otp',
+  async (req, res) => {
+    const result = await sendPartnerOtp({ phone_number: req.body.phone_number });
+    return sendTopLevelServiceResult(res, result);
+  },
+  { errorMessage: 'Failed to send OTP.' }
+);
+
+const verifyPartnerOtpHandler = wrapMobileHandler(
+  'mobile partner verify-otp',
+  async (req, res) => {
+    const result = await verifyPartnerOtpAndLogin({
+      phone_number: req.body.phone_number,
+      device_token: req.body.device_token,
+      validOtp: req.validOtp,
+    });
+    return sendTopLevelServiceResult(res, result);
+  },
+  { errorMessage: 'Failed to verify OTP.' }
+);
 
 const googleLogin = wrapMobileHandler('mobile partner google-login', async (req, res) => {
   const result = await googleLoginPartner({
@@ -231,6 +256,8 @@ const update = async (req, res) => {
 module.exports = {
   register,
   login,
+  sendPartnerOtpHandler,
+  verifyPartnerOtpHandler,
   googleLogin,
   appleLogin,
   forgotPassword,

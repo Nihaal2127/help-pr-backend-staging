@@ -21,12 +21,20 @@ const {
   normalizeUserEmail,
   normalizeUserPhone,
   checkUserContactUniqueness,
+  getPhoneLookupVariants,
 } = require('../../../utils/user_contact_uniqueness');
 const { escapeRegExp } = require('../../../utils/string_helpers');
 const { verifyGoogleIdToken, GOOGLE_APP_PARTNER } = require('../../../helper/google_auth');
 const { verifyAppleIdToken, APPLE_APP_PARTNER } = require('../../../helper/apple_auth');
 const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
-const { fail, okWithData, okPass } = require('../../../utils/mobile_service_result');
+const Otp = require('../../../models/otp');
+const { fail, okWithData, okPass, okWithMessage } = require('../../../utils/mobile_service_result');
+const { issueAndSendPhoneOtp } = require('../shared/phone_otp_delivery_service');
+const {
+  resolvePartnerBankInputFromBody,
+  upsertPartnerBankAccountForPartner,
+  replacePartnerBankAccountsForPartner,
+} = require('./partner_bank_account_helpers');
 const { attachPartnerRatingFields } = require('../../../utils/rating_format');
 const { getPartnerEngagementCounts } = require('../../partner_post_common_service');
 const { safeNotifyBackofficePartnerPending } = require('../../../src/modules/notifications/services/backofficeHooks');
@@ -328,29 +336,6 @@ const normalizePartnerDocuments = (payload) => {
   return normalized;
 };
 
-const normalizeOnePartnerBankAccount = (parsed) => {
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-  const rawPrimary = parsed.is_primary ?? parsed.primary_bank_account ?? false;
-  const normalizedPrimary =
-    typeof rawPrimary === 'string' ? rawPrimary.trim().toLowerCase() === 'true' : rawPrimary === true;
-  const accountNumber =
-    parsed.account_number != null ? String(parsed.account_number).trim() : '';
-  if (!accountNumber) return null;
-  return {
-    account_holder_name: String(parsed.account_holder_name ?? parsed.account_name ?? '').trim(),
-    account_number: accountNumber,
-    ifsc_code: String(parsed.ifsc_code ?? '').trim().toUpperCase(),
-    bank_name: String(parsed.bank_name ?? '').trim(),
-    branch_name: String(parsed.branch_name ?? '').trim(),
-    is_primary: normalizedPrimary,
-  };
-};
-
-const normalizePartnerBankAccount = (payload) => {
-  const { accounts } = resolvePartnerBankInputFromBody({ bank_account: payload });
-  return accounts[0] ?? null;
-};
-
 const toOid = (id) => {
   if (!id) return null;
   if (id instanceof mongoose.Types.ObjectId) return id;
@@ -445,46 +430,6 @@ async function mergeMobilePartnerCatalogFromNormalizedRows(partnerId, normalized
     });
   }
 }
-
-const resolvePartnerBankInputFromBody = (body) => {
-  const hasFlatBankFields =
-    body.bank_name !== undefined ||
-    body.branch_name !== undefined ||
-    body.account_holder_name !== undefined ||
-    body.account_name !== undefined ||
-    body.account_number !== undefined ||
-    body.ifsc_code !== undefined;
-
-  let raw = body.bank_account;
-  if (raw === undefined && hasFlatBankFields) {
-    raw = {
-      account_name: body.account_name,
-      account_holder_name: body.account_holder_name,
-      account_number: body.account_number,
-      ifsc_code: body.ifsc_code,
-      bank_name: body.bank_name,
-      branch_name: body.branch_name,
-      primary_bank_account: body.primary_bank_account,
-      is_primary: body.is_primary,
-    };
-  }
-
-  const parsed = parseJsonIfString(raw, raw);
-  const isArrayPayload = Array.isArray(parsed);
-  const accounts = [];
-
-  if (isArrayPayload) {
-    for (const item of parsed) {
-      const row = normalizeOnePartnerBankAccount(item);
-      if (row) accounts.push(row);
-    }
-  } else {
-    const row = normalizeOnePartnerBankAccount(parsed);
-    if (row) accounts.push(row);
-  }
-
-  return { accounts, isArrayPayload };
-};
 
 const mergePartnerDocumentPayloadFromMultipart = async (files) => {
   const merged = {};
@@ -581,141 +526,6 @@ async function ensurePartnerDocumentCatalogRows(partnerId, userRecord) {
   await userRecord.save();
 }
 
-const assertBankAccountNumberAvailable = async (partnerOid, accountNumber) => {
-  const takenByOther = await PartnerBankAccount.findOne({
-    account_number: accountNumber,
-    deleted_at: null,
-    partner_id: { $ne: partnerOid },
-  }).lean();
-  if (takenByOther) {
-    return fail(409, 'Account number already exists.');
-  }
-  return okPass();
-};
-
-const applyPrimaryBankAccountFlags = (accounts) => {
-  const rows = accounts.map((acc) => ({ ...acc, is_primary: acc.is_primary === true }));
-  const firstPrimaryIdx = rows.findIndex((r) => r.is_primary);
-  if (firstPrimaryIdx === -1 && rows.length > 0) {
-    rows[0].is_primary = true;
-    return rows;
-  }
-  return rows.map((r, i) => ({
-    ...r,
-    is_primary: i === firstPrimaryIdx,
-  }));
-};
-
-async function upsertPartnerBankAccountForPartner(partnerId, normalizedBankAccount) {
-  if (!normalizedBankAccount) return okPass();
-  const bankAccountNumber = String(normalizedBankAccount.account_number || '').trim();
-  if (!bankAccountNumber) return okPass();
-
-  const partnerOid =
-    partnerId instanceof mongoose.Types.ObjectId
-      ? partnerId
-      : new mongoose.Types.ObjectId(String(partnerId));
-
-  const availability = await assertBankAccountNumberAvailable(partnerOid, bankAccountNumber);
-  if (!availability.ok) return availability;
-
-  let account = await PartnerBankAccount.findOne({
-    partner_id: partnerOid,
-    account_number: bankAccountNumber,
-    deleted_at: null,
-  });
-  if (!account && normalizedBankAccount.is_primary === true) {
-    account = await PartnerBankAccount.findOne({
-      partner_id: partnerOid,
-      deleted_at: null,
-      is_primary: true,
-    });
-  }
-
-  const fields = {
-    bank_name: normalizedBankAccount.bank_name,
-    account_holder_name: normalizedBankAccount.account_holder_name,
-    account_number: bankAccountNumber,
-    ifsc_code: normalizedBankAccount.ifsc_code,
-    branch_name: normalizedBankAccount.branch_name,
-    is_primary: normalizedBankAccount.is_primary === true,
-    updated_at: new Date(),
-  };
-
-  if (normalizedBankAccount.is_primary === true) {
-    const clearPrimaryQuery = { partner_id: partnerOid, deleted_at: null };
-    if (account) clearPrimaryQuery._id = { $ne: account._id };
-    await PartnerBankAccount.updateMany(clearPrimaryQuery, {
-      $set: { is_primary: false, updated_at: new Date() },
-    });
-  }
-
-  if (account) {
-    Object.assign(account, fields);
-    await account.save();
-  } else {
-    const hasAny = await PartnerBankAccount.exists({ partner_id: partnerOid, deleted_at: null });
-    await PartnerBankAccount.create({
-      partner_id: partnerOid,
-      ...fields,
-      is_primary: fields.is_primary || !hasAny,
-      created_at: new Date(),
-      deleted_at: null,
-    });
-  }
-  return okPass();
-}
-
-async function replacePartnerBankAccountsForPartner(partnerId, normalizedAccounts) {
-  if (!Array.isArray(normalizedAccounts) || normalizedAccounts.length === 0) {
-    return okPass();
-  }
-
-  const partnerOid =
-    partnerId instanceof mongoose.Types.ObjectId
-      ? partnerId
-      : new mongoose.Types.ObjectId(String(partnerId));
-
-  const seenNumbers = new Set();
-  for (const acc of normalizedAccounts) {
-    const bankAccountNumber = String(acc.account_number || '').trim();
-    if (!bankAccountNumber) {
-      return fail(400, 'Account number is required.');
-    }
-    if (seenNumbers.has(bankAccountNumber)) {
-      return fail(400, 'Duplicate account number in bank accounts.');
-    }
-    seenNumbers.add(bankAccountNumber);
-    const availability = await assertBankAccountNumberAvailable(partnerOid, bankAccountNumber);
-    if (!availability.ok) return availability;
-  }
-
-  const rows = applyPrimaryBankAccountFlags(normalizedAccounts);
-  const now = new Date();
-
-  await PartnerBankAccount.updateMany(
-    { partner_id: partnerOid, deleted_at: null },
-    { $set: { deleted_at: now, updated_at: now } }
-  );
-
-  await PartnerBankAccount.insertMany(
-    rows.map((acc) => ({
-      partner_id: partnerOid,
-      bank_name: acc.bank_name,
-      account_holder_name: acc.account_holder_name,
-      account_number: acc.account_number,
-      ifsc_code: acc.ifsc_code,
-      branch_name: acc.branch_name,
-      is_primary: acc.is_primary === true,
-      created_at: now,
-      updated_at: now,
-      deleted_at: null,
-    }))
-  );
-
-  return okPass();
-}
-
 const assignPartnerOnboarding = async (savedUser) => {
   console.log('[partner.register] onboarding: creating notification settings', {
     user_id: savedUser._id,
@@ -745,6 +555,18 @@ const assignPartnerOnboarding = async (savedUser) => {
     notes: 'Auto-assigned on mobile registration',
   });
   console.log('[partner.register] onboarding: partner subscription created');
+};
+
+const rollbackNewPartnerCreation = async (partnerId) => {
+  try {
+    await Promise.all([
+      notificationSetting.deleteMany({ user_id: partnerId }),
+      PartnerSubscription.deleteMany({ partner_id: partnerId }),
+      User.deleteOne({ _id: partnerId }),
+    ]);
+  } catch (error) {
+    console.error('[partner.phone-login] rollbackNewPartnerCreation failed:', error.message);
+  }
 };
 
 const buildPartnerLoginData = async (user) => {
@@ -819,6 +641,7 @@ const registerPartner = async ({ name, email, phone_number, password, date_of_bi
   const uniqueness = await checkUserContactUniqueness({
     email: normalizedEmail,
     phone_number: normalizedPhone,
+    type: USER_TYPE_PARTNER,
   });
   if (!uniqueness.ok) {
     console.log('[partner.register] service: uniqueness conflict', { message: uniqueness.message });
@@ -914,6 +737,111 @@ const registerPartner = async ({ name, email, phone_number, password, date_of_bi
   };
 };
 
+const findPartnerByPhone = async (phone_number) => {
+  const normalizedPhone = normalizeUserPhone(phone_number);
+  const phoneVariants = getPhoneLookupVariants(normalizedPhone);
+  if (phoneVariants.length === 0) return null;
+
+  return User.findOne({
+    phone_number: { $in: phoneVariants },
+    type: USER_TYPE_PARTNER,
+    deleted_at: null,
+  });
+};
+
+const findOrCreatePartner = async (phone_number) => {
+  const normalizedPhone = normalizeUserPhone(phone_number);
+  let user = await findPartnerByPhone(phone_number);
+
+  if (user) {
+    if (user.phone_number !== normalizedPhone) {
+      user.phone_number = normalizedPhone;
+      await user.save();
+    }
+    return { ok: true, user, isNew: false };
+  }
+
+  const uniqueness = await checkUserContactUniqueness({
+    phone_number: normalizedPhone,
+    type: USER_TYPE_PARTNER,
+  });
+  if (!uniqueness.ok) {
+    return fail(409, uniqueness.message);
+  }
+
+  const registration_id = await getNewId(0);
+  const user_id = await getNewId(USER_TYPE_PARTNER);
+  const _id = new mongoose.Types.ObjectId();
+
+  user = new User({
+    _id,
+    registration_id,
+    user_id,
+    phone_number: normalizedPhone,
+    type: USER_TYPE_PARTNER,
+    registration_type: REGISTRATION_TYPE_NORMAL,
+    is_from_web: false,
+    verification_status: 1,
+    verified_at: null,
+  });
+
+  try {
+    await user.save();
+  } catch (err) {
+    if (err?.code === 11000) {
+      return fail(409, 'Phone number already exists.');
+    }
+    throw err;
+  }
+
+  try {
+    await assignPartnerOnboarding(user);
+  } catch (err) {
+    console.error('findOrCreatePartner onboarding', err.message);
+    await rollbackNewPartnerCreation(user._id);
+    return fail(500, 'Partner account created but onboarding failed. Please contact support.');
+  }
+
+  return { ok: true, user, isNew: true };
+};
+
+const sendPartnerOtp = async ({ phone_number }) => {
+  const partnerResult = await findOrCreatePartner(phone_number);
+  if (!partnerResult.ok) {
+    return partnerResult;
+  }
+
+  const deliveryResult = await issueAndSendPhoneOtp({ phone_number });
+  if (!deliveryResult.ok && partnerResult.isNew) {
+    await rollbackNewPartnerCreation(partnerResult.user._id);
+  }
+
+  return deliveryResult;
+};
+
+const verifyPartnerOtpAndLogin = async ({ phone_number, device_token, validOtp }) => {
+  const normalizedPhone = normalizeUserPhone(phone_number);
+  const phoneVariants = getPhoneLookupVariants(normalizedPhone);
+  const user = await User.findOne({
+    phone_number: { $in: phoneVariants },
+    type: USER_TYPE_PARTNER,
+    deleted_at: null,
+  });
+
+  if (!user) {
+    return fail(401, 'Invalid credentials.');
+  }
+
+  await Otp.deleteOne({ _id: validOtp._id });
+
+  const result = await finalizePartnerLogin(user, device_token);
+  if (!result.ok) {
+    return result;
+  }
+
+  return okWithMessage(200, 'OTP verified successfully.', { data: result.data });
+};
+
 const loginPartner = async ({ email, password, device_token }) => {
   const user = await User.findOne({ email, deleted_at: null }).select('+password');
   if (!user) {
@@ -992,6 +920,7 @@ const googleLoginPartner = async ({ id_token, device_token, phone_number, date_o
   const uniqueness = await checkUserContactUniqueness({
     email,
     phone_number: normalizedPhone,
+    type: USER_TYPE_PARTNER,
   });
   if (!uniqueness.ok) {
     return fail(409, uniqueness.message);
@@ -1098,6 +1027,7 @@ const appleLoginPartner = async ({ id_token, device_token, phone_number, date_of
   const uniqueness = await checkUserContactUniqueness({
     email,
     phone_number: normalizedPhone,
+    type: USER_TYPE_PARTNER,
   });
   if (!uniqueness.ok) {
     return fail(409, uniqueness.message);
@@ -1478,6 +1408,8 @@ const updatePartner = async ({ partnerId, body, files, section = PARTNER_UPDATE_
 module.exports = {
   registerPartner,
   loginPartner,
+  sendPartnerOtp,
+  verifyPartnerOtpAndLogin,
   googleLoginPartner,
   appleLoginPartner,
   updatePartner,

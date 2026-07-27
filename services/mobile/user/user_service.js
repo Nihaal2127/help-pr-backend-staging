@@ -26,6 +26,7 @@ const findCustomerByPhone = async (phone_number) => {
 
   return User.findOne({
     phone_number: { $in: phoneVariants },
+    type: USER_TYPE_CUSTOMER,
     deleted_at: null,
   });
 };
@@ -35,9 +36,6 @@ const findOrCreateCustomer = async (phone_number) => {
   let user = await findCustomerByPhone(phone_number);
 
   if (user) {
-    if (Number(user.type) !== USER_TYPE_CUSTOMER) {
-      return fail(409, 'This phone number is registered with another account type.');
-    }
     if (user.phone_number !== normalizedPhone) {
       user.phone_number = normalizedPhone;
       await user.save();
@@ -45,7 +43,10 @@ const findOrCreateCustomer = async (phone_number) => {
     return { ok: true, user };
   }
 
-  const uniqueness = await checkUserContactUniqueness({ phone_number: normalizedPhone });
+  const uniqueness = await checkUserContactUniqueness({
+    phone_number: normalizedPhone,
+    type: USER_TYPE_CUSTOMER,
+  });
   if (!uniqueness.ok) {
     return fail(409, uniqueness.message);
   }

@@ -34,6 +34,7 @@ const {
   resolvePartnerBankInputFromBody,
   upsertPartnerBankAccountForPartner,
   replacePartnerBankAccountsForPartner,
+  reconcilePartnerBankAccountPrimaries,
 } = require('./partner_bank_account_helpers');
 const { attachPartnerRatingFields } = require('../../../utils/rating_format');
 const { getPartnerEngagementCounts } = require('../../partner_post_common_service');
@@ -1130,6 +1131,8 @@ const buildPartnerResponseData = async (partnerId) => {
   if (!populated) return null;
 
   const partnerOid = new mongoose.Types.ObjectId(String(partnerId));
+
+  await reconcilePartnerBankAccountPrimaries(partnerOid);
 
   const [partner_services, bank_accounts, partner_documents, engagementCounts] = await Promise.all([
     PartnerService.find({ partner_id: partnerOid, deleted_at: null })

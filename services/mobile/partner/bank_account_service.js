@@ -5,8 +5,11 @@ const {
   formatBankAccountRecord,
   normalizeOnePartnerBankAccount,
   assertBankAccountNumberAvailable,
-  clearOtherPrimaryBankAccounts,
+  clearAllPrimaryBankAccounts,
+  setPrimaryBankAccountForPartner,
+  reconcilePartnerBankAccountPrimaries,
   ensurePartnerHasPrimaryBankAccount,
+  toPartnerOid,
 } = require('./partner_bank_account_helpers');
 
 const bankAccountMatchesSearch = (record, search) => {
@@ -66,8 +69,10 @@ const listPartnerBankAccounts = async (partnerId, { search } = {}) => {
     const normalizedSearch =
       search !== undefined && search !== null ? String(search).trim() : '';
 
+    await reconcilePartnerBankAccountPrimaries(partnerOid);
+
     const rows = await PartnerBankAccount.find({
-      partner_id: partnerOid,
+      partner_id: toPartnerOid(partnerOid),
       deleted_at: null,
     })
       .sort({ is_primary: -1, created_at: -1 })
@@ -126,7 +131,7 @@ const createPartnerBankAccount = async (partnerId, body) => {
     const isPrimary = normalized.is_primary === true || !hasAny;
 
     if (isPrimary) {
-      await clearOtherPrimaryBankAccounts(partnerOid);
+      await clearAllPrimaryBankAccounts(partnerOid);
     }
 
     const now = new Date();
@@ -212,24 +217,39 @@ const updatePartnerBankAccount = async (partnerId, accountId, body) => {
     if (primaryFlag === null) {
       return fail(400, 'is_primary must be true or false.');
     }
-    if (primaryFlag === true) {
-      await clearOtherPrimaryBankAccounts(partnerOid, account._id);
-      updates.is_primary = true;
-    } else if (primaryFlag === false) {
+    const wantsPrimary = primaryFlag === true;
+    const wantsUnsetPrimary = primaryFlag === false;
+
+    if (wantsPrimary) {
+      delete updates.is_primary;
+    } else if (wantsUnsetPrimary) {
       updates.is_primary = false;
     }
 
-    if (Object.keys(updates).length === 0) {
+    if (Object.keys(updates).length === 0 && !wantsPrimary && !wantsUnsetPrimary) {
       return ok(200, {
         message: 'Bank account updated successfully.',
         record: formatBankAccountRecord(account),
       });
     }
 
-    Object.assign(account, updates, { updated_at: now });
-    await account.save();
+    if (Object.keys(updates).length > 0) {
+      Object.assign(account, updates, { updated_at: now });
+      await account.save();
+    }
 
-    if (primaryFlag === false) {
+    if (wantsPrimary) {
+      const primaryAccount = await setPrimaryBankAccountForPartner(partnerOid, account._id);
+      if (!primaryAccount) {
+        return fail(404, 'Bank account not found.');
+      }
+      return ok(200, {
+        message: 'Bank account updated successfully.',
+        record: formatBankAccountRecord(primaryAccount),
+      });
+    }
+
+    if (wantsUnsetPrimary) {
       await ensurePartnerHasPrimaryBankAccount(partnerOid);
     }
 
@@ -258,15 +278,14 @@ const setPartnerBankAccountPrimary = async (partnerId, accountId) => {
       return owned;
     }
 
-    const account = owned.data.account;
-    await clearOtherPrimaryBankAccounts(partnerOid, account._id);
-    account.is_primary = true;
-    account.updated_at = new Date();
-    await account.save();
+    const updated = await setPrimaryBankAccountForPartner(partnerOid, accountId);
+    if (!updated) {
+      return fail(404, 'Bank account not found.');
+    }
 
     return ok(200, {
       message: 'Primary bank account updated successfully.',
-      record: formatBankAccountRecord(account),
+      record: formatBankAccountRecord(updated),
     });
   } catch (err) {
     console.error('setPartnerBankAccountPrimary', err.message);

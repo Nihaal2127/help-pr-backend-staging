@@ -19,6 +19,14 @@ const toPartnerOid = (partnerId) => {
   return new mongoose.Types.ObjectId(String(partnerId));
 };
 
+const toAccountOid = (accountId) => {
+  if (accountId instanceof mongoose.Types.ObjectId) return accountId;
+  return new mongoose.Types.ObjectId(String(accountId));
+};
+
+const isTruthyPrimaryFlag = (value) =>
+  value === true || value === 1 || value === '1' || String(value).trim().toLowerCase() === 'true';
+
 const formatBankAccountRecord = (doc) => {
   const row = doc && doc.toObject ? doc.toObject() : { ...doc };
   return {
@@ -124,32 +132,118 @@ const applyPrimaryBankAccountFlags = (accounts) => {
   }));
 };
 
+const clearAllPrimaryBankAccounts = async (partnerOid) => {
+  const normalizedPartnerOid = toPartnerOid(partnerOid);
+  await PartnerBankAccount.updateMany(
+    { partner_id: normalizedPartnerOid, deleted_at: null },
+    { $set: { is_primary: false, updated_at: new Date() } }
+  );
+};
+
 const clearOtherPrimaryBankAccounts = async (partnerOid, excludeAccountId = null) => {
-  const query = { partner_id: partnerOid, deleted_at: null };
-  if (excludeAccountId) {
-    query._id = { $ne: excludeAccountId };
+  const normalizedPartnerOid = toPartnerOid(partnerOid);
+  if (excludeAccountId == null) {
+    await clearAllPrimaryBankAccounts(normalizedPartnerOid);
+    return;
   }
-  await PartnerBankAccount.updateMany(query, {
-    $set: { is_primary: false, updated_at: new Date() },
-  });
+
+  await PartnerBankAccount.updateMany(
+    {
+      partner_id: normalizedPartnerOid,
+      deleted_at: null,
+      _id: { $ne: toAccountOid(excludeAccountId) },
+    },
+    { $set: { is_primary: false, updated_at: new Date() } }
+  );
+};
+
+const setPrimaryBankAccountForPartner = async (partnerOid, accountId) => {
+  const normalizedPartnerOid = toPartnerOid(partnerOid);
+  const normalizedAccountOid = toAccountOid(accountId);
+  const now = new Date();
+
+  await clearAllPrimaryBankAccounts(normalizedPartnerOid);
+
+  const updated = await PartnerBankAccount.findOneAndUpdate(
+    {
+      _id: normalizedAccountOid,
+      partner_id: normalizedPartnerOid,
+      deleted_at: null,
+    },
+    { $set: { is_primary: true, updated_at: now } },
+    { new: true }
+  );
+
+  return updated;
+};
+
+const reconcilePartnerBankAccountPrimaries = async (partnerOid) => {
+  const normalizedPartnerOid = toPartnerOid(partnerOid);
+  const accounts = await PartnerBankAccount.find({
+    partner_id: normalizedPartnerOid,
+    deleted_at: null,
+  })
+    .select('_id is_primary updated_at created_at')
+    .lean();
+
+  if (accounts.length === 0) return null;
+
+  const primaries = accounts.filter((account) => isTruthyPrimaryFlag(account.is_primary));
+  if (primaries.length === 1) {
+    return primaries[0]._id;
+  }
+
+  const winner =
+    primaries.length > 1
+      ? primaries.sort(
+          (a, b) =>
+            new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime()
+        )[0]
+      : accounts.sort(
+          (a, b) =>
+            new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime()
+        )[0];
+
+  await clearAllPrimaryBankAccounts(normalizedPartnerOid);
+  await PartnerBankAccount.updateOne(
+    { _id: winner._id },
+    { $set: { is_primary: true, updated_at: new Date() } }
+  );
+
+  return winner._id;
 };
 
 const ensurePartnerHasPrimaryBankAccount = async (partnerOid) => {
-  const primary = await PartnerBankAccount.findOne({
-    partner_id: partnerOid,
-    deleted_at: null,
-    is_primary: true,
-  }).lean();
-  if (primary) return;
-
-  const next = await PartnerBankAccount.findOne({
-    partner_id: partnerOid,
+  const normalizedPartnerOid = toPartnerOid(partnerOid);
+  const accounts = await PartnerBankAccount.find({
+    partner_id: normalizedPartnerOid,
     deleted_at: null,
   })
-    .sort({ created_at: 1 })
+    .select('_id is_primary updated_at created_at')
     .lean();
-  if (!next) return;
 
+  if (accounts.length === 0) return;
+
+  const primaries = accounts.filter((account) => isTruthyPrimaryFlag(account.is_primary));
+  if (primaries.length === 1) {
+    if (primaries[0].is_primary === true) return;
+    await PartnerBankAccount.updateOne(
+      { _id: primaries[0]._id },
+      { $set: { is_primary: true, updated_at: new Date() } }
+    );
+    return;
+  }
+
+  if (primaries.length > 1) {
+    await reconcilePartnerBankAccountPrimaries(normalizedPartnerOid);
+    return;
+  }
+
+  const next = accounts.sort(
+    (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+  )[0];
+
+  await clearAllPrimaryBankAccounts(normalizedPartnerOid);
   await PartnerBankAccount.updateOne(
     { _id: next._id },
     { $set: { is_primary: true, updated_at: new Date() } }
@@ -190,7 +284,11 @@ async function upsertPartnerBankAccountForPartner(partnerId, normalizedBankAccou
   };
 
   if (normalizedBankAccount.is_primary === true) {
-    await clearOtherPrimaryBankAccounts(partnerOid, account?._id ?? null);
+    if (account) {
+      await clearOtherPrimaryBankAccounts(partnerOid, account._id);
+    } else {
+      await clearAllPrimaryBankAccounts(partnerOid);
+    }
   }
 
   if (account) {
@@ -263,9 +361,14 @@ module.exports = {
   resolvePartnerBankInputFromBody,
   assertBankAccountNumberAvailable,
   applyPrimaryBankAccountFlags,
+  clearAllPrimaryBankAccounts,
   clearOtherPrimaryBankAccounts,
+  setPrimaryBankAccountForPartner,
+  reconcilePartnerBankAccountPrimaries,
   ensurePartnerHasPrimaryBankAccount,
   upsertPartnerBankAccountForPartner,
   replacePartnerBankAccountsForPartner,
   toPartnerOid,
+  toAccountOid,
+  isTruthyPrimaryFlag,
 };

@@ -1,7 +1,6 @@
 const User = require('../../../models/user');
 const PasswordResetOtp = require('../../../models/password_reset_otp');
-const { sendTemplateEmail } = require('../../../helper/mail');
-const { buildPasswordResetOtpEmail } = require('../../../helper/email_templates/password_reset_otp_email');
+const { sendPasswordResetOtpEmail } = require('../../../helper/password_reset_email');
 const {
   generateOtp,
   hashOtp,
@@ -41,14 +40,21 @@ const requestForgotPasswordOtp = async ({ email, userType }) => {
       await PasswordResetOtp.deleteMany({ user_id: user._id });
 
       const otp = generateOtp();
-      await PasswordResetOtp.create({
+      const otpRecord = await PasswordResetOtp.create({
         user_id: user._id,
         otp_hash: hashOtp(otp),
         expires_at: getOtpExpiryDate(),
       });
 
-      const { subject, text, html } = buildPasswordResetOtpEmail(otp);
-      await sendTemplateEmail(normalizedEmail, subject, html, text);
+      const delivery = await sendPasswordResetOtpEmail({
+        to: normalizedEmail,
+        otp,
+      });
+
+      if (!delivery.ok) {
+        await PasswordResetOtp.deleteOne({ _id: otpRecord._id });
+        return fail(503, 'Unable to send OTP. Please try again later.');
+      }
     }
   }
 

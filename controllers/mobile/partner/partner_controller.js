@@ -160,22 +160,26 @@ const appleLogin = wrapMobileHandler('mobile partner apple-login', async (req, r
   });
 });
 
-const forgotPassword = wrapMobileHandler('mobile partner forgot-password', async (req, res) => {
-  const result = await requestForgotPasswordOtp({
-    email: req.body.email,
-    userType: USER_TYPE_PARTNER,
-  });
+const forgotPassword = wrapMobileHandler(
+  'mobile partner forgot-password',
+  async (req, res) => {
+    const result = await requestForgotPasswordOtp({
+      email: req.body.email,
+      userType: USER_TYPE_PARTNER,
+    });
 
-  if (!result.ok) {
-    return sendServiceError(res, result);
-  }
+    if (!result.ok) {
+      return sendServiceError(res, result);
+    }
 
-  return res.status(200).json({
-    success: true,
-    status: 200,
-    message: result.message,
-  });
-});
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: result.message,
+    });
+  },
+  { errorMessage: 'Failed to send password reset OTP.' }
+);
 
 const verifyForgotPasswordOtp = wrapMobileHandler(
   'mobile partner verify-forgot-password-otp',

@@ -13,6 +13,10 @@ const {
     safeNotifySubscriptionAssigned,
     safeNotifySubscriptionStatusChanged,
 } = require('../src/modules/notifications/services/domainHooks');
+const {
+    DEFAULT_PARTNER_PLAN_NAME,
+    AUTO_BASIC_SUBSCRIPTION_NOTES,
+} = require('../constants/partner_subscription');
 /** Same as `user.type` in models/user.js (2 = Partner). */
 const USER_TYPE_PARTNER = 2;
 
@@ -773,6 +777,93 @@ const getMySubscription = async (partnerUserId) => {
     }
 };
 
+const loadDefaultBasicPlan = async () =>
+    SubscriptionPlan.findOne({
+        plan_name: DEFAULT_PARTNER_PLAN_NAME,
+        is_active: true,
+        deleted_at: null,
+    });
+
+const partnerHasActiveSubscription = async (partnerOid) => {
+    const now = new Date();
+    const row = await PartnerSubscription.findOne({
+        partner_id: partnerOid,
+        status: 'active',
+        deleted_at: null,
+        $or: [{ expires_at: null }, { expires_at: { $gt: now } }],
+    })
+        .select('_id')
+        .lean();
+    return Boolean(row);
+};
+
+/**
+ * Assign the default "basic" plan when a partner has no active subscription.
+ * Matches mobile onboarding: expires_at null, status active, no assignment notification.
+ */
+const assignDefaultBasicPlanIfMissing = async (partnerId, options = {}) => {
+    try {
+        const { assignedByUserId = null, source = 'web', startedAt = null, notes } = options;
+
+        const pPartner = parseObjectId(partnerId, 'partner_id');
+        if (!pPartner.ok) return fail(400, pPartner.message);
+
+        const partnerUser = await loadPartnerUser(pPartner.oid);
+        if (!partnerUser) {
+            return fail(404, 'Partner not found or user is not a partner.');
+        }
+
+        if (await partnerHasActiveSubscription(pPartner.oid)) {
+            return ok(200, {
+                message: 'Partner already has an active subscription.',
+                skipped: true,
+            });
+        }
+
+        const basicPlan = await loadDefaultBasicPlan();
+        if (!basicPlan) {
+            return fail(500, 'Default subscription plan "basic" is not configured.');
+        }
+
+        const start = startedAt ? new Date(startedAt) : new Date();
+        if (Number.isNaN(start.getTime())) {
+            return fail(400, `${fieldLabel('started_at')} must be a valid date.`);
+        }
+
+        const sourceKey = String(source || 'web').toLowerCase() === 'mobile' ? 'mobile' : 'web';
+        const resolvedNotes =
+            notes !== undefined && notes !== null
+                ? String(notes)
+                : AUTO_BASIC_SUBSCRIPTION_NOTES[sourceKey];
+
+        let assignedOid = null;
+        if (assignedByUserId !== undefined && assignedByUserId !== null) {
+            const assignedBy = parseObjectId(assignedByUserId, 'assigned_by_id');
+            if (assignedBy.ok) {
+                assignedOid = assignedBy.oid;
+            }
+        }
+
+        await PartnerSubscription.create({
+            partner_id: pPartner.oid,
+            subscription_plan_id: basicPlan._id,
+            started_at: start,
+            expires_at: null,
+            status: 'active',
+            notes: resolvedNotes,
+            assigned_by_id: assignedOid,
+        });
+
+        return ok(200, {
+            message: 'Default basic subscription assigned successfully.',
+            skipped: false,
+        });
+    } catch (error) {
+        console.error('assignDefaultBasicPlanIfMissing', error.message);
+        return fail(500, 'Internal server error.');
+    }
+};
+
 module.exports = {
     listPartnerSubscriptions,
     createPartnerSubscription,
@@ -781,4 +872,5 @@ module.exports = {
     softDeletePartnerSubscription,
     importPartnerSubscriptions,
     getMySubscription,
+    assignDefaultBasicPlanIfMissing,
 };

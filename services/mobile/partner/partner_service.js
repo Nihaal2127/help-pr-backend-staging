@@ -4,8 +4,8 @@ const Address = require('../../../models/address');
 const PartnerDocument = require('../../../models/partner_document');
 const PartnerBankAccount = require('../../../models/partner_bank_account');
 const notificationSetting = require('../../../models/notification_settings');
-const SubscriptionPlan = require('../../../models/subscription_plan');
 const PartnerSubscription = require('../../../models/partner_subscription');
+const partnerSubscriptionService = require('../../partner_subscription_service');
 const Franchise = require('../../../models/franchise');
 const { getNewId } = require('../../../helper/id_generator');
 const { getDocumentList } = require('../../../controllers/document_controller');
@@ -43,7 +43,6 @@ const {
   partnerDocumentFieldsAfterImageUpload,
   applyPartnerUserStatusAfterDocumentUpload,
 } = require('../../../utils/partner_document_status');
-const DEFAULT_PARTNER_PLAN_NAME = 'basic';
 const REGISTRATION_TYPE_NORMAL = 1;
 const REGISTRATION_TYPE_GOOGLE = 2;
 const REGISTRATION_TYPE_APPLE = 3;
@@ -534,28 +533,23 @@ const assignPartnerOnboarding = async (savedUser) => {
   await notificationSetting.create({ user_id: savedUser._id });
   console.log('[partner.register] onboarding: notification settings created');
 
-  console.log('[partner.register] onboarding: looking up basic subscription plan');
-  const basicPlan = await SubscriptionPlan.findOne({
-    plan_name: DEFAULT_PARTNER_PLAN_NAME,
-    is_active: true,
-    deleted_at: null,
-  });
-  if (!basicPlan) {
-    console.error('[partner.register] onboarding: basic plan not found in DB');
-    throw new Error('Default subscription plan "basic" is not configured.');
+  console.log('[partner.register] onboarding: assigning default basic subscription');
+  const subscriptionResult = await partnerSubscriptionService.assignDefaultBasicPlanIfMissing(
+    savedUser._id,
+    {
+      source: 'mobile',
+      startedAt: savedUser.created_at,
+    }
+  );
+  if (!subscriptionResult.ok) {
+    console.error('[partner.register] onboarding: basic plan assignment failed', {
+      message: subscriptionResult.message,
+    });
+    throw new Error(subscriptionResult.message);
   }
-  console.log('[partner.register] onboarding: basic plan found', { plan_id: basicPlan._id });
-
-  console.log('[partner.register] onboarding: creating partner subscription');
-  await PartnerSubscription.create({
-    partner_id: savedUser._id,
-    subscription_plan_id: basicPlan._id,
-    started_at: savedUser.created_at,
-    expires_at: null,
-    status: 'active',
-    notes: 'Auto-assigned on mobile registration',
+  console.log('[partner.register] onboarding: partner subscription ready', {
+    skipped: subscriptionResult.data?.skipped === true,
   });
-  console.log('[partner.register] onboarding: partner subscription created');
 };
 
 const rollbackNewPartnerCreation = async (partnerId) => {

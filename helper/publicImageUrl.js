@@ -8,6 +8,7 @@ const IMAGE_FIELD_KEYS = new Set([
   'profile_url',
   'document_image',
   'service_image',
+  'banner_image_url',
 ]);
 
 const getCdnBase = () =>

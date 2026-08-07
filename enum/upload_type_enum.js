@@ -6,6 +6,7 @@ const UploadType = new Map([
   [5, "partner_post"],
   [6, "order_work_proof"],
   [7, "chat_attachment"],
+  [8, "partner_subscription_banner"],
 ]);
 
 const UPLOAD_TYPE_PARTNER_DOCUMENT = 1;
@@ -15,6 +16,7 @@ const UPLOAD_TYPE_USER_PROFILE = 4;
 const UPLOAD_TYPE_PARTNER_POST = 5;
 const UPLOAD_TYPE_ORDER_WORK_PROOF = 6;
 const UPLOAD_TYPE_CHAT_ATTACHMENT = 7;
+const UPLOAD_TYPE_PARTNER_SUBSCRIPTION_BANNER = 8;
 
 const getUploadType = (key) => UploadType.get(Number(key)) || "";
 
@@ -38,6 +40,7 @@ module.exports = {
   UPLOAD_TYPE_PARTNER_POST,
   UPLOAD_TYPE_ORDER_WORK_PROOF,
   UPLOAD_TYPE_CHAT_ATTACHMENT,
+  UPLOAD_TYPE_PARTNER_SUBSCRIPTION_BANNER,
   getUploadType,
   getUploadTypeKey,
   isValidUploadType,

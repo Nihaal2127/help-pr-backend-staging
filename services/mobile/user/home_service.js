@@ -6,14 +6,17 @@ const { resolveFranchiseEffectiveCatalog } = require('../../../utils/catalog_ava
 const {
   resolveFranchiseFromLocation,
   loadSubscribedFranchisePartners,
+  loadRandomPlatinumPartnerBanners,
   collectEffectivePartnerOfferings,
   mapFranchisePartnerRecords,
 } = require('./franchise_partner_scope');
 const { enrichPartnerListRecordsWithServiceRatings } = require('./partner_rating_service');
 const { loadCustomerHomeOrders } = require('./home_orders_service');
+const { toPublicImageUrl } = require('../../../helper/publicImageUrl');
 
 /** Max partners returned on home (highest plan priority first). */
 const HOME_PARTNERS_LIMIT = 20;
+const HOME_BANNERS_LIMIT = 5;
 
 const { fail, ok } = require('../../../utils/mobile_service_result');
 
@@ -196,6 +199,7 @@ const getHomeForLocation = async ({ location, userId }) => {
           location: buildResolvedLocation(franchiseCtx),
           categories: [],
           partners: [],
+          banners: [],
           orders,
         },
       });
@@ -206,9 +210,12 @@ const getHomeForLocation = async ({ location, userId }) => {
       .lean();
     const servicePrice = city?.city_service_price ?? 0;
 
-    const subscribed = await loadSubscribedFranchisePartners(franchiseCtx.franchise._id, {
-      limit: HOME_PARTNERS_LIMIT,
-    });
+    const [subscribed, banners] = await Promise.all([
+      loadSubscribedFranchisePartners(franchiseCtx.franchise._id, {
+        limit: HOME_PARTNERS_LIMIT,
+      }),
+      loadRandomPlatinumPartnerBanners(franchiseCtx.franchise._id, HOME_BANNERS_LIMIT),
+    ]);
 
     const catalogResult = await buildFranchiseCategories(
       franchiseCtx.franchise._id,
@@ -233,6 +240,7 @@ const getHomeForLocation = async ({ location, userId }) => {
         location: buildResolvedLocation(franchiseCtx),
         categories: catalogResult.categories,
         partners: partnersWithRatings,
+        banners: banners.map(toPublicImageUrl),
         orders,
       },
     });

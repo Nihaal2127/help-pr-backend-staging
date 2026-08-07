@@ -8,6 +8,7 @@ const Service = require('../../../models/service');
 const PartnerCategory = require('../../../models/partner_category');
 const PartnerService = require('../../../models/partner_service');
 const PartnerSubscription = require('../../../models/partner_subscription');
+const { PLATINUM_PLAN_NAME } = require('../../../constants/partner_subscription');
 const {
   resolveFranchiseEffectiveCatalog,
   resolveFranchiseAssignedEnabledMaps,
@@ -253,7 +254,7 @@ const loadSubscribedFranchisePartners = async (franchiseId, options = {}) => {
     deleted_at: null,
     $or: [{ expires_at: null }, { expires_at: { $gt: now } }],
   })
-    .select('partner_id subscription_plan_id created_at')
+    .select('partner_id subscription_plan_id banner_image_url created_at')
     .populate({
       path: 'subscription_plan_id',
       select: 'plan_name priority is_active deleted_at',
@@ -273,6 +274,7 @@ const loadSubscribedFranchisePartners = async (franchiseId, options = {}) => {
     planByPartnerId.set(partnerKey, {
       plan_name: plan.plan_name,
       priority: plan.priority,
+      banner_image_url: row.banner_image_url || null,
     });
   }
 
@@ -295,6 +297,79 @@ const loadSubscribedFranchisePartners = async (franchiseId, options = {}) => {
     partners: subscribed,
     planByPartnerId,
   };
+};
+
+const HOME_PLATINUM_BANNERS_LIMIT = 5;
+
+const pickRandomItems = (items, count) => {
+  if (!Array.isArray(items) || items.length === 0 || count <= 0) {
+    return [];
+  }
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy.slice(0, Math.min(count, copy.length));
+};
+
+/**
+ * Up to `limit` random banner URLs from active platinum partners in the franchise.
+ * Franchise-scoped; one banner per partner; empty when none qualify.
+ */
+const loadRandomPlatinumPartnerBanners = async (franchiseId, limit = HOME_PLATINUM_BANNERS_LIMIT) => {
+  const partnerRows = await User.find({
+    franchise_id: franchiseId,
+    type: USER_TYPE_PARTNER,
+    verification_status: 2,
+    is_active: true,
+    is_blocked: { $ne: true },
+    deleted_at: null,
+  })
+    .select('_id')
+    .lean();
+
+  if (partnerRows.length === 0) {
+    return [];
+  }
+
+  const partnerOids = partnerRows.map((p) => p._id);
+  const now = new Date();
+
+  const subscriptionRows = await PartnerSubscription.find({
+    partner_id: { $in: partnerOids },
+    status: 'active',
+    deleted_at: null,
+    banner_image_url: { $nin: [null, ''] },
+    $or: [{ expires_at: null }, { expires_at: { $gt: now } }],
+  })
+    .select('partner_id subscription_plan_id banner_image_url created_at')
+    .populate({
+      path: 'subscription_plan_id',
+      select: 'plan_name is_active deleted_at',
+    })
+    .sort({ created_at: -1 })
+    .lean();
+
+  const seenPartners = new Set();
+  const bannerUrls = [];
+
+  for (const row of subscriptionRows) {
+    const partnerKey = String(row.partner_id);
+    if (seenPartners.has(partnerKey)) continue;
+
+    const plan = row.subscription_plan_id;
+    if (!plan || plan.deleted_at != null || plan.is_active !== true) continue;
+    if (String(plan.plan_name || '').toLowerCase() !== PLATINUM_PLAN_NAME) continue;
+
+    const url = String(row.banner_image_url || '').trim();
+    if (!url) continue;
+
+    seenPartners.add(partnerKey);
+    bannerUrls.push(url);
+  }
+
+  return pickRandomItems(bannerUrls, limit);
 };
 
 const collectEffectivePartnerOfferings = async (
@@ -444,6 +519,8 @@ const mapFranchisePartnerRecords = (subscribedPartners, planByPartnerId, effecti
 
   return subscribedPartners.map((p) => {
     const plan = planByPartnerId.get(String(p._id));
+    const isPlatinum =
+      String(plan?.plan_name ?? '').toLowerCase() === PLATINUM_PLAN_NAME;
     return {
       _id: p._id,
       name: p.name,
@@ -452,6 +529,8 @@ const mapFranchisePartnerRecords = (subscribedPartners, planByPartnerId, effecti
       experience: p.experience,
       subscription_plan_name: plan?.plan_name ?? null,
       plan_priority: plan?.priority ?? null,
+      banner_image_url:
+        isPlatinum && plan?.banner_image_url ? plan.banner_image_url : null,
       categories: categoriesByPartnerId.get(String(p._id)) || [],
       ...attachPartnerRatingFields(p),
     };
@@ -590,6 +669,7 @@ module.exports = {
   resolveFranchiseFromLocation,
   resolveFranchiseById,
   loadSubscribedFranchisePartners,
+  loadRandomPlatinumPartnerBanners,
   collectEffectivePartnerOfferings,
   mapFranchisePartnerRecords,
   buildPartnerDetailCatalog,

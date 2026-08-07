@@ -31,7 +31,7 @@ const uploadDocument = async (req, res) => {
         return res.status(400).json({
             success: false,
             status: 400,
-            message: 'Invalid upload type. Use 1–7 (chat attachments: type 7).',
+            message: 'Invalid upload type. Use 1–8 (partner subscription banner: type 8; chat attachments: type 7).',
         });
     }
 
@@ -73,7 +73,7 @@ const updateDocument = async (req, res) => {
         return res.status(400).json({
             success: false,
             status: 400,
-            message: 'Invalid upload type. Use 1–7 (chat attachments: type 7).',
+            message: 'Invalid upload type. Use 1–8 (partner subscription banner: type 8; chat attachments: type 7).',
         });
     }
 

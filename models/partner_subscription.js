@@ -19,6 +19,8 @@ const partnerSubscriptionSchema = new mongoose.Schema(
             default: 'active',
         },
         assigned_by_id: { type: mongoose.Schema.Types.ObjectId, ref: 'user', default: null },
+        /** Platinum-only promotional banner; kept on downgrade but hidden from customers until platinum again. */
+        banner_image_url: { type: String, default: null, trim: true },
         notes: { type: String, default: '' },
         created_at: { type: Date, default: Date.now },
         updated_at: { type: Date, default: Date.now },

@@ -23,27 +23,39 @@ const getAll = async (req, res) => {
 };
 
 const create = async (req, res) => {
-    const result = await partnerSubscriptionService.createPartnerSubscription(req.body, req.user.id);
+    const result = await partnerSubscriptionService.createPartnerSubscription(
+        req.body,
+        req.user.id,
+        req
+    );
     return sendServiceResult(res, result);
 };
 
 const update = async (req, res) => {
-    const result = await partnerSubscriptionService.updatePartnerSubscription(req.params.id, req.body);
+    const result = await partnerSubscriptionService.updatePartnerSubscription(
+        req.params.id,
+        req.body,
+        req
+    );
     return sendServiceResult(res, result);
 };
 
 const getById = async (req, res) => {
-    const result = await partnerSubscriptionService.getPartnerSubscriptionById(req.params.id);
+    const result = await partnerSubscriptionService.getPartnerSubscriptionById(req.params.id, req);
     return sendServiceResult(res, result);
 };
 
 const deletePartnerSubscription = async (req, res) => {
-    const result = await partnerSubscriptionService.softDeletePartnerSubscription(req.params.id);
+    const result = await partnerSubscriptionService.softDeletePartnerSubscription(req.params.id, req);
     return sendServiceResult(res, result);
 };
 
 const importRecords = async (req, res) => {
-    const result = await partnerSubscriptionService.importPartnerSubscriptions(req.body.records, req.user.id);
+    const result = await partnerSubscriptionService.importPartnerSubscriptions(
+        req.body.records,
+        req.user.id,
+        req
+    );
     return sendServiceResult(res, result);
 };
 

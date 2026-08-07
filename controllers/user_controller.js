@@ -739,6 +739,7 @@ const normalizePartnerSubscriptionPayload = (payload) => {
       null,
     status: parsed.status ?? null,
     notes: parsed.notes ?? '',
+    banner_image_url: parsed.banner_image_url ?? null,
   };
 };
 

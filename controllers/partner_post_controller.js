@@ -68,7 +68,7 @@ const listReportsHandler = async (req, res) => {
 
 const getAllPostsHandler = async (req, res) => {
   try {
-    const result = await listAllPosts(req.query);
+    const result = await listAllPosts(req, req.query);
 
     if (!result.ok) {
       return res.status(result.status).json({
@@ -100,7 +100,7 @@ const getAllPostsHandler = async (req, res) => {
 
 const moderatePostHandler = async (req, res) => {
   try {
-    const result = await moderatePost(req.params.postId, req.body);
+    const result = await moderatePost(req, req.params.postId, req.body);
 
     if (!result.ok) {
       return res.status(result.status).json({

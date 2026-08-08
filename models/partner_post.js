@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const { POST_TYPES, POST_TYPE_ORDER, POST_TYPE_LEGACY_WORK } = require('../enum/post_type_enum');
-const { POST_STATUS_PUBLISHED, POST_STATUSES } = require('../enum/post_report_reason_enum');
+const { POST_STATUS_PENDING, POST_STATUSES } = require('../enum/post_report_reason_enum');
 
 const partnerPostSchema = new mongoose.Schema(
   {
@@ -42,9 +42,10 @@ const partnerPostSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: POST_STATUSES,
-      default: POST_STATUS_PUBLISHED,
+      default: POST_STATUS_PENDING,
       trim: true,
     },
+    rejection_reason: { type: String, default: '', trim: true },
     share_token: { type: String, required: true, trim: true, unique: true },
     likes_count: { type: Number, default: 0, min: 0 },
     shares_count: { type: Number, default: 0, min: 0 },

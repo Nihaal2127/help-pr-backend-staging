@@ -6,9 +6,12 @@ const {
   normalizePostStatus,
   normalizeReportStatus,
   REPORT_STATUS_PENDING,
+  POST_STATUS_PENDING,
   POST_STATUS_PUBLISHED,
+  POST_STATUS_REJECTED,
   POST_STATUS_HIDDEN,
   POST_STATUS_REMOVED,
+  POST_MODERATION_STATUSES,
 } = require('../enum/post_report_reason_enum');
 const { resolvePartnerPostListScope } = require('../utils/partner_post_access');
 const {
@@ -80,8 +83,10 @@ const getPostCounts = async (req, query = {}) => {
 
   const postFilter = filterResult.filter;
 
-  const [published, hidden, removed, reportCounts] = await Promise.all([
+  const [postPending, published, rejected, hidden, removed, reportCounts] = await Promise.all([
+    PartnerPost.countDocuments({ ...postFilter, status: POST_STATUS_PENDING }),
     PartnerPost.countDocuments({ ...postFilter, status: POST_STATUS_PUBLISHED }),
+    PartnerPost.countDocuments({ ...postFilter, status: POST_STATUS_REJECTED }),
     PartnerPost.countDocuments({ ...postFilter, status: POST_STATUS_HIDDEN }),
     PartnerPost.countDocuments({ ...postFilter, status: POST_STATUS_REMOVED }),
     countReportStatusesForPostFilter(postFilter),
@@ -90,7 +95,9 @@ const getPostCounts = async (req, query = {}) => {
   return ok(200, {
     message: 'Post counts fetched successfully.',
     counts: {
+      post_pending: postPending,
       published,
+      rejected,
       hidden,
       removed,
       pending: reportCounts.pending,
@@ -194,12 +201,17 @@ const listReports = async (query) => {
   });
 };
 
-const listAllPosts = async (query) => {
+const listAllPosts = async (req, query) => {
   const page = parsePositiveInt(query.page, DEFAULT_PAGE);
   const limit = Math.min(parsePositiveInt(query.limit, DEFAULT_LIMIT), MAX_ADMIN_LIMIT);
   const skip = (page - 1) * limit;
 
-  const filter = { deleted_at: null };
+  const filterResult = await buildPostListScopeFilter(req, query);
+  if (!filterResult.ok) {
+    return fail(filterResult.status, filterResult.message);
+  }
+
+  const filter = { ...filterResult.filter };
 
   if (query.status !== undefined && String(query.status).trim() !== '') {
     const status = normalizePostStatus(query.status);
@@ -207,18 +219,6 @@ const listAllPosts = async (query) => {
       return fail(400, 'Invalid post status filter.');
     }
     filter.status = status;
-  }
-
-  if (query.partner_id) {
-    const parsed = parseObjectId(query.partner_id, 'partner_id');
-    if (!parsed.ok) return fail(400, parsed.message);
-    filter.partner_id = parsed.oid;
-  }
-
-  if (query.franchise_id) {
-    const parsed = parseObjectId(query.franchise_id, 'franchise_id');
-    if (!parsed.ok) return fail(400, parsed.message);
-    filter.franchise_id = parsed.oid;
   }
 
   const [totalItems, posts] = await Promise.all([
@@ -241,26 +241,70 @@ const listAllPosts = async (query) => {
   });
 };
 
-const moderatePost = async (postId, body) => {
+const moderatePost = async (req, postId, body) => {
   const parsed = parseObjectId(postId, 'post_id');
   if (!parsed.ok) return fail(400, parsed.message);
 
-  const status = normalizePostStatus(body.status);
-  if (!status) {
-    return fail(400, 'status must be one of: published, hidden, removed.');
+  const scopeResult = await buildPostListScopeFilter(req, {});
+  if (!scopeResult.ok) {
+    return fail(scopeResult.status, scopeResult.message);
   }
 
-  const post = await PartnerPost.findOne({ _id: parsed.oid, deleted_at: null });
+  const status = normalizePostStatus(body.status);
+  if (!status) {
+    return fail(400, 'status must be one of: published, hidden, removed, rejected.');
+  }
+
+  const post = await PartnerPost.findOne({
+    _id: parsed.oid,
+    deleted_at: null,
+    ...scopeResult.filter,
+  });
   if (!post) {
     return fail(404, 'Post not found.');
   }
 
-  post.status = status;
+  const currentStatus = post.status;
+
+  if (currentStatus === POST_STATUS_PENDING) {
+    if (status === POST_STATUS_PUBLISHED) {
+      post.status = POST_STATUS_PUBLISHED;
+      post.rejection_reason = '';
+    } else if (status === POST_STATUS_REJECTED) {
+      const reason = String(body.rejection_reason ?? '').trim();
+      if (!reason) {
+        return fail(400, 'rejection_reason is required when status is rejected.');
+      }
+      post.status = POST_STATUS_REJECTED;
+      post.rejection_reason = reason;
+    } else {
+      return fail(400, 'Pending posts can only be approved (published) or rejected.');
+    }
+  } else if (currentStatus === POST_STATUS_REJECTED) {
+    if (status === POST_STATUS_PUBLISHED) {
+      post.status = POST_STATUS_PUBLISHED;
+      post.rejection_reason = '';
+    } else {
+      return fail(400, 'Rejected posts can only be approved (published).');
+    }
+  } else if (POST_MODERATION_STATUSES.includes(currentStatus)) {
+    if (!POST_MODERATION_STATUSES.includes(status)) {
+      return fail(400, 'status must be one of: published, hidden, removed.');
+    }
+    post.status = status;
+  } else {
+    return fail(400, 'This post cannot be moderated.');
+  }
+
   post.updated_at = new Date();
   await post.save();
 
   const mapped = await mapPostRecords([post.toObject()], { includePartner: true });
-  return ok(200, { message: 'Post moderated successfully.', post: mapped[0] });
+  const message =
+    currentStatus === POST_STATUS_PENDING || currentStatus === POST_STATUS_REJECTED
+      ? 'Post review updated successfully.'
+      : 'Post moderated successfully.';
+  return ok(200, { message, post: mapped[0] });
 };
 
 const updateReportStatus = async (reportId, body) => {

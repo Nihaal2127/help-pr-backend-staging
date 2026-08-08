@@ -206,6 +206,15 @@ Content-Type: application/json
 | `rejected` | `published` (admin override) |
 | `published` / `hidden` / `removed` | `published`, `hidden`, `removed` |
 
+**Push notification:** When a post moves to `published` or `rejected` from the approval flow (`pending` → `published`/`rejected`, or `rejected` → `published`), the partner receives an in-app notification and Firebase push (if enabled in their notification settings).
+
+| Event | Title | Recipient |
+|-------|-------|-----------|
+| `PARTNER_POST_APPROVED` | Post approved | Post owner (partner) |
+| `PARTNER_POST_REJECTED` | Post rejected | Post owner (partner) — body includes `rejection_reason` |
+
+Hide/remove moderation after publish does **not** trigger these events.
+
 ---
 
 ### 1.4 List customer reports

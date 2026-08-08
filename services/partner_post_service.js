@@ -14,6 +14,7 @@ const {
   POST_MODERATION_STATUSES,
 } = require('../enum/post_report_reason_enum');
 const { resolvePartnerPostListScope } = require('../utils/partner_post_access');
+const { safeNotifyPartnerPostReviewed } = require('../src/modules/notifications/services/domainHooks');
 const {
   fail,
   ok,
@@ -298,6 +299,21 @@ const moderatePost = async (req, postId, body) => {
 
   post.updated_at = new Date();
   await post.save();
+
+  const isApprovalReview =
+    (currentStatus === POST_STATUS_PENDING &&
+      (post.status === POST_STATUS_PUBLISHED || post.status === POST_STATUS_REJECTED)) ||
+    (currentStatus === POST_STATUS_REJECTED && post.status === POST_STATUS_PUBLISHED);
+
+  if (isApprovalReview) {
+    void safeNotifyPartnerPostReviewed({
+      post: post.toObject(),
+      partnerUserId: post.partner_id,
+      reviewStatus: post.status === POST_STATUS_PUBLISHED ? 'approved' : 'rejected',
+      rejectionReason: post.rejection_reason || '',
+      actorUserId: req.user?.id || req.user?._id || null,
+    });
+  }
 
   const mapped = await mapPostRecords([post.toObject()], { includePartner: true });
   const message =

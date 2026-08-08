@@ -3500,7 +3500,7 @@
         },
         {
           "name": "Posts",
-          "description": "Partner portfolio posts — `post_routes.js`. Requires verified partner. See `docs/PARTNER_POST_FRONTEND.md`.",
+          "description": "Partner portfolio posts — `post_routes.js`. Requires verified partner. See `docs/PARTNER_POST_API_REFERENCE.md` and `docs/PARTNER_POST_FRONTEND.md`.\n\n**Approval workflow:** create → `status: pending` → admin approves (`published`) or rejects (`rejected` + reason). Partner can **edit** or **delete** any own post.\n\n**Suggested order:** Order options → Create post → List own posts → Get post → Update post → Delete post.",
           "item": [
             {
               "name": "Order options",
@@ -3602,7 +3602,7 @@
                     "posts"
                   ]
                 },
-                "description": "**POST /api/mobile/partner/posts** — multipart, 1-4 images."
+                "description": "**POST /api/mobile/partner/posts** — multipart, 1–4 images.\n\n| Field | Required | Notes |\n|-------|----------|--------|\n| `post_type` | Yes | `order` or `legacy_work` |\n| `description` | Yes | Max 500 chars |\n| `order_id` | If `order` | Completed order ID |\n| `legacy_service_name` | If `legacy_work` | Min 3 chars |\n| `images` | Yes | 1–4 JPEG/PNG files |\n\n**201:** `message: Post submitted for approval.` — `data.status` is `pending`.\n\nSets `{{postId}}` and `{{postShareToken}}` from response."
               },
               "response": []
             },
@@ -3638,7 +3638,7 @@
                     }
                   ]
                 },
-                "description": "**GET /api/mobile/partner/posts**"
+                "description": "**GET /api/mobile/partner/posts** — paginated list of own posts.\n\nIncludes all statuses: `pending`, `published`, `rejected`, `hidden`, `removed`. Each record has `status` and `rejection_reason`."
               },
               "response": []
             },
@@ -3665,7 +3665,111 @@
                     "{{postId}}"
                   ]
                 },
-                "description": "**GET /api/mobile/partner/posts/:postId**"
+                "description": "**GET /api/mobile/partner/posts/:postId** — single own post.\n\n**200 `data`:** full post including `status`, `rejection_reason`, `linked`, `partner`."
+              },
+              "response": []
+            },
+            {
+              "name": "Update post (description only)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Post updated', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "  });",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "description",
+                      "value": "Updated description from Postman.",
+                      "type": "text",
+                      "description": "Max 500 chars"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/posts/{{postId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "partner",
+                    "posts",
+                    "{{postId}}"
+                  ]
+                },
+                "description": "**PUT /api/mobile/partner/posts/:postId** — edit description and/or images.\n\n| Field | Required | Notes |\n|-------|----------|--------|\n| `description` | No | Max 500 chars; cannot be empty if sent |\n| `keep_existing_images` | No | JSON array of image URLs to retain |\n| `images` | No | 1–4 new JPEG/PNG files |\n\n**Behaviour:**\n- `published` post → stays `published` (live immediately)\n- `rejected` post → resets to `pending`, clears `rejection_reason`\n- Final image count must be 1–4\n\n**200:**\n```json\n{\n  \"success\": true,\n  \"status\": 200,\n  \"message\": \"Post updated successfully.\",\n  \"data\": { \"_id\": \"...\", \"status\": \"published\", \"rejection_reason\": \"\", \"...\": \"...\" }\n}\n```\n\nSee `docs/PARTNER_POST_API_REFERENCE.md` §2.5."
+              },
+              "response": []
+            },
+            {
+              "name": "Update post (resubmit rejected)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "description",
+                      "value": "Re-uploaded with clearer photos.",
+                      "type": "text"
+                    },
+                    {
+                      "key": "keep_existing_images",
+                      "value": "[\"partner_post/existing_uuid.jpg\"]",
+                      "type": "text",
+                      "description": "JSON array — replace with real URLs from Get post response"
+                    },
+                    {
+                      "key": "images",
+                      "type": "file",
+                      "src": [],
+                      "description": "Optional new image file(s)"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/posts/{{postId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "partner",
+                    "posts",
+                    "{{postId}}"
+                  ]
+                },
+                "description": "**PUT /api/mobile/partner/posts/:postId** — resubmit after admin rejection.\n\nUse when `data.status` is `rejected`. After update, `status` becomes `pending` and `rejection_reason` is cleared.\n\nSet `keep_existing_images` from **Get post** `image_urls` you want to keep; attach new files in `images` if needed."
               },
               "response": []
             },
@@ -3692,7 +3796,7 @@
                     "{{postId}}"
                   ]
                 },
-                "description": "**DELETE /api/mobile/partner/posts/:postId**"
+                "description": "**DELETE /api/mobile/partner/posts/:postId** — soft delete own post.\n\n**Body:** None\n\nWorks for all statuses: `pending`, `published`, `rejected`, `hidden`, `removed`.\n\n**200:**\n```json\n{\n  \"success\": true,\n  \"status\": 200,\n  \"message\": \"Post deleted successfully.\"\n}\n```\n\n**404:** `Post not found.` (wrong id, not owned, or already deleted).\n\nSee `docs/PARTNER_POST_API_REFERENCE.md` §2.6."
               },
               "response": []
             }
@@ -6714,7 +6818,7 @@
         },
         {
           "name": "Posts",
-          "description": "Customer post feed, gallery, liked/saved lists, like, save, share, report — `post_routes.js`. See `docs/PARTNER_POST_FRONTEND.md`.\n\n**Suggested order:** **Home** (sets `{{franchiseId}}`) → **Feed** (sets `{{postId}}`) → **Like post** / **Save post** → **Liked posts** / **Saved posts**.",
+          "description": "Customer post feed, gallery, liked/saved lists, like, save, share, report — `post_routes.js`. See `docs/PARTNER_POST_API_REFERENCE.md` §3 and `docs/PARTNER_POST_FRONTEND.md`.\n\n**Suggested order:** **Home** (sets `{{franchiseId}}`) → **Feed** (sets `{{postId}}`) → **Like post** / **Save post** / **Report post** → **Liked posts** / **Saved posts**.",
           "item": [
             {
               "name": "Feed",

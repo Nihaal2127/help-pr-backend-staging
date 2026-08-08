@@ -3,7 +3,13 @@ const { USER_TYPE_ADMIN } = require("../../../../constants/user_types");
 
 const addId = (set, value) => {
   if (value == null || value === "") return;
-  set.add(String(value));
+  // Support ObjectId, string id, or populated `{ _id }` docs.
+  const id =
+    typeof value === "object" && value._id != null ? value._id : value;
+  if (id == null || id === "") return;
+  const key = String(id);
+  if (!key || key === "[object Object]") return;
+  set.add(key);
 };
 
 /**

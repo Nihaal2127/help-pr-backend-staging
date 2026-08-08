@@ -43,7 +43,13 @@ const parseObjectId = (raw, fieldName) => {
 const generateShareToken = () => uuidv4().replace(/-/g, '');
 
 const buildShareUrl = (shareToken) => {
-  const base = String(process.env.MOBILE_APP_DEEP_LINK_BASE || 'helppr://post').replace(/\/$/, '');
+  // HTTPS share links open in WhatsApp/SMS browsers, then deep-link into the app.
+  // Override with POST_SHARE_WEB_BASE_URL if needed (default matches https://helppr.in/post/:token).
+  const base = String(
+    process.env.POST_SHARE_WEB_BASE_URL ||
+      process.env.MOBILE_APP_SHARE_WEB_BASE ||
+      'https://helppr.in/post'
+  ).replace(/\/$/, '');
   return `${base}/${shareToken}`;
 };
 

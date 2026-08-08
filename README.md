@@ -86,7 +86,8 @@ Typical variables (set in `.env` or Lambda console):
 - `MONGO_URI` — MongoDB connection string
 - `JWT_SECRET` — JWT signing secret
 - `PORT` — Local port (default `5001`)
-- `MOBILE_APP_DEEP_LINK_BASE` — Base URL for post share deep links (default `helppr://post`)
+- `POST_SHARE_WEB_BASE_URL` — HTTPS base for post share links (default `https://helppr.in/post`) → `https://helppr.in/post/{share_token}`
+- `MOBILE_APP_DEEP_LINK_BASE` — Legacy env name; prefer `POST_SHARE_WEB_BASE_URL` for share URLs. Deep link scheme used by `/post/:token` page is `helppr://post/{token}`
 - AWS / S3, Razorpay, Firebase, mail — per integration
 
 **WhatsApp OTP (customer mobile login):**

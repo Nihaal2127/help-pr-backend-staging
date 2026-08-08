@@ -66,6 +66,7 @@ GET /api/partner-post/getCounts
   "status": 200,
   "message": "Post counts fetched successfully.",
   "record": {
+    "total": 134,
     "post_pending": 5,
     "published": 120,
     "rejected": 3,
@@ -80,8 +81,11 @@ GET /api/partner-post/getCounts
 
 | Key | Meaning |
 |-----|---------|
-| `post_pending` / `published` / `rejected` / `hidden` / `removed` | Post status buckets |
-| `pending` / `reviewed` / `dismissed` | Customer **report** queue |
+| `total` | All in-scope posts (`post_pending` + `published` + `rejected` + `hidden` + `removed`) |
+| `post_pending` / `published` / `rejected` / `hidden` / `removed` | Post status buckets — match `GET /getAll?status=<value>` |
+| `pending` / `reviewed` / `dismissed` | Customer **report** queue — match `GET /reports?status=<value>` |
+
+**Note:** `pending` here means **report** status, not post approval. Use `post_pending` for posts awaiting admin approval.
 
 ---
 
@@ -168,6 +172,8 @@ Content-Type: application/json
 }
 ```
 
+`rejection_reason` is required when rejecting (max 500 characters).
+
 **After published — hide / remove / republish:**
 
 ```json
@@ -206,14 +212,18 @@ Content-Type: application/json
 | `rejected` | `published` (admin override) |
 | `published` / `hidden` / `removed` | `published`, `hidden`, `removed` |
 
-**Push notification:** When a post moves to `published` or `rejected` from the approval flow (`pending` → `published`/`rejected`, or `rejected` → `published`), the partner receives an in-app notification and Firebase push (if enabled in their notification settings).
+**Push notification:** When a post moves to `published` or `rejected` from the approval flow (`pending` → `published`/`rejected`, or `rejected` → `published`), the partner receives an in-app notification and Firebase push (if enabled in their notification settings). The notification is **awaited** before the API responds so Lambda does not drop the FCM send.
 
 | Event | Title | Recipient |
 |-------|-------|-----------|
 | `PARTNER_POST_APPROVED` | Post approved | Post owner (partner) |
 | `PARTNER_POST_REJECTED` | Post rejected | Post owner (partner) — body includes `rejection_reason` |
+| `PARTNER_POST_HIDDEN` | Post hidden after publish | Post owner (partner) |
+| `PARTNER_POST_REMOVED` | Post removed after publish | Post owner (partner) |
 
-Hide/remove moderation after publish does **not** trigger these events.
+**Back-office notification (in-app):** When a partner submits a post (`POST /api/mobile/partner/posts`, order completion with `publish_as_post`, or **resubmit** after rejection via `PUT /api/mobile/partner/posts/:postId`), admins receive `PARTNER_POST_PENDING_REVIEW` (super admin, staff, franchise admin, employee for that franchise).
+
+When an admin hides or removes a live post (`published`/`hidden` → `hidden`/`removed`), the partner receives `PARTNER_POST_HIDDEN` or `PARTNER_POST_REMOVED` (in-app + push).
 
 ---
 
@@ -222,6 +232,8 @@ Hide/remove moderation after publish does **not** trigger these events.
 ```
 GET /api/partner-post/reports?page=1&limit=10&status=pending
 ```
+
+Uses the same franchise role scope as `getAll` and `getCounts` (only reports whose parent post is in scope). Optional query: `franchise_id`, `partner_id`.
 
 **200 `records[]` item:**
 
@@ -427,8 +439,8 @@ Content-Type: multipart/form-data
 
 | Post status | After edit |
 |-------------|------------|
-| `rejected` | Resets to `pending`; `rejection_reason` cleared |
-| `published` | Stays `published` (changes go live immediately) |
+| `rejected` | Resets to `pending`; `rejection_reason` cleared; admins notified (`PARTNER_POST_PENDING_REVIEW`) |
+| `published` | Stays `published` (changes go live immediately — no re-approval) |
 | `pending` | Stays `pending` |
 | `hidden` / `removed` | Status unchanged |
 

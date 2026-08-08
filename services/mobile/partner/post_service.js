@@ -27,6 +27,7 @@ const {
   POST_TYPE_ORDER,
   POST_TYPE_LEGACY_WORK,
 } = require('../../../services/partner_post_common_service');
+const { safeNotifyBackofficePartnerPostPending } = require('../../../src/modules/notifications/services/backofficeHooks');
 
 const uploadPostImages = async (files) => {
   const uploadType = getUploadType(5);
@@ -166,6 +167,11 @@ const createPartnerPost = async (partnerId, body, files) => {
     created_at: now,
     updated_at: now,
     deleted_at: null,
+  });
+
+  await safeNotifyBackofficePartnerPostPending({
+    post: post.toObject(),
+    actorUserId: partnerId,
   });
 
   const mapped = await mapPostRecords([post.toObject()], { includePartner: true });
@@ -350,13 +356,21 @@ const updatePartnerPost = async (partnerId, postId, body, files) => {
 
   updates.image_urls = finalImages;
 
-  if (post.status === POST_STATUS_REJECTED) {
+  const wasRejected = post.status === POST_STATUS_REJECTED;
+  if (wasRejected) {
     updates.status = POST_STATUS_PENDING;
     updates.rejection_reason = '';
   }
 
   Object.assign(post, updates);
   await post.save();
+
+  if (wasRejected) {
+    await safeNotifyBackofficePartnerPostPending({
+      post: post.toObject(),
+      actorUserId: partnerId,
+    });
+  }
 
   const mapped = await mapPostRecords([post.toObject()], { includePartner: true });
   return ok(200, { message: 'Post updated successfully.', post: mapped[0] });

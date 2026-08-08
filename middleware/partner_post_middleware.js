@@ -2,7 +2,9 @@ const mongoose = require('mongoose');
 const {
   normalizePostStatus,
   normalizeReportStatus,
+  POST_STATUS_REJECTED,
 } = require('../enum/post_report_reason_enum');
+const { parseRejectionReason } = require('../services/partner_post_common_service');
 
 const sendError = (res, status, message) =>
   res.status(status).json({
@@ -29,6 +31,13 @@ const validateModeratePostBody = (req, res, next) => {
   const status = normalizePostStatus(req.body?.status);
   if (!status) {
     return sendError(res, 400, 'status must be one of: published, hidden, removed, rejected.');
+  }
+  if (status === POST_STATUS_REJECTED) {
+    const parsed = parseRejectionReason(req.body?.rejection_reason);
+    if (!parsed.ok) {
+      return sendError(res, 400, parsed.message);
+    }
+    req.body.rejection_reason = parsed.text;
   }
   req.body.status = status;
   next();

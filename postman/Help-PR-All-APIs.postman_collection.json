@@ -13671,8 +13671,70 @@
     },
     {
       "name": "43 — Partner post management",
-      "description": "**/api/partner-post** — Admin back-office moderation for partner portfolio posts (user-feed work samples).\n\n**Frontend doc:** `docs/PARTNER_POST_FRONTEND.md` §6\n\n**Access:** Super admin (5), staff (6), franchise admin (1), employee (3) — back-office JWT only. Partner (2) & customer (4) → **403**.\n\n**Auth:** `Bearer {{accessToken}}` (run **00 — Auth → Login**).\n\n**Flow:** 1 getAll (browse posts) → 2 reports (moderation queue) → 3 moderate post → 4 update report\n\n**Variables:** `partnerPostId` from getAll/reports · `partnerPostReportId` from reports · optional `franchiseId` / `partnerMongoId` filters on getAll",
+      "description": "**/api/partner-post** — Admin back-office moderation for partner portfolio posts (user-feed work samples).\n\n**Frontend doc:** `docs/PARTNER_POST_ADMIN_FRONTEND.md` · `docs/PARTNER_POST_API_REFERENCE.md` §1\n\n**Access:** Super admin (5), staff (6), franchise admin (1), employee (3) — back-office JWT only. Partner (2) & customer (4) → **403**.\n\n**Auth:** `Bearer {{accessToken}}` (run **00 — Auth → Login**).\n\n**Flow:** 0 getCounts (dashboard tabs) → 1 getAll (browse posts) → 2 reports (moderation queue) → 3 moderate post → 4 update report\n\n**Variables:** `partnerPostId` from getAll/reports · `partnerPostReportId` from reports · optional `franchiseId` / `partnerMongoId` filters",
       "item": [
+        {
+          "name": "0. Get counts (dashboard tabs)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Post counts fetched', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.record).to.be.an('object');",
+                  "    pm.expect(j.record).to.have.property('post_pending');",
+                  "    pm.expect(j.record).to.have.property('rejected');",
+                  "  });",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/partner-post/getCounts?franchise_id={{franchiseId}}&partner_id={{partnerMongoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "partner-post",
+                "getCounts"
+              ],
+              "query": [
+                {
+                  "key": "franchise_id",
+                  "value": "{{franchiseId}}",
+                  "description": "Optional franchise Mongo _id"
+                },
+                {
+                  "key": "partner_id",
+                  "value": "{{partnerMongoId}}",
+                  "description": "Optional partner Mongo _id"
+                }
+              ]
+            },
+            "description": "**GET /api/partner-post/getCounts** — Dashboard tab counts for post management.\n\n**200 `record`:**\n- `total` — all in-scope posts\n- `post_pending`, `published`, `rejected`, `hidden`, `removed` — post status buckets (match `GET /getAll?status=...`)\n- `pending`, `reviewed`, `dismissed` — customer **report** queue (match `GET /reports?status=...`)\n\n**Note:** `pending` = report status. Use `post_pending` for posts awaiting approval.\n\nAlso available via **POST /api/getCount** with `{ \"type\": \"partner-post-management\" }` (type **16**). See `docs/GET_COUNT_API_FRONTEND.txt`."
+          },
+          "description": "\n\n_Source: builtin:partner_post_management → Get counts_"
+        },
         {
           "name": "1. Get all posts",
           "event": [
@@ -13734,7 +13796,7 @@
                 {
                   "key": "status",
                   "value": "",
-                  "description": "Optional: published | hidden | removed"
+                  "description": "Optional: pending | published | rejected | hidden | removed"
                 },
                 {
                   "key": "partner_id",
@@ -13748,7 +13810,7 @@
                 }
               ]
             },
-            "description": "**GET /api/partner-post/getAll** — Paginated list of partner posts for admin moderation.\n\n| Query | Required | Notes |\n|-------|----------|--------|\n| `page` | No | Default 1 (`{{page}}`) |\n| `limit` | No | Default 10, max 100 (`{{limit}}`) |\n| `status` | No | `published` \\| `hidden` \\| `removed` |\n| `partner_id` | No | Partner Mongo `_id` (`{{partnerMongoId}}`) |\n| `franchise_id` | No | Franchise Mongo `_id` (`{{franchiseId}}`) |\n\n**200:** `success`, `records[]` (post + nested `partner`), `totalItems`, `totalPages`, `currentPage`, `limit`.\n\nTest script sets `partnerPostId` from first record."
+            "description": "**GET /api/partner-post/getAll** — Paginated list of partner posts for admin moderation.\n\n| Query | Required | Notes |\n|-------|----------|--------|\n| `page` | No | Default 1 (`{{page}}`) |\n| `limit` | No | Default 10, max 100 (`{{limit}}`) |\n| `status` | No | `pending` \\| `published` \\| `rejected` \\| `hidden` \\| `removed` |\n| `partner_id` | No | Partner Mongo `_id` (`{{partnerMongoId}}`) |\n| `franchise_id` | No | Franchise Mongo `_id` (`{{franchiseId}}`) |\n\n**200:** `success`, `records[]` (post + nested `partner`), `totalItems`, `totalPages`, `currentPage`, `limit`.\n\nTest script sets `partnerPostId` from first record."
           },
           "description": "\n\n_Source: builtin:partner_post_management → Get all posts_"
         },

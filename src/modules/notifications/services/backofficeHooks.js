@@ -1,4 +1,5 @@
 const { notify } = require("./notification.service");
+const User = require("../../../../models/user");
 const {
   resolveSuperAdminStaffRecipients,
   resolveFranchiseBackofficeRecipients,
@@ -20,6 +21,13 @@ const notifyBackoffice = (params) => notify({ ...params, skipPush: true });
 
 const franchiseSuffix = (franchiseName) =>
   franchiseName ? ` (${franchiseName})` : "";
+
+const truncatePostDescription = (value, maxLen = 60) => {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  if (text.length <= maxLen) return text;
+  return `${text.slice(0, maxLen - 1)}…`;
+};
 
 const safeNotifyBackofficeCategoryRequested = async ({ category, actorUserId }) => {
   await runSafe("backoffice.category_requested", async () => {
@@ -407,6 +415,41 @@ const safeNotifyBackofficeSubscriptionChanged = async ({
   });
 };
 
+const safeNotifyBackofficePartnerPostPending = async ({ post, actorUserId }) => {
+  await runSafe("backoffice.partner_post_pending", async () => {
+    if (!post?._id) return;
+
+    const franchiseId = post.franchise_id || null;
+    const franchiseName = await loadFranchiseName(franchiseId);
+    const recipients = await resolveSuperAdminAndFranchiseRecipients(franchiseId);
+    if (!recipients.length) return;
+
+    const partner = post.partner_id
+      ? await User.findById(post.partner_id).select("name").lean()
+      : null;
+
+    await notifyBackoffice({
+      eventKey: "PARTNER_POST_PENDING_REVIEW",
+      actorUserId,
+      recipientUserIds: recipients,
+      context: {
+        partnerName: partner?.name || "",
+        franchiseName,
+        postDescription: truncatePostDescription(post.description),
+      },
+      entityType: "partner_post",
+      entityId: post._id,
+      franchiseId,
+      metadata: {
+        post_id: post._id,
+        partner_id: post.partner_id || null,
+        status: "pending",
+      },
+      dedupeKeyPrefix: `backoffice.partner_post.pending:${post._id}`,
+    });
+  });
+};
+
 const safeNotifyBackofficeChatMessage = async ({
   recipientUserIds,
   senderName,
@@ -462,5 +505,6 @@ module.exports = {
   safeNotifyBackofficeOrderStatusChanged,
   safeNotifyBackofficeOrderPayment,
   safeNotifyBackofficeSubscriptionChanged,
+  safeNotifyBackofficePartnerPostPending,
   safeNotifyBackofficeChatMessage,
 };

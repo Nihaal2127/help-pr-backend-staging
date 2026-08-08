@@ -36,7 +36,7 @@ const getPostCountsHandler = async (req, res) => {
 
 const listReportsHandler = async (req, res) => {
   try {
-    const result = await listReports(req.query);
+    const result = await listReports(req, req.query);
 
     if (!result.ok) {
       return res.status(result.status).json({

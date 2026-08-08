@@ -11,7 +11,7 @@ const Category = require('../models/category');
 const Service = require('../models/service');
 const { USER_TYPE_PARTNER } = require('../constants/user_types');
 const { POST_TYPE_ORDER, POST_TYPE_LEGACY_WORK } = require('../enum/post_type_enum');
-const { POST_STATUS_PUBLISHED } = require('../enum/post_report_reason_enum');
+const { POST_STATUS_PENDING, POST_STATUS_PUBLISHED } = require('../enum/post_report_reason_enum');
 const { ORDER_STATUS_COMPLETED } = require('../enum/order_status_enum');
 
 const fail = (status, message) => ({ ok: false, status, message });
@@ -231,7 +231,7 @@ const createOrderPostFromUrls = async (partnerId, orderId, imageUrls, descriptio
     legacy_service_name: '',
     description: descParsed.text,
     image_urls: urls,
-    status: POST_STATUS_PUBLISHED,
+    status: POST_STATUS_PENDING,
     share_token: generateShareToken(),
     likes_count: 0,
     shares_count: 0,
@@ -498,6 +498,7 @@ const mapPostRecord = (post, options = {}) => {
     description: post.description,
     image_urls: post.image_urls || [],
     status: post.status,
+    rejection_reason: post.rejection_reason || '',
     share_token: post.share_token,
     share_url: buildShareUrl(post.share_token),
     likes_count: post.likes_count ?? 0,

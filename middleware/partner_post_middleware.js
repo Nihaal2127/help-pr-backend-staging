@@ -28,7 +28,7 @@ const validateReportIdParam = (req, res, next) => {
 const validateModeratePostBody = (req, res, next) => {
   const status = normalizePostStatus(req.body?.status);
   if (!status) {
-    return sendError(res, 400, 'status must be one of: published, hidden, removed.');
+    return sendError(res, 400, 'status must be one of: published, hidden, removed, rejected.');
   }
   req.body.status = status;
   next();

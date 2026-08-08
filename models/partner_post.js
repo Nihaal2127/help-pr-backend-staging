@@ -45,7 +45,7 @@ const partnerPostSchema = new mongoose.Schema(
       default: POST_STATUS_PENDING,
       trim: true,
     },
-    rejection_reason: { type: String, default: '', trim: true },
+    rejection_reason: { type: String, default: '', trim: true, maxlength: 500 },
     share_token: { type: String, required: true, trim: true, unique: true },
     likes_count: { type: Number, default: 0, min: 0 },
     shares_count: { type: Number, default: 0, min: 0 },

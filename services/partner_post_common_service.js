@@ -13,6 +13,7 @@ const { USER_TYPE_PARTNER } = require('../constants/user_types');
 const { POST_TYPE_ORDER, POST_TYPE_LEGACY_WORK } = require('../enum/post_type_enum');
 const { POST_STATUS_PENDING, POST_STATUS_PUBLISHED } = require('../enum/post_report_reason_enum');
 const { ORDER_STATUS_COMPLETED } = require('../enum/order_status_enum');
+const { safeNotifyBackofficePartnerPostPending } = require('../src/modules/notifications/services/backofficeHooks');
 
 const fail = (status, message) => ({ ok: false, status, message });
 const ok = (status, data) => ({ ok: true, status, data });
@@ -23,6 +24,7 @@ const MAX_LIMIT = 50;
 const MIN_IMAGES = 1;
 const MAX_IMAGES = 4;
 const MAX_DESCRIPTION_LENGTH = 500;
+const MAX_POST_REJECTION_REASON_LENGTH = 500;
 const MIN_LEGACY_SERVICE_NAME_LENGTH = 3;
 
 const OBJECT_ID_HEX_24 = /^[a-fA-F0-9]{24}$/;
@@ -207,6 +209,20 @@ const parsePostDescription = (value) => {
   return { ok: true, text };
 };
 
+const parseRejectionReason = (raw) => {
+  const text = String(raw ?? '').trim();
+  if (!text) {
+    return { ok: false, message: 'rejection_reason is required when status is rejected.' };
+  }
+  if (text.length > MAX_POST_REJECTION_REASON_LENGTH) {
+    return {
+      ok: false,
+      message: `rejection_reason must be at most ${MAX_POST_REJECTION_REASON_LENGTH} characters.`,
+    };
+  }
+  return { ok: true, text };
+};
+
 /**
  * Create an order-linked partner post from pre-uploaded image URLs (e.g. order completion flow).
  * Order must already be completed and not linked to another post.
@@ -245,6 +261,11 @@ const createOrderPostFromUrls = async (partnerId, orderId, imageUrls, descriptio
     created_at: now,
     updated_at: now,
     deleted_at: null,
+  });
+
+  await safeNotifyBackofficePartnerPostPending({
+    post: post.toObject(),
+    actorUserId: partnerId,
   });
 
   const mapped = await mapPostRecords([post.toObject()], { includePartner: true });
@@ -647,6 +668,8 @@ module.exports = {
   MIN_IMAGES,
   MAX_IMAGES,
   MAX_DESCRIPTION_LENGTH,
+  MAX_POST_REJECTION_REASON_LENGTH,
+  parseRejectionReason,
   MIN_LEGACY_SERVICE_NAME_LENGTH,
   parsePositiveInt,
   parseObjectId,

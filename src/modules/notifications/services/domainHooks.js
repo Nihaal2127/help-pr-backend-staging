@@ -629,6 +629,36 @@ const safeNotifyPartnerPostReviewed = async ({
   });
 };
 
+const safeNotifyPartnerPostModerated = async ({
+  post,
+  partnerUserId,
+  moderationStatus,
+  actorUserId,
+}) => {
+  await runSafe("partner.post_moderated", async () => {
+    const status = String(moderationStatus || "").toLowerCase();
+    if (status !== "hidden" && status !== "removed") return;
+
+    const eventKey = status === "hidden" ? "PARTNER_POST_HIDDEN" : "PARTNER_POST_REMOVED";
+    const postDescription = truncatePostDescription(post?.description);
+
+    await notify({
+      eventKey,
+      actorUserId,
+      recipientUserIds: [partnerUserId],
+      context: { post, postDescription },
+      entityType: "partner_post",
+      entityId: post?._id,
+      franchiseId: post?.franchise_id || null,
+      metadata: {
+        post_id: post?._id || null,
+        status,
+      },
+      dedupeKeyPrefix: `partner.post.moderated:${post?._id}:${status}:${post?.updated_at ? new Date(post.updated_at).toISOString() : Date.now()}`,
+    });
+  });
+};
+
 const safeNotifyPartnerVerificationUpdated = async ({
   partnerUserId,
   verificationStatus,
@@ -977,6 +1007,7 @@ module.exports = {
   safeNotifyPartnerWorkCompleted,
   safeNotifyQuoteAssigned,
   safeNotifyPartnerPostReviewed,
+  safeNotifyPartnerPostModerated,
   safeNotifyPartnerVerificationUpdated,
   safeNotifyOrderAdditionalChargeUpdated,
   safeNotifyOrderAdditionalChargeRemoved,

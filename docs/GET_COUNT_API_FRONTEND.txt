@@ -170,20 +170,25 @@ ORDER-MANAGEMENT (TYPE 14) — "record" KEYS (four dashboard cards)
   Buckets are mutually exclusive (refunded tab wins when payment rollup shows refund).
 
 --------------------------------------------------------------------------------
-PARTNER-POST-MANAGEMENT (TYPE 16) — "record" KEYS (six dashboard cards)
+PARTNER-POST-MANAGEMENT (TYPE 16) — "record" KEYS (nine dashboard cards + total)
 --------------------------------------------------------------------------------
 
   Post status (partner_post.status, deleted_at null):
 
-  published     Live posts — same bucket as GET /api/partner-post/getAll?status=published
-  hidden        Admin-hidden posts
-  removed       Admin-removed posts
+  total         All in-scope posts (sum of post status buckets below)
+  post_pending  Awaiting admin approval — GET /api/partner-post/getAll?status=pending
+  published     Live posts — GET /api/partner-post/getAll?status=published
+  rejected      Admin-rejected posts — GET /api/partner-post/getAll?status=rejected
+  hidden        Admin-hidden posts — GET /api/partner-post/getAll?status=hidden
+  removed       Admin-removed posts — GET /api/partner-post/getAll?status=removed
 
   Report status (partner_post_report.status, parent post in scope):
 
   pending       Customer reports awaiting review — GET /api/partner-post/reports?status=pending
   reviewed      Reports marked handled
   dismissed     Reports closed with no post action
+
+  IMPORTANT: "pending" in record = REPORT status. Use post_pending for posts awaiting approval.
 
   Standalone (same buckets):
     GET /api/partner-post/getCounts?franchise_id=<optional>&partner_id=<optional>

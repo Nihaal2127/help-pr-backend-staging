@@ -10,7 +10,7 @@
 
 ## 1. Overview
 
-Partner posts are work-sample portfolio items (images + description) created by partners via the mobile app. They are **auto-published** on create — there is no pre-moderation step before a post goes live.
+Partner posts require **admin approval** before they go live. On create, posts start as `pending`; admins approve (`published`) or reject (`rejected` + reason) via the moderate API.
 
 Admins manage posts through five back-office endpoints:
 
@@ -79,13 +79,15 @@ Image URLs in `image_urls` are CDN-prefixed by the global response middleware in
 
 | Status | Meaning | Customer visibility |
 |--------|---------|-------------------|
-| `published` | Live (default on create) | Visible in feed, profile, detail, share |
+| `pending` | Awaiting admin approval (default on create) | Hidden |
+| `published` | Approved / live | Visible in feed, profile, detail, share |
+| `rejected` | Admin rejected (`rejection_reason` set) | Hidden |
 | `hidden` | Temporarily hidden by admin | Hidden from customers |
 | `removed` | Taken down by admin | Hidden from customers |
 
 Posts also have `deleted_at` for soft-delete. Admin `getAll` and `moderate` only operate on posts where `deleted_at` is `null`.
 
-**Customer-facing APIs** only return posts with `status: published` and `deleted_at: null`. Partners can still see their own `hidden` / `removed` posts in the partner app post list.
+**Customer-facing APIs** only return posts with `status: published` and `deleted_at: null`. Partners can still see their own posts in all statuses in the partner app post list.
 
 ### 3.2 Report status (`PartnerPostReport.status`)
 
@@ -172,7 +174,10 @@ GET /api/partner-post/getCounts?franchise_id=665a1b2c3d4e5f6789012346&partner_id
   "status": 200,
   "message": "Post counts fetched successfully.",
   "record": {
+    "total": 134,
+    "post_pending": 5,
     "published": 120,
+    "rejected": 3,
     "hidden": 4,
     "removed": 2,
     "pending": 3,
@@ -186,20 +191,23 @@ GET /api/partner-post/getCounts?franchise_id=665a1b2c3d4e5f6789012346&partner_id
 
 | Key | Source | Matches list filter |
 |-----|--------|---------------------|
+| `total` | Sum of all post status buckets below | `GET /getAll` (no status filter) |
+| `post_pending` | Posts with `status: pending` | `GET /getAll?status=pending` |
 | `published` | Posts with `status: published` | `GET /getAll?status=published` |
+| `rejected` | Posts with `status: rejected` | `GET /getAll?status=rejected` |
 | `hidden` | Posts with `status: hidden` | `GET /getAll?status=hidden` |
 | `removed` | Posts with `status: removed` | `GET /getAll?status=removed` |
 | `pending` | Reports with `status: pending` on in-scope posts | `GET /reports?status=pending` |
 | `reviewed` | Reports with `status: reviewed` on in-scope posts | `GET /reports?status=reviewed` |
 | `dismissed` | Reports with `status: dismissed` on in-scope posts | `GET /reports?status=dismissed` |
 
-Post counts (`published`, `hidden`, `removed`) and report counts (`pending`, `reviewed`, `dismissed`) are **independent dimensions**. A post can be `published` while it has `pending` reports.
+Post counts (`post_pending`, `published`, `rejected`, `hidden`, `removed`) and report counts (`pending`, `reviewed`, `dismissed`) are **independent dimensions**. **`pending` in this response is report status** — use `post_pending` for the approval queue.
 
 Report counts only include reports whose **parent post** matches the scope (`deleted_at: null`, plus `franchise_id` / `partner_id` filters).
 
 ### 5.3 POST /api/getCount (type 16)
 
-Same six keys in `record`:
+Same nine keys in `record` (plus `total`):
 
 ```json
 POST /api/getCount
@@ -209,6 +217,8 @@ POST /api/getCount
   "partner_id": "<optional ObjectId>"
 }
 ```
+
+**200 `record`:** `total`, `post_pending`, `published`, `rejected`, `hidden`, `removed`, `pending`, `reviewed`, `dismissed`.
 
 Aliases: `partner_post_management`, `partner-posts`, `partner_posts`, `"16"`.
 
@@ -449,7 +459,7 @@ Mark a customer report as handled. Does not modify the post.
 
 | Screen | API | Notes |
 |--------|-----|-------|
-| Dashboard tab badges | `GET /getCounts` | Post tabs: published / hidden / removed · Report tabs: pending / reviewed / dismissed |
+| Dashboard tab badges | `GET /getCounts` | Post tabs: `post_pending` / `published` / `rejected` / `hidden` / `removed` · Report tabs: `pending` / `reviewed` / `dismissed` |
 | Moderation queue (default landing) | `GET /reports?status=pending` | Show reason, reporter, post preview, partner |
 | Report history | `GET /reports?status=reviewed` or `dismissed` | Audit past decisions |
 | All posts browser | `GET /getAll` | Filters: status, partner, franchise |

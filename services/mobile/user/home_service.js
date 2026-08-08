@@ -12,6 +12,7 @@ const {
 } = require('./franchise_partner_scope');
 const { enrichPartnerListRecordsWithServiceRatings } = require('./partner_rating_service');
 const { loadCustomerHomeOrders } = require('./home_orders_service');
+const { loadHomeCounts } = require('../common/home_counts_service');
 const { toPublicImageUrl } = require('../../../helper/publicImageUrl');
 
 /** Max partners returned on home (highest plan priority first). */
@@ -183,9 +184,10 @@ const getHomeForLocation = async ({ location, userId }) => {
       return fail(401, 'Invalid token.');
     }
 
-    const [franchiseCtx, orders] = await Promise.all([
+    const [franchiseCtx, orders, home_counts] = await Promise.all([
       resolveFranchiseFromLocation(location, { requireFranchise: false }),
       loadCustomerHomeOrders(userId),
+      loadHomeCounts(),
     ]);
     if (!franchiseCtx.ok) return franchiseCtx;
 
@@ -201,6 +203,7 @@ const getHomeForLocation = async ({ location, userId }) => {
           partners: [],
           banners: [],
           orders,
+          home_counts,
         },
       });
     }
@@ -242,6 +245,7 @@ const getHomeForLocation = async ({ location, userId }) => {
         partners: partnersWithRatings,
         banners: banners.map(toPublicImageUrl),
         orders,
+        home_counts,
       },
     });
   } catch (err) {

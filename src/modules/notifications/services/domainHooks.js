@@ -23,6 +23,13 @@ const runSafe = async (label, fn) => {
   }
 };
 
+const truncatePostDescription = (value, maxLen = 60) => {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  if (text.length <= maxLen) return text;
+  return `${text.slice(0, maxLen - 1)}…`;
+};
+
 const buildOrderMetadata = (order, extra = {}) => ({
   order_id: order?._id || null,
   order_unique_id: order?.unique_id || "",
@@ -581,6 +588,40 @@ const safeNotifyQuoteAssigned = async ({ quote, actorUserId }) => {
   });
 };
 
+const safeNotifyPartnerPostReviewed = async ({
+  post,
+  partnerUserId,
+  reviewStatus,
+  rejectionReason = "",
+  actorUserId,
+}) => {
+  await runSafe("partner.post_reviewed", async () => {
+    const isApproved = String(reviewStatus || "").toLowerCase() === "approved";
+    const eventKey = isApproved ? "PARTNER_POST_APPROVED" : "PARTNER_POST_REJECTED";
+    const postDescription = truncatePostDescription(post?.description);
+
+    await notify({
+      eventKey,
+      actorUserId,
+      recipientUserIds: [partnerUserId],
+      context: {
+        post,
+        postDescription,
+        rejectionReason: String(rejectionReason || "").trim(),
+      },
+      entityType: "partner_post",
+      entityId: post?._id,
+      franchiseId: post?.franchise_id || null,
+      metadata: {
+        post_id: post?._id || null,
+        status: isApproved ? "published" : "rejected",
+        rejection_reason: isApproved ? "" : String(rejectionReason || "").trim(),
+      },
+      dedupeKeyPrefix: `partner.post.reviewed:${post?._id}:${post?.updated_at ? new Date(post.updated_at).toISOString() : Date.now()}`,
+    });
+  });
+};
+
 const safeNotifyPartnerVerificationUpdated = async ({
   partnerUserId,
   verificationStatus,
@@ -928,6 +969,7 @@ module.exports = {
   safeNotifyPartnerWorkStarted,
   safeNotifyPartnerWorkCompleted,
   safeNotifyQuoteAssigned,
+  safeNotifyPartnerPostReviewed,
   safeNotifyPartnerVerificationUpdated,
   safeNotifyOrderAdditionalChargeUpdated,
   safeNotifyOrderAdditionalChargeRemoved,

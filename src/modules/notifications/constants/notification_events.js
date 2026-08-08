@@ -152,6 +152,29 @@ const NOTIFICATION_EVENTS = {
     body: () =>
       "Your partner verification was not approved. Please check your documents.",
   },
+  PARTNER_POST_APPROVED: {
+    category: "system",
+    title: () => "Post approved",
+    body: (ctx) => {
+      const preview = String(ctx.postDescription || "").trim();
+      if (preview) {
+        return `Your portfolio post "${preview}" has been approved and is now live.`;
+      }
+      return "Your portfolio post has been approved and is now live.";
+    },
+  },
+  PARTNER_POST_REJECTED: {
+    category: "system",
+    title: () => "Post rejected",
+    body: (ctx) => {
+      const preview = String(ctx.postDescription || "").trim();
+      const reason = String(ctx.rejectionReason || "").trim();
+      const base = preview
+        ? `Your portfolio post "${preview}" was not approved.`
+        : "Your portfolio post was not approved.";
+      return reason ? `${base} Reason: ${reason}` : base;
+    },
+  },
   ORDER_ADDITIONAL_CHARGE_UPDATED: {
     category: "order",
     title: () => "Additional charge updated",

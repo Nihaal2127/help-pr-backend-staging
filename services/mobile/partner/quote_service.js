@@ -210,10 +210,12 @@ const updatePartnerQuoteStatus = async (partnerId, quoteId, body) => {
 
     await quote.save();
 
-    void safeNotifyQuoteStatusChanged({
+    // Await so Lambda does not freeze before FCM send completes
+    // (callbackWaitsForEmptyEventLoop = false).
+    await safeNotifyQuoteStatusChanged({
       quote,
       previousStatus: oldStatus,
-      newStatus: quote.status,
+      newStatus: nextStatus,
       actorUserId: partnerId,
     });
 

@@ -2,6 +2,7 @@ const { notify } = require("./notification.service");
 const OrderPayment = require("../../../../models/order_payment");
 const OrderAdditionalCharge = require("../../../../models/order_additional_charge");
 const { formatAmount } = require("../constants/notification_events");
+const { normalizeQuoteStatus } = require("../../../../enum/quote_status_enum");
 const { resolveOrderRecipients } = require("../resolvers/orderRecipients");
 const { resolveQuoteRecipients } = require("../resolvers/quoteRecipients");
 const { resolveSubscriptionRecipients } = require("../resolvers/subscriptionRecipients");
@@ -363,26 +364,32 @@ const safeNotifyQuoteStatusChanged = async ({
   actorUserId,
 }) => {
   await runSafe("quote.status_changed", async () => {
-    if (!newStatus || newStatus === previousStatus) return;
+    const prev = normalizeQuoteStatus(previousStatus, quote) || previousStatus;
+    const next = normalizeQuoteStatus(newStatus, quote) || newStatus;
+    if (!next || String(next) === String(prev)) return;
 
     const recipients = await resolveQuoteRecipients(quote);
     await notify({
       eventKey: "QUOTE_STATUS_CHANGED",
       actorUserId,
       recipientUserIds: recipients,
-      context: { quote, previousStatus, newStatus },
+      context: { quote, previousStatus: prev, newStatus: next },
       entityType: "quote",
       entityId: quote._id,
       franchiseId: quote.franchise_id,
       metadata: {
         quote_id: quote._id,
         quote_sequence_id: quote.quote_sequence_id,
-        previousStatus,
-        newStatus,
+        previousStatus: prev,
+        newStatus: next,
       },
-      dedupeKeyPrefix: `quote.status:${quote._id}:${newStatus}`,
+      dedupeKeyPrefix: `quote.status:${quote._id}:${next}`,
     });
-    void safeNotifyBackofficeQuoteStatusChanged({ quote, newStatus, actorUserId });
+    await safeNotifyBackofficeQuoteStatusChanged({
+      quote,
+      newStatus: next,
+      actorUserId,
+    });
   });
 };
 

@@ -8,6 +8,11 @@ const PartnerSubscription = require('../../../models/partner_subscription');
 const partnerSubscriptionService = require('../../partner_subscription_service');
 const Franchise = require('../../../models/franchise');
 const { getNewId } = require('../../../helper/id_generator');
+const {
+  registerDeviceToken,
+  unregisterDeviceToken,
+  buildDeviceRegistrationOptions,
+} = require('../../../services/device_token_service');
 const { getDocumentList } = require('../../../controllers/document_controller');
 const {
   createMultiple,
@@ -602,7 +607,7 @@ const applyAppleProfileToPartner = (user, { email, name }) => {
   }
 };
 
-const finalizePartnerLogin = async (user, device_token) => {
+const finalizePartnerLogin = async (user, device_token, deviceOptions = {}) => {
   if (user.is_blocked === true) {
     return fail(403, 'Your account is blocked. Please contact support.');
   }
@@ -613,12 +618,48 @@ const finalizePartnerLogin = async (user, device_token) => {
   }
   await user.save();
 
+  if (device_token !== undefined && device_token !== null && String(device_token).trim() !== '') {
+    await registerDeviceToken({
+      userId: user._id,
+      ...buildDeviceRegistrationOptions({
+        device_token,
+        platform: deviceOptions.platform,
+        device_id: deviceOptions.device_id,
+      }),
+    });
+  }
+
   const data = await buildPartnerLoginData(user);
   if (!data) {
     return fail(500, 'Failed to load partner profile.');
   }
 
   return okWithData(data);
+};
+
+const logoutPartner = async ({ userId, device_token, device_id }) => {
+  const user = await User.findOne({
+    _id: userId,
+    type: USER_TYPE_PARTNER,
+    deleted_at: null,
+  });
+
+  if (!user) {
+    return fail(404, 'Partner not found.');
+  }
+
+  if (device_token || device_id) {
+    await unregisterDeviceToken({
+      userId,
+      deviceToken: device_token,
+      deviceId: device_id,
+    });
+  }
+
+  user.auth_token = null;
+  await user.save();
+
+  return okWithMessage(200, 'Logged out successfully.');
 };
 
 const tagRegisterError = (step, err) => {
@@ -814,7 +855,13 @@ const sendPartnerOtp = async ({ phone_number }) => {
   return deliveryResult;
 };
 
-const verifyPartnerOtpAndLogin = async ({ phone_number, device_token, validOtp }) => {
+const verifyPartnerOtpAndLogin = async ({
+  phone_number,
+  device_token,
+  validOtp,
+  platform,
+  device_id,
+}) => {
   const normalizedPhone = normalizeUserPhone(phone_number);
   const phoneVariants = getPhoneLookupVariants(normalizedPhone);
   const user = await User.findOne({
@@ -829,7 +876,7 @@ const verifyPartnerOtpAndLogin = async ({ phone_number, device_token, validOtp }
 
   await Otp.deleteOne({ _id: validOtp._id });
 
-  const result = await finalizePartnerLogin(user, device_token);
+  const result = await finalizePartnerLogin(user, device_token, { platform, device_id });
   if (!result.ok) {
     return result;
   }
@@ -837,7 +884,7 @@ const verifyPartnerOtpAndLogin = async ({ phone_number, device_token, validOtp }
   return okWithMessage(200, 'OTP verified successfully.', { data: result.data });
 };
 
-const loginPartner = async ({ email, password, device_token }) => {
+const loginPartner = async ({ email, password, device_token, platform, device_id }) => {
   const user = await User.findOne({ email, deleted_at: null }).select('+password');
   if (!user) {
     return fail(401, 'Invalid email.');
@@ -852,10 +899,17 @@ const loginPartner = async ({ email, password, device_token }) => {
     return fail(401, 'Invalid password.');
   }
 
-  return finalizePartnerLogin(user, device_token);
+  return finalizePartnerLogin(user, device_token, { platform, device_id });
 };
 
-const googleLoginPartner = async ({ id_token, device_token, phone_number, date_of_birth }) => {
+const googleLoginPartner = async ({
+  id_token,
+  device_token,
+  phone_number,
+  date_of_birth,
+  platform,
+  device_id,
+}) => {
   let googleProfile;
   try {
     googleProfile = await verifyGoogleIdToken(id_token, { app: GOOGLE_APP_PARTNER });
@@ -880,7 +934,7 @@ const googleLoginPartner = async ({ id_token, device_token, phone_number, date_o
       return fail(409, 'This Google account is registered with another account type.');
     }
     applyGoogleProfileToPartner(user, { email, name, picture });
-    const result = await finalizePartnerLogin(user, device_token);
+    const result = await finalizePartnerLogin(user, device_token, { platform, device_id });
     if (!result.ok) return result;
     return { ...result, message: 'Login successfully.' };
   }
@@ -902,7 +956,7 @@ const googleLoginPartner = async ({ id_token, device_token, phone_number, date_o
 
       user.google_id = google_id;
       applyGoogleProfileToPartner(user, { email, name, picture });
-      const result = await finalizePartnerLogin(user, device_token);
+      const result = await finalizePartnerLogin(user, device_token, { platform, device_id });
       if (!result.ok) return result;
       return { ...result, message: 'Login successfully.' };
     }
@@ -957,10 +1011,25 @@ const googleLoginPartner = async ({ id_token, device_token, phone_number, date_o
     return fail(500, 'Failed to load partner profile.');
   }
 
+  if (device_token !== undefined && device_token !== null && String(device_token).trim() !== '') {
+    await registerDeviceToken({
+      userId: savedUser._id,
+      ...buildDeviceRegistrationOptions({ device_token, platform, device_id }),
+    });
+  }
+
   return { ok: true, data, message: 'Partner registered successfully.' };
 };
 
-const appleLoginPartner = async ({ id_token, device_token, phone_number, date_of_birth, name }) => {
+const appleLoginPartner = async ({
+  id_token,
+  device_token,
+  phone_number,
+  date_of_birth,
+  name,
+  platform,
+  device_id,
+}) => {
   let appleProfile;
   try {
     appleProfile = await verifyAppleIdToken(id_token, { app: APPLE_APP_PARTNER });
@@ -987,7 +1056,7 @@ const appleLoginPartner = async ({ id_token, device_token, phone_number, date_of
       return fail(409, 'This Apple account is registered with another account type.');
     }
     applyAppleProfileToPartner(user, { email, name: displayName });
-    const result = await finalizePartnerLogin(user, device_token);
+    const result = await finalizePartnerLogin(user, device_token, { platform, device_id });
     if (!result.ok) return result;
     return { ...result, message: 'Login successfully.' };
   }
@@ -1009,7 +1078,7 @@ const appleLoginPartner = async ({ id_token, device_token, phone_number, date_of
 
       user.apple_id = apple_id;
       applyAppleProfileToPartner(user, { email, name: displayName });
-      const result = await finalizePartnerLogin(user, device_token);
+      const result = await finalizePartnerLogin(user, device_token, { platform, device_id });
       if (!result.ok) return result;
       return { ...result, message: 'Login successfully.' };
     }
@@ -1061,6 +1130,13 @@ const appleLoginPartner = async ({ id_token, device_token, phone_number, date_of
   const data = await buildPartnerLoginData(savedUser);
   if (!data) {
     return fail(500, 'Failed to load partner profile.');
+  }
+
+  if (device_token !== undefined && device_token !== null && String(device_token).trim() !== '') {
+    await registerDeviceToken({
+      userId: savedUser._id,
+      ...buildDeviceRegistrationOptions({ device_token, platform, device_id }),
+    });
   }
 
   return { ok: true, data, message: 'Partner registered successfully.' };
@@ -1409,5 +1485,6 @@ module.exports = {
   verifyPartnerOtpAndLogin,
   googleLoginPartner,
   appleLoginPartner,
+  logoutPartner,
   updatePartner,
 };

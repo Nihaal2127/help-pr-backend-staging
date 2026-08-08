@@ -1,12 +1,17 @@
 const User = require('../models/user');
 const { generateRandomPassword } = require('../helper/password_generator');
 const { sendEmail } = require('../helper/mail');
-
+const {
+  registerDeviceToken,
+  unregisterDeviceToken,
+  unregisterAllDeviceTokens,
+  buildDeviceRegistrationOptions,
+} = require('../services/device_token_service');
 
 const login = async (req, res) => {
   try {
     
-    const { email, password, device_token } = req.body;
+    const { email, password, device_token, platform, device_id } = req.body;
     console.log(device_token);
     if (!email || !password) {
       return res.status(400).json({
@@ -41,9 +46,17 @@ const login = async (req, res) => {
     }
     
     user.auth_token = user.generateAuthToken();
-    user.device_token = device_token;
+    if (device_token !== undefined && device_token !== null && String(device_token).trim() !== '') {
+      user.device_token = String(device_token).trim();
+    }
     await user.save();
-    console.log('user.device_token',user.device_token);
+
+    if (device_token !== undefined && device_token !== null && String(device_token).trim() !== '') {
+      await registerDeviceToken({
+        userId: user._id,
+        ...buildDeviceRegistrationOptions({ device_token, platform, device_id }),
+      });
+    }
     // await createOtp(email);
     if (user.type === 1) {
       return res.status(200).json({
@@ -131,6 +144,8 @@ const logout = async (req, res) => {
   }
   try {
 
+    const { device_token, device_id } = req.body || {};
+
     const admin = await User.findOne({ _id: req.user.id, deleted_at: null });
     if (!admin) {
       return res.status(404).json({
@@ -139,6 +154,17 @@ const logout = async (req, res) => {
         message: 'User not found or deleted.',
       });
     }
+
+    if (device_token || device_id) {
+      await unregisterDeviceToken({
+        userId: admin._id,
+        deviceToken: device_token,
+        deviceId: device_id,
+      });
+    } else {
+      await unregisterAllDeviceTokens(admin._id);
+    }
+
     admin.auth_token = null;
     admin.device_token = null;
     await admin.save();
@@ -159,7 +185,7 @@ const logout = async (req, res) => {
 const userLogin = async (req, res) => {
   try {
     
-    const { phone_number, device_token } = req.body;
+    const { phone_number, device_token, platform, device_id } = req.body;
 
     let user = await User.findOne({ phone_number, deleted_at: null });
     
@@ -170,9 +196,18 @@ const userLogin = async (req, res) => {
         message: 'New user created.'
       });
     }
-    user.device_token = device_token;
+    if (device_token !== undefined && device_token !== null && String(device_token).trim() !== '') {
+      user.device_token = String(device_token).trim();
+    }
     user.generateAuthToken();
     await user.save();
+
+    if (device_token !== undefined && device_token !== null && String(device_token).trim() !== '') {
+      await registerDeviceToken({
+        userId: user._id,
+        ...buildDeviceRegistrationOptions({ device_token, platform, device_id }),
+      });
+    }
 
     user = await User.findById({ _id: user._id }).populate([
       { path: "city_id" },

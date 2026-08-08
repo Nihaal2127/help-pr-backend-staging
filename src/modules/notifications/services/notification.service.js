@@ -256,16 +256,29 @@ const notify = async ({
         );
       }
 
-      logNotificationDelivery({
-        ...deliveryBase,
-        pushSent: pushResult.pushSent,
-        pushSkipReason: pushResult.skipReason || "",
-        pushError: pushResult.pushError || "",
-        pushErrorCode: pushResult.pushErrorCode || "",
-        firebaseTarget: pushResult.firebaseTarget || "",
-        deviceTokenSuffix: pushResult.deviceTokenSuffix || "",
-        userType: pushResult.userType,
-      });
+      const deviceResults =
+        Array.isArray(pushResult.deviceResults) && pushResult.deviceResults.length
+          ? pushResult.deviceResults
+          : [pushResult];
+
+      for (const deviceResult of deviceResults) {
+        logNotificationDelivery({
+          ...deliveryBase,
+          pushSent: Boolean(deviceResult.pushSent),
+          pushSkipReason: deviceResult.skipReason || pushResult.skipReason || "",
+          pushError: deviceResult.pushError || pushResult.pushError || "",
+          pushErrorCode: deviceResult.pushErrorCode || pushResult.pushErrorCode || "",
+          firebaseTarget: deviceResult.firebaseTarget || pushResult.firebaseTarget || "",
+          deviceTokenSuffix:
+            deviceResult.deviceTokenSuffix || pushResult.deviceTokenSuffix || "",
+          userType: pushResult.userType,
+          metadata: {
+            ...metadata,
+            devices_attempted: pushResult.devicesAttempted || deviceResults.length,
+            devices_sent: pushResult.devicesSent || (deviceResult.pushSent ? 1 : 0),
+          },
+        });
+      }
     } catch (error) {
       if (error?.code === 11000) {
         logNotificationDelivery({

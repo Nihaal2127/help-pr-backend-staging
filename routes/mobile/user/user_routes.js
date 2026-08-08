@@ -9,6 +9,7 @@ const {
   resetPasswordHandler,
   updateHandler,
   getPincodesHandler,
+  logoutHandler,
 } = require('../../../controllers/mobile/user/user_controller');
 const {
   validateForgotPasswordEmail,
@@ -64,6 +65,7 @@ router.post(
   verifyForgotPasswordOtpHandler
 );
 router.post('/reset-password', validateResetPassword, resetPasswordHandler);
+router.post('/logout', userAuthMiddleware, logoutHandler);
 
 router.use(addressRoutes);
 router.use(quoteRoutes);

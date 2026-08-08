@@ -2,6 +2,11 @@ const User = require('../models/user');
 const Otp = require('../models/otp');
 const { issueAndSendPhoneOtp } = require('../services/mobile/shared/phone_otp_delivery_service');
 const { normalizeUserPhone, getPhoneLookupVariants } = require('../utils/user_contact_uniqueness');
+const {
+  registerDeviceToken,
+  unregisterDeviceToken,
+  buildDeviceRegistrationOptions,
+} = require('../services/device_token_service');
 
 const createOtp = async (phone_number) => issueAndSendPhoneOtp({ phone_number });
 
@@ -35,7 +40,7 @@ const sentOpt = async (req, res) => {
 
 const verifyOtp = async (req, res) => {
   try {
-    const { phone_number, device_token } = req.body;
+    const { phone_number, device_token, platform, device_id } = req.body;
     const normalizedPhone = normalizeUserPhone(phone_number);
     const phoneVariants = getPhoneLookupVariants(normalizedPhone);
 
@@ -58,6 +63,13 @@ const verifyOtp = async (req, res) => {
     await Otp.deleteOne({ _id: req.validOtp._id });
     user.generateAuthToken();
     await user.save();
+
+    if (device_token !== undefined && device_token !== null && String(device_token).trim() !== '') {
+      await registerDeviceToken({
+        userId: user._id,
+        ...buildDeviceRegistrationOptions({ device_token, platform, device_id }),
+      });
+    }
 
     user = await User.findById({ _id: user._id }).populate([{ path: 'city_id' }]).lean();
 

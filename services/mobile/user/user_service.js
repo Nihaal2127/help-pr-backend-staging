@@ -9,6 +9,11 @@ const { handleImageUpload } = require('../../../helper/image_uploader');
 const { getUploadType } = require('../../../enum/upload_type_enum');
 const { normalizeUserPhone, normalizeUserEmail, checkUserContactUniqueness, getPhoneLookupVariants } = require('../../../utils/user_contact_uniqueness');
 const { escapeRegExp } = require('../../../utils/string_helpers');
+const {
+  registerDeviceToken,
+  unregisterDeviceToken,
+  buildDeviceRegistrationOptions,
+} = require('../../../services/device_token_service');
 const { verifyGoogleIdToken, GOOGLE_APP_USER } = require('../../../helper/google_auth');
 const { verifyAppleIdToken, APPLE_APP_USER } = require('../../../helper/apple_auth');
 const { USER_TYPE_CUSTOMER } = require('../../../constants/user_types');
@@ -102,7 +107,7 @@ const buildCustomerLoginData = async (user) => {
   return data;
 };
 
-const finalizeCustomerLogin = async (user, device_token, message) => {
+const finalizeCustomerLogin = async (user, device_token, message, deviceOptions = {}) => {
   if (user.is_blocked === true) {
     return fail(403, 'Your account is blocked. Please contact support.');
   }
@@ -114,12 +119,48 @@ const finalizeCustomerLogin = async (user, device_token, message) => {
   user.generateAuthToken();
   await user.save();
 
+  if (device_token !== undefined && device_token !== null && String(device_token).trim() !== '') {
+    await registerDeviceToken({
+      userId: user._id,
+      ...buildDeviceRegistrationOptions({
+        device_token,
+        platform: deviceOptions.platform,
+        device_id: deviceOptions.device_id,
+      }),
+    });
+  }
+
   const data = await buildCustomerLoginData(user);
   if (!data) {
     return fail(500, 'Failed to load user profile.');
   }
 
   return okWithMessage(200, message, { data });
+};
+
+const logoutCustomer = async ({ userId, device_token, device_id }) => {
+  const user = await User.findOne({
+    _id: userId,
+    type: USER_TYPE_CUSTOMER,
+    deleted_at: null,
+  });
+
+  if (!user) {
+    return fail(404, 'Customer not found.');
+  }
+
+  if (device_token || device_id) {
+    await unregisterDeviceToken({
+      userId,
+      deviceToken: device_token,
+      deviceId: device_id,
+    });
+  }
+
+  user.auth_token = null;
+  await user.save();
+
+  return okWithMessage(200, 'Logged out successfully.');
 };
 
 const applyGoogleProfileToUser = (user, { email, name, picture }) => {
@@ -143,7 +184,13 @@ const applyAppleProfileToUser = (user, { email, name }) => {
   }
 };
 
-const verifyOtpAndLogin = async ({ phone_number, device_token, validOtp }) => {
+const verifyOtpAndLogin = async ({
+  phone_number,
+  device_token,
+  validOtp,
+  platform,
+  device_id,
+}) => {
   const normalizedPhone = normalizeUserPhone(phone_number);
   const phoneVariants = getPhoneLookupVariants(normalizedPhone);
   const user = await User.findOne({
@@ -158,10 +205,13 @@ const verifyOtpAndLogin = async ({ phone_number, device_token, validOtp }) => {
 
   await Otp.deleteOne({ _id: validOtp._id });
 
-  return finalizeCustomerLogin(user, device_token, 'OTP verified successfully.');
+  return finalizeCustomerLogin(user, device_token, 'OTP verified successfully.', {
+    platform,
+    device_id,
+  });
 };
 
-const googleLogin = async ({ id_token, device_token }) => {
+const googleLogin = async ({ id_token, device_token, platform, device_id }) => {
   let googleProfile;
   try {
     googleProfile = await verifyGoogleIdToken(id_token, { app: GOOGLE_APP_USER });
@@ -182,7 +232,10 @@ const googleLogin = async ({ id_token, device_token }) => {
       return fail(409, 'This Google account is registered with another account type.');
     }
     applyGoogleProfileToUser(user, { email, name, picture });
-    return finalizeCustomerLogin(user, device_token, 'Logged in successfully.');
+    return finalizeCustomerLogin(user, device_token, 'Logged in successfully.', {
+      platform,
+      device_id,
+    });
   }
 
   if (email) {
@@ -202,7 +255,10 @@ const googleLogin = async ({ id_token, device_token }) => {
 
       user.google_id = google_id;
       applyGoogleProfileToUser(user, { email, name, picture });
-      return finalizeCustomerLogin(user, device_token, 'Logged in successfully.');
+      return finalizeCustomerLogin(user, device_token, 'Logged in successfully.', {
+      platform,
+      device_id,
+    });
     }
   }
 
@@ -232,10 +288,13 @@ const googleLogin = async ({ id_token, device_token }) => {
   await user.save();
   await notificationSetting.create({ user_id: user._id });
 
-  return finalizeCustomerLogin(user, device_token, 'Logged in successfully.');
+  return finalizeCustomerLogin(user, device_token, 'Logged in successfully.', {
+    platform,
+    device_id,
+  });
 };
 
-const appleLogin = async ({ id_token, device_token, name }) => {
+const appleLogin = async ({ id_token, device_token, name, platform, device_id }) => {
   let appleProfile;
   try {
     appleProfile = await verifyAppleIdToken(id_token, { app: APPLE_APP_USER });
@@ -258,7 +317,10 @@ const appleLogin = async ({ id_token, device_token, name }) => {
       return fail(409, 'This Apple account is registered with another account type.');
     }
     applyAppleProfileToUser(user, { email, name: displayName });
-    return finalizeCustomerLogin(user, device_token, 'Logged in successfully.');
+    return finalizeCustomerLogin(user, device_token, 'Logged in successfully.', {
+      platform,
+      device_id,
+    });
   }
 
   if (email) {
@@ -278,7 +340,10 @@ const appleLogin = async ({ id_token, device_token, name }) => {
 
       user.apple_id = apple_id;
       applyAppleProfileToUser(user, { email, name: displayName });
-      return finalizeCustomerLogin(user, device_token, 'Logged in successfully.');
+      return finalizeCustomerLogin(user, device_token, 'Logged in successfully.', {
+      platform,
+      device_id,
+    });
     }
   }
 
@@ -307,7 +372,10 @@ const appleLogin = async ({ id_token, device_token, name }) => {
   await user.save();
   await notificationSetting.create({ user_id: user._id });
 
-  return finalizeCustomerLogin(user, device_token, 'Logged in successfully.');
+  return finalizeCustomerLogin(user, device_token, 'Logged in successfully.', {
+    platform,
+    device_id,
+  });
 };
 
 const MOBILE_USER_ALLOWED_UPDATE_FIELDS = ['name', 'phone_number', 'email', 'date_of_birth', 'gender'];
@@ -436,6 +504,7 @@ module.exports = {
   verifyOtpAndLogin,
   googleLogin,
   appleLogin,
+  logoutCustomer,
   updateUser,
   listAllPincodes,
 };

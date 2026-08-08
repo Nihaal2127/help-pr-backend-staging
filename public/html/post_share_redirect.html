@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>Open in Helppr</title>
+  <style>
+    :root {
+      --bg: #1a0a0a;
+      --card: #ffffff;
+      --accent: #c62828;
+      --muted: #666666;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: radial-gradient(ellipse at top, #3a1212 0%, var(--bg) 55%);
+      color: #222;
+      padding: 24px;
+    }
+    .card {
+      width: 100%;
+      max-width: 420px;
+      background: var(--card);
+      border-radius: 16px;
+      padding: 28px 24px;
+      text-align: center;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 1.35rem;
+      color: var(--accent);
+    }
+    p {
+      margin: 0 0 20px;
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.45;
+    }
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    a.button {
+      display: block;
+      text-decoration: none;
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+    a.primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    a.secondary {
+      background: #f3f3f3;
+      color: #333;
+    }
+    .hint {
+      margin-top: 16px;
+      font-size: 0.8rem;
+      color: #999;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Opening Helppr…</h1>
+    <p id="status">Trying to open the app. If nothing happens, use a store link below.</p>
+    <div class="actions">
+      <a id="open-app" class="button primary" href="#">Open in App</a>
+      <a id="store-link" class="button secondary" href="#">Get the App</a>
+    </div>
+    <p class="hint">Shared post link · Helppr</p>
+  </div>
+
+  <script>
+    (function () {
+      var PLAY_STORE =
+        'https://play.google.com/store/apps/details?id=com.helppr';
+      var APP_STORE =
+        'https://apps.apple.com/us/app/helppr-multi-service-app/id6783224560';
+      var FALLBACK_MS = 1800;
+
+      var parts = window.location.pathname.split('/').filter(Boolean);
+      var token = '';
+      var postIdx = parts.indexOf('post');
+      if (postIdx >= 0 && parts[postIdx + 1]) {
+        token = decodeURIComponent(parts[postIdx + 1]).trim();
+      }
+      if (!token) {
+        var q = new URLSearchParams(window.location.search).get('token');
+        if (q) token = String(q).trim();
+      }
+
+      // Allow only safe token characters in deep links / UI.
+      token = token.replace(/[^a-zA-Z0-9_-]/g, '');
+
+      var ua = navigator.userAgent || '';
+      var isAndroid = /Android/i.test(ua);
+      var isIOS = /iPhone|iPad|iPod/i.test(ua);
+      var storeUrl = isIOS ? APP_STORE : PLAY_STORE;
+
+      var deepLink = token ? ('helppr://post/' + encodeURIComponent(token)) : 'helppr://';
+      var intentLink = token
+        ? ('intent://post/' + encodeURIComponent(token) +
+           '#Intent;scheme=helppr;package=com.helppr;S.browser_fallback_url=' +
+           encodeURIComponent(PLAY_STORE) + ';end')
+        : ('intent://#Intent;scheme=helppr;package=com.helppr;S.browser_fallback_url=' +
+           encodeURIComponent(PLAY_STORE) + ';end');
+
+      var openApp = document.getElementById('open-app');
+      var storeLink = document.getElementById('store-link');
+      var statusEl = document.getElementById('status');
+
+      openApp.href = isAndroid ? intentLink : deepLink;
+      storeLink.href = storeUrl;
+      storeLink.textContent = isIOS
+        ? 'Open App Store'
+        : isAndroid
+          ? 'Open Play Store'
+          : 'Get the App';
+
+      if (!token) {
+        statusEl.textContent = 'Invalid share link. You can still download Helppr.';
+        return;
+      }
+
+      var left = false;
+      var fallbackTimer = null;
+
+      function goToStore() {
+        if (left) return;
+        window.location.href = storeUrl;
+      }
+
+      function tryOpenApp() {
+        var start = Date.now();
+
+        document.addEventListener('visibilitychange', function () {
+          if (document.hidden) {
+            left = true;
+            if (fallbackTimer) clearTimeout(fallbackTimer);
+          }
+        });
+        window.addEventListener('pagehide', function () {
+          left = true;
+          if (fallbackTimer) clearTimeout(fallbackTimer);
+        });
+        window.addEventListener('blur', function () {
+          left = true;
+          if (fallbackTimer) clearTimeout(fallbackTimer);
+        });
+
+        fallbackTimer = setTimeout(function () {
+          // If the page stayed visible, app likely is not installed.
+          if (!left && Date.now() - start >= FALLBACK_MS - 50) {
+            goToStore();
+          }
+        }, FALLBACK_MS);
+
+        if (isAndroid) {
+          window.location.href = intentLink;
+        } else {
+          // iOS / desktop: custom scheme, then store fallback.
+          window.location.href = deepLink;
+        }
+      }
+
+      // Auto-attempt on load (works for WhatsApp / SMS https taps).
+      tryOpenApp();
+    })();
+  </script>
+</body>
+</html>

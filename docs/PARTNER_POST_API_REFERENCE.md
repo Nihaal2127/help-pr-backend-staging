@@ -123,7 +123,7 @@ GET /api/partner-post/getAll?page=1&limit=10&status=pending
       "status": "pending",
       "rejection_reason": "",
       "share_token": "abc123...",
-      "share_url": "helppr://post/abc123...",
+      "share_url": "https://helppr.in/post/abc123...",
       "likes_count": 0,
       "shares_count": 0,
       "reports_count": 0,
@@ -671,7 +671,7 @@ GET /api/mobile/user/posts/share/:shareToken
   "message": "Post retrieved successfully.",
   "data": {
     "post": { "...": "published post only" },
-    "share_url": "helppr://post/abc123..."
+    "share_url": "https://helppr.in/post/abc123..."
   }
 }
 ```

@@ -153,7 +153,9 @@ GET /api/mobile/user/posts/share/:shareToken
 
 No auth. Returns `{ post, share_url }` for app handoff / link preview. Full like/report still requires customer login.
 
-**Env (server):** `MOBILE_APP_DEEP_LINK_BASE=helppr://post` → share URLs like `helppr://post/{share_token}`.
+**Env (server):** `POST_SHARE_WEB_BASE_URL=https://helppr.in/post` → share URLs like `https://helppr.in/post/{share_token}`.
+
+Opening that HTTPS URL serves `GET /post/:token`, which tries `helppr://post/{token}` then falls back to Play Store / App Store.
 
 ---
 
@@ -173,7 +175,7 @@ No auth. Returns `{ post, share_url }` for app handoff / link preview. Full like
   "is_liked": true,
   "is_saved": false,
   "share_token": "abc123...",
-  "share_url": "helppr://post/abc123...",
+  "share_url": "https://helppr.in/post/abc123...",
   "created_at": "2026-06-02T10:00:00.000Z",
   "partner": {
     "_id": "...",

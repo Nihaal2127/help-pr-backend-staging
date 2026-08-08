@@ -54,6 +54,7 @@ const partnersRoutes = require('./routes/partners_routes');
 const appointmentRoutes = require('./routes/appointment_routes');
 const { notificationRoutes } = require('./src/modules/notifications');
 const mobileRoutes = require('./routes/mobile');
+const postShareRedirectRoutes = require('./routes/post_share_redirect_routes');
 const { publicImageUrlsResponseMiddleware } = require('./middleware/public_image_urls_response_middleware');
 const { logPublicImageUrlConfig } = require('./helper/publicImageUrl');
 
@@ -177,6 +178,9 @@ app.use('/api/appointment', appointmentRoutes);
 // Chat REST and Socket.IO run on the separate Chat Service (VPS). Lambda provisions via HTTP only.
 
 app.use('/api/mobile', mobileRoutes);
+
+// Public post share landing (https://helppr.in/post/:token) — must be before catch-all
+app.use('/post', postShareRedirectRoutes);
 
 // app.use('/login', loginRoute);
 

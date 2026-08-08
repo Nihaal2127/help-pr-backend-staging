@@ -249,8 +249,13 @@ const buildOrderDashboardCounts = async (req, franchiseOid, dateFilter) => {
 };
 
 /**
- * Payments: sum completed order_payment rows by paid_at (fallback created_at) in range,
- * plus legacy is_paid orders without customer payment rows (order schedule date filter).
+ * Payments (avoid double-counting):
+ * - Customer payment amounts already include commission; partner payouts come from that pool.
+ * - total_payments = gross customer payments only
+ * - customer = gross customer payments − commission
+ * - commission = order admin_earning / commission_amount for those orders
+ * - partner = completed partner order_payment rows only
+ * Legacy: paid orders with no customer payment rows still contribute customer + commission.
  */
 const buildPaymentDashboardTotals = async (
     req,
@@ -325,8 +330,8 @@ const buildPaymentDashboardTotals = async (
     ]);
 
     const paymentRow = paymentAgg[0] || {};
-    let customer = roundMoney(paymentRow.customer || 0);
-    let partner = roundMoney(paymentRow.partner || 0);
+    let customerGross = roundMoney(paymentRow.customer || 0);
+    const partner = roundMoney(paymentRow.partner || 0);
     let commission = 0;
 
     const customerOrderIds = (paymentRow.customer_order_ids || []).filter(Boolean);
@@ -366,7 +371,6 @@ const buildPaymentDashboardTotals = async (
                     { is_paid: true, total_price: { $gt: 0 } },
                     { customer_net_paid: { $gt: 0 } },
                     { customer_paid_amount: { $gt: 0 } },
-                    { partner_paid_amount: { $gt: 0 } },
                     { admin_earning: { $gt: 0 } },
                     { commission_amount: { $gt: 0 } },
                 ],
@@ -376,12 +380,13 @@ const buildPaymentDashboardTotals = async (
     ]);
 
     const legacyRow = legacyAgg[0] || {};
-    customer = roundMoney(customer + (legacyRow.customer || 0));
-    partner = roundMoney(partner + (legacyRow.partner || 0));
+    customerGross = roundMoney(customerGross + (legacyRow.customer || 0));
     commission = roundMoney(commission + (legacyRow.commission || 0));
 
+    const customer = roundMoney(customerGross - commission);
+
     return ok({
-        total_payments: roundMoney(customer + partner + commission),
+        total_payments: customerGross,
         customer,
         partner,
         commission,

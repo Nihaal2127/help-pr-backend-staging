@@ -127,5 +127,6 @@ Deploy steps: **[docs/LAMBDA_VPS_DEPLOY.md](docs/LAMBDA_VPS_DEPLOY.md)**
 | `npm run verify:whatsapp-otp -- <phone>` | Test WhatsApp OTP delivery |
 
 ## License
+hi
 
 ISC

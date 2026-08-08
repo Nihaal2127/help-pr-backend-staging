@@ -3,6 +3,7 @@ const {
   verifyOtpAndLogin,
   googleLogin,
   appleLogin,
+  logoutCustomer,
   updateUser,
   listAllPincodes,
 } = require('../../../services/mobile/user/user_service');
@@ -33,6 +34,8 @@ const verifyOtpHandler = wrapMobileHandler(
     const result = await verifyOtpAndLogin({
       phone_number: req.body.phone_number,
       device_token: req.body.device_token,
+      platform: req.body.platform,
+      device_id: req.body.device_id,
       validOtp: req.validOtp,
     });
     return sendTopLevelServiceResult(res, result);
@@ -46,6 +49,8 @@ const googleLoginHandler = wrapMobileHandler(
     const result = await googleLogin({
       id_token: req.body.id_token,
       device_token: req.body.device_token,
+      platform: req.body.platform,
+      device_id: req.body.device_id,
     });
     return sendTopLevelServiceResult(res, result);
   },
@@ -59,6 +64,8 @@ const appleLoginHandler = wrapMobileHandler(
       id_token: req.body.id_token,
       device_token: req.body.device_token,
       name: req.body.name,
+      platform: req.body.platform,
+      device_id: req.body.device_id,
     });
     return sendTopLevelServiceResult(res, result);
   },
@@ -127,6 +134,15 @@ const getPincodesHandler = wrapMobileHandler('mobile user pincodes', async (req,
   return sendTopLevelServiceResult(res, result);
 });
 
+const logoutHandler = wrapMobileHandler('mobile user logout', async (req, res) => {
+  const result = await logoutCustomer({
+    userId: req.user.id,
+    device_token: req.body.device_token,
+    device_id: req.body.device_id,
+  });
+  return sendTopLevelServiceResult(res, result);
+});
+
 module.exports = {
   sendOtpHandler,
   verifyOtpHandler,
@@ -137,4 +153,5 @@ module.exports = {
   resetPasswordHandler,
   updateHandler,
   getPincodesHandler,
+  logoutHandler,
 };

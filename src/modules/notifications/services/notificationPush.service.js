@@ -6,6 +6,11 @@ const {
   mapUserTypeToFirebaseTarget,
   getFirebaseDiagnostics,
 } = require("../../../../service/firebase/push_service");
+const {
+  getDeviceTokensForUser,
+  removeDeviceTokenByValue,
+  isStaleFcmTokenError,
+} = require("../../../../services/device_token_service");
 const { maskDeviceTokenSuffix } = require("./notificationDeliveryLog.service");
 
 const PUSH_SKIP = {
@@ -42,6 +47,58 @@ const isPushAllowedForUser = async (userId, pushPreference = "update") => {
   }
 };
 
+const sendPushToDevice = async ({
+  deviceToken,
+  title,
+  body,
+  data,
+  target,
+  sentDeviceTokens,
+}) => {
+  const result = {
+    pushSent: false,
+    skipReason: null,
+    pushError: null,
+    pushErrorCode: null,
+    firebaseTarget: target || "",
+    deviceTokenSuffix: maskDeviceTokenSuffix(deviceToken),
+  };
+
+  if (sentDeviceTokens?.has(deviceToken)) {
+    return { ...result, skipReason: PUSH_SKIP.DUPLICATE_DEVICE_TOKEN };
+  }
+
+  const sendResult = await safeSendPushNotification({
+    deviceToken,
+    title,
+    body,
+    data,
+    target,
+  });
+
+  if (!sendResult?.ok) {
+    if (isStaleFcmTokenError(sendResult?.code)) {
+      await removeDeviceTokenByValue(deviceToken);
+    }
+    return {
+      ...result,
+      skipReason: PUSH_SKIP.FIREBASE_SEND_FAILED,
+      pushError: sendResult?.error || "Unknown Firebase error",
+      pushErrorCode: sendResult?.code || "",
+    };
+  }
+
+  sentDeviceTokens?.add(deviceToken);
+
+  return {
+    ...result,
+    pushSent: true,
+    skipReason: null,
+    pushError: null,
+    pushErrorCode: null,
+  };
+};
+
 const sendPushForNotification = async ({
   userId,
   title,
@@ -58,6 +115,9 @@ const sendPushForNotification = async ({
     firebaseTarget: null,
     deviceTokenSuffix: null,
     userType: null,
+    devicesAttempted: 0,
+    devicesSent: 0,
+    deviceResults: [],
   };
 
   try {
@@ -69,28 +129,15 @@ const sendPushForNotification = async ({
       return { ...baseResult, skipReason: settingsSkip || PUSH_SKIP.SETTINGS_DISABLED };
     }
 
-    const user = await User.findById(userId).select("device_token type").lean();
+    const user = await User.findById(userId).select("type").lean();
     if (!user) {
       return { ...baseResult, skipReason: PUSH_SKIP.USER_NOT_FOUND };
     }
 
     baseResult.userType = user.type != null ? Number(user.type) : null;
 
-    if (user && BACKOFFICE_TYPES.has(Number(user.type))) {
+    if (BACKOFFICE_TYPES.has(Number(user.type))) {
       return { ...baseResult, skipReason: PUSH_SKIP.BACKOFFICE_USER };
-    }
-
-    const deviceToken = user?.device_token ? String(user.device_token).trim() : "";
-    baseResult.deviceTokenSuffix = maskDeviceTokenSuffix(deviceToken);
-    if (!deviceToken) {
-      return { ...baseResult, skipReason: PUSH_SKIP.NO_DEVICE_TOKEN };
-    }
-
-    if (sentDeviceTokens) {
-      if (sentDeviceTokens.has(deviceToken)) {
-        return { ...baseResult, skipReason: PUSH_SKIP.DUPLICATE_DEVICE_TOKEN };
-      }
-      sentDeviceTokens.add(deviceToken);
     }
 
     const target = mapUserTypeToFirebaseTarget(user?.type);
@@ -104,29 +151,46 @@ const sendPushForNotification = async ({
       return { ...baseResult, skipReason: PUSH_SKIP.FIREBASE_NOT_CONFIGURED };
     }
 
-    const sendResult = await safeSendPushNotification({
-      deviceToken,
-      title,
-      body,
-      data,
-      target,
-    });
+    const deviceTokens = await getDeviceTokensForUser(userId);
+    baseResult.devicesAttempted = deviceTokens.length;
 
-    if (!sendResult?.ok) {
-      return {
-        ...baseResult,
-        skipReason: PUSH_SKIP.FIREBASE_SEND_FAILED,
-        pushError: sendResult?.error || "Unknown Firebase error",
-        pushErrorCode: sendResult?.code || "",
-      };
+    if (!deviceTokens.length) {
+      return { ...baseResult, skipReason: PUSH_SKIP.NO_DEVICE_TOKEN };
     }
+
+    const deviceResults = [];
+    let devicesSent = 0;
+    let primarySkipReason = null;
+
+    for (const deviceToken of deviceTokens) {
+      const deviceResult = await sendPushToDevice({
+        deviceToken,
+        title,
+        body,
+        data,
+        target,
+        sentDeviceTokens,
+      });
+      deviceResults.push(deviceResult);
+      if (deviceResult.pushSent) {
+        devicesSent += 1;
+      } else if (!primarySkipReason) {
+        primarySkipReason = deviceResult.skipReason;
+      }
+    }
+
+    const pushSent = devicesSent > 0;
+    const lastResult = deviceResults[deviceResults.length - 1] || {};
 
     return {
       ...baseResult,
-      pushSent: true,
-      skipReason: null,
-      pushError: null,
-      pushErrorCode: null,
+      pushSent,
+      skipReason: pushSent ? null : primarySkipReason || PUSH_SKIP.FIREBASE_SEND_FAILED,
+      pushError: pushSent ? null : lastResult.pushError || null,
+      pushErrorCode: pushSent ? null : lastResult.pushErrorCode || null,
+      deviceTokenSuffix: lastResult.deviceTokenSuffix || null,
+      devicesSent,
+      deviceResults,
     };
   } catch (error) {
     console.error(`[notifications] push failed for user ${userId}:`, error.message);

@@ -5,6 +5,7 @@ const {
   verifyPartnerOtpAndLogin,
   googleLoginPartner,
   appleLoginPartner,
+  logoutPartner,
   updatePartner,
 } = require('../../../services/mobile/partner/partner_service');
 const {
@@ -83,6 +84,8 @@ const login = wrapMobileHandler('mobile partner login', async (req, res) => {
     email: req.body.email,
     password: req.body.password,
     device_token: req.body.device_token,
+    platform: req.body.platform,
+    device_id: req.body.device_id,
   });
 
   if (!result.ok) {
@@ -112,6 +115,8 @@ const verifyPartnerOtpHandler = wrapMobileHandler(
     const result = await verifyPartnerOtpAndLogin({
       phone_number: req.body.phone_number,
       device_token: req.body.device_token,
+      platform: req.body.platform,
+      device_id: req.body.device_id,
       validOtp: req.validOtp,
     });
     return sendTopLevelServiceResult(res, result);
@@ -125,6 +130,8 @@ const googleLogin = wrapMobileHandler('mobile partner google-login', async (req,
     device_token: req.body.device_token,
     phone_number: req.body.phone_number,
     date_of_birth: req.body.date_of_birth,
+    platform: req.body.platform,
+    device_id: req.body.device_id,
   });
 
   if (!result.ok) {
@@ -146,6 +153,8 @@ const appleLogin = wrapMobileHandler('mobile partner apple-login', async (req, r
     phone_number: req.body.phone_number,
     date_of_birth: req.body.date_of_birth,
     name: req.body.name,
+    platform: req.body.platform,
+    device_id: req.body.device_id,
   });
 
   if (!result.ok) {
@@ -257,6 +266,24 @@ const update = async (req, res) => {
   }
 };
 
+const logout = wrapMobileHandler('mobile partner logout', async (req, res) => {
+  const result = await logoutPartner({
+    userId: req.user.id,
+    device_token: req.body.device_token,
+    device_id: req.body.device_id,
+  });
+
+  if (!result.ok) {
+    return sendServiceError(res, result);
+  }
+
+  return res.status(200).json({
+    success: true,
+    status: 200,
+    message: result.message || 'Logged out successfully.',
+  });
+});
+
 module.exports = {
   register,
   login,
@@ -268,4 +295,5 @@ module.exports = {
   verifyForgotPasswordOtp,
   resetPassword,
   update,
+  logout,
 };

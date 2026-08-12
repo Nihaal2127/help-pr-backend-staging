@@ -126,20 +126,20 @@ const validateCreateQuoteBody = (req, res, next) => {
   normalizeOptionalPartnerId(body);
 
   if (!body.franchise_id || !mongoose.Types.ObjectId.isValid(String(body.franchise_id))) {
-    return sendError(res, 400, 'Valid franchise_id is required.');
+    return sendError(res, 400, `Valid ${fieldLabel('franchise_id')} is required.`);
   }
   if (!body.category_id || !mongoose.Types.ObjectId.isValid(String(body.category_id))) {
-    return sendError(res, 400, 'Valid category_id is required.');
+    return sendError(res, 400, `Valid ${fieldLabel('category_id')} is required.`);
   }
   if (!body.service_id || !mongoose.Types.ObjectId.isValid(String(body.service_id))) {
-    return sendError(res, 400, 'Valid service_id is required.');
+    return sendError(res, 400, `Valid ${fieldLabel('service_id')} is required.`);
   }
   if (!body.address_id || !mongoose.Types.ObjectId.isValid(String(body.address_id))) {
-    return sendError(res, 400, 'Valid address_id is required.');
+    return sendError(res, 400, `Valid ${fieldLabel('address_id')} is required.`);
   }
 
   if (body.partner_id !== undefined && !mongoose.Types.ObjectId.isValid(String(body.partner_id))) {
-    return sendError(res, 400, 'Invalid partner_id.');
+    return sendError(res, 400, `Invalid ${fieldLabel('partner_id')}.`);
   }
 
   if (body.partner_id === undefined) {
@@ -173,7 +173,7 @@ const validateUpdateQuoteBody = (req, res, next) => {
     return sendError(
       res,
       403,
-      'Only admin users can update total_service_charge. Contact support to change pricing.'
+      `Only admin users can update ${fieldLabel('total_service_charge')}. Contact support to change pricing.`
     );
   }
 
@@ -248,7 +248,7 @@ const validateListQuotesQuery = (req, res, next) => {
 
   if (franchise_id !== undefined && String(franchise_id).trim() !== '') {
     if (!mongoose.Types.ObjectId.isValid(String(franchise_id))) {
-      return sendError(res, 400, 'Invalid franchise_id.');
+      return sendError(res, 400, `Invalid ${fieldLabel('franchise_id')}.`);
     }
   }
 
@@ -258,7 +258,7 @@ const validateListQuotesQuery = (req, res, next) => {
       return sendError(
         res,
         409,
-        `Invalid status. Use one of: ${QUOTE_STATUSES.join(', ')}.`
+        `Invalid ${fieldLabel('status')}. Use one of: ${QUOTE_STATUSES.join(', ')}.`
       );
     }
     req.query.status = normalized;
@@ -274,7 +274,7 @@ const validateCancelQuoteBody = (req, res, next) => {
     cancellation_reason !== null &&
     typeof cancellation_reason !== 'string'
   ) {
-    return sendError(res, 400, 'cancellation_reason must be a string.');
+    return sendError(res, 400, `${fieldLabel('cancellation_reason')} must be a string.`);
   }
   next();
 };
@@ -284,22 +284,22 @@ const validateConvertQuoteBody = (req, res, next) => {
   const payment_method =
     body.payment_method !== undefined ? String(body.payment_method).trim().toLowerCase() : '';
   if (!payment_method) {
-    return sendError(res, 400, 'payment_method is required.');
+    return sendError(res, 400, `${fieldLabel('payment_method')} is required.`);
   }
   if (!ALLOWED_CUSTOMER_PAYMENT_METHODS.has(payment_method)) {
     return sendError(
       res,
       400,
-      `payment_method must be one of: ${Array.from(ALLOWED_CUSTOMER_PAYMENT_METHODS).join(', ')}.`
+      `${fieldLabel('payment_method')} must be one of: ${Array.from(ALLOWED_CUSTOMER_PAYMENT_METHODS).join(', ')}.`
     );
   }
 
   if (body.amount === undefined || body.amount === null || String(body.amount).trim() === '') {
-    return sendError(res, 400, 'amount is required.');
+    return sendError(res, 400, `${fieldLabel('amount')} is required.`);
   }
   const amount = Number(body.amount);
   if (!Number.isFinite(amount) || amount <= 0) {
-    return sendError(res, 400, 'amount must be greater than 0.');
+    return sendError(res, 400, `${fieldLabel('amount')} must be greater than 0.`);
   }
   req.body.amount = amount;
   req.body.payment_method = payment_method;
@@ -309,19 +309,19 @@ const validateConvertQuoteBody = (req, res, next) => {
     body.transaction_reference !== null &&
     typeof body.transaction_reference !== 'string'
   ) {
-    return sendError(res, 400, 'transaction_reference must be a string.');
+    return sendError(res, 400, `${fieldLabel('transaction_reference')} must be a string.`);
   }
   if (
     body.notes !== undefined &&
     body.notes !== null &&
     typeof body.notes !== 'string'
   ) {
-    return sendError(res, 400, 'notes must be a string.');
+    return sendError(res, 400, `${fieldLabel('notes')} must be a string.`);
   }
   if (body.paid_at !== undefined && body.paid_at !== null && body.paid_at !== '') {
     const paidAt = new Date(body.paid_at);
     if (Number.isNaN(paidAt.getTime())) {
-      return sendError(res, 400, 'paid_at must be a valid date.');
+      return sendError(res, 400, `${fieldLabel('paid_at')} must be a valid date.`);
     }
   }
 

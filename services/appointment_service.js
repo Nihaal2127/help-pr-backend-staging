@@ -9,6 +9,7 @@ const { parseFilterDate } = require("../utils/date_bounds");
 const { escapeRegExp } = require("../utils/string_helpers");
 const { isMongoObjectIdHex } = require("../utils/mongoose_helpers");
 const { getCallerId } = require("../utils/auth_caller");
+const { fieldLabel } = require("../utils/field_labels");
 const {
   normalizeAppointmentStatus,
 } = require("../enum/appointment_status_enum");
@@ -229,24 +230,24 @@ const safeCreateDefaultAppointmentForOrder = async (order, options = {}) => {
 const validateManualScheduleInput = ({ service_date, start_time, end_time }) => {
   const parsedDate = parseFilterDate(service_date);
   if (!parsedDate) {
-    return { ok: false, status: 400, message: "Valid service_date is required." };
+    return { ok: false, status: 400, message: `Valid ${fieldLabel("service_date")} is required.` };
   }
 
   const startStr = parseTimeInput(start_time);
   const endStr = parseTimeInput(end_time);
 
   if (start_time != null && String(start_time).trim() !== "" && !startStr) {
-    return { ok: false, status: 400, message: "Invalid start_time. Use HH:mm format." };
+    return { ok: false, status: 400, message: `Invalid ${fieldLabel("start_time")}. Use HH:mm format.` };
   }
   if (end_time != null && String(end_time).trim() !== "" && !endStr) {
-    return { ok: false, status: 400, message: "Invalid end_time. Use HH:mm format." };
+    return { ok: false, status: 400, message: `Invalid ${fieldLabel("end_time")}. Use HH:mm format.` };
   }
 
   const startDateTime = startStr ? combineDateAndTime(parsedDate, startStr) : null;
   const endDateTime = endStr ? combineDateAndTime(parsedDate, endStr) : null;
 
   if (startDateTime && endDateTime && endDateTime <= startDateTime) {
-    return { ok: false, status: 400, message: "end_time must be after start_time." };
+    return { ok: false, status: 400, message: `${fieldLabel("end_time")} must be after ${fieldLabel("start_time")}.` };
   }
 
   return {
@@ -478,7 +479,7 @@ const listAppointments = async (query, { req, partnerId } = {}) => {
     if (query.order_id) {
       const order = await resolveOrderByIdParam(query.order_id);
       if (!order) {
-        return { ok: false, status: 400, message: "Invalid order_id filter." };
+        return { ok: false, status: 400, message: `Invalid ${fieldLabel("order_id")} filter.` };
       }
       const orderAccess = await assertOrderAccessForAppointment(req, order, { partnerId });
       if (!orderAccess.ok) {

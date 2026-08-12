@@ -9,6 +9,7 @@ const PartnerCategory = require('../../../models/partner_category');
 const PartnerService = require('../../../models/partner_service');
 const PartnerSubscription = require('../../../models/partner_subscription');
 const { PLATINUM_PLAN_NAME } = require('../../../constants/partner_subscription');
+const { fieldLabel } = require('../../../utils/field_labels');
 const {
   resolveFranchiseEffectiveCatalog,
   resolveFranchiseAssignedEnabledMaps,
@@ -153,7 +154,7 @@ const resolveFranchiseFromLocation = async (rawLocation, options = {}) => {
 const resolveFranchiseById = async (rawFranchiseId) => {
   const id = rawFranchiseId != null ? String(rawFranchiseId).trim() : '';
   if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-    return fail(400, 'franchise_id must be a valid ObjectId.');
+    return fail(400, `${fieldLabel('franchise_id')} must be a valid ObjectId.`);
   }
 
   const franchise = await Franchise.findOne({

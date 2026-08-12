@@ -12,6 +12,7 @@ const Quote = require('../../../models/quote');
 const { formatOrderRecords } = require('../../../utils/order_api_format');
 const { stripAdminDescriptionForPublicApi } = require('../../../utils/admin_description_access');
 const { escapeRegExp } = require('../../../utils/string_helpers');
+const { fieldLabel } = require('../../../utils/field_labels');
 const {
   buildOrderDateRangeFilter,
   buildOrderTodayOverlapFilter,
@@ -47,7 +48,7 @@ const addObjectIdFilter = (query, key, filter) => {
     return { ok: true };
   }
   if (!mongoose.Types.ObjectId.isValid(String(raw))) {
-    return { ok: false, message: `Invalid ${key} filter.` };
+    return { ok: false, message: `Invalid ${fieldLabel(key)} filter.` };
   }
   filter[key] = new mongoose.Types.ObjectId(String(raw));
   return { ok: true };
@@ -154,7 +155,7 @@ const applyOrderManagementStatusFilter = (filter, query) => {
 
   const statusFilter = buildOrderManagementStatusQueryFilter(statusRaw);
   if (!statusFilter) {
-    return fail(409, `Invalid status. Use one of: ${ORDER_STATUSES.join(', ')}.`);
+    return fail(409, `Invalid ${fieldLabel('status')}. Use one of: ${ORDER_STATUSES.join(', ')}.`);
   }
   Object.assign(filter, statusFilter);
   return { ok: true };
@@ -197,7 +198,7 @@ const applyUserPaymentStatusFilter = (filter, query) => {
   if (!isValidOrderPaymentStatus(paymentStatusRaw)) {
     return fail(
       409,
-      'Invalid user_payment_status/payment_status filter. Use unpaid, paid, partially_paid, refund, partially_refund.'
+      `Invalid ${fieldLabel('user_payment_status')}/${fieldLabel('payment_status')} filter. Use unpaid, paid, partially_paid, refund, partially_refund.`
     );
   }
   filter.user_payment_status = paymentStatusRaw;
@@ -219,7 +220,7 @@ const applyPartnerPaymentStatusFilter = (filter, query) => {
   if (!isValidPartnerPaymentStatus(partnerPaymentStatusRaw)) {
     return fail(
       409,
-      'Invalid partner_payment_status filter. Use unpaid, partially_paid, paid.'
+      `Invalid ${fieldLabel('partner_payment_status')} filter. Use unpaid, partially_paid, paid.`
     );
   }
   filter.partner_payment_status = partnerPaymentStatusRaw;
@@ -242,7 +243,7 @@ const applyPartnerWorkStatusFilter = (filter, query) => {
   if (!workStatusFilter) {
     return fail(
       409,
-      'Invalid partner_work_status filter. Use pending, in-progress, or completed.'
+      `Invalid ${fieldLabel('partner_work_status')} filter. Use pending, in-progress, or completed.`
     );
   }
   Object.assign(filter, workStatusFilter);

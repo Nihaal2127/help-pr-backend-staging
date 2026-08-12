@@ -6,6 +6,7 @@ const { NOTIFICATION_EVENTS } = require("../constants/notification_events");
 const { sendPushForNotification } = require("./notificationPush.service");
 const { logNotificationDelivery } = require("./notificationDeliveryLog.service");
 const { buildFieldDateRangeFilter } = require("../../../../utils/schedule_date_filters");
+const { fieldLabel } = require("../../../../utils/field_labels");
 
 const MAX_PAGE_SIZE = 100;
 
@@ -87,7 +88,7 @@ const buildNotificationQueryFilter = (userId, query = {}) => {
       return {
         ok: false,
         status: 400,
-        message: "Invalid franchise_id filter.",
+        message: `Invalid ${fieldLabel("franchise_id")} filter.`,
       };
     }
     filter.franchise_id = franchiseId;

@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const { isMongoObjectIdHex } = require("../../../utils/mongoose_helpers");
+const { fieldLabel } = require("../../../utils/field_labels");
 
 const sendError = (res, status, message) =>
   res.status(status).json({
@@ -12,7 +13,7 @@ const validateAppointmentIdParam = (req, res, next) => {
   try {
     const id = String(req.params.appointmentId ?? "").trim();
     if (!id) {
-      return sendError(res, 400, "appointmentId is required.");
+      return sendError(res, 400, `${fieldLabel("appointmentId")} is required.`);
     }
     if (isMongoObjectIdHex(id)) {
       return next();
@@ -31,7 +32,7 @@ const validateOrderIdParam = (req, res, next) => {
   try {
     const id = String(req.params.orderId ?? "").trim();
     if (!id) {
-      return sendError(res, 400, "orderId is required.");
+      return sendError(res, 400, `${fieldLabel("orderId")} is required.`);
     }
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return sendError(res, 400, "Invalid order id.");

@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const User = require('../../../models/user');
 const { validatePhoneNumber } = require('../../../validator/form_validator');
+const { fieldLabel } = require('../../../utils/field_labels');
 const {
   normalizeUserEmail,
   normalizeUserPhone,
@@ -118,7 +119,7 @@ const validateGoogleLogin = (req, res, next) => {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'id_token is required.',
+      message: `${fieldLabel('id_token')} is required.`,
     });
   }
 
@@ -132,7 +133,7 @@ const validateAppleLogin = (req, res, next) => {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'id_token is required.',
+      message: `${fieldLabel('id_token')} is required.`,
     });
   }
 

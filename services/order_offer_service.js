@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Offer = require("../models/offer");
 const OrderOffer = require("../models/order_offer");
 const { OrderCreationError } = require("../errors/order_creation_error");
+const { fieldLabel } = require("../utils/field_labels");
 const {
   computeOrderOfferBreakdown,
   isOfferValidOnDate,
@@ -9,7 +10,10 @@ const {
 
 const loadOfferForOrder = async (offerIdRaw, referenceDate) => {
   if (!offerIdRaw || !mongoose.Types.ObjectId.isValid(String(offerIdRaw))) {
-    throw new OrderCreationError("Valid offer_id is required when applying an offer.", 409);
+    throw new OrderCreationError(
+      `Valid ${fieldLabel("offer_id")} is required when applying an offer.`,
+      409
+    );
   }
 
   const offer = await Offer.findOne({

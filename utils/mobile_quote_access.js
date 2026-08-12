@@ -3,6 +3,7 @@ const Franchise = require('../models/franchise');
 const Address = require('../models/address');
 const { USER_TYPE_PARTNER, USER_TYPE_CUSTOMER } = require('../constants/user_types');
 const User = require('../models/user');
+const { fieldLabel } = require('./field_labels');
 
 const fail = (status, message) => ({ ok: false, status, message });
 const pass = () => ({ ok: true });
@@ -47,7 +48,7 @@ const assertPartnerAssignedToQuote = (partnerId, quote) => {
 const assertFranchiseExists = async (franchiseId) => {
   const oid = toObjectId(franchiseId);
   if (!oid) {
-    return fail(400, 'Valid franchise_id is required.');
+    return fail(400, `Valid ${fieldLabel('franchise_id')} is required.`);
   }
   const franchise = await Franchise.findOne({ _id: oid, deleted_at: null })
     .select('_id name')
@@ -61,7 +62,7 @@ const assertFranchiseExists = async (franchiseId) => {
 const assertCustomerOwnsAddress = async (customerId, addressId) => {
   const oid = toObjectId(addressId);
   if (!oid) {
-    return fail(400, 'Valid address_id is required.');
+    return fail(400, `Valid ${fieldLabel('address_id')} is required.`);
   }
   const address = await Address.findOne({
     _id: oid,
@@ -77,7 +78,7 @@ const assertCustomerOwnsAddress = async (customerId, addressId) => {
 const assertPartnerUser = async (partnerId) => {
   const oid = toObjectId(partnerId);
   if (!oid) {
-    return fail(400, 'Valid partner_id is required.');
+    return fail(400, `Valid ${fieldLabel('partner_id')} is required.`);
   }
   const partner = await User.findOne({
     _id: oid,

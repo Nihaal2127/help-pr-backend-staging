@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const { OrderCreationError } = require("../errors/order_creation_error");
+const { fieldLabel } = require("../utils/field_labels");
 const {
   buildOrderPricingFromService,
   resolveTotalServiceCharge,
@@ -19,7 +20,7 @@ const resolveQuotePricing = async (body) => {
   const serviceId = body?.service_id;
   if (!serviceId || !mongoose.Types.ObjectId.isValid(String(serviceId))) {
     throw new OrderCreationError(
-      "Valid service_id is required for quote pricing.",
+      `Valid ${fieldLabel("service_id")} is required for quote pricing.`,
       409
     );
   }
@@ -34,7 +35,7 @@ const resolveQuotePricing = async (body) => {
 
   if (totalCharge === null || totalCharge <= 0) {
     throw new OrderCreationError(
-      "Unable to determine service price for the selected partner. Ensure the partner offers this service or send total_service_charge.",
+      `Unable to determine service price for the selected partner. Ensure the partner offers this service or send ${fieldLabel("total_service_charge")}.`,
       409
     );
   }
@@ -71,17 +72,42 @@ const resolveQuoteCharge = (quote, body = {}) => {
   return stored > 0 ? stored : 0;
 };
 
+const sameRefId = (a, b) => {
+  const left = a == null || a === "" ? null : String(a._id ?? a);
+  const right = b == null || b === "" ? null : String(b._id ?? b);
+  return left === right;
+};
+
 const buildQuotePricingBody = (quote, body) => {
   const partnerId =
     body.partner_id !== undefined ? body.partner_id : quote.partner_id;
+  const serviceId =
+    body.service_id !== undefined ? body.service_id : quote.service_id;
+  const categoryId =
+    body.category_id !== undefined ? body.category_id : quote.category_id;
+
+  // Admin edit forms often resend partner_id / service_id even when unchanged.
+  // Only fall back to partner_service.price (1 unit) when partner/service
+  // actually changes and the client did not send an explicit booked-hours charge.
+  const partnerOrServiceChanged =
+    (body.partner_id !== undefined &&
+      !sameRefId(body.partner_id, quote.partner_id)) ||
+    (body.service_id !== undefined &&
+      !sameRefId(body.service_id, quote.service_id));
+
+  const explicitCharge = resolveTotalServiceCharge(body, {});
+  const hasExplicitCharge =
+    explicitCharge !== null && explicitCharge > 0;
+
   const reloadFromPartnerOffering =
     hasPartnerId(partnerId) &&
-    (body.partner_id !== undefined || body.service_id !== undefined);
+    partnerOrServiceChanged &&
+    !hasExplicitCharge;
 
   return {
-    service_id: body.service_id !== undefined ? body.service_id : quote.service_id,
+    service_id: serviceId,
     partner_id: partnerId,
-    category_id: body.category_id !== undefined ? body.category_id : quote.category_id,
+    category_id: categoryId,
     total_service_charge: reloadFromPartnerOffering
       ? null
       : resolveQuoteCharge(quote, body) || null,
@@ -106,7 +132,7 @@ const ensureQuotePricingForConversion = async (quote, body = {}) => {
   const charge = resolveQuoteCharge(quote, body);
   if (!(charge > 0)) {
     throw new OrderCreationError(
-      "Quote must have total_service_charge (or service_price) greater than 0 before converting to an order.",
+      `Quote must have ${fieldLabel("total_service_charge")} (or ${fieldLabel("service_price")}) greater than 0 before converting to an order.`,
       409
     );
   }

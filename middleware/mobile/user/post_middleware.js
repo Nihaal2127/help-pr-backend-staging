@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { normalizeReportReason } = require('../../../enum/post_report_reason_enum');
+const { fieldLabel } = require('../../../utils/field_labels');
 
 const sendError = (res, status, message) =>
   res.status(status).json({
@@ -11,11 +12,11 @@ const sendError = (res, status, message) =>
 const validateFranchiseIdQuery = (req, res, next) => {
   const franchiseId = req.query.franchise_id;
   if (franchiseId === undefined || franchiseId === null || String(franchiseId).trim() === '') {
-    return sendError(res, 400, 'franchise_id is required.');
+    return sendError(res, 400, `${fieldLabel('franchise_id')} is required.`);
   }
 
   if (!mongoose.Types.ObjectId.isValid(String(franchiseId).trim())) {
-    return sendError(res, 400, 'franchise_id must be a valid ObjectId.');
+    return sendError(res, 400, `${fieldLabel('franchise_id')} must be a valid ObjectId.`);
   }
 
   next();
@@ -46,7 +47,7 @@ const validateShareTokenParam = (req, res, next) => {
 const validateReportBody = (req, res, next) => {
   const { reason } = req.body || {};
   if (!normalizeReportReason(reason)) {
-    return sendError(res, 400, 'reason must be one of: spam, inappropriate, misleading, other.');
+    return sendError(res, 400, `${fieldLabel('reason')} must be one of: spam, inappropriate, misleading, other.`);
   }
   next();
 };

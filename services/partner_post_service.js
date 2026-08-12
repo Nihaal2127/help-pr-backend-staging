@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { fieldLabel } = require('../utils/field_labels');
 const PartnerPost = require('../models/partner_post');
 const PartnerPostReport = require('../models/partner_post_report');
 const User = require('../models/user');
@@ -274,7 +275,7 @@ const moderatePost = async (req, postId, body) => {
 
   const status = normalizePostStatus(body.status);
   if (!status) {
-    return fail(400, 'status must be one of: published, hidden, removed, rejected.');
+    return fail(400, `${fieldLabel('status')} must be one of: published, hidden, removed, rejected.`);
   }
 
   const post = await PartnerPost.findOne({
@@ -311,7 +312,7 @@ const moderatePost = async (req, postId, body) => {
     }
   } else if (POST_MODERATION_STATUSES.includes(currentStatus)) {
     if (!POST_MODERATION_STATUSES.includes(status)) {
-      return fail(400, 'status must be one of: published, hidden, removed.');
+      return fail(400, `${fieldLabel('status')} must be one of: published, hidden, removed.`);
     }
     post.status = status;
   } else {
@@ -366,7 +367,7 @@ const updateReportStatus = async (reportId, body) => {
 
   const status = normalizeReportStatus(body.status);
   if (!status || status === REPORT_STATUS_PENDING) {
-    return fail(400, 'status must be reviewed or dismissed.');
+    return fail(400, `${fieldLabel('status')} must be reviewed or dismissed.`);
   }
 
   const report = await PartnerPostReport.findById(parsed.oid);

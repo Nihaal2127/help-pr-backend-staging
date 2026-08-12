@@ -1,3 +1,4 @@
+const { fieldLabel } = require('../../../utils/field_labels');
 const OBJECT_ID_HEX_24 = /^[a-fA-F0-9]{24}$/;
 
 const sendError = (res, status, message) =>
@@ -13,7 +14,7 @@ const parseNonNegativeAmount = (raw, fieldName) => {
     }
     const n = Number(raw);
     if (Number.isNaN(n) || n < 0) {
-        return { ok: false, message: `${fieldName} must be a non-negative number.` };
+        return { ok: false, message: `${fieldLabel(fieldName)} must be a non-negative number.` };
     }
     return { ok: true, value: n };
 };
@@ -21,10 +22,10 @@ const parseNonNegativeAmount = (raw, fieldName) => {
 const validateTargetPlanId = (req, res, next) => {
     const targetPlanId = req.body?.target_plan_id;
     if (!targetPlanId || String(targetPlanId).trim() === '') {
-        return sendError(res, 400, 'target_plan_id is required.');
+        return sendError(res, 400, `${fieldLabel('target_plan_id')} is required.`);
     }
     if (!OBJECT_ID_HEX_24.test(String(targetPlanId).trim())) {
-        return sendError(res, 400, 'target_plan_id must be a valid ObjectId.');
+        return sendError(res, 400, `${fieldLabel('target_plan_id')} must be a valid ObjectId.`);
     }
     next();
 };
@@ -32,10 +33,10 @@ const validateTargetPlanId = (req, res, next) => {
 const validateApplyChangeBody = (req, res, next) => {
     const targetPlanId = req.body?.target_plan_id;
     if (!targetPlanId || String(targetPlanId).trim() === '') {
-        return sendError(res, 400, 'target_plan_id is required.');
+        return sendError(res, 400, `${fieldLabel('target_plan_id')} is required.`);
     }
     if (!OBJECT_ID_HEX_24.test(String(targetPlanId).trim())) {
-        return sendError(res, 400, 'target_plan_id must be a valid ObjectId.');
+        return sendError(res, 400, `${fieldLabel('target_plan_id')} must be a valid ObjectId.`);
     }
 
     const walletParsed = parseNonNegativeAmount(req.body.wallet_amount, 'wallet_amount');

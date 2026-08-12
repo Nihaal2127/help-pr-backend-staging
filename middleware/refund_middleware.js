@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { fieldLabel } = require('../utils/field_labels');
 
 const isValidObjectIdString = (id) => {
     if (id === undefined || id === null) return false;
@@ -92,13 +93,13 @@ const validateRefundIdParam = (req, res, next) => {
     if (!id || String(id).trim() === '') {
         return res.status(400).json({
             success: false,
-            message: 'id is required.',
+            message: `${fieldLabel('id')} is required.`,
         });
     }
     if (!isValidObjectIdString(id)) {
         return res.status(400).json({
             success: false,
-            message: 'id must be a valid MongoDB ObjectId.',
+            message: `${fieldLabel('id')} must be a valid MongoDB ObjectId.`,
         });
     }
     next();

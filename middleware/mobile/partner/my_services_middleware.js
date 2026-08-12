@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const User = require('../../../models/user');
 const { parseJSONField } = require('../../../utils/multipart_parser');
+const { fieldLabel } = require('../../../utils/field_labels');
 
 const USER_TYPE_PARTNER = 2;
 const PARTNER_VERIFICATION_STATUS_APPROVED = 2;
@@ -61,7 +62,7 @@ const partnerUpdateMyServicesMiddleware = async (req, res, next) => {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'services must be a non-empty array.',
+      message: `${fieldLabel('services')} must be a non-empty array.`,
     });
   }
 
@@ -71,7 +72,7 @@ const partnerUpdateMyServicesMiddleware = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: `services[${i}] must be an object.`,
+        message: `${fieldLabel(`services[${i}]`)} must be an object.`,
       });
     }
   }
@@ -99,7 +100,7 @@ const partnerPatchMyServiceStatusMiddleware = async (req, res, next) => {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'id must be a valid id.',
+      message: `${fieldLabel('id')} must be a valid id.`,
     });
   }
 
@@ -107,7 +108,7 @@ const partnerPatchMyServiceStatusMiddleware = async (req, res, next) => {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'is_active must be true or false.',
+      message: `${fieldLabel('is_active')} must be true or false.`,
     });
   }
 
@@ -136,7 +137,7 @@ const partnerPatchMyServicesBulkStatusMiddleware = async (req, res, next) => {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'updates must be a non-empty array.',
+      message: `${fieldLabel('updates')} must be a non-empty array.`,
     });
   }
 
@@ -146,7 +147,7 @@ const partnerPatchMyServicesBulkStatusMiddleware = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: `updates[${i}] must be an object.`,
+        message: `${fieldLabel(`updates[${i}]`)} must be an object.`,
       });
     }
 
@@ -155,7 +156,7 @@ const partnerPatchMyServicesBulkStatusMiddleware = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: `updates[${i}]._id must be a valid id.`,
+        message: `${fieldLabel(`updates[${i}]._id`)} must be a valid id.`,
       });
     }
 
@@ -163,7 +164,7 @@ const partnerPatchMyServicesBulkStatusMiddleware = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: `updates[${i}].is_active must be true or false.`,
+        message: `${fieldLabel(`updates[${i}].is_active`)} must be true or false.`,
       });
     }
   }

@@ -8,6 +8,7 @@ const { getUploadType } = require('../../../enum/upload_type_enum');
 const { normalizePostType } = require('../../../enum/post_type_enum');
 const { POST_STATUS_PENDING, POST_STATUS_REJECTED } = require('../../../enum/post_report_reason_enum');
 const { ORDER_STATUS_COMPLETED } = require('../../../enum/order_status_enum');
+const { fieldLabel } = require('../../../utils/field_labels');
 const {
   fail,
   ok,
@@ -100,7 +101,7 @@ const createPartnerPost = async (partnerId, body, files) => {
 
   const postType = normalizePostType(body.post_type);
   if (!postType) {
-    return fail(400, `post_type must be one of: order, legacy_work.`);
+    return fail(400, `${fieldLabel('post_type')} must be one of: order, legacy_work.`);
   }
 
   const descParsed = parseDescription(body.description);
@@ -118,7 +119,7 @@ const createPartnerPost = async (partnerId, body, files) => {
 
   if (postType === POST_TYPE_ORDER) {
     if (!body.order_id) {
-      return fail(400, 'order_id is required for order posts.');
+      return fail(400, `${fieldLabel('order_id')} is required for order posts.`);
     }
 
     const orderLink = await validateOrderLink(partnerId, body.order_id);
@@ -132,7 +133,7 @@ const createPartnerPost = async (partnerId, body, files) => {
     if (legacyServiceName.length < MIN_LEGACY_SERVICE_NAME_LENGTH) {
       return fail(
         400,
-        `legacy_service_name is required and must be at least ${MIN_LEGACY_SERVICE_NAME_LENGTH} characters.`
+        `${fieldLabel('legacy_service_name')} is required and must be at least ${MIN_LEGACY_SERVICE_NAME_LENGTH} characters.`
       );
     }
 
@@ -332,11 +333,11 @@ const updatePartnerPost = async (partnerId, postId, body, files) => {
       const parsedKeep =
         typeof keepExistingRaw === 'string' ? JSON.parse(keepExistingRaw) : keepExistingRaw;
       if (!Array.isArray(parsedKeep)) {
-        return fail(400, 'keep_existing_images must be a JSON array of image URLs to retain.');
+        return fail(400, `${fieldLabel('keep_existing_images')} must be a JSON array of image URLs to retain.`);
       }
       keepExisting = parsedKeep.map((u) => String(u).trim()).filter(Boolean);
     } catch {
-      return fail(400, 'keep_existing_images must be valid JSON.');
+      return fail(400, `${fieldLabel('keep_existing_images')} must be valid JSON.`);
     }
   } else if (imageFiles.length > 0) {
     keepExisting = [];

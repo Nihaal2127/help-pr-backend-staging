@@ -8,6 +8,7 @@ const { ORDER_STATUS_COMPLETED } = require("../../../enum/order_status_enum");
 const { safeNotifyOrderReviewReceived } = require("../../../src/modules/notifications/services/domainHooks");
 
 const { fail, ok } = require('../../../utils/mobile_service_result');
+const { fieldLabel } = require('../../../utils/field_labels');
 
 const normalizeRating = (value) => {
   const rating = Number(value);
@@ -28,7 +29,7 @@ const pickOrderServiceForReview = async (order, serviceItemIdRaw) => {
   if (serviceItemIdRaw !== undefined && serviceItemIdRaw !== null && String(serviceItemIdRaw).trim() !== "") {
     const raw = String(serviceItemIdRaw).trim();
     if (!mongoose.Types.ObjectId.isValid(raw)) {
-      return fail(400, "Invalid service_items_id.");
+      return fail(400, `Invalid ${fieldLabel("service_items_id")}.`);
     }
     if (!lineIds.includes(raw)) {
       return fail(404, "Service line not found on this order.");
@@ -37,7 +38,7 @@ const pickOrderServiceForReview = async (order, serviceItemIdRaw) => {
   } else if (lineIds.length === 1) {
     targetLineId = lineIds[0];
   } else {
-    return fail(400, "service_items_id is required when order has multiple services.");
+    return fail(400, `${fieldLabel("service_items_id")} is required when order has multiple services.`);
   }
 
   const line = await OrderService.findOne({
@@ -109,7 +110,7 @@ const submitOrderReview = async (customerId, orderId, payload = {}) => {
 
     const rating = normalizeRating(payload.rating);
     if (rating === null) {
-      return fail(409, "rating must be a number between 1 and 5.");
+      return fail(409, `${fieldLabel("rating")} must be a number between 1 and 5.`);
     }
     const review_text = normalizeReview(payload.review_text);
 

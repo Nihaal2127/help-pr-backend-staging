@@ -1,5 +1,6 @@
 const { parseFilterDate } = require("../utils/date_bounds");
 const { isMongoObjectIdHex } = require("../utils/mongoose_helpers");
+const { fieldLabel } = require("../utils/field_labels");
 const {
   normalizeAppointmentStatus,
   isValidAppointmentStatus,
@@ -58,15 +59,15 @@ const validateCreateAppointmentBody = (req, res, next) => {
     const { order_id, title, service_date } = req.body || {};
 
     if (!order_id || String(order_id).trim() === "") {
-      return sendError(res, 400, "order_id is required.");
+      return sendError(res, 400, `${fieldLabel("order_id")} is required.`);
     }
 
     if (!parseFilterDate(service_date)) {
-      return sendError(res, 400, "Valid service_date is required.");
+      return sendError(res, 400, `Valid ${fieldLabel("service_date")} is required.`);
     }
 
     if (title !== undefined && title !== null && String(title).length > 200) {
-      return sendError(res, 400, "title must be 200 characters or fewer.");
+      return sendError(res, 400, `${fieldLabel("title")} must be 200 characters or fewer.`);
     }
 
     if (
@@ -78,7 +79,7 @@ const validateCreateAppointmentBody = (req, res, next) => {
       return sendError(
         res,
         400,
-        "status must be one of: scheduled, in-progress, completed, cancelled."
+        `${fieldLabel("status")} must be one of: scheduled, in-progress, completed, cancelled.`
       );
     }
 
@@ -94,7 +95,7 @@ const validateUpdateAppointmentBody = (req, res, next) => {
     const { title, status } = req.body || {};
 
     if (title !== undefined && title !== null && String(title).length > 200) {
-      return sendError(res, 400, "title must be 200 characters or fewer.");
+      return sendError(res, 400, `${fieldLabel("title")} must be 200 characters or fewer.`);
     }
 
     if (
@@ -106,7 +107,7 @@ const validateUpdateAppointmentBody = (req, res, next) => {
       return sendError(
         res,
         400,
-        "status must be one of: scheduled, in-progress, completed, cancelled."
+        `${fieldLabel("status")} must be one of: scheduled, in-progress, completed, cancelled.`
       );
     }
 

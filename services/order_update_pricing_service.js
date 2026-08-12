@@ -1,6 +1,7 @@
 const Order = require("../models/order");
 const OrderService = require("../models/order_services");
 const { OrderCreationError } = require("../errors/order_creation_error");
+const { fieldLabel } = require("../utils/field_labels");
 const { computeBasePricing } = require("../utils/order_pricing");
 const {
   loadOfferForOrder,
@@ -24,7 +25,7 @@ const resolveChargeForUpdate = (body, order) => {
     const n = Number(body.total_service_charge);
     if (!Number.isFinite(n) || n <= 0) {
       throw new OrderCreationError(
-        "total_service_charge must be a number greater than 0.",
+        `${fieldLabel("total_service_charge")} must be a number greater than 0.`,
         409
       );
     }
@@ -33,13 +34,19 @@ const resolveChargeForUpdate = (body, order) => {
   if (body.service_price !== undefined && body.service_price !== null) {
     const n = Number(body.service_price);
     if (!Number.isFinite(n) || n <= 0) {
-      throw new OrderCreationError("service_price must be a number greater than 0.", 409);
+      throw new OrderCreationError(
+        `${fieldLabel("service_price")} must be a number greater than 0.`,
+        409
+      );
     }
     return n;
   }
   const existing = Number(order.total_service_charge ?? order.service_price) || 0;
   if (existing <= 0) {
-    throw new OrderCreationError("Order has no total_service_charge to reprice.", 409);
+    throw new OrderCreationError(
+      `Order has no ${fieldLabel("total_service_charge")} to reprice.`,
+      409
+    );
   }
   return existing;
 };
@@ -51,7 +58,7 @@ const getStoredRatePercents = (order) => {
 
   if (!Number.isFinite(tax_percent) && !Number.isFinite(commission_percent)) {
     throw new OrderCreationError(
-      "Order is missing stored tax_percent / commission_percent; cannot reprice.",
+      `Order is missing stored ${fieldLabel("tax_percent")} / ${fieldLabel("commission_percent")}; cannot reprice.`,
       409
     );
   }

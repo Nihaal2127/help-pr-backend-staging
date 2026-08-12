@@ -1,6 +1,7 @@
 const PartnerBankAccount = require('../../../models/partner_bank_account');
 const { assertActivePartner, assertVerifiedPartner } = require('../shared/partner_access_helpers');
 const { fail, ok } = require('../../../utils/mobile_service_result');
+const { fieldLabel } = require('../../../utils/field_labels');
 const {
   formatBankAccountRecord,
   normalizeOnePartnerBankAccount,
@@ -215,7 +216,7 @@ const updatePartnerBankAccount = async (partnerId, accountId, body) => {
 
     const primaryFlag = parseOptionalPrimaryFlag(body);
     if (primaryFlag === null) {
-      return fail(400, 'is_primary must be true or false.');
+      return fail(400, `${fieldLabel('is_primary')} must be true or false.`);
     }
     const wantsPrimary = primaryFlag === true;
     const wantsUnsetPrimary = primaryFlag === false;

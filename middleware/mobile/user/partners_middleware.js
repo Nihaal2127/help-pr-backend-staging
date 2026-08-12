@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { fieldLabel } = require('../../../utils/field_labels');
 
 const validatePartnersListQuery = (req, res, next) => {
   const franchiseId = req.query.franchise_id;
@@ -6,7 +7,7 @@ const validatePartnersListQuery = (req, res, next) => {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'franchise_id is required.',
+      message: `${fieldLabel('franchise_id')} is required.`,
     });
   }
 
@@ -14,7 +15,7 @@ const validatePartnersListQuery = (req, res, next) => {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'franchise_id must be a valid ObjectId.',
+      message: `${fieldLabel('franchise_id')} must be a valid ObjectId.`,
     });
   }
 
@@ -31,7 +32,7 @@ const validatePartnerProfileQuery = (req, res, next) => {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'franchise_id must be a valid ObjectId.',
+      message: `${fieldLabel('franchise_id')} must be a valid ObjectId.`,
     });
   }
 
@@ -44,7 +45,7 @@ const validatePartnerIdParam = (req, res, next) => {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'partnerId is required.',
+      message: `${fieldLabel('partnerId')} is required.`,
     });
   }
 
@@ -52,7 +53,7 @@ const validatePartnerIdParam = (req, res, next) => {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'partnerId must be a valid ObjectId.',
+      message: `${fieldLabel('partnerId')} must be a valid ObjectId.`,
     });
   }
 

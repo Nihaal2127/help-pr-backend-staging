@@ -44,7 +44,7 @@ const create = async (req, res) => {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: "amount is required and must be >= 0.",
+        message: `${fieldLabel("amount")} is required and must be >= 0.`,
       });
     }
 
@@ -57,14 +57,14 @@ const create = async (req, res) => {
         return res.status(400).json({
           success: false,
           status: 400,
-          message: "Online payments are only supported for payer_type customer.",
+          message: `Online payments are only supported when ${fieldLabel("payer_type")} is customer.`,
         });
       }
       if (Number(amount) <= 0) {
         return res.status(400).json({
           success: false,
           status: 400,
-          message: "amount must be greater than 0 for online payments.",
+          message: `${fieldLabel("amount")} must be greater than 0 for online payments.`,
         });
       }
       if (status === "completed") {
@@ -284,7 +284,7 @@ const update = async (req, res) => {
         return res.status(400).json({
           success: false,
           status: 400,
-          message: "amount must be >= 0.",
+          message: `${fieldLabel("amount")} must be >= 0.`,
         });
       }
     }

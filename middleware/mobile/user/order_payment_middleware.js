@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { fieldLabel } = require('../../../utils/field_labels');
 const {
   ALLOWED_CUSTOMER_PAYMENT_METHODS,
   ORDER_PAYMENT_STATUSES,
@@ -17,7 +18,7 @@ const validatePaymentMethod = (raw, res, { required }) => {
     raw !== undefined && raw !== null ? String(raw).trim().toLowerCase() : '';
   if (!normalized) {
     if (required) {
-      sendError(res, 400, 'payment_method is required.');
+      sendError(res, 400, `${fieldLabel('payment_method')} is required.`);
       return null;
     }
     return '';
@@ -26,7 +27,7 @@ const validatePaymentMethod = (raw, res, { required }) => {
     sendError(
       res,
       400,
-      `payment_method must be one of: ${Array.from(ALLOWED_CUSTOMER_PAYMENT_METHODS).join(', ')}.`
+      `${fieldLabel('payment_method')} must be one of: ${Array.from(ALLOWED_CUSTOMER_PAYMENT_METHODS).join(', ')}.`
     );
     return null;
   }
@@ -37,7 +38,7 @@ const validateOptionalDate = (value, fieldName, res) => {
   if (value === undefined || value === null || value === '') return true;
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) {
-    sendError(res, 400, `${fieldName} must be a valid date.`);
+    sendError(res, 400, `${fieldLabel(fieldName)} must be a valid date.`);
     return false;
   }
   return true;
@@ -48,7 +49,7 @@ const validateListOrderPaymentsQuery = (req, res, next) => {
 
   if (order_id !== undefined && String(order_id).trim() !== '') {
     if (!mongoose.Types.ObjectId.isValid(String(order_id))) {
-      return sendError(res, 400, 'Invalid order_id.');
+      return sendError(res, 400, `Invalid ${fieldLabel('order_id')}.`);
     }
   }
 
@@ -58,7 +59,7 @@ const validateListOrderPaymentsQuery = (req, res, next) => {
       return sendError(
         res,
         400,
-        'status must be one of: pending, completed, failed, refunded.'
+        `${fieldLabel('status')} must be one of: pending, completed, failed, refunded.`
       );
     }
     req.query.status = normalized;
@@ -70,7 +71,7 @@ const validateListOrderPaymentsQuery = (req, res, next) => {
       return sendError(
         res,
         400,
-        `payment_method must be one of: ${Array.from(ALLOWED_CUSTOMER_PAYMENT_METHODS).join(', ')}.`
+        `${fieldLabel('payment_method')} must be one of: ${Array.from(ALLOWED_CUSTOMER_PAYMENT_METHODS).join(', ')}.`
       );
     }
     req.query.payment_method = normalized;
@@ -87,7 +88,7 @@ const validateListOrderPaymentsQuery = (req, res, next) => {
 const validatePaymentIdParam = (req, res, next) => {
   const paymentId = req.params.paymentId;
   if (paymentId === undefined || paymentId === null || String(paymentId).trim() === '') {
-    return sendError(res, 400, 'paymentId is required.');
+    return sendError(res, 400, `${fieldLabel('paymentId')} is required.`);
   }
   if (!mongoose.Types.ObjectId.isValid(String(paymentId).trim())) {
     return sendError(res, 400, 'Invalid payment id.');
@@ -99,11 +100,11 @@ const validateCreateOrderPaymentBody = (req, res, next) => {
   const body = req.body || {};
 
   if (body.amount === undefined || body.amount === null || String(body.amount).trim() === '') {
-    return sendError(res, 400, 'amount is required.');
+    return sendError(res, 400, `${fieldLabel('amount')} is required.`);
   }
   const amount = Number(body.amount);
   if (!Number.isFinite(amount) || amount < 0) {
-    return sendError(res, 400, 'amount must be >= 0.');
+    return sendError(res, 400, `${fieldLabel('amount')} must be >= 0.`);
   }
 
   const paymentMethod = validatePaymentMethod(body.payment_method, res, { required: true });
@@ -116,7 +117,7 @@ const validateCreateOrderPaymentBody = (req, res, next) => {
       return sendError(
         res,
         400,
-        'status must be one of: pending, completed, failed, refunded.'
+        `${fieldLabel('status')} must be one of: pending, completed, failed, refunded.`
       );
     }
   }
@@ -126,10 +127,10 @@ const validateCreateOrderPaymentBody = (req, res, next) => {
     body.transaction_reference !== null &&
     typeof body.transaction_reference !== 'string'
   ) {
-    return sendError(res, 400, 'transaction_reference must be a string.');
+    return sendError(res, 400, `${fieldLabel('transaction_reference')} must be a string.`);
   }
   if (body.notes !== undefined && body.notes !== null && typeof body.notes !== 'string') {
-    return sendError(res, 400, 'notes must be a string.');
+    return sendError(res, 400, `${fieldLabel('notes')} must be a string.`);
   }
   if (
     body.installment_index !== undefined &&
@@ -138,7 +139,7 @@ const validateCreateOrderPaymentBody = (req, res, next) => {
   ) {
     const idx = Number(body.installment_index);
     if (!Number.isFinite(idx)) {
-      return sendError(res, 400, 'installment_index must be a number.');
+      return sendError(res, 400, `${fieldLabel('installment_index')} must be a number.`);
     }
   }
   if (!validateOptionalDate(body.due_date, 'due_date', res)) return;
@@ -146,7 +147,7 @@ const validateCreateOrderPaymentBody = (req, res, next) => {
 
   if (paymentMethod === 'online') {
     if (amount <= 0) {
-      return sendError(res, 400, 'amount must be greater than 0 for online payments.');
+      return sendError(res, 400, `${fieldLabel('amount')} must be greater than 0 for online payments.`);
     }
     if (status === 'completed') {
       return sendError(
@@ -177,7 +178,7 @@ const validateUpdateOrderPaymentBody = (req, res, next) => {
   if (body.amount !== undefined) {
     const amount = Number(body.amount);
     if (!Number.isFinite(amount) || amount < 0) {
-      return sendError(res, 400, 'amount must be >= 0.');
+      return sendError(res, 400, `${fieldLabel('amount')} must be >= 0.`);
     }
     body.amount = amount;
   }
@@ -194,7 +195,7 @@ const validateUpdateOrderPaymentBody = (req, res, next) => {
       return sendError(
         res,
         400,
-        'status must be one of: pending, completed, failed, refunded.'
+        `${fieldLabel('status')} must be one of: pending, completed, failed, refunded.`
       );
     }
     body.status = status;
@@ -205,10 +206,10 @@ const validateUpdateOrderPaymentBody = (req, res, next) => {
     body.transaction_reference !== null &&
     typeof body.transaction_reference !== 'string'
   ) {
-    return sendError(res, 400, 'transaction_reference must be a string.');
+    return sendError(res, 400, `${fieldLabel('transaction_reference')} must be a string.`);
   }
   if (body.notes !== undefined && body.notes !== null && typeof body.notes !== 'string') {
-    return sendError(res, 400, 'notes must be a string.');
+    return sendError(res, 400, `${fieldLabel('notes')} must be a string.`);
   }
   if (
     body.installment_index !== undefined &&
@@ -217,7 +218,7 @@ const validateUpdateOrderPaymentBody = (req, res, next) => {
   ) {
     const idx = Number(body.installment_index);
     if (!Number.isFinite(idx)) {
-      return sendError(res, 400, 'installment_index must be a number.');
+      return sendError(res, 400, `${fieldLabel('installment_index')} must be a number.`);
     }
   }
   if (!validateOptionalDate(body.due_date, 'due_date', res)) return;

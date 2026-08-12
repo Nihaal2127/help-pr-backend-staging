@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Dispute = require("../models/dispute");
 const Order = require("../models/order");
 const { getDisputeId } = require("../helper/id_generator");
+const { fieldLabel } = require("../utils/field_labels");
 const { ORDER_STATUS_COMPLETED } = require("../enum/order_status_enum");
 const {
   DISPUTE_STATUS_OPEN,
@@ -77,7 +78,7 @@ const raiseDisputeForCustomer = async (customerId, body) => {
   const { order_id: orderId, reason, description } = body;
 
   if (!mongoose.Types.ObjectId.isValid(String(orderId))) {
-    return fail(400, "Valid order_id is required.");
+    return fail(400, `Valid ${fieldLabel("order_id")} is required.`);
   }
 
   const order = await Order.findOne({

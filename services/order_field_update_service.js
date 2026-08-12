@@ -34,7 +34,7 @@ const normalizeServiceItemsOps = (value) => {
     };
   }
   throw new OrderCreationError(
-    "service_items must be an array or { update: [...] }.",
+    `${fieldLabel("service_items")} must be an array or { update: [...] }.`,
     400
   );
 };
@@ -180,7 +180,7 @@ const applyOrderLevelFields = async (order, body) => {
     const pst = String(body.payment_schedule_type).trim();
     if (!PAYMENT_SCHEDULE_TYPES.has(pst)) {
       throw new OrderCreationError(
-        "payment_schedule_type must be single or installments.",
+        `${fieldLabel("payment_schedule_type")} must be single or installments.`,
         409
       );
     }
@@ -231,7 +231,7 @@ const applyServiceItemsUpdate = async (order, body) => {
     if (!lineId) {
       if (orderLineIds.length !== 1) {
         throw new OrderCreationError(
-          `service_items.update[${i}]: _id is required when order has multiple lines.`,
+          `${fieldLabel("service_items")} update [item ${i + 1}]: ${fieldLabel("_id")} is required when order has multiple lines.`,
           400
         );
       }
@@ -240,14 +240,14 @@ const applyServiceItemsUpdate = async (order, body) => {
 
     if (!mongoose.Types.ObjectId.isValid(String(lineId))) {
       throw new OrderCreationError(
-        `service_items.update[${i}]: invalid _id.`,
+        `${fieldLabel("service_items")} update [item ${i + 1}]: invalid ${fieldLabel("_id")}.`,
         400
       );
     }
 
     if (!orderLineIds.includes(String(lineId))) {
       throw new OrderCreationError(
-        `service_items.update[${i}]: line does not belong to this order.`,
+        `${fieldLabel("service_items")} update [item ${i + 1}]: line does not belong to this order.`,
         404
       );
     }
@@ -260,7 +260,7 @@ const applyServiceItemsUpdate = async (order, body) => {
 
     if (!line) {
       throw new OrderCreationError(
-        `service_items.update[${i}]: order service not found.`,
+        `${fieldLabel("service_items")} update [item ${i + 1}]: order service not found.`,
         404
       );
     }
@@ -300,7 +300,7 @@ const applyServiceItemsUpdate = async (order, body) => {
     if (item.service_date !== undefined) {
       if (!item.service_date) {
         throw new OrderCreationError(
-          `service_items.update[${i}]: service_date is required.`,
+          `${fieldLabel("service_items")} update [item ${i + 1}]: ${fieldLabel("service_date")} is required.`,
           409
         );
       }
@@ -310,7 +310,7 @@ const applyServiceItemsUpdate = async (order, body) => {
     if (item.service_from_time !== undefined) {
       if (!item.service_from_time) {
         throw new OrderCreationError(
-          `service_items.update[${i}]: service_from_time is required.`,
+          `${fieldLabel("service_items")} update [item ${i + 1}]: ${fieldLabel("service_from_time")} is required.`,
           409
         );
       }
@@ -320,7 +320,7 @@ const applyServiceItemsUpdate = async (order, body) => {
     if (item.service_to_time !== undefined) {
       if (!item.service_to_time) {
         throw new OrderCreationError(
-          `service_items.update[${i}]: service_to_time is required.`,
+          `${fieldLabel("service_items")} update [item ${i + 1}]: ${fieldLabel("service_to_time")} is required.`,
           409
         );
       }
@@ -331,7 +331,7 @@ const applyServiceItemsUpdate = async (order, body) => {
       const normalized = normalizeOrderStatus(item.service_status);
       if (!normalized) {
         throw new OrderCreationError(
-          `service_items.update[${i}]: invalid service_status.`,
+          `${fieldLabel("service_items")} update [item ${i + 1}]: invalid ${fieldLabel("service_status")}.`,
           409
         );
       }
@@ -352,7 +352,7 @@ const applyServiceItemsUpdate = async (order, body) => {
     if (charge !== null) {
       if (!Number.isFinite(charge) || charge <= 0) {
         throw new OrderCreationError(
-          `service_items.update[${i}]: total_service_charge must be > 0.`,
+          `${fieldLabel("service_items")} update [item ${i + 1}]: ${fieldLabel("total_service_charge")} must be > 0.`,
           409
         );
       }
@@ -420,7 +420,7 @@ const applyOrderFieldsAndServicesUpdate = async (order, body) => {
 
   if (Number(order.type) === 1 && !order.partner_id) {
     throw new OrderCreationError(
-      "partner_id is required on the order when type is 1.",
+      `${fieldLabel("partner_id")} is required on the order when type is 1.`,
       409
     );
   }

@@ -8,6 +8,7 @@ const { applyPagination } = require('../../../utils/pagination');
 const { OrderCreationError } = require('../../../errors/order_creation_error');
 const OrderPayment = require('../../../models/order_payment');
 const Order = require('../../../models/order');
+const { fieldLabel } = require('../../../utils/field_labels');
 const {
   resolveQuotePricing,
   applyPricingToQuote,
@@ -578,11 +579,11 @@ const convertCustomerQuoteToOrder = async (customerId, quoteId, body) => {
     if (paidAmount < minimumDeposit) {
       return fail(
         409,
-        `Minimum deposit is ${minimumDeposit}. Amount must be at least minimum_deposit_amount.`
+        `Minimum deposit is ${minimumDeposit}. Amount must be at least the minimum deposit.`
       );
     }
     if (totalPrice > 0 && paidAmount > totalPrice) {
-      return fail(409, 'Amount cannot exceed quote total_price.');
+      return fail(409, 'Amount cannot exceed the quote total.');
     }
 
     const paymentMethod = String(body.payment_method || '').trim().toLowerCase();
@@ -653,7 +654,7 @@ const convertCustomerQuoteToOrder = async (customerId, quoteId, body) => {
     const paymentStatus = body.payment_status ? String(body.payment_status).trim() : 'completed';
     const allowedPaymentStatuses = new Set(['pending', 'completed']);
     if (!allowedPaymentStatuses.has(paymentStatus)) {
-      return fail(400, 'payment_status must be either pending or completed.');
+      return fail(400, `${fieldLabel('payment_status')} must be either pending or completed.`);
     }
 
     const orderPayment = new OrderPayment({

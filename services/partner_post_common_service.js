@@ -9,6 +9,7 @@ const Order = require('../models/order');
 const OrderService = require('../models/order_services');
 const Category = require('../models/category');
 const Service = require('../models/service');
+const { fieldLabel } = require('../utils/field_labels');
 const { USER_TYPE_PARTNER } = require('../constants/user_types');
 const { POST_TYPE_ORDER, POST_TYPE_LEGACY_WORK } = require('../enum/post_type_enum');
 const { POST_STATUS_PENDING, POST_STATUS_PUBLISHED } = require('../enum/post_report_reason_enum');
@@ -37,7 +38,7 @@ const parsePositiveInt = (raw, fallback) => {
 const parseObjectId = (raw, fieldName) => {
   const s = raw !== undefined && raw !== null ? String(raw).trim() : '';
   if (!s || !OBJECT_ID_HEX_24.test(s)) {
-    return { ok: false, message: `${fieldName} must be a valid id.` };
+    return { ok: false, message: `${fieldLabel(fieldName)} must be a valid id.` };
   }
   return { ok: true, oid: new mongoose.Types.ObjectId(s) };
 };
@@ -212,12 +213,12 @@ const parsePostDescription = (value) => {
 const parseRejectionReason = (raw) => {
   const text = String(raw ?? '').trim();
   if (!text) {
-    return { ok: false, message: 'rejection_reason is required when status is rejected.' };
+    return { ok: false, message: `${fieldLabel('rejection_reason')} is required when status is rejected.` };
   }
   if (text.length > MAX_POST_REJECTION_REASON_LENGTH) {
     return {
       ok: false,
-      message: `rejection_reason must be at most ${MAX_POST_REJECTION_REASON_LENGTH} characters.`,
+      message: `${fieldLabel('rejection_reason')} must be at most ${MAX_POST_REJECTION_REASON_LENGTH} characters.`,
     };
   }
   return { ok: true, text };

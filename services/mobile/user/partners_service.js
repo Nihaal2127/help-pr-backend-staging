@@ -19,6 +19,10 @@ const {
   enrichPartnerListRecordsWithServiceRatings,
 } = require('./partner_rating_service');
 const { attachPartnerRatingFields } = require('../../../utils/rating_format');
+const {
+  getPartnerEngagementCounts,
+  getPartnersEngagementCountsByPartnerIds,
+} = require('../../partner_post_common_service');
 
 const { fail, ok, parsePositiveInt } = require('../../../utils/mobile_service_result');
 
@@ -225,6 +229,7 @@ const paginatePartnerRecords = (records, { filters, serviceId, categoryId, page,
 /**
  * Build partner list cards for a franchise (subscribed partners + catalog offerings).
  * Optional partnerIdAllowlist limits to specific partner Mongo ids.
+ * Optional publishedOnly controls post engagement scope (default false = all non-deleted).
  */
 const buildFranchisePartnerListRecords = async (franchiseId, options = {}) => {
   const franchiseCtx = await resolveFranchiseById(franchiseId);
@@ -236,6 +241,7 @@ const buildFranchisePartnerListRecords = async (franchiseId, options = {}) => {
     options.partnerIdAllowlist != null
       ? new Set(options.partnerIdAllowlist.map((id) => String(id)))
       : null;
+  const publishedOnly = options.publishedOnly === true;
 
   const subscribed = await loadSubscribedFranchisePartners(franchiseCtx.franchise._id);
 
@@ -260,17 +266,28 @@ const buildFranchisePartnerListRecords = async (franchiseId, options = {}) => {
   const effectiveServiceIds = (catalogResolved.effectiveServiceIds || []).map((x) => String(x));
   const partnerIds = partners.map((p) => p._id);
 
-  const effectiveOfferings = await collectEffectivePartnerOfferings(
-    franchiseCtx.franchise._id,
-    effectiveServiceIds,
-    partnerIds
-  );
+  const [effectiveOfferings, engagementByPartnerId] = await Promise.all([
+    collectEffectivePartnerOfferings(
+      franchiseCtx.franchise._id,
+      effectiveServiceIds,
+      partnerIds
+    ),
+    getPartnersEngagementCountsByPartnerIds(partnerIds, { publishedOnly }),
+  ]);
 
   const records = mapFranchisePartnerRecords(
     partners,
     subscribed.planByPartnerId,
     effectiveOfferings
-  );
+  ).map((record) => ({
+    ...record,
+    ...(engagementByPartnerId.get(String(record._id)) || {
+      posts_count: 0,
+      likes_count: 0,
+      shares_count: 0,
+      saves_count: 0,
+    }),
+  }));
 
   const recordsWithRatings = await enrichPartnerListRecordsWithServiceRatings(records);
 
@@ -292,7 +309,7 @@ const isPartnerSavedByUser = async (userId, partnerId) => {
   return Boolean(row);
 };
 
-const listFranchisePartnersPaginated = async (query) => {
+const listFranchisePartnersPaginated = async (query, options = {}) => {
   try {
     const franchiseCtx = await resolveFranchiseById(query.franchise_id);
     if (!franchiseCtx.ok) {
@@ -302,7 +319,11 @@ const listFranchisePartnersPaginated = async (query) => {
     const parsed = parsePartnersListQuery(query);
     if (!parsed.ok) return fail(parsed.status, parsed.message);
 
-    const built = await buildFranchisePartnerListRecords(franchiseCtx.franchise._id);
+    // Customer mobile defaults to published-only; admin can pass publishedOnly: false.
+    const publishedOnly = options.publishedOnly !== false;
+    const built = await buildFranchisePartnerListRecords(franchiseCtx.franchise._id, {
+      publishedOnly,
+    });
     if (!built.ok) return built;
     const builtData = built.data || {};
     if (!Array.isArray(builtData.records)) {
@@ -435,10 +456,12 @@ const getPartnerProfileForCustomer = async (partnerId, franchiseId, userId = nul
       return fail(404, 'Partner not found.');
     }
 
-    const [catalogResult, completedServicesCount, isSaved] = await Promise.all([
+    const [catalogResult, completedServicesCount, isSaved, engagementCounts] = await Promise.all([
       buildPartnerDetailCatalog(franchiseCtx.franchise._id, partner._id),
       countPartnerCompletedServices(partner._id),
       userId ? isPartnerSavedByUser(userId, partner._id) : Promise.resolve(false),
+      // Published-only: matches customer / admin partner posts gallery on mobile.
+      getPartnerEngagementCounts(partner._id, { publishedOnly: true }),
     ]);
     if (!catalogResult.ok) {
       return fail(catalogResult.status, catalogResult.message);
@@ -472,6 +495,7 @@ const getPartnerProfileForCustomer = async (partnerId, franchiseId, userId = nul
           no_of_services_completed: completedServicesCount,
           is_saved: isSaved,
           ...partnerRatings,
+          ...engagementCounts,
         },
         categories: categoriesWithRatings,
       },

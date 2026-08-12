@@ -35,6 +35,7 @@ const assertSavablePartner = async (partnerId) => {
 
   const built = await buildFranchisePartnerListRecords(partner.franchise_id, {
     partnerIdAllowlist: [partner._id],
+    publishedOnly: true,
   });
 
   if (!built.ok) {
@@ -192,6 +193,7 @@ const listSavedPartnersPaginated = async (userId, query) => {
     for (const [franchiseKey, partnerIdSet] of byFranchise) {
       const built = await buildFranchisePartnerListRecords(franchiseKey, {
         partnerIdAllowlist: [...partnerIdSet],
+        publishedOnly: true,
       });
       if (!built.ok) continue;
       const builtData = built.data || {};

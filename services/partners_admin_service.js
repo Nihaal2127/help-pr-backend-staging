@@ -81,7 +81,9 @@ const listAllFranchisesPartnersPaginated = async (query) => {
 
     const merged = [];
     for (const franchise of franchises) {
-      const built = await buildFranchisePartnerListRecords(franchise._id);
+      const built = await buildFranchisePartnerListRecords(franchise._id, {
+        publishedOnly: false,
+      });
       if (!built.ok) continue;
 
       const builtData = built.data || {};
@@ -154,7 +156,9 @@ const collectAllFranchisesPartnerBrowseRecords = async () => {
   const merged = [];
 
   for (const franchise of franchises) {
-    const built = await buildFranchisePartnerListRecords(franchise._id);
+    const built = await buildFranchisePartnerListRecords(franchise._id, {
+      publishedOnly: false,
+    });
     if (!built.ok) continue;
 
     const builtData = built.data || {};
@@ -183,7 +187,9 @@ const collectPartnersBrowseRecords = async (scopeResult, queryFranchiseId) => {
     }
   }
 
-  const built = await buildFranchisePartnerListRecords(franchiseResolved.franchiseId);
+  const built = await buildFranchisePartnerListRecords(franchiseResolved.franchiseId, {
+    publishedOnly: false,
+  });
   if (!built.ok) {
     return built;
   }
@@ -220,10 +226,13 @@ const listPartnersForAdmin = async (scopeResult, query) => {
     return listAllFranchisesPartnersPaginated(query);
   }
 
-  return listFranchisePartnersPaginated({
-    ...query,
-    franchise_id: franchiseResolved.franchiseId,
-  });
+  return listFranchisePartnersPaginated(
+    {
+      ...query,
+      franchise_id: franchiseResolved.franchiseId,
+    },
+    { publishedOnly: false }
+  );
 };
 
 const loadPartnerForAccess = async (partnerIdRaw) => {

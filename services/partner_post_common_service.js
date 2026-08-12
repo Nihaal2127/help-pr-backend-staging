@@ -603,11 +603,57 @@ const partnerPostScopeFilter = (partnerId) => {
   };
 };
 
-/** Aggregate post, like, and save totals for a partner (all non-deleted posts). */
-const getPartnerEngagementCounts = async (partnerId) => {
-  const postMatch = partnerPostScopeFilter(partnerId);
-  if (!postMatch) {
-    return { posts_count: 0, likes_count: 0, saves_count: 0 };
+const emptyPartnerEngagementCounts = () => ({
+  posts_count: 0,
+  likes_count: 0,
+  shares_count: 0,
+  saves_count: 0,
+});
+
+const normalizePartnerObjectIds = (partnerIds = []) => {
+  const oids = [];
+  const seen = new Set();
+  for (const raw of partnerIds) {
+    const key = String(raw ?? '').trim();
+    if (!key || !mongoose.Types.ObjectId.isValid(key) || seen.has(key)) continue;
+    seen.add(key);
+    oids.push(new mongoose.Types.ObjectId(key));
+  }
+  return oids;
+};
+
+/**
+ * Batch engagement totals keyed by partner id string.
+ * Uses denormalized likes_count / shares_count on each post so totals match
+ * summing the values shown on post cards.
+ *
+ * @param {Array<string|import('mongoose').Types.ObjectId>} partnerIds
+ * @param {{ publishedOnly?: boolean }} [options]
+ */
+const getPartnersEngagementCountsByPartnerIds = async (
+  partnerIds,
+  { publishedOnly = false } = {}
+) => {
+  const oids = normalizePartnerObjectIds(partnerIds);
+  const byPartnerId = new Map();
+  if (oids.length === 0) {
+    return byPartnerId;
+  }
+
+  const postMatch = {
+    partner_id: { $in: oids },
+    deleted_at: null,
+  };
+  if (publishedOnly) {
+    postMatch.status = POST_STATUS_PUBLISHED;
+  }
+
+  const savePostMatch = {
+    'post.partner_id': { $in: oids },
+    'post.deleted_at': null,
+  };
+  if (publishedOnly) {
+    savePostMatch['post.status'] = POST_STATUS_PUBLISHED;
   }
 
   const [postAgg, savesAgg] = await Promise.all([
@@ -615,9 +661,10 @@ const getPartnerEngagementCounts = async (partnerId) => {
       { $match: postMatch },
       {
         $group: {
-          _id: null,
+          _id: '$partner_id',
           posts_count: { $sum: 1 },
           likes_count: { $sum: { $ifNull: ['$likes_count', 0] } },
+          shares_count: { $sum: { $ifNull: ['$shares_count', 0] } },
         },
       },
     ]),
@@ -631,19 +678,58 @@ const getPartnerEngagementCounts = async (partnerId) => {
         },
       },
       { $unwind: '$post' },
-      { $match: { 'post.partner_id': postMatch.partner_id, 'post.deleted_at': null } },
-      { $count: 'saves_count' },
+      { $match: savePostMatch },
+      { $group: { _id: '$post.partner_id', saves_count: { $sum: 1 } } },
     ]),
   ]);
 
-  const postStats = postAgg[0] || {};
-  const savesStats = savesAgg[0] || {};
+  for (const oid of oids) {
+    byPartnerId.set(String(oid), emptyPartnerEngagementCounts());
+  }
 
-  return {
-    posts_count: Math.max(0, Number(postStats.posts_count) || 0),
-    likes_count: Math.max(0, Number(postStats.likes_count) || 0),
-    saves_count: Math.max(0, Number(savesStats.saves_count) || 0),
-  };
+  for (const row of postAgg) {
+    const key = String(row._id);
+    const current = byPartnerId.get(key) || emptyPartnerEngagementCounts();
+    byPartnerId.set(key, {
+      ...current,
+      posts_count: Math.max(0, Number(row.posts_count) || 0),
+      likes_count: Math.max(0, Number(row.likes_count) || 0),
+      shares_count: Math.max(0, Number(row.shares_count) || 0),
+    });
+  }
+
+  for (const row of savesAgg) {
+    const key = String(row._id);
+    const current = byPartnerId.get(key) || emptyPartnerEngagementCounts();
+    byPartnerId.set(key, {
+      ...current,
+      saves_count: Math.max(0, Number(row.saves_count) || 0),
+    });
+  }
+
+  return byPartnerId;
+};
+
+/**
+ * Aggregate post / like / share / save totals for a partner.
+ * Uses the same denormalized counters shown on each post card so profile
+ * totals match summing the partner's mobile post list.
+ *
+ * @param {string|import('mongoose').Types.ObjectId} partnerId
+ * @param {{ publishedOnly?: boolean }} [options]
+ *   - publishedOnly=false (default): all non-deleted posts (partner app list)
+ *   - publishedOnly=true: published only (customer / admin partner gallery)
+ */
+const getPartnerEngagementCounts = async (partnerId, { publishedOnly = false } = {}) => {
+  const postMatch = partnerPostScopeFilter(partnerId);
+  if (!postMatch) {
+    return emptyPartnerEngagementCounts();
+  }
+
+  const byPartnerId = await getPartnersEngagementCountsByPartnerIds([postMatch.partner_id], {
+    publishedOnly,
+  });
+  return byPartnerId.get(String(postMatch.partner_id)) || emptyPartnerEngagementCounts();
 };
 
 const findPublishedPostById = async (postId) => {
@@ -685,6 +771,7 @@ module.exports = {
   publishedPostFilter,
   findPublishedPostById,
   getPartnerEngagementCounts,
+  getPartnersEngagementCountsByPartnerIds,
   POST_TYPE_ORDER,
   POST_TYPE_LEGACY_WORK,
 };

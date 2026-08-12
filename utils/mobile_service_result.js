@@ -1,3 +1,5 @@
+const { fieldLabel } = require('./field_labels');
+
 const fail = (status, message, extra = {}) => ({ ok: false, status, message, ...extra });
 
 const ok = (status, data) => ({ ok: true, status, data });
@@ -28,7 +30,7 @@ const parseOptionalBoolean = (raw) => {
   const normalized = String(raw).trim().toLowerCase();
   if (normalized === 'true') return { ok: true, value: true };
   if (normalized === 'false') return { ok: true, value: false };
-  return { ok: false, message: 'Invalid is_paid filter. Use true or false.' };
+  return { ok: false, message: `Invalid ${fieldLabel('is_paid')} filter. Use true or false.` };
 };
 
 const mergeMongoFilters = (...parts) => {

@@ -4,6 +4,7 @@ const Service = require("../../../models/service");
 const OrderService = require("../../../models/order_services");
 const PartnerServiceRating = require("../../../models/partner_service_rating");
 const { USER_TYPE_PARTNER } = require("../../../constants/user_types");
+const { fieldLabel } = require('../../../utils/field_labels');
 const {
   mapRatingSummary,
   attachServiceRatingFields,
@@ -24,7 +25,7 @@ const parseReviewLimit = (raw) => {
 const assertPartnerInFranchise = async (partnerId, franchiseId) => {
   const partnerKey = String(partnerId ?? "").trim();
   if (!partnerKey || !mongoose.Types.ObjectId.isValid(partnerKey)) {
-    return fail(400, "partnerId must be a valid ObjectId.");
+    return fail(400, `${fieldLabel("partnerId")} must be a valid ObjectId.`);
   }
 
   const franchiseIdRaw =
@@ -87,7 +88,7 @@ const getPartnerRatingsSummary = async (partnerId, query = {}) => {
         ? String(query.service_id).trim()
         : "";
     if (serviceIdRaw && !mongoose.Types.ObjectId.isValid(serviceIdRaw)) {
-      return fail(400, "service_id must be a valid ObjectId.");
+      return fail(400, `${fieldLabel("service_id")} must be a valid ObjectId.`);
     }
 
     const reviewLimit = parseReviewLimit(query.review_limit);

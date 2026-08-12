@@ -497,7 +497,7 @@ const validateBankPayloadIfPresent = (req, res) => {
         res.status(400).json({
           success: false,
           status: 400,
-          message: `bank_account[${i}] must be an object.`,
+          message: `${fieldLabel(`bank_account[${i}]`)} must be an object.`,
         });
         return false;
       }
@@ -510,7 +510,7 @@ const validateBankPayloadIfPresent = (req, res) => {
         });
         return false;
       }
-      if (!validateBankAccountFormatFields(item, res, `bank_account[${i}]`)) {
+      if (!validateBankAccountFormatFields(item, res, fieldLabel(`bank_account[${i}]`))) {
         return false;
       }
       const accountNumber = String(item.account_number).trim();
@@ -1134,7 +1134,7 @@ const validatePartnerBankAccountsPayload = (req, res) => {
     res.status(400).json({
       success: false,
       status: 400,
-      message: 'bank_account is required.',
+      message: `${fieldLabel('bank_account')} is required.`,
     });
     return false;
   }
@@ -1390,7 +1390,7 @@ const partnerGoogleLoginMiddleware = async (req, res, next) => {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'id_token is required.',
+      message: `${fieldLabel('id_token')} is required.`,
     });
   }
   req.body.id_token = String(id_token).trim();
@@ -1428,7 +1428,7 @@ const partnerAppleLoginMiddleware = async (req, res, next) => {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'id_token is required.',
+      message: `${fieldLabel('id_token')} is required.`,
     });
   }
   req.body.id_token = String(id_token).trim();
@@ -1732,7 +1732,7 @@ const createPartnerUpdateMiddleware = (section) => {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: 'partner_documents is not supported. Upload verification document files instead.',
+        message: `${fieldLabel('partner_documents')} is not supported. Upload verification document files instead.`,
       });
     }
 

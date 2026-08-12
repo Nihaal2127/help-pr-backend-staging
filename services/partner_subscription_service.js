@@ -301,7 +301,7 @@ const listPartnerSubscriptions = async (query, req = null) => {
             if (!SubscriptionPlan.PLAN_NAMES.includes(planName)) {
                 return fail(
                     400,
-                    `plan_name must be one of: ${SubscriptionPlan.PLAN_NAMES.join(', ')}.`
+                    `${fieldLabel('plan_name')} must be one of: ${SubscriptionPlan.PLAN_NAMES.join(', ')}.`
                 );
             }
             const planIds = await SubscriptionPlan.find({
@@ -544,7 +544,7 @@ const createPartnerSubscription = async (body, assignedByUserId, req = null) => 
         if (requestedStatus === '1') requestedStatus = 'active';
         const normalizedStatus = requestedStatus === 'inactive' ? 'cancelled' : requestedStatus;
         if (!['active', 'expired', 'cancelled'].includes(normalizedStatus)) {
-            return fail(400, 'status must be active, expired, or cancelled.');
+            return fail(400, `${fieldLabel('status')} must be active, expired, or cancelled.`);
         }
 
         // Maintain only one active subscription row per partner:
@@ -659,7 +659,7 @@ const updatePartnerSubscription = async (id, body, req = null) => {
 
         if (body.status !== undefined) {
             if (!['active', 'expired', 'cancelled'].includes(body.status)) {
-                return fail(400, 'status must be active, expired, or cancelled.');
+                return fail(400, `${fieldLabel('status')} must be active, expired, or cancelled.`);
             }
             row.status = body.status;
         }

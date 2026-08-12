@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const NotificationDeliveryLog = require("../../../../models/notification_delivery_log");
 const { buildFieldDateRangeFilter } = require("../../../../utils/schedule_date_filters");
+const { fieldLabel } = require("../../../../utils/field_labels");
 
 const MAX_PAGE_SIZE = 100;
 
@@ -86,7 +87,7 @@ const listDeliveryLogs = async (query = {}) => {
   if (query.recipient_user_id) {
     const recipientId = String(query.recipient_user_id).trim();
     if (!mongoose.Types.ObjectId.isValid(recipientId)) {
-      return { ok: false, status: 400, message: "Invalid recipient_user_id." };
+      return { ok: false, status: 400, message: `Invalid ${fieldLabel("recipient_user_id")}.` };
     }
     filter.recipient_user_id = recipientId;
   }
@@ -94,7 +95,7 @@ const listDeliveryLogs = async (query = {}) => {
   if (query.entity_id) {
     const entityId = String(query.entity_id).trim();
     if (!mongoose.Types.ObjectId.isValid(entityId)) {
-      return { ok: false, status: 400, message: "Invalid entity_id." };
+      return { ok: false, status: 400, message: `Invalid ${fieldLabel("entity_id")}.` };
     }
     filter.entity_id = entityId;
   }

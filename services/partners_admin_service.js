@@ -3,6 +3,7 @@ const User = require('../models/user');
 const Franchise = require('../models/franchise');
 const { PLAN_NAMES } = require('../models/subscription_plan');
 const { USER_TYPE_PARTNER } = require('../constants/user_types');
+const { fieldLabel } = require('../utils/field_labels');
 const {
   listFranchisePartnersPaginated,
   getPartnerProfileForCustomer,
@@ -65,7 +66,7 @@ const resolveListFranchiseId = (scopeResult, queryFranchiseId) => {
     return { ok: true, allFranchises: true };
   }
   if (!mongoose.Types.ObjectId.isValid(queryRaw)) {
-    return fail(400, 'franchise_id must be a valid ObjectId.');
+    return fail(400, `${fieldLabel('franchise_id')} must be a valid ObjectId.`);
   }
 
   return { ok: true, franchiseId: queryRaw };
@@ -228,7 +229,7 @@ const listPartnersForAdmin = async (scopeResult, query) => {
 const loadPartnerForAccess = async (partnerIdRaw) => {
   const partnerKey = String(partnerIdRaw ?? '').trim();
   if (!partnerKey || !mongoose.Types.ObjectId.isValid(partnerKey)) {
-    return fail(400, 'partnerId must be a valid ObjectId.');
+    return fail(400, `${fieldLabel('partnerId')} must be a valid ObjectId.`);
   }
 
   const partner = await User.findOne({

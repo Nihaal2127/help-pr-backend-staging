@@ -4,6 +4,7 @@ const OrderPayment = require('../../../models/order_payment');
 const { loadCustomerOrder } = require('../shared/order_access_helpers');
 const { applyPagination } = require('../../../utils/pagination');
 const { buildFieldDateRangeFilter } = require('../../../utils/schedule_date_filters');
+const { fieldLabel } = require('../../../utils/field_labels');
 const {
   createOrderPaymentRecord,
   updateOrderPaymentRecord,
@@ -45,7 +46,7 @@ const listAllCustomerOrderPayments = async (customerId, query = {}) => {
 
     if (query.order_id !== undefined && String(query.order_id).trim() !== '') {
       if (!mongoose.Types.ObjectId.isValid(String(query.order_id))) {
-        return fail(400, 'Invalid order_id filter.');
+        return fail(400, `Invalid ${fieldLabel('order_id')} filter.`);
       }
       orderFilter._id = new mongoose.Types.ObjectId(String(query.order_id));
     }

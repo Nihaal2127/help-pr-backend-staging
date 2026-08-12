@@ -1,4 +1,5 @@
 const OrderPayment = require('../models/order_payment');
+const { fieldLabel } = require('../utils/field_labels');
 const {
     computeOrderPartnerCreditAmount,
 } = require('./partner_wallet_order_service');
@@ -59,7 +60,7 @@ const validatePartnerOrderPayment = async (
         return {
             ok: false,
             status: 400,
-            message: 'amount must be >= 0.',
+            message: `${fieldLabel('amount')} must be >= 0.`,
         };
     }
 

@@ -95,20 +95,79 @@ const FIELD_LABELS = {
     status: 'Status',
     name: 'Name',
     id: 'ID',
+    _id: 'ID',
+    amount: 'Amount',
+    additional_charges: 'Additional charges',
+    order_payments: 'Order payments',
+    payment_schedule_type: 'Payment schedule type',
+    service_date: 'Service date',
+    service_from_time: 'Service from time',
+    service_to_time: 'Service to time',
+    start_time: 'Start time',
+    end_time: 'End time',
+    paid_at: 'Paid at',
+    banner_image_url: 'Banner image URL',
+    description: 'Description',
+    title: 'Title',
+    reason: 'Reason',
+    limit: 'Limit',
+    customer_payment_status: 'Customer payment status',
+    user_payment_status: 'Customer payment status',
+    payment_status: 'Payment status',
+    partner_work_status: 'Partner work status',
+    is_paid: 'Paid status',
+    is_primary: 'Primary',
+    is_active: 'Active status',
+    recipient_user_id: 'Recipient user',
+    entity_id: 'Entity',
+    target_plan_id: 'Target plan',
+    service_items_id: 'Service item',
+    installment_index: 'Installment index',
+    post_type: 'Post type',
+    charge_type: 'Charge type',
+    bank_account: 'Bank account',
+    id_token: 'ID token',
+    legacy_service_name: 'Legacy service name',
+    keep_existing_images: 'Existing images',
+    partner_documents: 'Partner documents',
+    min_price: 'Minimum price',
+    max_price: 'Maximum price',
+    initial_message: 'Initial message',
+    // camelCase route/query params
+    orderId: 'Order ID',
+    partnerId: 'Partner',
+    appointmentId: 'Appointment ID',
+    chargeId: 'Charge ID',
+    paymentId: 'Payment ID',
+    disputeId: 'Dispute ID',
+    postId: 'Post ID',
+    reportId: 'Report ID',
+    create: 'Create',
+    update: 'Update',
+    delete: 'Delete',
 };
 
 const titleCase = (text) =>
     text.replace(/\b\w/g, (c) => c.toUpperCase());
 
+/** Split snake_case / camelCase / PascalCase into spaced words for fallback labels. */
+const humanizeKey = (key) =>
+    titleCase(
+        String(key)
+            .replace(/_/g, ' ')
+            .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+            .replace(/\s+/g, ' ')
+            .trim()
+    );
+
 const labelSegment = (segment) => {
     const bracket = segment.match(/^(.+?)\[(\d+)\]$/);
     if (bracket) {
-        const base =
-            FIELD_LABELS[bracket[1]] || titleCase(String(bracket[1]).replace(/_/g, ' '));
+        const base = FIELD_LABELS[bracket[1]] || humanizeKey(bracket[1]);
         return `${base} [item ${Number(bracket[2]) + 1}]`;
     }
     if (FIELD_LABELS[segment]) return FIELD_LABELS[segment];
-    return titleCase(String(segment).replace(/_/g, ' '));
+    return humanizeKey(segment);
 };
 
 /**
@@ -122,7 +181,7 @@ const fieldLabel = (key) => {
     const k = String(key).trim();
     if (FIELD_LABELS[k]) return FIELD_LABELS[k];
     if (!k.includes('.') && !k.includes('[')) {
-        return titleCase(k.replace(/_/g, ' '));
+        return humanizeKey(k);
     }
     return k.split('.').map(labelSegment).join(' → ');
 };

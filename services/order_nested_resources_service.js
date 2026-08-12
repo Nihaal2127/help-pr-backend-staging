@@ -66,11 +66,11 @@ const normalizeNestedOps = (value, fieldName) => {
 
 const validateChargeItem = (item, context) => {
   if (!item || typeof item !== "object") {
-    throw new OrderCreationError(`${context}: invalid charge item.`, 400);
+    throw new OrderCreationError(`${fieldLabel(context)}: invalid charge item.`, 400);
   }
   if (item.amount === undefined || Number(item.amount) < 0) {
     throw new OrderCreationError(
-      `${context}: amount is required and must be >= 0.`,
+      `${fieldLabel(context)}: ${fieldLabel("amount")} is required and must be >= 0.`,
       400
     );
   }
@@ -78,22 +78,22 @@ const validateChargeItem = (item, context) => {
 
 const validatePaymentItem = (item, context) => {
   if (!item || typeof item !== "object") {
-    throw new OrderCreationError(`${context}: invalid payment item.`, 400);
+    throw new OrderCreationError(`${fieldLabel(context)}: invalid payment item.`, 400);
   }
   if (!item.payer_type || !PAYER_TYPES.has(item.payer_type)) {
     throw new OrderCreationError(
-      `${context}: payer_type must be customer or partner.`,
+      `${fieldLabel(context)}: ${fieldLabel("payer_type")} must be customer or partner.`,
       400
     );
   }
   if (item.amount === undefined || Number(item.amount) < 0) {
     throw new OrderCreationError(
-      `${context}: amount is required and must be >= 0.`,
+      `${fieldLabel(context)}: ${fieldLabel("amount")} is required and must be >= 0.`,
       400
     );
   }
   if (item.status !== undefined && !PAYMENT_STATUSES.has(item.status)) {
-    throw new OrderCreationError(`${context}: invalid payment status.`, 400);
+    throw new OrderCreationError(`${fieldLabel(context)}: invalid payment status.`, 400);
   }
 };
 
@@ -208,7 +208,10 @@ const softDeleteCharges = async (orderId, deleteIds) => {
   for (const rawId of deleteIds) {
     const oid = resolveRowId(rawId);
     if (!oid) {
-      throw new OrderCreationError("additional_charges.delete: invalid id.", 400);
+      throw new OrderCreationError(
+        `${fieldLabel("additional_charges")} delete: invalid ${fieldLabel("id")}.`,
+        400
+      );
     }
     const row = await OrderAdditionalCharge.findOne({
       _id: oid,
@@ -217,7 +220,7 @@ const softDeleteCharges = async (orderId, deleteIds) => {
     });
     if (!row) {
       throw new OrderCreationError(
-        `additional_charges.delete: charge ${oid} not found on this order.`,
+        `${fieldLabel("additional_charges")} delete: charge ${oid} not found on this order.`,
         404
       );
     }
@@ -234,7 +237,10 @@ const softDeletePayments = async (orderId, deleteIds) => {
   for (const rawId of deleteIds) {
     const oid = resolveRowId(rawId);
     if (!oid) {
-      throw new OrderCreationError("order_payments.delete: invalid id.", 400);
+      throw new OrderCreationError(
+        `${fieldLabel("order_payments")} delete: invalid ${fieldLabel("id")}.`,
+        400
+      );
     }
     const row = await OrderPayment.findOne({
       _id: oid,
@@ -243,7 +249,7 @@ const softDeletePayments = async (orderId, deleteIds) => {
     });
     if (!row) {
       throw new OrderCreationError(
-        `order_payments.delete: payment ${oid} not found on this order.`,
+        `${fieldLabel("order_payments")} delete: payment ${oid} not found on this order.`,
         404
       );
     }
@@ -265,7 +271,7 @@ const applyChargeUpdates = async (order, items) => {
     const oid = resolveRowId(item);
     if (!oid) {
       throw new OrderCreationError(
-        `additional_charges.update[${i}]: _id is required.`,
+        `${fieldLabel("additional_charges")} update [item ${i + 1}]: ${fieldLabel("_id")} is required.`,
         400
       );
     }
@@ -277,7 +283,7 @@ const applyChargeUpdates = async (order, items) => {
     });
     if (!row) {
       throw new OrderCreationError(
-        `additional_charges.update[${i}]: charge not found on this order.`,
+        `${fieldLabel("additional_charges")} update [item ${i + 1}]: charge not found on this order.`,
         404
       );
     }
@@ -287,7 +293,7 @@ const applyChargeUpdates = async (order, items) => {
     if (item.amount !== undefined) {
       if (Number(item.amount) < 0) {
         throw new OrderCreationError(
-          `additional_charges.update[${i}]: amount must be >= 0.`,
+          `${fieldLabel("additional_charges")} update [item ${i + 1}]: ${fieldLabel("amount")} must be >= 0.`,
           400
         );
       }
@@ -318,7 +324,10 @@ const applyChargeUpdates = async (order, items) => {
 const applyPaymentUpdateToRow = async (order, item, contextLabel) => {
   const oid = resolveRowId(item);
   if (!oid) {
-    throw new OrderCreationError(`${contextLabel}: _id is required.`, 400);
+    throw new OrderCreationError(
+      `${fieldLabel(contextLabel)}: ${fieldLabel("_id")} is required.`,
+      400
+    );
   }
 
   const row = await OrderPayment.findOne({
@@ -328,14 +337,17 @@ const applyPaymentUpdateToRow = async (order, item, contextLabel) => {
   });
   if (!row) {
     throw new OrderCreationError(
-      `${contextLabel}: payment not found on this order.`,
+      `${fieldLabel(contextLabel)}: payment not found on this order.`,
       404
     );
   }
 
   if (item.amount !== undefined) {
     if (Number(item.amount) < 0) {
-      throw new OrderCreationError(`${contextLabel}: amount must be >= 0.`, 400);
+      throw new OrderCreationError(
+        `${fieldLabel(contextLabel)}: ${fieldLabel("amount")} must be >= 0.`,
+        400
+      );
     }
     row.amount = Number(item.amount);
   }
@@ -344,7 +356,7 @@ const applyPaymentUpdateToRow = async (order, item, contextLabel) => {
   }
   if (item.status !== undefined) {
     if (!PAYMENT_STATUSES.has(item.status)) {
-      throw new OrderCreationError(`${contextLabel}: invalid status.`, 400);
+      throw new OrderCreationError(`${fieldLabel(contextLabel)}: invalid status.`, 400);
     }
     row.status = item.status;
   }
@@ -380,7 +392,7 @@ const partitionPaymentUpdates = async (order, items) => {
     const oid = resolveRowId(item);
     if (!oid) {
       throw new OrderCreationError(
-        `order_payments.update[${i}]: _id is required.`,
+        `${fieldLabel("order_payments")} update [item ${i + 1}]: ${fieldLabel("_id")} is required.`,
         400
       );
     }
@@ -391,7 +403,7 @@ const partitionPaymentUpdates = async (order, items) => {
     }).select("payer_type");
     if (!row) {
       throw new OrderCreationError(
-        `order_payments.update[${i}]: payment not found on this order.`,
+        `${fieldLabel("order_payments")} update [item ${i + 1}]: payment not found on this order.`,
         404
       );
     }
@@ -441,13 +453,13 @@ const applyNestedResourcesOnCreate = async (order, body) => {
 
   if (chargeOps.update.length || chargeOps.delete.length) {
     throw new OrderCreationError(
-      "additional_charges on create only supports an array or { create: [...] }.",
+      `${fieldLabel("additional_charges")} on create only supports an array or { create: [...] }.`,
       400
     );
   }
   if (paymentOps.update.length || paymentOps.delete.length) {
     throw new OrderCreationError(
-      "order_payments on create only supports an array or { create: [...] }.",
+      `${fieldLabel("order_payments")} on create only supports an array or { create: [...] }.`,
       400
     );
   }

@@ -1,5 +1,6 @@
 const { normalizePartnerWorkStatus } = require('../../../enum/partner_work_status_enum');
 const { MIN_IMAGES, MAX_IMAGES } = require('../../../services/partner_post_common_service');
+const { fieldLabel } = require('../../../utils/field_labels');
 
 const sendError = (res, status, message) =>
   res.status(status).json({
@@ -11,11 +12,11 @@ const sendError = (res, status, message) =>
 const validateUpdateWorkStatusBody = (req, res, next) => {
   const statusRaw = req.body?.partner_work_status;
   if (statusRaw === undefined || statusRaw === null || String(statusRaw).trim() === '') {
-    return sendError(res, 400, 'partner_work_status is required.');
+    return sendError(res, 400, `${fieldLabel('partner_work_status')} is required.`);
   }
 
   if (!normalizePartnerWorkStatus(statusRaw)) {
-    return sendError(res, 409, 'Invalid partner_work_status. Use pending, in-progress, or completed.');
+    return sendError(res, 409, `Invalid ${fieldLabel('partner_work_status')}. Use pending, in-progress, or completed.`);
   }
 
   next();

@@ -128,14 +128,14 @@ const createFranchiseMiddleware = (req, res, next) => {
         return res.status(400).json({
             success: false,
             status: 400,
-            message: 'services must be an array.',
+            message: 'Services must be an array.',
         });
     }
     if (categories !== undefined && categories !== null && !Array.isArray(categories)) {
         return res.status(400).json({
             success: false,
             status: 400,
-            message: 'categories must be an array.',
+            message: 'Categories must be an array.',
         });
     }
     next();
@@ -192,14 +192,14 @@ const updateFranchiseMiddleware = (req, res, next) => {
         return res.status(400).json({
             success: false,
             status: 400,
-            message: 'services must be an array.',
+            message: 'Services must be an array.',
         });
     }
     if (categories !== undefined && categories !== null && !Array.isArray(categories)) {
         return res.status(400).json({
             success: false,
             status: 400,
-            message: 'categories must be an array.',
+            message: 'Categories must be an array.',
         });
     }
     next();

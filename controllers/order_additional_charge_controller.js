@@ -33,7 +33,7 @@ const create = async (req, res) => {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: "amount is required and must be >= 0.",
+        message: `${fieldLabel("amount")} is required and must be >= 0.`,
       });
     }
 
@@ -177,7 +177,7 @@ const update = async (req, res) => {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: "amount must be >= 0.",
+        message: `${fieldLabel("amount")} must be >= 0.`,
       });
     }
 

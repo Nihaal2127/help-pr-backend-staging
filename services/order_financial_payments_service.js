@@ -3,6 +3,7 @@ const Order = require('../models/order');
 const OrderPayment = require('../models/order_payment');
 const User = require('../models/user');
 const Service = require('../models/service');
+const { fieldLabel } = require('../utils/field_labels');
 const { buildPartnerOrderSummaryFromOrderDoc } = require('../utils/partner_order_summary');
 const {
     ORDER_STATUS_IN_PROGRESS,
@@ -422,7 +423,7 @@ const listFinancialOrderPayments = async (req) => {
         if (paymentStatusRaw && !isValidOrderPaymentStatus(String(paymentStatusRaw).trim().toLowerCase())) {
             return fail(
                 400,
-                'Invalid customer_payment_status. Use: unpaid, paid, partially_paid, refund, partially_refund.'
+                `Invalid ${fieldLabel('customer_payment_status')}. Use: unpaid, paid, partially_paid, refund, partially_refund.`
             );
         }
 

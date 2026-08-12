@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const User = require('../../../models/user');
 const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
+const { fieldLabel } = require('../../../utils/field_labels');
 
 const PARTNER_VERIFICATION_STATUS_APPROVED = 2;
 const OBJECT_ID_HEX_24 = /^[a-fA-F0-9]{24}$/;
@@ -140,7 +141,7 @@ const rejectDisallowedBankAccountFields = (req, res) => {
       res.status(400).json({
         success: false,
         status: 400,
-        message: `Field "${key}" is not allowed on this endpoint.`,
+        message: `${fieldLabel(key)} is not allowed on this endpoint.`,
       });
       return false;
     }
@@ -171,7 +172,7 @@ const partnerCreateBankAccountMiddleware = async (req, res, next) => {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'is_primary must be true or false.',
+      message: `${fieldLabel('is_primary')} must be true or false.`,
     });
   }
 
@@ -285,7 +286,7 @@ const partnerUpdateBankAccountMiddleware = async (req, res, next) => {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'is_primary must be true or false.',
+      message: `${fieldLabel('is_primary')} must be true or false.`,
     });
   }
 

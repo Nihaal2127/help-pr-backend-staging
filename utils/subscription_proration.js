@@ -160,7 +160,7 @@ const validateUpgradePaymentSplit = ({
     if (cash > PAYMENT_TOLERANCE && online > PAYMENT_TOLERANCE) {
         return {
             ok: false,
-            message: 'Use either cash_amount or online_amount for the non-wallet portion, not both.',
+            message: 'Use either Cash Amount or Online Amount for the non-wallet portion, not both.',
         };
     }
 

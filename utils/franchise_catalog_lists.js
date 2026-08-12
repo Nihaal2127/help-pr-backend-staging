@@ -331,7 +331,7 @@ const validateCategoriesOrderPermutation = (orderOids, catalogStr) => {
         return {
             ok: false,
             message:
-                'categories_order must list every category_id in categories_list exactly once, in display order.',
+                `${fieldLabel('categories_order')} must list every ${fieldLabel('category_id')} in ${fieldLabel('categories_list')} exactly once, in display order.`,
         };
     }
     const seen = new Set();
@@ -375,7 +375,7 @@ const validateServicesOrderPermutation = (orderOids, catalogStr) => {
         return {
             ok: false,
             message:
-                'services_order must list every service_id in services_list exactly once, in display order.',
+                `${fieldLabel('services_order')} must list every ${fieldLabel('service_id')} in ${fieldLabel('services_list')} exactly once, in display order.`,
         };
     }
     const seen = new Set();

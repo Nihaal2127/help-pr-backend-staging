@@ -56,7 +56,7 @@ const formatValidationError = (error) => {
 
 const validateDateRange = (startDate, endDate) => {
     if (startDate > endDate) {
-        return 'end_date must be on or after start_date.';
+        return `${fieldLabel('end_date')} must be on or after ${fieldLabel('start_date')}.`;
     }
     return null;
 };

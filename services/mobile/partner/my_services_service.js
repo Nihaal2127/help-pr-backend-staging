@@ -4,6 +4,7 @@ const Category = require('../../../models/category');
 const Service = require('../../../models/service');
 const { rebuildPartnerCategoriesFromPartnerServices } = require('../../../services/partner_category_service');
 const { resolveFranchiseEffectiveCatalog } = require('../../../utils/catalog_availability_resolver');
+const { fieldLabel } = require('../../../utils/field_labels');
 const {
   assertActivePartner,
   assertVerifiedPartner,
@@ -19,7 +20,7 @@ const isPresentFieldValue = (value) =>
 const parseObjectId = (raw, fieldName) => {
   const s = raw !== undefined && raw !== null ? String(raw).trim() : '';
   if (!s || !OBJECT_ID_HEX_24.test(s)) {
-    return { ok: false, message: `${fieldName} must be a valid id.` };
+    return { ok: false, message: `${fieldLabel(fieldName)} must be a valid id.` };
   }
   return { ok: true, oid: new mongoose.Types.ObjectId(s) };
 };
@@ -49,7 +50,7 @@ const parseIsActive = (value, fieldName = 'is_active') => {
   if (value === false || value === 'false') {
     return { ok: true, active: false };
   }
-  return { ok: false, message: `${fieldName} must be true or false.` };
+  return { ok: false, message: `${fieldLabel(fieldName)} must be true or false.` };
 };
 
 const loadApprovedPartner = (partnerId) =>

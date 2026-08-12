@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { fieldLabel } = require('../utils/field_labels');
 const {
   normalizePostStatus,
   normalizeReportStatus,
@@ -30,7 +31,7 @@ const validateReportIdParam = (req, res, next) => {
 const validateModeratePostBody = (req, res, next) => {
   const status = normalizePostStatus(req.body?.status);
   if (!status) {
-    return sendError(res, 400, 'status must be one of: published, hidden, removed, rejected.');
+    return sendError(res, 400, `${fieldLabel('status')} must be one of: published, hidden, removed, rejected.`);
   }
   if (status === POST_STATUS_REJECTED) {
     const parsed = parseRejectionReason(req.body?.rejection_reason);
@@ -46,7 +47,7 @@ const validateModeratePostBody = (req, res, next) => {
 const validateUpdateReportBody = (req, res, next) => {
   const status = normalizeReportStatus(req.body?.status);
   if (!status || status === 'pending') {
-    return sendError(res, 400, 'status must be reviewed or dismissed.');
+    return sendError(res, 400, `${fieldLabel('status')} must be reviewed or dismissed.`);
   }
   req.body.status = status;
   next();

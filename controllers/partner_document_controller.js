@@ -171,7 +171,7 @@ const updateDocumentStatus = async (req, res) => {
       return res.status(400).json({
         success: false,
         status: 400,
-        message: 'status must be accept/reject or 2/3.',
+        message: `${fieldLabel('status')} must be accept/reject or 2/3.`,
       });
     }
 

@@ -5,6 +5,7 @@ const PartnerSubscriptionChange = require('../../../models/partner_subscription_
 const PartnerWalletLedger = require('../../../models/partner_wallet_ledger');
 const User = require('../../../models/user');
 const { getWalletAggregatesForPartners } = require('../../partner_payout_service');
+const { fieldLabel } = require('../../../utils/field_labels');
 const {
     PAYMENT_TOLERANCE,
     roundAmount,
@@ -500,7 +501,7 @@ const parseObjectId = (raw, fieldName = 'id') => {
     }
     const s = raw !== undefined && raw !== null ? String(raw).trim() : '';
     if (!s || !/^[a-fA-F0-9]{24}$/.test(s)) {
-        return { ok: false, message: `${fieldName} must be a valid ObjectId.` };
+        return { ok: false, message: `${fieldLabel(fieldName)} must be a valid ObjectId.` };
     }
     return { ok: true, oid: new mongoose.Types.ObjectId(s) };
 };
@@ -991,7 +992,7 @@ const executeChangeInTransaction = async ({
                 if (revalidated.online > PAYMENT_TOLERANCE) {
                     throw new SubscriptionChangeError(
                         400,
-                        'Online payment must use the online_amount flow, not immediate apply.'
+                        'Online payment must use the Online Amount flow, not immediate apply.'
                     );
                 }
             }

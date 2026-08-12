@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Service = require("../models/service");
 const { OrderCreationError } = require("../errors/order_creation_error");
+const { fieldLabel } = require("../utils/field_labels");
 const {
   loadServiceRates,
   computeBasePricing,
@@ -19,7 +20,10 @@ const {
 
 const loadServiceForPricing = async (serviceId) => {
   if (!serviceId || !mongoose.Types.ObjectId.isValid(String(serviceId))) {
-    throw new OrderCreationError("Valid service_id is required for order pricing.", 409);
+    throw new OrderCreationError(
+      `Valid ${fieldLabel("service_id")} is required for order pricing.`,
+      409
+    );
   }
   const service = await Service.findOne({
     _id: serviceId,
@@ -49,7 +53,7 @@ const resolveOfferDiscount = async (body, basePricing) => {
     body.discount_amount !== ""
   ) {
     throw new OrderCreationError(
-      "Send offer_id or discount_amount, not both.",
+      `Send ${fieldLabel("offer_id")} or ${fieldLabel("discount_amount")}, not both.`,
       409
     );
   }
@@ -73,7 +77,7 @@ const resolveOrderPricing = async (body, serviceItem = {}, serviceId = null) => 
   const totalCharge = resolveTotalServiceCharge(body, serviceItem);
   if (totalCharge === null) {
     throw new OrderCreationError(
-      "total_service_charge (or service_price) is required.",
+      `${fieldLabel("total_service_charge")} (or ${fieldLabel("service_price")}) is required.`,
       409
     );
   }

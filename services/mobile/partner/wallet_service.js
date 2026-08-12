@@ -8,6 +8,7 @@ const { assertActivePartner } = require('../shared/partner_access_helpers');
 const MAX_PAGE_SIZE = 100;
 
 const { fail, ok } = require('../../../utils/mobile_service_result');
+const { fieldLabel } = require('../../../utils/field_labels');
 
 const roundAmount = (n) => Math.round(Number(n) * 100) / 100;
 
@@ -33,7 +34,7 @@ const parseDate = (value, fieldName) => {
     }
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) {
-        return { ok: false, message: `${fieldName} must be a valid date.` };
+        return { ok: false, message: `${fieldLabel(fieldName)} must be a valid date.` };
     }
     return { ok: true, value: d };
 };
@@ -80,7 +81,7 @@ const buildLedgerBaseFilter = (partnerOid, query = {}) => {
         if (!TRANSACTION_TYPES.includes(tt)) {
             return {
                 ok: false,
-                message: `transaction_type must be one of: ${TRANSACTION_TYPES.join(', ')}.`,
+                message: `${fieldLabel('transaction_type')} must be one of: ${TRANSACTION_TYPES.join(', ')}.`,
             };
         }
         ledgerFilter.transaction_type = tt;

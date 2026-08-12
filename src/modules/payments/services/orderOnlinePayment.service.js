@@ -134,7 +134,7 @@ const completeOrderPaymentFromWebhook = async (
             return {
                 ok: false,
                 status: 409,
-                message: 'Completed payment is missing order_id.',
+                message: 'Completed payment is missing Order ID.',
             };
         }
         const syncResult = await finalizeCompletedOrderPaymentSideEffects(payment.order_id, {

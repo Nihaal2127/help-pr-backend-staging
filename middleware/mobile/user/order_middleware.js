@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { fieldLabel } = require('../../../utils/field_labels');
 
 const validateOrderIdParam = (req, res, next) => {
   const orderId = req.params.orderId;
@@ -6,7 +7,7 @@ const validateOrderIdParam = (req, res, next) => {
     return res.status(400).json({
       success: false,
       status: 400,
-      message: 'orderId is required.',
+      message: `${fieldLabel('orderId')} is required.`,
     });
   }
   if (!mongoose.Types.ObjectId.isValid(String(orderId).trim())) {

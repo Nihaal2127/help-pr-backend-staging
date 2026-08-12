@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
 const { QUOTE_STATUSES, normalizeQuoteStatus } = require('../../../enum/quote_status_enum');
+const { fieldLabel } = require('../../../utils/field_labels');
 
 const sendError = (res, status, message) =>
   res.status(status).json({
@@ -35,7 +36,7 @@ const validateListPartnerQuotesQuery = (req, res, next) => {
       return sendError(
         res,
         409,
-        `Invalid status. Use one of: ${QUOTE_STATUSES.join(', ')}.`
+        `Invalid ${fieldLabel('status')}. Use one of: ${QUOTE_STATUSES.join(', ')}.`
       );
     }
     req.query.status = normalized;
@@ -46,7 +47,7 @@ const validateListPartnerQuotesQuery = (req, res, next) => {
 const validatePartnerStatusBody = (req, res, next) => {
   const { status } = req.body || {};
   if (status === undefined || status === null || String(status).trim() === '') {
-    return sendError(res, 400, 'status is required.');
+    return sendError(res, 400, `${fieldLabel('status')} is required.`);
   }
 
   const normalized = normalizeQuoteStatus(status);
@@ -54,7 +55,7 @@ const validatePartnerStatusBody = (req, res, next) => {
     return sendError(
       res,
       409,
-      `Invalid status. Partners may set: accepted, failed.`
+      `Invalid ${fieldLabel('status')}. Partners may set: accepted, failed.`
     );
   }
 
@@ -71,14 +72,14 @@ const validatePartnerStatusBody = (req, res, next) => {
       rejection_reason !== null &&
       typeof rejection_reason !== 'string'
     ) {
-      return sendError(res, 400, 'rejection_reason must be a string.');
+      return sendError(res, 400, `${fieldLabel('rejection_reason')} must be a string.`);
     }
     if (
       cancellation_reason !== undefined &&
       cancellation_reason !== null &&
       typeof cancellation_reason !== 'string'
     ) {
-      return sendError(res, 400, 'cancellation_reason must be a string.');
+      return sendError(res, 400, `${fieldLabel('cancellation_reason')} must be a string.`);
     }
   }
 

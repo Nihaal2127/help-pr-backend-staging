@@ -55,7 +55,7 @@ const createPartnerPayoutMiddleware = (req, res, next) => {
     if (!description || String(description).trim() === '') {
         return res.status(400).json({
             success: false,
-            message: 'description is required.',
+            message: `${fieldLabel('description')} is required.`,
         });
     }
 
@@ -76,13 +76,13 @@ const validatePartnerLedgerQuery = (req, res, next) => {
     if (!partnerId || String(partnerId).trim() === '') {
         return res.status(400).json({
             success: false,
-            message: 'id is required.',
+            message: `${fieldLabel('id')} is required.`,
         });
     }
     if (!isValidObjectIdString(partnerId)) {
         return res.status(400).json({
             success: false,
-            message: 'id must be a valid MongoDB ObjectId.',
+            message: `${fieldLabel('id')} must be a valid MongoDB ObjectId.`,
         });
     }
     next();

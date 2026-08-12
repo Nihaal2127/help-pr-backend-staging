@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { normalizePostType } = require('../../../enum/post_type_enum');
 const { MAX_IMAGES, MIN_IMAGES } = require('../../../services/partner_post_common_service');
+const { fieldLabel } = require('../../../utils/field_labels');
 
 const sendError = (res, status, message) =>
   res.status(status).json({
@@ -20,11 +21,11 @@ const validateCreatePostBody = (req, res, next) => {
   const { post_type, description } = req.body || {};
 
   if (!normalizePostType(post_type)) {
-    return sendError(res, 400, 'post_type must be one of: order, legacy_work.');
+    return sendError(res, 400, `${fieldLabel('post_type')} must be one of: order, legacy_work.`);
   }
 
   if (!description || String(description).trim() === '') {
-    return sendError(res, 400, 'description is required.');
+    return sendError(res, 400, `${fieldLabel('description')} is required.`);
   }
 
   const files = req.files || [];
@@ -40,7 +41,7 @@ const validateUpdatePostBody = (req, res, next) => {
   const files = req.files || [];
 
   if (description !== undefined && String(description).trim() === '') {
-    return sendError(res, 400, 'description cannot be empty.');
+    return sendError(res, 400, `${fieldLabel('description')} cannot be empty.`);
   }
 
   if (files.length > MAX_IMAGES) {

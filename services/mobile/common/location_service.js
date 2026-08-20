@@ -12,8 +12,8 @@ const collectObjectIdsFromField = (franchiseDocs, fieldName) => {
   const oids = [];
   for (const fr of franchiseDocs || []) {
     const value = fr[fieldName];
-    if (fieldName === 'area_id') {
-      const arr = Array.isArray(value) ? value : [];
+    if (fieldName === 'area_id' || fieldName === 'city_id') {
+      const arr = Array.isArray(value) ? value : value ? [value] : [];
       for (const raw of arr) {
         if (!raw) continue;
         const s = raw instanceof mongoose.Types.ObjectId ? raw.toString() : String(raw).trim();

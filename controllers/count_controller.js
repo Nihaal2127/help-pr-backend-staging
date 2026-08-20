@@ -533,7 +533,11 @@ const getCountData = async (req, res) => {
                     });
                 }
                 const stateId = frDoc.state_id;
-                const cityId = frDoc.city_id;
+                const cityIds = Array.isArray(frDoc.city_id)
+                    ? frDoc.city_id.filter(Boolean)
+                    : frDoc.city_id
+                      ? [frDoc.city_id]
+                      : [];
                 const areaIds = (frDoc.area_id || []).filter(Boolean);
 
                 response.total_state = await State.countDocuments({ _id: stateId, deleted_at: null });
@@ -548,17 +552,22 @@ const getCountData = async (req, res) => {
                     deleted_at: null,
                 });
 
-                response.total_city = await City.countDocuments({ _id: cityId, deleted_at: null });
-                response.inactive_city = await City.countDocuments({
-                    _id: cityId,
-                    is_active: false,
-                    deleted_at: null,
-                });
-                response.active_city = await City.countDocuments({
-                    _id: cityId,
-                    is_active: true,
-                    deleted_at: null,
-                });
+                if (cityIds.length === 0) {
+                    response.total_city = 0;
+                    response.inactive_city = 0;
+                    response.active_city = 0;
+                } else {
+                    const cityBase = { _id: { $in: cityIds }, deleted_at: null };
+                    response.total_city = await City.countDocuments(cityBase);
+                    response.inactive_city = await City.countDocuments({
+                        ...cityBase,
+                        is_active: false,
+                    });
+                    response.active_city = await City.countDocuments({
+                        ...cityBase,
+                        is_active: true,
+                    });
+                }
 
                 if (areaIds.length === 0) {
                     response.total_area = 0;

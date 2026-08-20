@@ -149,16 +149,52 @@ const normalizeDescriptionFields = (body) => {
 const loadState = async (stateOid) =>
     State.findOne({ _id: stateOid, deleted_at: null });
 
-const loadCityUnderState = async (cityOid, stateOid) => {
-    const city = await City.findOne({ _id: cityOid, deleted_at: null });
-    if (!city) return null;
-    if (city.state_id.toString() !== stateOid.toString()) {
-        return { mismatch: true, city };
+/** Accept a single city id or an array; normalize to a deduped ObjectId array. */
+const normalizeCityIdInput = (raw) => {
+    if (raw === undefined || raw === null || raw === '') {
+        return { ok: false, message: 'City is required.' };
     }
-    return { city };
+    const list = Array.isArray(raw) ? raw : [raw];
+    if (list.length === 0) {
+        return { ok: false, message: 'City is required.' };
+    }
+    const oids = [];
+    for (const item of list) {
+        const p = parseObjectId(item, 'city_id');
+        if (!p.ok) return { ok: false, message: p.message };
+        oids.push(p.oid);
+    }
+    return { ok: true, oids: dedupeIdsPreserveOrder(oids) };
 };
 
-const resolveAreasForCity = async (areaIdsRaw, cityOid) => {
+const loadCitiesUnderState = async (cityOids, stateOid) => {
+    const cities = await City.find({
+        _id: { $in: cityOids },
+        deleted_at: null,
+    }).lean();
+    if (cities.length !== cityOids.length) {
+        return { ok: false, status: 404, message: 'One or more cities were not found.' };
+    }
+    const byId = new Map(cities.map((c) => [c._id.toString(), c]));
+    const ordered = [];
+    for (const oid of cityOids) {
+        const city = byId.get(oid.toString());
+        if (!city) {
+            return { ok: false, status: 404, message: 'One or more cities were not found.' };
+        }
+        if (city.state_id.toString() !== stateOid.toString()) {
+            return {
+                ok: false,
+                status: 400,
+                message: 'One or more cities do not belong to the selected state.',
+            };
+        }
+        ordered.push(city);
+    }
+    return { ok: true, cities: ordered };
+};
+
+const resolveAreasForCities = async (areaIdsRaw, cityOids) => {
     if (!areaIdsRaw || !Array.isArray(areaIdsRaw) || areaIdsRaw.length === 0) {
         return { ok: true, area_ids: [], area_names: [] };
     }
@@ -171,14 +207,14 @@ const resolveAreasForCity = async (areaIdsRaw, cityOid) => {
     const uniqueOids = dedupeIdsPreserveOrder(oids);
     const areas = await Area.find({
         _id: { $in: uniqueOids },
-        city_id: cityOid,
+        city_id: { $in: cityOids },
         deleted_at: null,
     }).lean();
     if (areas.length !== uniqueOids.length) {
         return {
             ok: false,
             message:
-                'One or more areas are invalid, deleted, or do not belong to the selected city.',
+                'One or more areas are invalid, deleted, or do not belong to the selected cities.',
         };
     }
     const map = new Map(areas.map((a) => [a._id.toString(), a.name]));
@@ -200,29 +236,32 @@ const validateFranchiseHierarchy = async ({
 }) => {
     const pState = parseObjectId(state_id, 'state_id');
     if (!pState.ok) return { ok: false, message: pState.message };
-    const pCity = parseObjectId(city_id, 'city_id');
-    if (!pCity.ok) return { ok: false, message: pCity.message };
+
+    const citiesInput = normalizeCityIdInput(city_id);
+    if (!citiesInput.ok) return { ok: false, message: citiesInput.message };
 
     const state = await loadState(pState.oid);
     if (!state) return { ok: false, status: 404, message: 'State not found.' };
 
-    const cityRes = await loadCityUnderState(pCity.oid, pState.oid);
-    if (!cityRes) return { ok: false, status: 404, message: 'City not found.' };
-    if (cityRes.mismatch) {
-        return { ok: false, status: 400, message: 'City does not belong to the selected state.' };
+    const citiesRes = await loadCitiesUnderState(citiesInput.oids, pState.oid);
+    if (!citiesRes.ok) {
+        return { ok: false, status: citiesRes.status || 400, message: citiesRes.message };
     }
 
-    const areasRes = await resolveAreasForCity(area_id, pCity.oid);
+    const areasRes = await resolveAreasForCities(area_id, citiesInput.oids);
     if (!areasRes.ok) return { ok: false, status: 400, message: areasRes.message };
+
+    const city_names = citiesRes.cities.map((c) => c.name);
 
     return {
         ok: true,
         state,
-        city: cityRes.city,
+        cities: citiesRes.cities,
+        city_ids: citiesInput.oids,
+        city_names,
         area_ids: areasRes.area_ids,
         area_names: areasRes.area_names,
         stateOid: pState.oid,
-        cityOid: pCity.oid,
     };
 };
 
@@ -348,8 +387,8 @@ const createFranchise = async (body) => {
             name: trimmedName,
             state_id: hierarchy.stateOid,
             state_name: hierarchy.state.name,
-            city_id: hierarchy.cityOid,
-            city_name: hierarchy.city.name,
+            city_id: hierarchy.city_ids,
+            city_name: hierarchy.city_names,
             area_id: hierarchy.area_ids,
             area_name: hierarchy.area_names,
             admin_id: pAdmin.oid,
@@ -418,8 +457,8 @@ const updateFranchise = async (id, body) => {
 
         franchise.state_id = hierarchy.stateOid;
         franchise.state_name = hierarchy.state.name;
-        franchise.city_id = hierarchy.cityOid;
-        franchise.city_name = hierarchy.city.name;
+        franchise.city_id = hierarchy.city_ids;
+        franchise.city_name = hierarchy.city_names;
         franchise.area_id = hierarchy.area_ids;
         franchise.area_name = hierarchy.area_names;
 
@@ -548,8 +587,8 @@ const importFranchises = async (records) => {
                 name: trimmedName,
                 state_id: hierarchy.stateOid,
                 state_name: hierarchy.state.name,
-                city_id: hierarchy.cityOid,
-                city_name: hierarchy.city.name,
+                city_id: hierarchy.city_ids,
+                city_name: hierarchy.city_names,
                 area_id: hierarchy.area_ids,
                 area_name: hierarchy.area_names,
                 admin_id: pAdmin.oid,

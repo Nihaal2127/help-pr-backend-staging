@@ -156,7 +156,9 @@ const exportFranchise = async (req, res) => {
         const result = rows.map((f) => ({
             name: f.name,
             state_name: f.state_name,
-            city_name: f.city_name,
+            city_name: Array.isArray(f.city_name)
+                ? f.city_name.filter(Boolean).join(', ')
+                : f.city_name || '',
             areas: Array.isArray(f.area_name) && f.area_name.length ? f.area_name.join(', ') : '',
             admin_name: f.admin_name,
             contact: f.contact,

@@ -6,6 +6,29 @@ const {
 
 const FRANCHISE_NAME_CONFLICT_MESSAGE = 'Franchise name already exists.';
 
+/** Normalize city_id to an array (accepts a single id string for backward compatibility). */
+const normalizeCityIdField = (val) => {
+    if (val === undefined || val === null || val === '') return val;
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'string') {
+        const trimmed = val.trim();
+        if (!trimmed) return trimmed;
+        if (trimmed.startsWith('[')) {
+            try {
+                const parsed = JSON.parse(trimmed);
+                if (Array.isArray(parsed)) return parsed;
+            } catch (_) {
+                /* fall through */
+            }
+        }
+        if (trimmed.includes(',')) {
+            return trimmed.split(',').map((s) => s.trim()).filter(Boolean);
+        }
+        return [trimmed];
+    }
+    return [val];
+};
+
 const ensureFranchiseNameUniqueMiddleware = async (req, res, next) => {
     try {
         const trimmedName = normalizeFranchiseName(req.body.name);
@@ -65,11 +88,13 @@ const ensureFranchiseNameUniqueOnUpdateMiddleware = async (req, res, next) => {
 
 const createFranchiseMiddleware = (req, res, next) => {
     const body = req.body;
+    if (body.city_id !== undefined) {
+        body.city_id = normalizeCityIdField(body.city_id);
+    }
     const {
         name,
         state_id,
         city_id,
-        admin_id,
         is_active,
         area_id,
     } = body;
@@ -88,27 +113,13 @@ const createFranchiseMiddleware = (req, res, next) => {
             message: 'State is required.',
         });
     }
-    if (!city_id || city_id === '') {
+    if (!city_id || !Array.isArray(city_id) || city_id.length === 0) {
         return res.status(400).json({
             success: false,
             status: 400,
             message: 'City is required.',
         });
     }
-    // if (!admin_id || admin_id === '') {
-    //     return res.status(400).json({
-    //         success: false,
-    //         status: 400,
-    //         message: 'Admin is required.',
-    //     });
-    // }
-    // if (contact === undefined || contact === null || String(contact).trim() === '') {
-    //     return res.status(400).json({
-    //         success: false,
-    //         status: 400,
-    //         message: 'Contact is required.',
-    //     });
-    // }
     if (is_active === undefined) {
         return res.status(400).json({
             success: false,
@@ -143,7 +154,10 @@ const createFranchiseMiddleware = (req, res, next) => {
 
 const updateFranchiseMiddleware = (req, res, next) => {
     const body = req.body;
-    const { name, state_id, city_id, admin_id, contact, is_active, area_id } = body;
+    if (body.city_id !== undefined) {
+        body.city_id = normalizeCityIdField(body.city_id);
+    }
+    const { name, state_id, city_id, contact, area_id } = body;
 
     if (name !== undefined && name === '') {
         return res.status(400).json({
@@ -159,20 +173,15 @@ const updateFranchiseMiddleware = (req, res, next) => {
             message: 'State is required.',
         });
     }
-    if (city_id !== undefined && city_id === '') {
-        return res.status(400).json({
-            success: false,
-            status: 400,
-            message: 'City is required.',
-        });
+    if (city_id !== undefined) {
+        if (!Array.isArray(city_id) || city_id.length === 0) {
+            return res.status(400).json({
+                success: false,
+                status: 400,
+                message: 'City is required.',
+            });
+        }
     }
-    // if (admin_id !== undefined && admin_id === '') {
-    //     return res.status(400).json({
-    //         success: false,
-    //         status: 400,
-    //         message: 'Admin is required.',
-    //     });
-    // }
     if (contact !== undefined && String(contact).trim() === '') {
         return res.status(400).json({
             success: false,

@@ -8,6 +8,7 @@ const {
   loadPartnerForAccess,
   getPartnerProfileForAdmin,
 } = require('../services/partners_admin_service');
+const { getPartnerOrderRatingsForAdmin } = require('../services/partner_ratings_admin_service');
 
 const sendScopeError = (res, scopeResult) =>
   res.status(scopeResult.status).json({
@@ -141,8 +142,59 @@ const getPartnerProfileHandler = async (req, res) => {
   }
 };
 
+const getPartnerRatingsHandler = async (req, res) => {
+  try {
+    const partnerLoad = await loadPartnerForAccess(req.params.partnerId);
+    if (!partnerLoad.ok) {
+      return res.status(partnerLoad.status).json({
+        success: false,
+        status: partnerLoad.status,
+        message: partnerLoad.message,
+      });
+    }
+
+    const access = await assertPartnersRecordAccess(req, partnerLoad.partner);
+    if (!access.ok) {
+      return res.status(access.status).json({
+        success: false,
+        status: access.status,
+        message: access.message,
+      });
+    }
+
+    const result = await getPartnerOrderRatingsForAdmin(req.params.partnerId, req.query);
+    if (!result.ok) {
+      return res.status(result.status).json({
+        success: false,
+        status: result.status,
+        message: result.message,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: result.data.message,
+      totalItems: result.data.totalItems,
+      totalPages: result.data.totalPages,
+      currentPage: result.data.currentPage,
+      limit: result.data.limit,
+      record: result.data.record,
+      records: result.data.records,
+    });
+  } catch (error) {
+    console.error('admin partner ratings', error.message);
+    return res.status(500).json({
+      success: false,
+      status: 500,
+      message: 'Internal server error.',
+    });
+  }
+};
+
 module.exports = {
   getPartnersCountsHandler,
   listPartnersHandler,
   getPartnerProfileHandler,
+  getPartnerRatingsHandler,
 };

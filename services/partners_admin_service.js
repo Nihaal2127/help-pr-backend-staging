@@ -82,7 +82,7 @@ const listAllFranchisesPartnersPaginated = async (query) => {
     const merged = [];
     for (const franchise of franchises) {
       const built = await buildFranchisePartnerListRecords(franchise._id, {
-        publishedOnly: false,
+        publishedOnly: true,
       });
       if (!built.ok) continue;
 
@@ -157,7 +157,7 @@ const collectAllFranchisesPartnerBrowseRecords = async () => {
 
   for (const franchise of franchises) {
     const built = await buildFranchisePartnerListRecords(franchise._id, {
-      publishedOnly: false,
+      publishedOnly: true,
     });
     if (!built.ok) continue;
 
@@ -188,7 +188,7 @@ const collectPartnersBrowseRecords = async (scopeResult, queryFranchiseId) => {
   }
 
   const built = await buildFranchisePartnerListRecords(franchiseResolved.franchiseId, {
-    publishedOnly: false,
+    publishedOnly: true,
   });
   if (!built.ok) {
     return built;
@@ -231,7 +231,7 @@ const listPartnersForAdmin = async (scopeResult, query) => {
       ...query,
       franchise_id: franchiseResolved.franchiseId,
     },
-    { publishedOnly: false }
+    { publishedOnly: true }
   );
 };
 

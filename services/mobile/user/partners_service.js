@@ -229,7 +229,8 @@ const paginatePartnerRecords = (records, { filters, serviceId, categoryId, page,
 /**
  * Build partner list cards for a franchise (subscribed partners + catalog offerings).
  * Optional partnerIdAllowlist limits to specific partner Mongo ids.
- * Optional publishedOnly controls post engagement scope (default false = all non-deleted).
+ * Optional publishedOnly controls post engagement scope.
+ * Default true = published posts only (customer / admin partner cards and gallery).
  */
 const buildFranchisePartnerListRecords = async (franchiseId, options = {}) => {
   const franchiseCtx = await resolveFranchiseById(franchiseId);
@@ -241,7 +242,7 @@ const buildFranchisePartnerListRecords = async (franchiseId, options = {}) => {
     options.partnerIdAllowlist != null
       ? new Set(options.partnerIdAllowlist.map((id) => String(id)))
       : null;
-  const publishedOnly = options.publishedOnly === true;
+  const publishedOnly = options.publishedOnly !== false;
 
   const subscribed = await loadSubscribedFranchisePartners(franchiseCtx.franchise._id);
 
@@ -319,7 +320,7 @@ const listFranchisePartnersPaginated = async (query, options = {}) => {
     const parsed = parsePartnersListQuery(query);
     if (!parsed.ok) return fail(parsed.status, parsed.message);
 
-    // Customer mobile defaults to published-only; admin can pass publishedOnly: false.
+    // Partner browse cards (customer + admin) count published posts only.
     const publishedOnly = options.publishedOnly !== false;
     const built = await buildFranchisePartnerListRecords(franchiseCtx.franchise._id, {
       publishedOnly,

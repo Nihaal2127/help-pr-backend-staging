@@ -1,5 +1,5 @@
 /**
- * Run scheduled notification reminders (RM1–RM3).
+ * Run scheduled notification reminders (RM1–RM4).
  *
  * Requires:
  *   MONGO_URI (or MONGODB_URI / DB_URL)

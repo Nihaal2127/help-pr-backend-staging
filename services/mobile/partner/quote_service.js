@@ -22,6 +22,7 @@ const {
   buildHistoryChange,
   appendQuoteHistory,
 } = require('../../../utils/quote_history_helper');
+const { applyQuoteActionDeadline } = require('../../../utils/quote_action_deadline');
 const { safeNotifyQuoteStatusChanged } = require('../../../src/modules/notifications/services/domainHooks');
 const { stripAdminDescriptionForPublicApi } = require('../../../utils/admin_description_access');
 
@@ -180,6 +181,7 @@ const updatePartnerQuoteStatus = async (partnerId, quoteId, body) => {
 
     applyPartnerStatusSideEffects(quote, body, nextStatus);
     quote.status = nextStatus;
+    applyQuoteActionDeadline(quote, { previousStatus: currentStatus });
 
     const historyChanges = [
       buildHistoryChange('status', oldStatus, quote.status),

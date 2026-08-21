@@ -20,6 +20,7 @@ const {
 const { combineDateAndTime } = require("../utils/order_schedule");
 const { normalizeAdminDescription } = require("../utils/admin_description_access");
 const { resolveQuoteStatus } = require("../enum/quote_status_enum");
+const { applyQuoteActionDeadline } = require("../utils/quote_action_deadline");
 const {
   DEFAULT_ORDER_STATUS,
   buildOrderStatusInfo,
@@ -109,6 +110,7 @@ const linkQuoteToOrder = async (quoteId, orderId) => {
 
   quote.order_id = orderId;
   quote.status = "success";
+  applyQuoteActionDeadline(quote, { previousStatus: "accepted" });
   quote.updated_at = new Date();
   await quote.save();
   return quote;

@@ -44,7 +44,7 @@ For backend architecture and implementation status, see **`docs/MOBILE_PUSH_NOTI
 
 - Real-time push requires `notification_settings.is_update_allow` and `device_token`.
 
-- Reminder push (RM1–RM3) requires `notification_settings.is_reminder_allow` and `device_token`.
+- Reminder push (RM1–RM4) requires `notification_settings.is_reminder_allow` and `device_token`.
 
 - Placeholders in templates are replaced at send time (see §2).
 
@@ -65,6 +65,8 @@ For backend architecture and implementation status, see **`docs/MOBILE_PUSH_NOTI
 | `{order_id}` | `ORD-1024` | Order `unique_id` |
 
 | `{quote_id}` | `QT-558` | Quote `quote_sequence_id` |
+
+| `{minutes}` | `10` | Minutes remaining on the quote action window |
 
 | `{service_name}` | `AC Repair` | Service line name |
 
@@ -232,13 +234,15 @@ For backend architecture and implementation status, see **`docs/MOBILE_PUSH_NOTI
 
 | RM3 | Reminder | Subscription expiring soon | ❌ | ✅ Partner | Subscription reminder | Your subscription plan expires soon. Renew to continue receiving jobs. | Live |
 
+| RM4 | Reminder | Quote action window: 20 / 10 / 5 / 2 minutes left | ✅ Accepted (convert to order) | ✅ Pending (accept or reject) | Quote expiring soon | Quote #{quote_id} expires in {minutes} minutes. Please accept or reject it. / Please convert it to an order. | Live |
+
 
 
 > **Note on AC1–AC3:** Push uses base `{amount}` (pre-tax line amount). `{charge_label}` is appended as ` (label)` when present. Partner who added the charge is excluded when `actorUserId` is passed (admin + partner mobile).
 
 
 
-> **Note on reminders:** Fired by scheduled job (hourly recommended). User can disable via reminder notification setting in app.
+> **Note on reminders:** Fired by scheduled job (**every 1 minute** recommended so RM4’s 2-minute window is hittable). User can disable via reminder notification setting in app.
 
 
 
@@ -329,6 +333,8 @@ All templates in `src/modules/notifications/constants/notification_events.js`:
 
 | `QUOTE_ACTION_REMINDER` | Action required |
 
+| `QUOTE_DEADLINE_REMINDER` | Quote expiring soon |
+
 | `SUBSCRIPTION_EXPIRING_REMINDER` | Subscription reminder |
 
 
@@ -373,11 +379,11 @@ In-app inbox: `GET /api/mobile/user/notifications` or `GET /api/mobile/partner/n
 
 |---|:------------:|:-----------:|
 
-| **Live** | 32 instances | 36 instances |
+| **Live** | 33 instances | 37 instances |
 
 | **Planned** | 2 instances (O4, AC6) | 1 instance (O4) |
 
-| **Unified event keys** | 36 total | 36 total |
+| **Unified event keys** | 37 total | 37 total |
 
 
 
@@ -396,5 +402,7 @@ In-app inbox: `GET /api/mobile/user/notifications` or `GET /api/mobile/partner/n
 | 2026-07-07 | Initial client spec |
 
 | 2026-07-08 | Phases 1–4 marked live; 36 event keys; reminders documented |
+
+| 2026-08-20 | RM4 quote 1-hour countdown (20/10/5/2 min); cron cadence 1 minute |
 
 

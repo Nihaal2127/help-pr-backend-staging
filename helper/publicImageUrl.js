@@ -6,6 +6,7 @@
 const IMAGE_FIELD_KEYS = new Set([
   'image_url',
   'profile_url',
+  'customer_profile_url',
   'document_image',
   'service_image',
   'banner_image_url',

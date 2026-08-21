@@ -23,6 +23,7 @@ const {
   savePartnerHandler,
   unsavePartnerHandler,
   getPartnerRatingsHandler,
+  listPartnerServiceRatingsHandler,
   getPartnerProfileHandler,
 } = require('../../../controllers/mobile/user/partners_controller');
 const { validateHomeLocationQuery } = require('../../../middleware/mobile/user/home_middleware');
@@ -31,6 +32,7 @@ const {
   validatePartnerProfileQuery,
   validatePartnerIdParam,
 } = require('../../../middleware/mobile/user/partners_middleware');
+const { validateRequiredServiceIdQuery } = require('../../../middleware/mobile/common/ratings_query_middleware');
 const {
   rateLimitSendOtp,
   validateGoogleLogin,
@@ -92,6 +94,14 @@ router.delete(
   userAuthMiddleware,
   validatePartnerIdParam,
   unsavePartnerHandler
+);
+router.get(
+  '/partners/:partnerId/ratings/reviews',
+  userAuthMiddleware,
+  validatePartnerIdParam,
+  validatePartnerProfileQuery,
+  validateRequiredServiceIdQuery,
+  listPartnerServiceRatingsHandler
 );
 router.get(
   '/partners/:partnerId/ratings',

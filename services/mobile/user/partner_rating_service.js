@@ -15,6 +15,7 @@ const {
 } = require("./franchise_partner_scope");
 
 const { fail, ok } = require('../../../utils/mobile_service_result');
+const { listPartnerServiceOrderRatings } = require('../shared/partner_service_ratings_list');
 
 const parseReviewLimit = (raw) => {
   const n = parseInt(String(raw ?? ""), 10);
@@ -174,6 +175,22 @@ const getPartnerRatingsSummary = async (partnerId, query = {}) => {
   }
 };
 
+const listPartnerServiceRatingsForCustomer = async (partnerId, query = {}) => {
+  try {
+    const partnerResult = await assertPartnerInFranchise(partnerId, query.franchise_id);
+    if (!partnerResult.ok) return partnerResult;
+
+    return listPartnerServiceOrderRatings({
+      partner: partnerResult.data.partner,
+      query,
+      includeCustomerContact: false,
+    });
+  } catch (err) {
+    console.error("listPartnerServiceRatingsForCustomer", err.message);
+    return fail(500, "Internal server error.");
+  }
+};
+
 /**
  * Attach global + partner-specific rating rollups to partner catalog services.
  */
@@ -298,6 +315,7 @@ const enrichPartnerListRecordsWithServiceRatings = async (records) => {
 
 module.exports = {
   getPartnerRatingsSummary,
+  listPartnerServiceRatingsForCustomer,
   enrichPartnerCatalogWithRatings,
   enrichPartnerListRecordsWithServiceRatings,
 };

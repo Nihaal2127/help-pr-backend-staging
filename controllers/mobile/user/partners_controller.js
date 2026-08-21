@@ -2,7 +2,10 @@ const {
   listFranchisePartnersPaginated,
   getPartnerProfileForCustomer,
 } = require('../../../services/mobile/user/partners_service');
-const { getPartnerRatingsSummary } = require('../../../services/mobile/user/partner_rating_service');
+const {
+  getPartnerRatingsSummary,
+  listPartnerServiceRatingsForCustomer,
+} = require('../../../services/mobile/user/partner_rating_service');
 const {
   savePartnerForCustomer,
   unsavePartnerForCustomer,
@@ -13,6 +16,7 @@ const {
   sendPaginatedListWithNestedData,
   sendCreatedOrOkDataResult,
   sendDataResult,
+  sendServiceResult,
 } = require('../../../utils/mobile_controller_helpers');
 
 const listPartnersHandler = wrapMobileHandler('mobile user partners list', async (req, res) => {
@@ -46,6 +50,14 @@ const getPartnerRatingsHandler = wrapMobileHandler('mobile user partner ratings'
   return sendDataResult(res, result);
 });
 
+const listPartnerServiceRatingsHandler = wrapMobileHandler(
+  'mobile user partner service ratings',
+  async (req, res) => {
+    const result = await listPartnerServiceRatingsForCustomer(req.params.partnerId, req.query);
+    return sendServiceResult(res, result);
+  }
+);
+
 const getPartnerProfileHandler = wrapMobileHandler('mobile user partner profile', async (req, res) => {
   const result = await getPartnerProfileForCustomer(
     req.params.partnerId,
@@ -61,5 +73,6 @@ module.exports = {
   savePartnerHandler,
   unsavePartnerHandler,
   getPartnerRatingsHandler,
+  listPartnerServiceRatingsHandler,
   getPartnerProfileHandler,
 };

@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "help-pr-mobile-apis-only",
     "name": "Help PR — Mobile APIs only",
-    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Razorpay online payments (test mode)\n\n| Flow | Where in collection |\n|------|---------------------|\n| Partner subscription upgrade | **Partner → Subscription** — Apply (Razorpay online) → Get payment status |\n| Customer order payment | **User** — Create order payment (Razorpay online) → Get order payment status |\n| Quote deposit | **User → Quotes** — Convert quote to order (Razorpay deposit) → Get quote deposit payment status |\n\n**Env (Lambda):** `RAZORPAY_*` on server; set `{{baseUrl}}` in Postman. Webhook: `{RAZORPAY_BASE_URL}/api/razorpay/razorpayWebhook`.\n\n**Additional charges:** no separate Razorpay API — customer pays updated due via **order payments**. **Partner payouts:** admin `/api/partner_payout` (manual bank transfer), not Razorpay.\n\nFull audit: `docs/RAZORPAY_ONLINE_PAYMENTS_AUDIT.md`\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** → **Phone login** → **Verify OTP** (dev OTP: `123456`) — or **Login** (email/password) / Google / Apple → **Forgot password** (3-step OTP reset: forgot → verify OTP → reset password) → **Home** (assigned quotes + orders) → **Quotes** (accept/reject pending) → **Orders** (assigned jobs) → **Appointments** (calendar on partner orders) → Update → **Bank accounts (list)** → Catalog → My services\n\n## Customer (User)\n1. **Login** → **Verify OTP** (dev OTP: `123456`) — or **Forgot password** (3-step email OTP reset when customer has email on file)\n2. **Pincodes (search)** or set `{{homeLocation}}` — e.g. `500032,Gachibowli,Hyderabad,Telangana`\n3. **Home** — categories, services, partners for franchise (Bearer + `location` query)\n4. **Partners** — list → **Get partner profile** (catalog + professional summary) → **Create quote** with `partner_id`\n5. **Addresses** — create / get / update / delete\n6. **Quotes** — create / list / get / update / cancel / **convert-to-order** (`franchise_id` required on create)\n7. **Posts** — feed, liked/saved lists, like, save, share, report\n8. **Orders & payments** — list orders → **Create order payment (Razorpay online)** or cash/offline → **Get order payment status**\n9. **Update** — multipart `profile_photo` + profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.\n\n**Appointments:** `docs/APPOINTMENT_MODULE_FRONTEND.md`\n\n**Chat & disputes:** User → **Chat & Disputes** (support chat, raise/list disputes). See `docs/CHAT_MODULE_FRONTEND.md`.",
+    "description": "Postman collection for **`/api/mobile/*`** (common + partner + customer apps).\n\n## Razorpay online payments (test mode)\n\n| Flow | Where in collection |\n|------|---------------------|\n| Partner subscription upgrade | **Partner → Subscription** — Apply (Razorpay online) → Get payment status |\n| Customer order payment | **User** — Create order payment (Razorpay online) → Get order payment status |\n| Quote deposit | **User → Quotes** — Convert quote to order (Razorpay deposit) → Get quote deposit payment status |\n\n**Env (Lambda):** `RAZORPAY_*` on server; set `{{baseUrl}}` in Postman. Webhook: `{RAZORPAY_BASE_URL}/api/razorpay/razorpayWebhook`.\n\n**Additional charges:** no separate Razorpay API — customer pays updated due via **order payments**. **Partner payouts:** admin `/api/partner_payout` (manual bank transfer), not Razorpay.\n\nFull audit: `docs/RAZORPAY_ONLINE_PAYMENTS_AUDIT.md`\n\n## Common (partner + user)\n1. **Location** → States → Cities → Areas → Pincodes (`/api/mobile/states`, …)\n\n## Partner\n1. **Common → Location** → **Phone login** → **Verify OTP** (dev OTP: `123456`) — or **Login** (email/password) / Google / Apple → **Forgot password** (3-step OTP reset: forgot → verify OTP → reset password) → **Home** (assigned quotes + orders) → **Quotes** (accept/reject pending) → **Orders** (assigned jobs) → **Appointments** (calendar on partner orders) → Update → **Bank accounts (list)** → Catalog → My services → **Ratings** (per-service reviews)\n\n## Customer (User)\n1. **Login** → **Verify OTP** (dev OTP: `123456`) — or **Forgot password** (3-step email OTP reset when customer has email on file)\n2. **Pincodes (search)** or set `{{homeLocation}}` — e.g. `500032,Gachibowli,Hyderabad,Telangana`\n3. **Home** — categories, services, partners for franchise (Bearer + `location` query)\n4. **Partners** — list → **Get partner profile** (catalog + professional summary) → **Get partner ratings** / **List partner service ratings** → **Create quote** with `partner_id`\n5. **Addresses** — create / get / update / delete\n6. **Quotes** — create / list / get / update / cancel / **convert-to-order** (`franchise_id` required on create)\n7. **Posts** — feed, liked/saved lists, like, save, share, report\n8. **Orders & payments** — list orders → **Create order payment (Razorpay online)** or cash/offline → **Get order payment status**\n9. **Update** — multipart `profile_photo` + profile fields\n\n**Partner 403** (catalog/bank / my-services while not approved): account must be verified first.\n\n**Appointments:** `docs/APPOINTMENT_MODULE_FRONTEND.md`\n\n**Chat & disputes:** User → **Chat & Disputes** (support chat, raise/list disputes). See `docs/CHAT_MODULE_FRONTEND.md`.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -1173,6 +1173,87 @@
                   ]
                 },
                 "description": "**PUT /api/mobile/partner/my-services**\n\n- **Auth:** Bearer — partner must be **approved** (`verification_status` 2)\n- **Body:** `services` array; each item **required:** `_id` (partner_service row from List), `category_id`, `service_id`, `price`, `description`\n- **200:** updated grouped `data[]` + message\n- **403** if not approved | **404** if `_id` not found | **409** duplicate `service_id` on another row\n\nRun **List my services** first. Use **Catalog → Categories** to change `categoryId` / `serviceId` dropdown values."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Ratings",
+          "description": "Bearer required. Paginated reviews the logged-in partner received for one service. Partner id comes from the token (cannot list another partner). Run **My services → List** or **Catalog → Categories** first to set `{{serviceId}}`.",
+          "item": [
+            {
+              "name": "List service ratings",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const j = pm.response.json();",
+                      "  pm.test('Own service ratings listed', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(j.success).to.eql(true);",
+                      "    pm.expect(j.records).to.be.an('array');",
+                      "    pm.expect(j.record).to.be.an('object');",
+                      "    pm.expect(j.record).to.have.property('average_rating');",
+                      "    pm.expect(j.record).to.have.property('rating_count');",
+                      "    pm.expect(j.record).to.have.property('service_id');",
+                      "  });",
+                      "} catch (e) {}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/partner/ratings?service_id={{serviceId}}&page={{ratingsPage}}&limit={{ratingsLimit}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mobile",
+                    "partner",
+                    "ratings"
+                  ],
+                  "query": [
+                    {
+                      "key": "service_id",
+                      "value": "{{serviceId}}",
+                      "description": "Required — catalog service ObjectId from My services / Catalog"
+                    },
+                    {
+                      "key": "page",
+                      "value": "{{ratingsPage}}",
+                      "description": "Default 1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "{{ratingsLimit}}",
+                      "description": "Default 10, max 50"
+                    }
+                  ]
+                },
+                "description": "**GET /api/mobile/partner/ratings**\n\nPaginated reviews the logged-in partner received for one service.\n\n| Query | Required | Notes |\n|-------|----------|--------|\n| `service_id` | Yes | Catalog service `_id` from **My services** / **Catalog** (`{{serviceId}}`) |\n| `page` | No | Default 1 |\n| `limit` | No | Default 10, max 50 |\n\n**Auth:** partner Bearer `{{token}}` (`type` 2). Scoped to the token partner only.\n\n**200:** `totalItems`, `totalPages`, `currentPage`, `limit`, `record` (partner + service rollup), `records[]` (`order_id`, `order_unique_id`, `user_id`, `customer_name`, `customer_phone_number`, `customer_profile_url`, `service_name`, `rating`, `review_text`, `reviewed_at`).\n\n**400** missing/invalid `service_id` | **404** service not found. Empty list is **200** with `records: []`."
               },
               "response": []
             }
@@ -5559,7 +5640,91 @@
                 }
               ]
             },
-            "description": "**GET /api/mobile/user/partners/:partnerId/ratings**\n\nPartner rating summary for customer app.\n\n| Query | Required | Notes |\n|-------|----------|--------|\n| `franchise_id` | No | Optional; omitted → resolved from partner (useful for saved partners) |\n| `service_id` | No | Filter to one service |\n| `review_limit` | No | Recent reviews (default 10, max 20) |\n\n**200 `data`:**\n- `average_rating`, `rating_count` — partner overall\n- `service_ratings[]` — per service this partner offers (`average_rating` = partner on that service; `service_average_rating` = global service rating)\n- `recent_reviews[]` — latest customer reviews (`order_unique_id`, `rating`, `review_text`, `reviewed_at`, `service_name`)"
+            "description": "**GET /api/mobile/user/partners/:partnerId/ratings**\n\nPartner rating summary for customer app.\n\n| Query | Required | Notes |\n|-------|----------|--------|\n| `franchise_id` | No | Optional; omitted → resolved from partner (useful for saved partners) |\n| `service_id` | No | Filter to one service |\n| `review_limit` | No | Recent reviews (default 10, max 20) |\n\n**200 `data`:**\n- `average_rating`, `rating_count` — partner overall\n- `service_ratings[]` — per service this partner offers (`average_rating` = partner on that service; `service_average_rating` = global service rating)\n- `recent_reviews[]` — latest customer reviews (`order_unique_id`, `rating`, `review_text`, `reviewed_at`, `service_name`)\n\nFor a paginated list of who rated a particular service, use **List partner service ratings**."
+          },
+          "response": []
+        },
+        {
+          "name": "List partner service ratings",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  pm.test('Partner service ratings listed', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(j.success).to.eql(true);",
+                  "    pm.expect(j.records).to.be.an('array');",
+                  "    pm.expect(j.record).to.be.an('object');",
+                  "    pm.expect(j.record).to.have.property('average_rating');",
+                  "    pm.expect(j.record).to.have.property('rating_count');",
+                  "    pm.expect(j.record).to.have.property('service_id');",
+                  "  });",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/user/partners/{{quotePartnerId}}/ratings/reviews?service_id={{serviceId}}&page={{ratingsPage}}&limit={{ratingsLimit}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "user",
+                "partners",
+                "{{quotePartnerId}}",
+                "ratings",
+                "reviews"
+              ],
+              "query": [
+                {
+                  "key": "service_id",
+                  "value": "{{serviceId}}",
+                  "description": "Required — catalog service ObjectId from partner profile"
+                },
+                {
+                  "key": "page",
+                  "value": "{{ratingsPage}}",
+                  "description": "Default 1"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{ratingsLimit}}",
+                  "description": "Default 10, max 50"
+                },
+                {
+                  "key": "franchise_id",
+                  "value": "{{franchiseId}}",
+                  "description": "Optional. Omitted → resolved from partner",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**GET /api/mobile/user/partners/:partnerId/ratings/reviews**\n\nPaginated customer reviews for one partner + service (who rated this service).\n\n| Param / query | Required | Notes |\n|---------------|----------|--------|\n| Path `partnerId` | Yes | `{{quotePartnerId}}` from **Partners (list)** or **Get partner profile** |\n| `service_id` | Yes | Catalog service `_id` from partner profile / **Get partner ratings** `service_ratings[]` |\n| `page` | No | Default 1 |\n| `limit` | No | Default 10, max 50 |\n| `franchise_id` | No | Optional; omitted → resolved from partner |\n\n**Auth:** customer Bearer `{{token}}`.\n\n**200:** `totalItems`, `totalPages`, `currentPage`, `limit`, `record` (partner + service rollup: `average_rating`, `rating_count`), `records[]` (`customer_name`, `customer_profile_url`, `service_name`, `rating`, `review_text`, `reviewed_at`). Phone / order ids are not returned.\n\n**400** missing/invalid `service_id` | **404** partner or service not found.\n\nRun **Get partner profile** first to set `{{quotePartnerId}}` and `{{serviceId}}`."
           },
           "response": []
         },
@@ -5646,7 +5811,7 @@
                 }
               ]
             },
-            "description": "**GET /api/mobile/user/partners/:partnerId**\n\nCustomer partner detail + full catalog for requesting a quote.\n\n| Param / query | Required | Notes |\n|---------------|----------|--------|\n| `partnerId` | Yes | Partner Mongo `_id` (`{{quotePartnerId}}` from Home, Partners list, or Saved partners) |\n| `franchise_id` | No | Optional franchise scope. Omit when opening a saved partner (resolved from partner). Pass when browsing within a franchise (e.g. Home) |\n\n**200 `data.partner`:** name, profile, `experience` / `professional_summary`, subscription plan, optional `business_info`, `location`, `joined_at`, `completed_services_count`, `is_saved`, **`average_rating`**, **`rating_count`**, **`ratings`** `{ average_rating, rating_count }`\n\n**200 `data.categories[].services[]`:** plus **`average_rating`** / **`rating_count`** and **`ratings`** (partner on that service), **`service_average_rating`** / **`service_rating_count`** (global service), `description`, `price`, `tax`, `payment_type`, `minimum_deposit`, `is_accept_request`\n\nRatings roll up from completed order reviews (`POST /api/mobile/user/orders/:orderId/review`). Use **Get partner ratings** for `service_ratings[]` and `recent_reviews[]`.\n\n**Quote flow:** pick a service → `POST /quotes/create` with `partner_id`, global `service_id`, `category_id`, `total_service_charge` = service `price`."
+            "description": "**GET /api/mobile/user/partners/:partnerId**\n\nCustomer partner detail + full catalog for requesting a quote.\n\n| Param / query | Required | Notes |\n|---------------|----------|--------|\n| `partnerId` | Yes | Partner Mongo `_id` (`{{quotePartnerId}}` from Home, Partners list, or Saved partners) |\n| `franchise_id` | No | Optional franchise scope. Omit when opening a saved partner (resolved from partner). Pass when browsing within a franchise (e.g. Home) |\n\n**200 `data.partner`:** name, profile, `experience` / `professional_summary`, subscription plan, optional `business_info`, `location`, `joined_at`, `completed_services_count`, `is_saved`, **`average_rating`**, **`rating_count`**, **`ratings`** `{ average_rating, rating_count }`\n\n**200 `data.categories[].services[]`:** plus **`average_rating`** / **`rating_count`** and **`ratings`** (partner on that service), **`service_average_rating`** / **`service_rating_count`** (global service), `description`, `price`, `tax`, `payment_type`, `minimum_deposit`, `is_accept_request`\n\nRatings roll up from completed order reviews (`POST /api/mobile/user/orders/:orderId/review`). Use **Get partner ratings** for `service_ratings[]` and `recent_reviews[]`. Use **List partner service ratings** for a paginated list of who rated a particular service.\n\n**Quote flow:** pick a service → `POST /quotes/create` with `partner_id`, global `service_id`, `category_id`, `total_service_charge` = service `price`."
           },
           "response": []
         },
@@ -8431,6 +8596,18 @@
       "value": "10",
       "type": "string",
       "description": "Recent reviews limit for GET partners/:partnerId/ratings (max 20)"
+    },
+    {
+      "key": "ratingsPage",
+      "value": "1",
+      "type": "string",
+      "description": "Page for partner/user service ratings lists"
+    },
+    {
+      "key": "ratingsLimit",
+      "value": "10",
+      "type": "string",
+      "description": "Limit for partner/user service ratings lists (max 50)"
     },
     {
       "key": "postsPage",

@@ -279,6 +279,12 @@ const NOTIFICATION_EVENTS = {
     body: (ctx) =>
       `Quote #${ctx.quoteSequenceId || ""} is waiting for your response.`,
   },
+  QUOTE_DEADLINE_REMINDER: {
+    category: "reminder",
+    title: () => "Quote expiring soon",
+    body: (ctx) =>
+      `Quote #${ctx.quoteSequenceId || ""} expires in ${ctx.minutesLeft || ""} minutes. ${ctx.actionHint || "Please respond."}`.trim(),
+  },
   SUBSCRIPTION_EXPIRING_REMINDER: {
     category: "reminder",
     title: () => "Subscription reminder",

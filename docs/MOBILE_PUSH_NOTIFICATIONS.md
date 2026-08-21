@@ -47,9 +47,9 @@ Recipient resolvers (orderRecipients, quoteRecipients, …)
 
 | Layer | Path | Role |
 |-------|------|------|
-| Event templates | `src/modules/notifications/constants/notification_events.js` | Title/body per `eventKey` (36 keys) |
+| Event templates | `src/modules/notifications/constants/notification_events.js` | Title/body per `eventKey` |
 | Domain hooks | `src/modules/notifications/services/domainHooks.js` | `safeNotify*` wrappers for real-time events |
-| Reminder runner | `src/modules/notifications/services/notificationReminder.service.js` | RM1–RM3 scheduled queries |
+| Reminder runner | `src/modules/notifications/services/notificationReminder.service.js` | RM1–RM4 scheduled queries |
 | Orchestrator | `src/modules/notifications/services/notification.service.js` | `notify()` — in-app record + push |
 | Push gate | `src/modules/notifications/services/notificationPush.service.js` | Preference + device token checks |
 | FCM sender | `service/firebase/push_service.js` | Firebase Admin SDK (`resources/adminsdk.json`) |
@@ -61,7 +61,7 @@ Recipient resolvers (orderRecipients, quoteRecipients, …)
 | Field | Default | Used for push? |
 |-------|---------|----------------|
 | `is_update_allow` | `true` | **Yes** — real-time business notifications |
-| `is_reminder_allow` | `true` | **Yes** — RM1–RM3 reminder notifications |
+| `is_reminder_allow` | `true` | **Yes** — RM1–RM4 reminder notifications |
 | `is_sms_allow` | `true` | **No** — SMS stub only |
 
 **Device token:** stored on `user.device_token`, set on mobile login/register (OTP, Google, Apple).
@@ -75,8 +75,10 @@ Recipient resolvers (orderRecipients, quoteRecipients, …)
 | `NOTIFICATION_CRON_SECRET` | — | Required for cron HTTP endpoint |
 | `SERVICE_REMINDER_LEAD_HOURS` | 24 | RM1 window |
 | `QUOTE_PENDING_REMINDER_HOURS` | 48 | RM2 stale threshold |
+| `QUOTE_ACTION_DEADLINE_MINUTES` | 60 | Pending/accepted action window used by RM4 |
 | `SUBSCRIPTION_EXPIRING_REMINDER_DAYS` | 7 | RM3 expiry window |
 | `ENABLE_NOTIFICATION_REMINDER_CRON` | — | Optional local `setInterval` (non-Lambda) |
+| `NOTIFICATION_REMINDER_CRON_INTERVAL_MS` | 60000 | Local poll interval (1 minute so RM4 can hit the 2-minute bucket) |
 
 ---
 
@@ -136,7 +138,7 @@ Partner only (`ledgerEntry.partner_id`).
 
 ---
 
-## 4. Unified event keys (36)
+## 4. Unified event keys
 
 All defined in `notification_events.js`. Categories: `order`, `quote`, `subscription`, `wallet`, `ticket`, `chat`, `system`, `reminder`.
 
@@ -178,6 +180,7 @@ All defined in `notification_events.js`. Categories: `order`, `quote`, `subscrip
 | `TICKET_STATUS_CHANGED` | ticket | update |
 | `SERVICE_REMINDER` | reminder | reminder |
 | `QUOTE_ACTION_REMINDER` | reminder | reminder |
+| `QUOTE_DEADLINE_REMINDER` | reminder | reminder |
 | `SUBSCRIPTION_EXPIRING_REMINDER` | reminder | reminder |
 
 ---
@@ -277,8 +280,9 @@ Legend: **✅ Live** · **❌ Gap**
 | RM1 | `SERVICE_REMINDER` | Upcoming appointment or order schedule | ✅ |
 | RM2 | `QUOTE_ACTION_REMINDER` | Stale pending/accepted/new quotes | ✅ |
 | RM3 | `SUBSCRIPTION_EXPIRING_REMINDER` | Active subscription expiring within N days | ✅ |
+| RM4 | `QUOTE_DEADLINE_REMINDER` | Pending/accepted quote 1-hour window: 20 / 10 / 5 / 2 minutes left | ✅ |
 
-Run via `POST /api/notifications/cron/reminders`, `node scripts/run-notification-reminders.js`, or local cron when enabled.
+Run via `POST /api/notifications/cron/reminders`, `node scripts/run-notification-reminders.js`, or local cron when enabled. Production EventBridge should use **`rate(1 minute)`** so RM4’s 2-minute bucket is hittable. Quotes are **not** auto-failed when the hour ends.
 
 ---
 
@@ -305,7 +309,7 @@ Run via `POST /api/notifications/cron/reminders`, `node scripts/run-notification
 | `safeNotifyPartnerVerificationUpdated` | `user_controller.js`, `partner_document_controller.js` |
 | `safeNotifyAppointment*` | `appointment_service.js` (manual + auto create, status update) |
 | `safeNotifyTicketStatusChanged` | `ticket_controller.js` |
-| `runAllReminders` | cron endpoint, CLI script, optional `server.js` interval |
+| `runAllReminders` | cron endpoint, CLI script, optional `server.js` interval (includes RM4 `runQuoteDeadlineReminders`) |
 
 ---
 
@@ -318,7 +322,7 @@ Phases 1–4 are **complete** for the agreed scope. Remaining gaps:
 | Low | O4 separate refunded status push | `ORDER_REFUND_PROCESSED` covers refund today |
 | Low | AC6 payment-due copy | Optional customer-focused template |
 | Low | T2 ticket created | Not in client spec |
-| Ops | EventBridge cron | Schedule `POST /api/notifications/cron/reminders` in Lambda |
+| Ops | EventBridge cron | Schedule `POST /api/notifications/cron/reminders` at **`rate(1 minute)`** on Lambda |
 | Ops | `resources/adminsdk.json` | Required for FCM in production |
 
 ---
@@ -382,3 +386,4 @@ Server console lines are prefixed with `[notifications:delivery]`.
 |------|--------|
 | 2026-07-07 | Initial catalog |
 | 2026-07-08 | Phases 1–4 complete; 36 event keys; reminders + preference wiring documented |
+| 2026-08-20 | RM4 quote deadline countdown (20/10/5/2 min); 1-minute cron cadence; `action_deadline_at` |

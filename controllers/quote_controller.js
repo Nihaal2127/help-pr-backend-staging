@@ -93,6 +93,7 @@ const {
   safeNotifyQuoteStatusChanged,
   safeNotifyQuoteAssigned,
 } = require("../src/modules/notifications/services/domainHooks");
+const { applyQuoteActionDeadline } = require("../utils/quote_action_deadline");
 
 const QUOTE_ADDRESS_POPULATE = {
   path: "address_id",
@@ -288,6 +289,7 @@ const create = async (req, res) => {
     });
 
     applyPricingToQuote(quote, pricing);
+    applyQuoteActionDeadline(quote, { previousStatus: "" });
 
     await appendQuoteHistory(quote, req, "created", [], "Quote created.");
     await quote.save();
@@ -729,6 +731,7 @@ const update = async (req, res) => {
       quote.status = normalizedStored;
     }
     const currentStatus = resolveQuoteStatus(quote);
+    const previousPartnerId = quote.partner_id;
     const hasStatusUpdate = body.status !== undefined;
     let previousStatusForNotify = null;
     let notifyQuoteAssigned = false;
@@ -950,6 +953,11 @@ const update = async (req, res) => {
       }
       historyChanges.push(...statusChanges.filter(Boolean));
     }
+
+    applyQuoteActionDeadline(quote, {
+      previousStatus: currentStatus,
+      previousPartnerId,
+    });
 
     quote.updated_at = new Date();
 

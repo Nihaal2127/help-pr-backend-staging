@@ -48,6 +48,7 @@ const {
   buildHistoryChange,
   appendQuoteHistory,
 } = require('../../../utils/quote_history_helper');
+const { applyQuoteActionDeadline } = require('../../../utils/quote_action_deadline');
 const {
   createOrderFromQuote,
 } = require('../../order_creation_service');
@@ -229,6 +230,7 @@ const createCustomerQuote = async (customerId, body) => {
     });
 
     applyPricingToQuote(quote, pricing);
+    applyQuoteActionDeadline(quote, { previousStatus: '' });
     appendQuoteHistory(quote, {
       actorId: customerId,
       actorRole: 'customer',
@@ -385,6 +387,7 @@ const updateCustomerQuote = async (customerId, quoteId, body) => {
     }
 
     const historyChanges = [];
+    const previousPartnerId = quote.partner_id;
     const previousValues = applyCustomerQuoteFieldUpdates(quote, body);
     const previousStatus = currentStatus;
     let assignedPartner = false;
@@ -422,6 +425,11 @@ const updateCustomerQuote = async (customerId, quoteId, body) => {
       quote.status = 'pending';
       assignedPartner = true;
     }
+
+    applyQuoteActionDeadline(quote, {
+      previousStatus: currentStatus,
+      previousPartnerId,
+    });
 
     quote.updated_at = new Date();
 
@@ -506,6 +514,7 @@ const cancelCustomerQuote = async (customerId, quoteId, body) => {
     if (body.cancellation_reason !== undefined) {
       quote.cancellation_reason = String(body.cancellation_reason).trim();
     }
+    applyQuoteActionDeadline(quote, { previousStatus: currentStatus });
 
     const historyChanges = [
       buildHistoryChange('status', oldStatus, quote.status),

@@ -75,6 +75,7 @@ const mapRatingRow = (line) => {
     user_unique_id: line.user_unique_id || customer?.user_id || null,
     customer_name: customer?.name ?? null,
     customer_phone_number: customer?.phone_number ?? null,
+    customer_profile_url: customer?.profile_url || null,
     service_name: service?.name ?? null,
     rating: Number.isFinite(ratingValue) && ratingValue > 0 ? ratingValue : 0,
     review_text: line.review_text || '',
@@ -138,7 +139,7 @@ const getPartnerOrderRatingsForAdmin = async (partnerIdRaw, query = {}) => {
         reviewed_at: 1,
       },
       [
-        { path: 'user_id', select: 'name phone_number user_id' },
+        { path: 'user_id', select: 'name phone_number user_id profile_url' },
         { path: 'service_id', select: 'name' },
       ]
     );

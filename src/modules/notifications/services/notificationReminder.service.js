@@ -7,10 +7,20 @@ const {
   normalizeAppointmentStatus,
 } = require("../../../../enum/appointment_status_enum");
 const { ORDER_STATUS_IN_PROGRESS } = require("../../../../enum/order_status_enum");
-const { buildQuoteBucketFilter } = require("../../../../enum/quote_status_enum");
+const {
+  buildQuoteBucketFilter,
+  resolveQuoteStatus,
+} = require("../../../../enum/quote_status_enum");
 const { combineDateAndTime } = require("../../../../utils/order_schedule");
 const { getReminderConfig } = require("../constants/reminder_config");
 const { notify } = require("./notification.service");
+const {
+  DEADLINE_REMINDER_MINUTES,
+  getQuoteActionDeadlineMs,
+  inferQuoteActionDeadlineAt,
+  matchDeadlineReminderBucket,
+  deadlineReminderActionHint,
+} = require("../../../../utils/quote_action_deadline");
 
 const isScheduledAppointment = (status) => {
   const normalized = normalizeAppointmentStatus(status);
@@ -286,12 +296,110 @@ const runSubscriptionReminders = async (now = new Date()) => {
   };
 };
 
+const runQuoteDeadlineReminders = async (now = new Date()) => {
+  const maxBucketMinutes = DEADLINE_REMINDER_MINUTES[0];
+  const horizon = new Date(now.getTime() + maxBucketMinutes * 60 * 1000);
+  const windowStart = new Date(now.getTime() - getQuoteActionDeadlineMs());
+  let candidates = 0;
+  let notified = 0;
+
+  const pendingBucket = buildQuoteBucketFilter("pending");
+  const acceptedBucket = buildQuoteBucketFilter("accepted");
+  const statusClauses = [pendingBucket, acceptedBucket].filter(Boolean);
+  if (!statusClauses.length) {
+    return {
+      quoteDeadlineReminderCandidates: 0,
+      quoteDeadlineRemindersSent: 0,
+    };
+  }
+
+  const quotes = await Quote.find({
+    deleted_at: null,
+    order_id: null,
+    $and: [
+      { $or: statusClauses },
+      {
+        $or: [
+          { action_deadline_at: { $gt: now, $lte: horizon } },
+          {
+            action_deadline_at: null,
+            $or: [
+              { created_at: { $gte: windowStart } },
+              { updated_at: { $gte: windowStart } },
+            ],
+          },
+        ],
+      },
+    ],
+  })
+    .select(
+      "_id quote_sequence_id user_id partner_id franchise_id status action_deadline_at created_at history"
+    )
+    .lean();
+
+  for (const quote of quotes) {
+    let deadline = quote.action_deadline_at
+      ? new Date(quote.action_deadline_at)
+      : null;
+    if (!deadline || Number.isNaN(deadline.getTime())) {
+      const inferred = inferQuoteActionDeadlineAt(quote, now);
+      if (!inferred) continue;
+      await Quote.updateOne(
+        { _id: quote._id, action_deadline_at: null },
+        { $set: { action_deadline_at: inferred } }
+      );
+      deadline = inferred;
+    }
+
+    if (deadline <= now || deadline > horizon) continue;
+
+    const remainingMs = deadline.getTime() - now.getTime();
+    const minutes = matchDeadlineReminderBucket(remainingMs);
+    if (!minutes) continue;
+
+    const status = resolveQuoteStatus(quote);
+    const recipientUserId =
+      status === "accepted" ? quote.user_id : quote.partner_id;
+    if (!recipientUserId) continue;
+
+    candidates += 1;
+    await notify({
+      eventKey: "QUOTE_DEADLINE_REMINDER",
+      recipientUserIds: [recipientUserId],
+      context: {
+        quoteSequenceId: quote.quote_sequence_id || "",
+        minutesLeft: minutes,
+        actionHint: deadlineReminderActionHint(status),
+      },
+      entityType: "quote",
+      entityId: quote._id,
+      franchiseId: quote.franchise_id,
+      metadata: {
+        quote_id: quote._id,
+        quote_sequence_id: quote.quote_sequence_id || "",
+        reminder_type: "quote_deadline",
+        minutes_left: minutes,
+        status,
+      },
+      dedupeKeyPrefix: `reminder.quote.deadline:${quote._id}:${minutes}`,
+      pushPreference: "reminder",
+    });
+    notified += 1;
+  }
+
+  return {
+    quoteDeadlineReminderCandidates: candidates,
+    quoteDeadlineRemindersSent: notified,
+  };
+};
+
 const runAllReminders = async () => {
   const now = new Date();
-  const [service, quote, subscription] = await Promise.all([
+  const [service, quote, subscription, quoteDeadline] = await Promise.all([
     runServiceReminders(now),
     runQuoteReminders(now),
     runSubscriptionReminders(now),
+    runQuoteDeadlineReminders(now),
   ]);
 
   return {
@@ -301,6 +409,7 @@ const runAllReminders = async () => {
     ...service,
     ...quote,
     ...subscription,
+    ...quoteDeadline,
   };
 };
 
@@ -308,5 +417,6 @@ module.exports = {
   runServiceReminders,
   runQuoteReminders,
   runSubscriptionReminders,
+  runQuoteDeadlineReminders,
   runAllReminders,
 };

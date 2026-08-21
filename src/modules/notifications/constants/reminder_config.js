@@ -20,6 +20,11 @@ const getReminderConfig = () => ({
     process.env.SUBSCRIPTION_EXPIRING_REMINDER_DAYS,
     7
   ),
+  /** Minutes a pending/accepted quote action window lasts (default 60). */
+  quoteActionDeadlineMinutes: parsePositiveNumber(
+    process.env.QUOTE_ACTION_DEADLINE_MINUTES,
+    60
+  ),
 });
 
 module.exports = {

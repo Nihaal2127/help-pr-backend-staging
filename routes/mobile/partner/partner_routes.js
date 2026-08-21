@@ -22,7 +22,9 @@ const {
 } = require('../../../middleware/mobile/partner/partner_middleware');
 const partnerAuthMiddleware = require('../../../middleware/mobile/partner/partner_auth_middleware');
 const { requirePartnerAccount } = require('../../../middleware/mobile/partner/quote_middleware');
+const { validateRequiredServiceIdQuery } = require('../../../middleware/mobile/common/ratings_query_middleware');
 const { getHomeHandler } = require('../../../controllers/mobile/partner/home_controller');
+const { listOwnServiceRatingsHandler } = require('../../../controllers/mobile/partner/ratings_controller');
 const quoteRoutes = require('./quote_routes');
 const orderRoutes = require('./order_routes');
 const appointmentRoutes = require('./appointment_routes');
@@ -53,6 +55,13 @@ router.post(
 router.post('/reset-password', validateResetPassword, resetPassword);
 router.post('/logout', partnerAuthMiddleware, logout);
 router.get('/home', partnerAuthMiddleware, requirePartnerAccount, getHomeHandler);
+router.get(
+  '/ratings',
+  partnerAuthMiddleware,
+  requirePartnerAccount,
+  validateRequiredServiceIdQuery,
+  listOwnServiceRatingsHandler
+);
 router.put(
   '/update',
   partnerAuthMiddleware,

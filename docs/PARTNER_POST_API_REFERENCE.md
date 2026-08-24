@@ -172,7 +172,7 @@ Content-Type: application/json
 }
 ```
 
-`rejection_reason` is required when rejecting (max 500 characters).
+`rejection_reason` is required when rejecting (no character limit).
 
 **After published — hide / remove / republish:**
 
@@ -346,7 +346,7 @@ Content-Type: multipart/form-data
 | Field | Required | Notes |
 |-------|----------|-------|
 | `post_type` | Yes | `order` or `legacy_work` |
-| `description` | Yes | Max 500 chars |
+| `description` | Yes | Required; no character limit |
 | `order_id` | If `post_type=order` | Completed order ID |
 | `legacy_service_name` | If `post_type=legacy_work` | Min 3 chars |
 | `category_id` | No | Legacy work only |
@@ -424,7 +424,7 @@ Content-Type: multipart/form-data
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `description` | string | Max 500 chars. Cannot be empty if sent |
+| `description` | string | Cannot be empty if sent; no character limit |
 | `keep_existing_images` | string (JSON array) | URLs to keep, e.g. `["partner_post/uuid1.jpg"]` |
 | `images` | file[] | New image files. Max 4 new files per request |
 

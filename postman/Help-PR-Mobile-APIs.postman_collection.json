@@ -900,7 +900,7 @@
                     "categories"
                   ]
                 },
-                "description": "**GET /api/mobile/partner/categories**\n\n- **400** if no `franchise_id` — complete location on Update first\n- **200** `data[]`: `_id`, `name`, `desc`, `image_url`, `services[]` (`_id`, `name`, `desc`, `tax`, `image_url`, `category_id`)\n- Sets `{{categoryId}}`, `{{serviceId}}`, `{{serviceId2}}` from first category's services"
+                "description": "**GET /api/mobile/partner/categories**\n\n- **400** if no `franchise_id` — complete location on Update first\n- **200** `data[]`: `_id`, `name`, `desc`, `image_url`, `services[]` (`_id`, `name`, `desc`, `tax`, `image_url`, `category_id`, `payment_type`)\n- Sets `{{categoryId}}`, `{{serviceId}}`, `{{serviceId2}}` from first category's services"
               },
               "response": []
             }
@@ -3683,7 +3683,7 @@
                     "posts"
                   ]
                 },
-                "description": "**POST /api/mobile/partner/posts** — multipart, 1–4 images.\n\n| Field | Required | Notes |\n|-------|----------|--------|\n| `post_type` | Yes | `order` or `legacy_work` |\n| `description` | Yes | Max 500 chars |\n| `order_id` | If `order` | Completed order ID |\n| `legacy_service_name` | If `legacy_work` | Min 3 chars |\n| `images` | Yes | 1–4 JPEG/PNG files |\n\n**201:** `message: Post submitted for approval.` — `data.status` is `pending`.\n\nSets `{{postId}}` and `{{postShareToken}}` from response."
+                "description": "**POST /api/mobile/partner/posts** — multipart, 1–4 images.\n\n| Field | Required | Notes |\n|-------|----------|--------|\n| `post_type` | Yes | `order` or `legacy_work` |\n| `description` | Yes | Required, no character limit |\n| `order_id` | If `order` | Completed order ID |\n| `legacy_service_name` | If `legacy_work` | Min 3 chars |\n| `images` | Yes | 1–4 JPEG/PNG files |\n\n**201:** `message: Post submitted for approval.` — `data.status` is `pending`.\n\nSets `{{postId}}` and `{{postShareToken}}` from response."
               },
               "response": []
             },
@@ -3784,7 +3784,7 @@
                       "key": "description",
                       "value": "Updated description from Postman.",
                       "type": "text",
-                      "description": "Max 500 chars"
+                      "description": "Required if sent; cannot be empty"
                     }
                   ]
                 },
@@ -3801,7 +3801,7 @@
                     "{{postId}}"
                   ]
                 },
-                "description": "**PUT /api/mobile/partner/posts/:postId** — edit description and/or images.\n\n| Field | Required | Notes |\n|-------|----------|--------|\n| `description` | No | Max 500 chars; cannot be empty if sent |\n| `keep_existing_images` | No | JSON array of image URLs to retain |\n| `images` | No | 1–4 new JPEG/PNG files |\n\n**Behaviour:**\n- `published` post → stays `published` (live immediately)\n- `rejected` post → resets to `pending`, clears `rejection_reason`\n- Final image count must be 1–4\n\n**200:**\n```json\n{\n  \"success\": true,\n  \"status\": 200,\n  \"message\": \"Post updated successfully.\",\n  \"data\": { \"_id\": \"...\", \"status\": \"published\", \"rejection_reason\": \"\", \"...\": \"...\" }\n}\n```\n\nSee `docs/PARTNER_POST_API_REFERENCE.md` §2.5."
+                "description": "**PUT /api/mobile/partner/posts/:postId** — edit description and/or images.\n\n| Field | Required | Notes |\n|-------|----------|--------|\n| `description` | No | Cannot be empty if sent; no character limit |\n| `keep_existing_images` | No | JSON array of image URLs to retain |\n| `images` | No | 1–4 new JPEG/PNG files |\n\n**Behaviour:**\n- `published` post → stays `published` (live immediately)\n- `rejected` post → resets to `pending`, clears `rejection_reason`\n- Final image count must be 1–4\n\n**200:**\n```json\n{\n  \"success\": true,\n  \"status\": 200,\n  \"message\": \"Post updated successfully.\",\n  \"data\": { \"_id\": \"...\", \"status\": \"published\", \"rejection_reason\": \"\", \"...\": \"...\" }\n}\n```\n\nSee `docs/PARTNER_POST_API_REFERENCE.md` §2.5."
               },
               "response": []
             },

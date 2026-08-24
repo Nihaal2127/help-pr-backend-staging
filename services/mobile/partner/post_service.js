@@ -17,7 +17,6 @@ const {
   MAX_LIMIT,
   MIN_IMAGES,
   MAX_IMAGES,
-  MAX_DESCRIPTION_LENGTH,
   MIN_LEGACY_SERVICE_NAME_LENGTH,
   parsePositiveInt,
   parseObjectId,
@@ -46,12 +45,6 @@ const parseDescription = (value) => {
   const text = String(value ?? '').trim();
   if (!text) {
     return { ok: false, message: 'Description is required.' };
-  }
-  if (text.length > MAX_DESCRIPTION_LENGTH) {
-    return {
-      ok: false,
-      message: `Description must be at most ${MAX_DESCRIPTION_LENGTH} characters.`,
-    };
   }
   return { ok: true, text };
 };

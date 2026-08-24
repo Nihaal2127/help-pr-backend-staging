@@ -25,7 +25,6 @@ const MAX_LIMIT = 50;
 const MIN_IMAGES = 1;
 const MAX_IMAGES = 4;
 const MAX_DESCRIPTION_LENGTH = 500;
-const MAX_POST_REJECTION_REASON_LENGTH = 500;
 const MIN_LEGACY_SERVICE_NAME_LENGTH = 3;
 
 const OBJECT_ID_HEX_24 = /^[a-fA-F0-9]{24}$/;
@@ -201,12 +200,6 @@ const parsePostDescription = (value) => {
   if (!text) {
     return { ok: false, message: 'Description is required.' };
   }
-  if (text.length > MAX_DESCRIPTION_LENGTH) {
-    return {
-      ok: false,
-      message: `Description must be at most ${MAX_DESCRIPTION_LENGTH} characters.`,
-    };
-  }
   return { ok: true, text };
 };
 
@@ -214,12 +207,6 @@ const parseRejectionReason = (raw) => {
   const text = String(raw ?? '').trim();
   if (!text) {
     return { ok: false, message: `${fieldLabel('rejection_reason')} is required when status is rejected.` };
-  }
-  if (text.length > MAX_POST_REJECTION_REASON_LENGTH) {
-    return {
-      ok: false,
-      message: `${fieldLabel('rejection_reason')} must be at most ${MAX_POST_REJECTION_REASON_LENGTH} characters.`,
-    };
   }
   return { ok: true, text };
 };
@@ -755,7 +742,6 @@ module.exports = {
   MIN_IMAGES,
   MAX_IMAGES,
   MAX_DESCRIPTION_LENGTH,
-  MAX_POST_REJECTION_REASON_LENGTH,
   parseRejectionReason,
   MIN_LEGACY_SERVICE_NAME_LENGTH,
   parsePositiveInt,

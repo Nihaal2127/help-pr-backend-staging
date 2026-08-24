@@ -37,7 +37,7 @@ const partnerPostSchema = new mongoose.Schema(
       ref: 'service',
     },
     legacy_service_name: { type: String, default: '', trim: true },
-    description: { type: String, default: '', trim: true, maxlength: 500 },
+    description: { type: String, default: '', trim: true },
     image_urls: { type: [String], default: [] },
     status: {
       type: String,
@@ -45,7 +45,7 @@ const partnerPostSchema = new mongoose.Schema(
       default: POST_STATUS_PENDING,
       trim: true,
     },
-    rejection_reason: { type: String, default: '', trim: true, maxlength: 500 },
+    rejection_reason: { type: String, default: '', trim: true },
     share_token: { type: String, required: true, trim: true, unique: true },
     likes_count: { type: Number, default: 0, min: 0 },
     shares_count: { type: Number, default: 0, min: 0 },

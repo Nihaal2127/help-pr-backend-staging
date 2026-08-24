@@ -900,7 +900,7 @@
                     "categories"
                   ]
                 },
-                "description": "**GET /api/mobile/partner/categories**\n\n- **400** if no `franchise_id` — complete location on Update first\n- **200** `data[]`: `_id`, `name`, `desc`, `image_url`, `services[]` (`_id`, `name`, `desc`, `tax`, `image_url`, `category_id`)\n- Sets `{{categoryId}}`, `{{serviceId}}`, `{{serviceId2}}` from first category's services"
+                "description": "**GET /api/mobile/partner/categories**\n\n- **400** if no `franchise_id` — complete location on Update first\n- **200** `data[]`: `_id`, `name`, `desc`, `image_url`, `services[]` (`_id`, `name`, `desc`, `tax`, `image_url`, `category_id`, `payment_type`)\n- Sets `{{categoryId}}`, `{{serviceId}}`, `{{serviceId2}}` from first category's services"
               },
               "response": []
             }

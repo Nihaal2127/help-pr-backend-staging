@@ -81,7 +81,7 @@ const listFranchiseCategoriesForPartner = async (partnerId) => {
             _id: { $in: [...serviceIdSet] },
             ...ACTIVE_SERVICE_FILTER,
           })
-            .select('name desc tax image_url category_id')
+            .select('name desc tax image_url category_id payment_type')
             .lean();
 
     const serviceById = new Map(serviceDocs.map((s) => [String(s._id), s]));
@@ -93,6 +93,7 @@ const listFranchiseCategoriesForPartner = async (partnerId) => {
       tax: s.tax,
       image_url: s.image_url,
       category_id: s.category_id,
+      payment_type: s.payment_type ?? '',
     });
 
     const categoriesWithServices = categories.map((c) => {

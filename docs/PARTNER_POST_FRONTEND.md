@@ -69,7 +69,7 @@ Content-Type: multipart/form-data
 | Field | Type | Notes |
 |-------|------|-------|
 | `post_type` | string | `order` or `legacy_work` |
-| `description` | string | Max 500 chars |
+| `description` | string | Required; no character limit |
 | `order_id` | string | Required when `post_type=order` |
 | `legacy_service_name` | string | Required when `post_type=legacy_work` |
 | `category_id` | string | Optional (legacy) |

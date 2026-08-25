@@ -16,6 +16,31 @@ function coerceNumber(v, defaultVal = 0) {
   return Number.isFinite(n) ? n : defaultVal;
 }
 
+function trimPaymentType(value) {
+  return value != null ? String(value).trim() : '';
+}
+
+function resolveCreatePaymentType(requested, masterPaymentType) {
+  return trimPaymentType(requested) || trimPaymentType(masterPaymentType);
+}
+
+async function loadMasterPaymentTypesByServiceId(serviceIds) {
+  const uniqueIds = [
+    ...new Map(
+      (serviceIds || [])
+        .filter(Boolean)
+        .map((id) => [String(id), toOid(id)])
+    ).values(),
+  ];
+  if (uniqueIds.length === 0) return new Map();
+
+  const docs = await Service.find({ _id: { $in: uniqueIds }, deleted_at: null })
+    .select('_id payment_type')
+    .lean();
+
+  return new Map(docs.map((s) => [String(s._id), trimPaymentType(s.payment_type)]));
+}
+
 /**
  * Build desired partner_service rows from partner_category documents
  * (not deleted, is_active). Skips services whose global category_id does not match the row.
@@ -41,8 +66,11 @@ async function syncPartnerServicesFromPartnerCategories(partnerOid) {
   const svcDocs =
     uniqueIds.length === 0
       ? []
-      : await Service.find({ _id: { $in: uniqueIds }, deleted_at: null }).select('_id category_id').lean();
+      : await Service.find({ _id: { $in: uniqueIds }, deleted_at: null })
+          .select('_id category_id payment_type')
+          .lean();
   const svcCat = new Map(svcDocs.map((s) => [String(s._id), s.category_id ? String(s.category_id) : null]));
+  const svcPaymentType = new Map(svcDocs.map((s) => [String(s._id), trimPaymentType(s.payment_type)]));
 
   const desired = new Map();
   for (const row of pcRows) {
@@ -95,6 +123,7 @@ async function syncPartnerServicesFromPartnerCategories(partnerOid) {
         partner_id: partnerId,
         service_id: svcOid,
         category_id: catOid,
+        payment_type: svcPaymentType.get(sidStr) || '',
         is_accept_request: true,
         created_at: new Date(),
         updated_at: new Date(),
@@ -237,6 +266,8 @@ async function replacePartnerCategoriesFromSignupRows(partnerId, normalizedRows)
     detailLastByService.set(String(r.service_id), r);
   }
 
+  const masterPaymentTypes = await loadMasterPaymentTypesByServiceId([...detailLastByService.keys()]);
+
   const psRows = [];
   for (const [sidStr, r] of detailLastByService) {
     const catStr = String(r.category_id);
@@ -246,7 +277,7 @@ async function replacePartnerCategoriesFromSignupRows(partnerId, normalizedRows)
       service_id: toOid(sidStr),
       description: r.description != null ? String(r.description) : '',
       price: coerceNumber(r.price, 0),
-      payment_type: r.payment_type != null ? String(r.payment_type).trim() : '',
+      payment_type: resolveCreatePaymentType(r.payment_type, masterPaymentTypes.get(sidStr)),
       tax: coerceNumber(r.tax, 0),
       minimum_deposit: coerceNumber(r.minimum_deposit, 0),
       is_active: r.is_active !== false,
@@ -345,14 +376,17 @@ async function mergePartnerCatalogFromNormalizedRows(partnerId, normalizedRows) 
     );
   }
 
+  const masterPaymentTypes = await loadMasterPaymentTypesByServiceId([...detailLastByService.keys()]);
+
   for (const [sidStr, r] of detailLastByService) {
     const svcOid = toOid(sidStr);
     const catOid = toOid(r.category_id);
+    const requestedPaymentType = trimPaymentType(r.payment_type);
     const updateFields = {
       category_id: catOid,
       description: r.description != null ? String(r.description) : '',
       price: coerceNumber(r.price, 0),
-      payment_type: r.payment_type != null ? String(r.payment_type).trim() : '',
+      payment_type: requestedPaymentType,
       tax: coerceNumber(r.tax, 0),
       minimum_deposit: coerceNumber(r.minimum_deposit, 0),
       is_active: r.is_active !== false,
@@ -379,6 +413,7 @@ async function mergePartnerCatalogFromNormalizedRows(partnerId, normalizedRows) 
         partner_id: partnerOid,
         service_id: svcOid,
         ...updateFields,
+        payment_type: resolveCreatePaymentType(requestedPaymentType, masterPaymentTypes.get(sidStr)),
         created_at: new Date(),
       });
     } else {
@@ -395,5 +430,7 @@ module.exports = {
   replacePartnerCategoriesFromSignupRows,
   replacePartnerCatalogFromNormalizedRows,
   mergePartnerCatalogFromNormalizedRows,
+  loadMasterPaymentTypesByServiceId,
+  resolveCreatePaymentType,
   toOid,
 };

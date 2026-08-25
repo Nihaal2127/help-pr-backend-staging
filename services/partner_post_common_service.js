@@ -592,6 +592,8 @@ const partnerPostScopeFilter = (partnerId) => {
 
 const emptyPartnerEngagementCounts = () => ({
   posts_count: 0,
+  images_count: 0,
+  video_count: 0,
   likes_count: 0,
   shares_count: 0,
   saves_count: 0,
@@ -612,7 +614,9 @@ const normalizePartnerObjectIds = (partnerIds = []) => {
 /**
  * Batch engagement totals keyed by partner id string.
  * Uses denormalized likes_count / shares_count on each post so totals match
- * summing the values shown on post cards.
+ * summing the values shown on post cards. images_count is the total number of
+ * images on those same posts (1–4 per post). video_count is always 0 until
+ * video posts are implemented.
  *
  * @param {Array<string|import('mongoose').Types.ObjectId>} partnerIds
  * @param {{ publishedOnly?: boolean }} [options]
@@ -650,6 +654,15 @@ const getPartnersEngagementCountsByPartnerIds = async (
         $group: {
           _id: '$partner_id',
           posts_count: { $sum: 1 },
+          images_count: {
+            $sum: {
+              $cond: [
+                { $isArray: '$image_urls' },
+                { $size: '$image_urls' },
+                0,
+              ],
+            },
+          },
           likes_count: { $sum: { $ifNull: ['$likes_count', 0] } },
           shares_count: { $sum: { $ifNull: ['$shares_count', 0] } },
         },
@@ -680,6 +693,8 @@ const getPartnersEngagementCountsByPartnerIds = async (
     byPartnerId.set(key, {
       ...current,
       posts_count: Math.max(0, Number(row.posts_count) || 0),
+      images_count: Math.max(0, Number(row.images_count) || 0),
+      video_count: 0,
       likes_count: Math.max(0, Number(row.likes_count) || 0),
       shares_count: Math.max(0, Number(row.shares_count) || 0),
     });
@@ -698,7 +713,7 @@ const getPartnersEngagementCountsByPartnerIds = async (
 };
 
 /**
- * Aggregate post / like / share / save totals for a partner.
+ * Aggregate post / image / like / share / save totals for a partner.
  * Uses the same denormalized counters shown on each post card so profile
  * totals match summing the partner's mobile post list.
  *

@@ -17,6 +17,7 @@ const {
   getServiceCountData,
   getVerificationCountData,
   pickFranchiseIdFromRequest,
+  buildUserJobFinancialSortKeyMap,
 } = require('./count_controller');
 
 const { getDocumentList } = require('./document_controller');
@@ -28,6 +29,11 @@ const { getUploadType } = require('../enum/upload_type_enum');
 const PartnerDocument = require('../models/partner_document');
 const PartnerBankAccount = require('../models/partner_bank_account');
 const PartnerSubscription = require('../models/partner_subscription');
+const {
+  mapRatingSummary,
+  buildCustomerSubmittedRatingMap,
+  getCustomerSubmittedRating,
+} = require('../utils/rating_format');
 const {
   replacePartnerCategoriesFromSignupRows,
   replacePartnerCatalogFromNormalizedRows,
@@ -52,34 +58,137 @@ const {
 } = require('../utils/partner_document_status');
 
 const GET_ALL_SORT_FIELDS = ['name', 'email', 'created_at'];
+const GET_ALL_COMPUTED_SORT_FIELDS = [
+  'total_service',
+  'rating',
+  'bal_payment',
+  'total_amount',
+  'total_earnings',
+  'no_of_services',
+];
 const VERIFICATION_SORT_FIELDS = ['name', 'email', 'created_at'];
 
-/** Query: sort_by / sortBy = name | email | created_at; sort_order / sortOrder = asc | desc. Legacy: sort=1|-1 on created_at when sort_by omitted. */
-function buildGetAllSort(query) {
-  const sortByRaw = query.sort_by ?? query.sortBy;
-  const orderRaw = String(query.sort_order ?? query.sortOrder ?? '').toLowerCase();
-
-  if (!sortByRaw) {
-    const legacy = query.sort !== undefined ? parseInt(query.sort, 10) : NaN;
-    const dir = legacy === 1 || legacy === -1 ? legacy : -1;
-    return { created_at: dir };
-  }
-
-  const sortBy = GET_ALL_SORT_FIELDS.includes(sortByRaw) ? sortByRaw : 'created_at';
-
-  let direction;
-  if (orderRaw === 'asc' || orderRaw === '1') direction = 1;
-  else if (orderRaw === 'desc' || orderRaw === '-1') direction = -1;
-  else direction = sortBy === 'created_at' ? -1 : 1;
-
-  return { [sortBy]: direction };
-}
-
-function getSortDirection(query, fallback = -1) {
+function parseSortDirection(query, fallback) {
   const orderRaw = String(query.sort_order ?? query.sortOrder ?? '').toLowerCase();
   if (orderRaw === 'asc' || orderRaw === '1') return 1;
   if (orderRaw === 'desc' || orderRaw === '-1') return -1;
   return fallback;
+}
+
+function normalizeComputedSortField(sortByRaw) {
+  if (sortByRaw === 'average_rating') return 'rating';
+  if (sortByRaw === 'balance_amount' || sortByRaw === 'pending_amount') return 'bal_payment';
+  return sortByRaw;
+}
+
+/** Query: sort_by / sortBy = name | email | created_at | total_service | rating | bal_payment | total_amount | total_earnings | no_of_services. Legacy: sort=1|-1 on created_at when sort_by omitted. */
+function resolveGetAllSort(query) {
+  const sortByRaw = query.sort_by ?? query.sortBy;
+  if (!sortByRaw) {
+    const legacy = query.sort !== undefined ? parseInt(query.sort, 10) : NaN;
+    const dir = legacy === 1 || legacy === -1 ? legacy : -1;
+    return { kind: 'user', sort: { created_at: dir }, field: 'created_at', direction: dir };
+  }
+
+  const computedField = normalizeComputedSortField(sortByRaw);
+  if (GET_ALL_COMPUTED_SORT_FIELDS.includes(computedField)) {
+    return {
+      kind: 'computed',
+      field: computedField,
+      direction: parseSortDirection(query, -1),
+    };
+  }
+
+  const sortBy = GET_ALL_SORT_FIELDS.includes(sortByRaw) ? sortByRaw : 'created_at';
+  const direction = parseSortDirection(query, sortBy === 'created_at' ? -1 : 1);
+  return { kind: 'user', sort: { [sortBy]: direction }, field: sortBy, direction };
+}
+
+function getSortDirection(query, fallback = -1) {
+  return parseSortDirection(query, fallback);
+}
+
+function sortHydratedNumericUserRecords(records, sortByRaw, direction) {
+  const field = normalizeComputedSortField(sortByRaw);
+  if (!GET_ALL_COMPUTED_SORT_FIELDS.includes(field)) return records;
+  return [...records].sort((a, b) => {
+    const va = Number(a?.[field]) || 0;
+    const vb = Number(b?.[field]) || 0;
+    return (va - vb) * direction;
+  });
+}
+
+function compareUserJobSortKeys(a, b, field, direction, keyMap) {
+  const ka = keyMap.get(String(a._id)) || {};
+  const kb = keyMap.get(String(b._id)) || {};
+  const va = Number(ka[field]) || 0;
+  const vb = Number(kb[field]) || 0;
+  if (va !== vb) return (va - vb) * direction;
+  const ta = new Date(a.created_at || 0).getTime();
+  const tb = new Date(b.created_at || 0).getTime();
+  if (ta !== tb) return tb - ta;
+  return String(a._id).localeCompare(String(b._id));
+}
+
+async function buildUserJobSortKeyMap(users) {
+  const financialMap = await buildUserJobFinancialSortKeyMap(users);
+  const customerIds = (users || [])
+    .filter((u) => Number(u.type) === USER_TYPE_CUSTOMER)
+    .map((u) => u._id);
+  const customerRatings = await buildCustomerSubmittedRatingMap(customerIds);
+  const map = new Map();
+  for (const user of users || []) {
+    const id = String(user._id);
+    const financial = financialMap.get(id) || {
+      total_service: 0,
+      total_amount: 0,
+      bal_payment: 0,
+      no_of_services: 0,
+    };
+    const isPartner = Number(user.type) === USER_TYPE_PARTNER;
+    let rating = 0;
+    if (Number(user.type) === USER_TYPE_CUSTOMER) {
+      rating = getCustomerSubmittedRating(customerRatings, user._id).rating;
+    } else if (isPartner) {
+      rating = mapRatingSummary(user).average_rating;
+    }
+    map.set(id, {
+      total_service: financial.total_service || 0,
+      total_amount: financial.total_amount || 0,
+      bal_payment: financial.bal_payment || 0,
+      total_earnings: isPartner ? financial.total_amount || 0 : 0,
+      no_of_services: financial.no_of_services || 0,
+      rating,
+    });
+  }
+  return map;
+}
+
+async function paginateUsersForGetAll(filter, page, limit, sortSpec, projection) {
+  if (sortSpec.kind !== 'computed') {
+    return applyPagination(User, filter, page, limit, sortSpec.sort, projection);
+  }
+
+  const allUsers = await User.find(filter)
+    .select('_id type average_rating rating_count created_at')
+    .lean();
+  const totalCount = allUsers.length;
+  const keyMap = await buildUserJobSortKeyMap(allUsers);
+  allUsers.sort((a, b) => compareUserJobSortKeys(a, b, sortSpec.field, sortSpec.direction, keyMap));
+
+  const skip = (page - 1) * limit;
+  const pageMeta = allUsers.slice(skip, skip + limit);
+  const pageIds = pageMeta.map((u) => u._id);
+  const pageDocs =
+    pageIds.length === 0
+      ? []
+      : await User.find({ _id: { $in: pageIds } })
+          .select('-password -auth_token')
+          .lean();
+  const byId = new Map(pageDocs.map((doc) => [String(doc._id), doc]));
+  const data = pageIds.map((id) => byId.get(String(id))).filter(Boolean);
+  const totalPages = Math.ceil(totalCount / limit) || 0;
+  return { data, totalCount, totalPages, currentPage: page };
 }
 
 async function buildAreaIdToNameMap(areaIds) {
@@ -107,6 +216,53 @@ function attachAreaNamesToAddresses(addresses, areaMap) {
     ...addr,
     area_name: resolveAreaName(addr.area_id, areaMap),
   }));
+}
+
+function attachUserJobFinancialFields(row, serviceCountData, extras = {}) {
+  const counts = serviceCountData || {};
+  const balance = Number(counts.balance_amount) || 0;
+  row.total_service = counts.total_service ?? 0;
+  row.service_paid = counts.service_paid ?? 0;
+  row.service_unpaid = counts.service_unpaid ?? 0;
+  row.in_progress_service = counts.in_progress_service ?? 0;
+  row.completed_service = counts.completed_service ?? 0;
+  row.cancelled_service = counts.cancelled_service ?? 0;
+  row.refunded_service = counts.refunded_service ?? 0;
+  row.no_of_services = counts.no_of_services ?? 0;
+  row.balance_amount = balance;
+  row.pending_amount = Number(counts.pending_amount) || 0;
+  row.total_amount = counts.total_amount ?? 0;
+  row.paid_amount = counts.paid_amount ?? 0;
+  row.rating = extras.rating ?? 0;
+  row.total_earnings = extras.total_earnings ?? 0;
+  row.bal_payment = balance;
+  if (extras.average_rating !== undefined) {
+    row.average_rating = extras.average_rating;
+  }
+  if (extras.rating_count !== undefined) {
+    row.rating_count = extras.rating_count;
+  }
+  return row;
+}
+
+function resolveUserListRatingEarnings(user, serviceCountData, customerSubmittedRatings) {
+  const type = Number(user.type);
+  if (type === USER_TYPE_CUSTOMER) {
+    const submitted = getCustomerSubmittedRating(customerSubmittedRatings, user._id);
+    return {
+      rating: submitted.rating,
+      average_rating: submitted.average_rating,
+      rating_count: submitted.rating_count,
+      total_earnings: 0,
+    };
+  }
+  if (type === USER_TYPE_PARTNER) {
+    return {
+      rating: mapRatingSummary(user).average_rating,
+      total_earnings: Number(serviceCountData?.total_amount) || 0,
+    };
+  }
+  return { rating: 0, total_earnings: 0 };
 }
 
 const sanitizeOptionalObjectIdRef = (value) => {
@@ -1123,15 +1279,14 @@ const getAll = async (req, res) => {
       })
     };
 
-    const sort = buildGetAllSort(req.query);
+    const sortSpec = resolveGetAllSort(req.query);
 
     const projection = { password: 0, auth_token: 0 };
-    const { data: users, totalCount, totalPages, currentPage } = await applyPagination(
-      User,
+    const { data: users, totalCount, totalPages, currentPage } = await paginateUsersForGetAll(
       filter,
       page,
       limit,
-      sort,
+      sortSpec,
       projection,
     );
     if (type === 1) {
@@ -1151,6 +1306,8 @@ const getAll = async (req, res) => {
     ]);
 
     const partnerIdsInPage = populatedUser.filter((u) => Number(u.type) === 2).map((u) => u._id);
+    const customerIdsInPage = populatedUser.filter((u) => Number(u.type) === 4).map((u) => u._id);
+    const customerSubmittedRatings = await buildCustomerSubmittedRatingMap(customerIdsInPage);
     const partnerIdToServiceRows = new Map();
     const partnerIdToRichUser = new Map();
     const partnerIdToBank = new Map();
@@ -1234,26 +1391,19 @@ const getAll = async (req, res) => {
         ...(user.type === 4 && {
           area_name: resolveAreaName(rest.area_id, type4AreaMap),
         }),
-
-        total_service: service_count_data.total_service,
-        service_paid: service_count_data.service_paid,
-        service_unpaid: service_count_data.service_unpaid,
-        in_progress_service: service_count_data.in_progress_service,
-        completed_service: service_count_data.completed_service,
-        cancelled_service: service_count_data.cancelled_service,
-        no_of_services: service_count_data.no_of_services,
-
-        balance_amount: service_count_data.balance_amount,
-        total_amount: service_count_data.total_amount,
-        paid_amount: service_count_data.paid_amount,
-        rating: 0,//This is in Phaase 2
-        total_earnings: 0,
-        bal_payment: 0,
       };
+      attachUserJobFinancialFields(
+        row,
+        service_count_data,
+        resolveUserListRatingEarnings(user, service_count_data, customerSubmittedRatings),
+      );
+
+      if (Number(user.type) === 2 || Number(user.type) === 4) {
+        row.last_service_date = await getLastServiceDate(user._id, user.type);
+      }
 
       if (Number(user.type) === 2) {
         const pid = user._id.toString();
-        row.last_service_date = await getLastServiceDate(user._id, user.type);
 
         const rich = partnerIdToRichUser.get(pid);
         if (rich) {
@@ -1301,12 +1451,8 @@ const getAll = async (req, res) => {
           if (aName > bName) return 1 * sortDirection;
           return 0;
         });
-      } else if (sortByRaw === 'no_of_services') {
-        finalRecords = [...processedUsers].sort((a, b) => {
-          const aCount = Number(a?.no_of_services ?? 0);
-          const bCount = Number(b?.no_of_services ?? 0);
-          return (aCount - bCount) * sortDirection;
-        });
+      } else if (sortByRaw) {
+        finalRecords = sortHydratedNumericUserRecords(processedUsers, sortByRaw, sortDirection);
       }
     }
 
@@ -2443,18 +2589,15 @@ const getById = async (req, res) => {
       const last_service_date = await getLastServiceDate(user._id, user.type);
       const service_count_data = await getServiceCountData(user._id);
       response.last_service_date = last_service_date;
-
-      response.total_service = service_count_data.total_service;
-      response.service_paid = service_count_data.service_paid;
-      response.service_unpaid = service_count_data.service_unpaid;
-      response.in_progress_service = service_count_data.in_progress_service;
-      response.completed_service = service_count_data.completed_service;
-      response.cancelled_service = service_count_data.cancelled_service;
-      response.no_of_services = service_count_data.no_of_services;
-
-      response.balance_amount = service_count_data.balance_amount;
-      response.total_amount = service_count_data.total_amount;
-      response.paid_amount = service_count_data.paid_amount;
+      const customerSubmittedRatings =
+        user.type === 4
+          ? await buildCustomerSubmittedRatingMap([user._id])
+          : null;
+      attachUserJobFinancialFields(
+        response,
+        service_count_data,
+        resolveUserListRatingEarnings(user, service_count_data, customerSubmittedRatings),
+      );
     }
     if (user.type === 2 && user.is_business === true) {
       user = await User.findById(id).populate([

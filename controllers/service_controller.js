@@ -22,7 +22,10 @@ const {
   loadFranchiseCallerScope,
 } = require('../utils/franchise_user_scope');
 const { parseObjectId } = require('../utils/franchise_catalog_lists');
-const { listPartnersOfferingService } = require('../services/mobile/user/franchise_partner_scope');
+const {
+  listPartnersOfferingService,
+  listPartnersOfferingServiceAcrossFranchises,
+} = require('../services/mobile/user/franchise_partner_scope');
 const {
   isGlobalCatalogRowActive,
   onGlobalServiceDeactivated,
@@ -99,17 +102,18 @@ const getServiceStatusConfig = (statusFilter = "") => {
 
 /**
  * Franchise for GET /api/service/get/:id partners.
- * Admin/employee: their franchise. Super admin/staff: optional ?franchise_id=.
+ * Admin/employee: their franchise.
+ * Super admin/staff: omit franchise_id for all franchises, or pass ?franchise_id= to filter one.
  */
 const resolveServiceGetFranchiseOid = async (query, user) => {
   const userId = resolveReqUserId(user);
   if (!userId) {
-    return { ok: true, franchiseOid: null };
+    return { ok: true, franchiseOid: null, allFranchises: false };
   }
 
   const scope = await loadFranchiseCallerScope(userId);
   if (!scope) {
-    return { ok: true, franchiseOid: null };
+    return { ok: true, franchiseOid: null, allFranchises: false };
   }
 
   const queryFranchiseRaw =
@@ -119,7 +123,7 @@ const resolveServiceGetFranchiseOid = async (query, user) => {
 
   if (scope.isFranchiseAdmin || scope.isEmployee) {
     if (!scope.franchiseOid) {
-      return { ok: true, franchiseOid: null };
+      return { ok: true, franchiseOid: null, allFranchises: false };
     }
     if (queryFranchiseRaw) {
       const parsed = parseObjectId(query.franchise_id, 'franchise_id');
@@ -128,19 +132,19 @@ const resolveServiceGetFranchiseOid = async (query, user) => {
         return { ok: false, status: 403, message: 'Access denied.' };
       }
     }
-    return { ok: true, franchiseOid: scope.franchiseOid };
+    return { ok: true, franchiseOid: scope.franchiseOid, allFranchises: false };
   }
 
   if (scope.isSuper) {
     if (!queryFranchiseRaw) {
-      return { ok: true, franchiseOid: null };
+      return { ok: true, franchiseOid: null, allFranchises: true };
     }
     const parsed = parseObjectId(query.franchise_id, 'franchise_id');
     if (!parsed.ok) return { ok: false, status: 400, message: parsed.message };
-    return { ok: true, franchiseOid: parsed.oid };
+    return { ok: true, franchiseOid: parsed.oid, allFranchises: false };
   }
 
-  return { ok: true, franchiseOid: null };
+  return { ok: true, franchiseOid: null, allFranchises: false };
 };
 
 const sendFranchiseServiceResult = (res, result) => {
@@ -1077,11 +1081,10 @@ const getById = async (req, res) => {
     }
 
     let partners = [];
-    if (franchiseScope.franchiseOid) {
-      const partnersResult = await listPartnersOfferingService(
-        franchiseScope.franchiseOid,
-        service._id
-      );
+    if (franchiseScope.allFranchises || franchiseScope.franchiseOid) {
+      const partnersResult = franchiseScope.allFranchises
+        ? await listPartnersOfferingServiceAcrossFranchises(service._id)
+        : await listPartnersOfferingService(franchiseScope.franchiseOid, service._id);
       if (!partnersResult.ok) {
         if (partnersResult.status === 404) {
           partners = [];

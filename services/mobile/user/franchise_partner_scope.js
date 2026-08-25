@@ -668,9 +668,9 @@ const buildPartnerDetailCatalog = async (franchiseId, partnerId) => {
 
 /**
  * Franchise-scoped partners who effectively offer `serviceId`.
- * Each item: { id, name, profile_url, average_rating }.
+ * Each item: { id, name, profile_url, average_rating, franchise_id, franchise_name }.
  */
-const listPartnersOfferingService = async (franchiseId, serviceId) => {
+const listPartnersOfferingService = async (franchiseId, serviceId, options = {}) => {
   const serviceKey = serviceId != null ? String(serviceId) : '';
   if (!franchiseId || !serviceKey) {
     return { ok: true, partners: [] };
@@ -691,6 +691,17 @@ const listPartnersOfferingService = async (franchiseId, serviceId) => {
     return { ok: true, partners: [] };
   }
 
+  let franchiseName = options.franchiseName ?? null;
+  if (franchiseName == null) {
+    const franchise = await Franchise.findOne({
+      _id: franchiseId,
+      deleted_at: null,
+    })
+      .select('name')
+      .lean();
+    franchiseName = franchise?.name ?? null;
+  }
+
   const offerings = await collectEffectivePartnerOfferings(
     franchiseId,
     [serviceKey],
@@ -707,8 +718,50 @@ const listPartnersOfferingService = async (franchiseId, serviceId) => {
         name: partner.name || null,
         profile_url: partner.profile_url || null,
         average_rating: ratings.average_rating,
+        franchise_id: String(franchiseId),
+        franchise_name: franchiseName,
       };
     });
+
+  return { ok: true, partners };
+};
+
+/**
+ * Super admin/staff: partners across every active franchise who effectively offer `serviceId`.
+ */
+const listPartnersOfferingServiceAcrossFranchises = async (serviceId) => {
+  const serviceKey = serviceId != null ? String(serviceId) : '';
+  if (!serviceKey) {
+    return { ok: true, partners: [] };
+  }
+
+  const franchises = await Franchise.find({ deleted_at: null, is_active: true })
+    .select('_id name')
+    .lean();
+
+  if (franchises.length === 0) {
+    return { ok: true, partners: [] };
+  }
+
+  const results = await Promise.all(
+    franchises.map((franchise) =>
+      listPartnersOfferingService(franchise._id, serviceKey, {
+        franchiseName: franchise.name ?? null,
+      })
+    )
+  );
+
+  const partners = [];
+  for (const result of results) {
+    if (!result.ok) continue;
+    partners.push(...(result.partners || []));
+  }
+
+  partners.sort((a, b) => {
+    const byFranchise = String(a.franchise_name ?? '').localeCompare(String(b.franchise_name ?? ''));
+    if (byFranchise !== 0) return byFranchise;
+    return String(a.name ?? '').localeCompare(String(b.name ?? ''));
+  });
 
   return { ok: true, partners };
 };
@@ -722,4 +775,5 @@ module.exports = {
   mapFranchisePartnerRecords,
   buildPartnerDetailCatalog,
   listPartnersOfferingService,
+  listPartnersOfferingServiceAcrossFranchises,
 };

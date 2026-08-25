@@ -32,6 +32,7 @@ const publicPartnerRegisterMiddleware = (req, res, next) => {
   delete req.body.franchise_id;
   delete req.body.created_by_id;
   delete req.body.accessible_screens;
+  delete req.body.registration_type;
 
   next();
 };

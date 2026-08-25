@@ -1,6 +1,10 @@
 const mongoose = require("mongoose");
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const {
+  REGISTRATION_TYPE_OTP,
+  REGISTRATION_TYPE_VALUES,
+} = require('../constants/registration_types');
 
 var schema = mongoose.Schema;
 
@@ -39,13 +43,18 @@ var userSchema = new schema(
       5 for Super Admin
       6 for Staff
     */
-    registration_type: { type: Number, required: true, default: 1 },
+    registration_type: {
+      type: Number,
+      required: true,
+      default: REGISTRATION_TYPE_OTP,
+      enum: REGISTRATION_TYPE_VALUES,
+    },
     /*
-      1 for normal
-      2 for google
-      3 for apple
-      4 for facebook
-      5 for X
+      1 mobile OTP
+      2 Google sign-in
+      3 Apple sign-in
+      4 admin registered
+      5 email and password
     */
     google_id: { type: String, trim: true },
     apple_id: { type: String, trim: true },

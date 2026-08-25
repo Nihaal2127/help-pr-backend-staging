@@ -45,6 +45,7 @@ const {
   checkUserContactUniqueness,
 } = require('../utils/user_contact_uniqueness');
 const { fieldLabel } = require('../utils/field_labels');
+const { resolveRegistrationTypeForUserCreate } = require('../constants/registration_types');
 const {
   partnerDocumentFieldsAfterImageUpload,
   applyPartnerUserStatusAfterDocumentUpload,
@@ -1517,7 +1518,6 @@ const create = async (req, res) => {
       is_blocked,
       is_business,
       type,
-      registration_type,
       device_token,
       business_name,
       business_email,
@@ -1645,7 +1645,7 @@ const create = async (req, res) => {
       chat: resolvedChat,
       is_business,
       type: Number.isFinite(userType) ? userType : type,
-      registration_type,
+      registration_type: resolveRegistrationTypeForUserCreate(req),
       device_token,
       created_by_id,
       franchise_id,
@@ -2114,7 +2114,6 @@ const update = async (req, res) => {
       'is_blocked',
       'is_business',
       'type',
-      'registration_type',
       'device_token',
       'created_by_id',
       'franchise_id',

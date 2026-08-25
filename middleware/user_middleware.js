@@ -687,7 +687,7 @@ const validatePartnerCatalogPayload = (req, res) => {
 
 const createUserMiddleware = async (req, res, next) => {
   parseNumberField(req, "type");
-  parseNumberField(req, "registration_type");
+  delete req.body.registration_type;
   parseBooleanField(req, "is_from_web");
   parseBooleanField(req, "is_active");
   parseBooleanField(req, "is_blocked");
@@ -736,7 +736,6 @@ const createUserMiddleware = async (req, res, next) => {
     is_blocked,
     is_business,
     type,
-    registration_type,
     business_name,
     business_email,
     business_phone_number,
@@ -1076,20 +1075,6 @@ const createUserMiddleware = async (req, res, next) => {
       }
     }
 
-    if (!registration_type || registration_type === undefined) {
-      return res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'Registration type is required.'
-      });
-    }
-    if (registration_type < 1 || registration_type > 5) {
-      return res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'Invalid registration type.'
-      });
-    }
     if (is_from_web === false && (type === 2 || type === 3)) {
       if (profile_url && profile_url.trim() === '') {
         return res.status(400).json({
@@ -1130,7 +1115,7 @@ const createUserMiddleware = async (req, res, next) => {
 
 const updateUserMiddleware = async (req, res, next) => {
   parseNumberField(req, "type");
-  parseNumberField(req, "registration_type");
+  delete req.body.registration_type;
   parseBooleanField(req, "is_from_web");
   parseBooleanField(req, "is_active");
   parseBooleanField(req, "is_blocked");
@@ -1220,7 +1205,6 @@ const updateUserMiddleware = async (req, res, next) => {
     is_business,
     is_blocked,
     type,
-    registration_type,
 
     business_name,
     business_email,
@@ -1454,20 +1438,6 @@ const updateUserMiddleware = async (req, res, next) => {
           message: 'Service provided by your business is required.'
         });
       }
-    }
-    // if (registration_type === undefined) {
-    //   return res.status(400).json({
-    //     success: false,
-    //     status: 400,
-    //     message: 'Registration type is required.'
-    //   });
-    // }
-    if (registration_type !== undefined && (registration_type < 1 || registration_type > 5)) {
-      return res.status(400).json({
-        success: false,
-        status: 400,
-        message: 'Invalid registration type.'
-      });
     }
     if (is_from_web !== undefined && is_from_web === false && (type === 2 || type === 3)) {
       if (isUserUpdateRoute(req)) {

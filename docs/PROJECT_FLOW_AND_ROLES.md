@@ -152,7 +152,17 @@ Legacy: `POST /api/auth/userLogin` (phone + device_token).
 | Google | `POST /api/mobile/user/google-login` — `{ id_token, device_token? }` |
 | Apple | `POST /api/mobile/user/apple-login` — `{ id_token, device_token?, name? }` |
 
-Phone flow auto-creates customers on first login. Google flow verifies the ID token server-side, creates or links a customer (`registration_type: 2`), and returns the same JWT shape as verify-otp. Apple flow mirrors Google (`registration_type: 3`, `apple_id` from token `sub`); send `name` from the client on first authorization only.
+Phone flow auto-creates customers on first login (`registration_type: 1`). Google flow verifies the ID token server-side, creates or links a customer (`registration_type: 2`), and returns the same JWT shape as verify-otp. Apple flow mirrors Google (`registration_type: 3`, `apple_id` from token `sub`); send `name` from the client on first authorization only.
+
+`registration_type` (set at create time, not overwritten on later Google/Apple link or admin update):
+
+| Value | Meaning |
+|-------|---------|
+| 1 | Mobile OTP |
+| 2 | Google sign-in |
+| 3 | Apple sign-in |
+| 4 | Admin registered (`POST /api/user/create`) |
+| 5 | Email and password (`POST /api/mobile/partner/register`, `POST /api/user/register-partner`) |
 
 Env (customer app): `GOOGLE_CLIENT_ID_ANDROID`, `GOOGLE_CLIENT_ID_IOS`, optional `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_ID_WEB`.
 
@@ -166,7 +176,7 @@ Env (partner Apple): `APPLE_CLIENT_ID_IOS_PARTNER`, optional `APPLE_CLIENT_ID_PA
 
 | Endpoint | Auth | Notes |
 |----------|------|-------|
-| `POST /api/mobile/partner/register` | None | Creates partner (`type: 2`), returns token |
+| `POST /api/mobile/partner/register` | None | Creates partner (`type: 2`, `registration_type: 5`), returns token |
 | `POST /api/mobile/partner/login` | None | Email/password |
 | `POST /api/mobile/partner/google-login` | None | Google Sign-In — `{ id_token, device_token?, phone_number?, date_of_birth? }` |
 | `POST /api/mobile/partner/apple-login` | None | Apple Sign-In — `{ id_token, device_token?, phone_number?, date_of_birth?, name? }` |

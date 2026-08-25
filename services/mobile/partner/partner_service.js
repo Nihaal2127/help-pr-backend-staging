@@ -52,9 +52,12 @@ const {
   partnerDocumentFieldsAfterImageUpload,
   applyPartnerUserStatusAfterDocumentUpload,
 } = require('../../../utils/partner_document_status');
-const REGISTRATION_TYPE_NORMAL = 1;
-const REGISTRATION_TYPE_GOOGLE = 2;
-const REGISTRATION_TYPE_APPLE = 3;
+const {
+  REGISTRATION_TYPE_OTP,
+  REGISTRATION_TYPE_GOOGLE,
+  REGISTRATION_TYPE_APPLE,
+  REGISTRATION_TYPE_EMAIL_PASSWORD,
+} = require('../../../constants/registration_types');
 
 const VERIFICATION_STATUS_MESSAGES = {
   1: 'Your profile is under verification. We will notify you once it is approved.',
@@ -722,7 +725,7 @@ const registerPartner = async ({ name, email, phone_number, password, date_of_bi
     phone_number: normalizedPhone,
     date_of_birth,
     type: USER_TYPE_PARTNER,
-    registration_type: REGISTRATION_TYPE_NORMAL,
+    registration_type: REGISTRATION_TYPE_EMAIL_PASSWORD,
     is_from_web: false,
     verification_status: 1,
     verified_at: null,
@@ -823,7 +826,7 @@ const findOrCreatePartner = async (phone_number) => {
     user_id,
     phone_number: normalizedPhone,
     type: USER_TYPE_PARTNER,
-    registration_type: REGISTRATION_TYPE_NORMAL,
+    registration_type: REGISTRATION_TYPE_OTP,
     is_from_web: false,
     verification_status: 1,
     verified_at: null,

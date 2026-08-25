@@ -17,12 +17,13 @@ const {
 const { verifyGoogleIdToken, GOOGLE_APP_USER } = require('../../../helper/google_auth');
 const { verifyAppleIdToken, APPLE_APP_USER } = require('../../../helper/apple_auth');
 const { USER_TYPE_CUSTOMER } = require('../../../constants/user_types');
+const {
+  REGISTRATION_TYPE_OTP,
+  REGISTRATION_TYPE_GOOGLE,
+  REGISTRATION_TYPE_APPLE,
+} = require('../../../constants/registration_types');
 const { fail, okWithMessage } = require('../../../utils/mobile_service_result');
 const { issueAndSendPhoneOtp } = require('../shared/phone_otp_delivery_service');
-
-const REGISTRATION_TYPE_NORMAL = 1;
-const REGISTRATION_TYPE_GOOGLE = 2;
-const REGISTRATION_TYPE_APPLE = 3;
 
 const findCustomerByPhone = async (phone_number) => {
   const normalizedPhone = normalizeUserPhone(phone_number);
@@ -66,7 +67,7 @@ const findOrCreateCustomer = async (phone_number) => {
     user_id,
     phone_number: normalizedPhone,
     type: USER_TYPE_CUSTOMER,
-    registration_type: REGISTRATION_TYPE_NORMAL,
+    registration_type: REGISTRATION_TYPE_OTP,
     is_from_web: false,
     is_active: true,
   });

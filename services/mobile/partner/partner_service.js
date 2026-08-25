@@ -20,6 +20,10 @@ const {
 } = require('../../../controllers/partner_document_controller');
 const PartnerCategory = require('../../../models/partner_category');
 const PartnerService = require('../../../models/partner_service');
+const {
+  loadMasterPaymentTypesByServiceId,
+  resolveCreatePaymentType,
+} = require('../../partner_category_service');
 const { handleImageUpload } = require('../../../helper/image_uploader');
 const { getUploadType } = require('../../../enum/upload_type_enum');
 const {
@@ -398,15 +402,18 @@ async function mergeMobilePartnerCatalogFromNormalizedRows(partnerId, normalized
     );
   }
 
+  const masterPaymentTypes = await loadMasterPaymentTypesByServiceId([...latestByService.keys()]);
+
   // keep partner_service additive too (no delete/replace)
   for (const [serviceStr, row] of latestByService) {
     const serviceOid = toOid(serviceStr);
     const categoryOid = toOid(row.category_id);
+    const requestedPaymentType = row.payment_type != null ? String(row.payment_type).trim() : '';
     const updateFields = {
       category_id: categoryOid,
       description: row.description != null ? String(row.description) : '',
       price: coerceNumber(row.price, 0),
-      payment_type: row.payment_type != null ? String(row.payment_type).trim() : '',
+      payment_type: requestedPaymentType,
       tax: coerceNumber(row.tax, 0),
       minimum_deposit: coerceNumber(row.minimum_deposit, 0),
       is_active: row.is_active !== false,
@@ -431,6 +438,7 @@ async function mergeMobilePartnerCatalogFromNormalizedRows(partnerId, normalized
       partner_id: partnerOid,
       service_id: serviceOid,
       ...updateFields,
+      payment_type: resolveCreatePaymentType(requestedPaymentType, masterPaymentTypes.get(serviceStr)),
       created_at: now,
     });
   }

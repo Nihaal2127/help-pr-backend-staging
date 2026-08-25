@@ -666,6 +666,53 @@ const buildPartnerDetailCatalog = async (franchiseId, partnerId) => {
   return { ok: true, categories };
 };
 
+/**
+ * Franchise-scoped partners who effectively offer `serviceId`.
+ * Each item: { id, name, profile_url, average_rating }.
+ */
+const listPartnersOfferingService = async (franchiseId, serviceId) => {
+  const serviceKey = serviceId != null ? String(serviceId) : '';
+  if (!franchiseId || !serviceKey) {
+    return { ok: true, partners: [] };
+  }
+
+  const catalogResolved = await resolveFranchiseEffectiveCatalog(franchiseId);
+  if (!catalogResolved.ok) {
+    return catalogResolved;
+  }
+
+  const effectiveServiceIds = (catalogResolved.effectiveServiceIds || []).map((id) => String(id));
+  if (!effectiveServiceIds.includes(serviceKey)) {
+    return { ok: true, partners: [] };
+  }
+
+  const subscribed = await loadSubscribedFranchisePartners(franchiseId);
+  if (subscribed.partnerIds.length === 0) {
+    return { ok: true, partners: [] };
+  }
+
+  const offerings = await collectEffectivePartnerOfferings(
+    franchiseId,
+    [serviceKey],
+    subscribed.partnerIds
+  );
+  const offeringPartnerIds = new Set(offerings.map((row) => String(row.partner_id)));
+
+  const partners = subscribed.partners
+    .filter((partner) => offeringPartnerIds.has(String(partner._id)))
+    .map((partner) => {
+      const ratings = attachPartnerRatingFields(partner);
+      return {
+        id: String(partner._id),
+        name: partner.name || null,
+        profile_url: partner.profile_url || null,
+        average_rating: ratings.average_rating,
+      };
+    });
+
+  return { ok: true, partners };
+};
+
 module.exports = {
   resolveFranchiseFromLocation,
   resolveFranchiseById,
@@ -674,4 +721,5 @@ module.exports = {
   collectEffectivePartnerOfferings,
   mapFranchisePartnerRecords,
   buildPartnerDetailCatalog,
+  listPartnersOfferingService,
 };

@@ -18,6 +18,12 @@ const {
   USER_TYPE_STAFF,
 } = require('../middleware/role_middleware');
 const {
+  resolveReqUserId,
+  loadFranchiseCallerScope,
+} = require('../utils/franchise_user_scope');
+const { parseObjectId } = require('../utils/franchise_catalog_lists');
+const { listPartnersOfferingService } = require('../services/mobile/user/franchise_partner_scope');
+const {
   isGlobalCatalogRowActive,
   onGlobalServiceDeactivated,
   validateGlobalServiceActivation,
@@ -89,6 +95,52 @@ const getServiceStatusConfig = (statusFilter = "") => {
     return { category: { is_request: true } };
   }
   return {};
+};
+
+/**
+ * Franchise for GET /api/service/get/:id partners.
+ * Admin/employee: their franchise. Super admin/staff: optional ?franchise_id=.
+ */
+const resolveServiceGetFranchiseOid = async (query, user) => {
+  const userId = resolveReqUserId(user);
+  if (!userId) {
+    return { ok: true, franchiseOid: null };
+  }
+
+  const scope = await loadFranchiseCallerScope(userId);
+  if (!scope) {
+    return { ok: true, franchiseOid: null };
+  }
+
+  const queryFranchiseRaw =
+    query?.franchise_id !== undefined && query?.franchise_id !== null
+      ? String(query.franchise_id).trim()
+      : '';
+
+  if (scope.isFranchiseAdmin || scope.isEmployee) {
+    if (!scope.franchiseOid) {
+      return { ok: true, franchiseOid: null };
+    }
+    if (queryFranchiseRaw) {
+      const parsed = parseObjectId(query.franchise_id, 'franchise_id');
+      if (!parsed.ok) return { ok: false, status: 400, message: parsed.message };
+      if (String(parsed.oid) !== String(scope.franchiseOid)) {
+        return { ok: false, status: 403, message: 'Access denied.' };
+      }
+    }
+    return { ok: true, franchiseOid: scope.franchiseOid };
+  }
+
+  if (scope.isSuper) {
+    if (!queryFranchiseRaw) {
+      return { ok: true, franchiseOid: null };
+    }
+    const parsed = parseObjectId(query.franchise_id, 'franchise_id');
+    if (!parsed.ok) return { ok: false, status: 400, message: parsed.message };
+    return { ok: true, franchiseOid: parsed.oid };
+  }
+
+  return { ok: true, franchiseOid: null };
 };
 
 const sendFranchiseServiceResult = (res, result) => {
@@ -1014,6 +1066,38 @@ const getById = async (req, res) => {
       }
     }
     response.category_name = category_name;
+
+    const franchiseScope = await resolveServiceGetFranchiseOid(req.query, req.user);
+    if (!franchiseScope.ok) {
+      return res.status(franchiseScope.status).json({
+        success: false,
+        status: franchiseScope.status,
+        message: franchiseScope.message,
+      });
+    }
+
+    let partners = [];
+    if (franchiseScope.franchiseOid) {
+      const partnersResult = await listPartnersOfferingService(
+        franchiseScope.franchiseOid,
+        service._id
+      );
+      if (!partnersResult.ok) {
+        if (partnersResult.status === 404) {
+          partners = [];
+        } else {
+          return res.status(partnersResult.status || 500).json({
+            success: false,
+            status: partnersResult.status || 500,
+            message: partnersResult.message,
+          });
+        }
+      } else {
+        partners = partnersResult.partners || [];
+      }
+    }
+    response.partners = partners;
+
     const [enrichedService] = await attachRequestedByUser([response]);
     res.status(200).json({
       success: true,

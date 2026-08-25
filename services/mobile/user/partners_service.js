@@ -284,6 +284,8 @@ const buildFranchisePartnerListRecords = async (franchiseId, options = {}) => {
     ...record,
     ...(engagementByPartnerId.get(String(record._id)) || {
       posts_count: 0,
+      images_count: 0,
+      video_count: 0,
       likes_count: 0,
       shares_count: 0,
       saves_count: 0,

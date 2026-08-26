@@ -2,7 +2,7 @@ const { notify } = require("./notification.service");
 const OrderPayment = require("../../../../models/order_payment");
 const OrderAdditionalCharge = require("../../../../models/order_additional_charge");
 const { formatAmount } = require("../constants/notification_events");
-const { normalizeQuoteStatus } = require("../../../../enum/quote_status_enum");
+const { normalizeQuoteStatus, shouldIncludePartnerInQuoteNotify } = require("../../../../enum/quote_status_enum");
 const { resolveOrderRecipients } = require("../resolvers/orderRecipients");
 const { resolveQuoteRecipients } = require("../resolvers/quoteRecipients");
 const { resolveSubscriptionRecipients } = require("../resolvers/subscriptionRecipients");
@@ -336,9 +336,14 @@ const safeNotifyOrderAdditionalChargeAdded = async ({
 
 const safeNotifyQuoteCreated = async ({ quote, actorUserId }) => {
   await runSafe("quote.created", async () => {
-    // QUOTE_CREATED: customer, partner (if set), assigned employee, franchise admin(s).
-    // Mobile push when user/partner have device_token. Actor excluded.
-    const recipients = await resolveQuoteRecipients(quote);
+    // QUOTE_CREATED: customer, assigned employee, franchise admin(s).
+    // Partner only after admin confirm (status pending+), e.g. admin create with partner.
+    const recipients = await resolveQuoteRecipients(quote, {
+      includePartner: shouldIncludePartnerInQuoteNotify({
+        newStatus: quote?.status,
+        quote,
+      }),
+    });
     await notify({
       eventKey: "QUOTE_CREATED",
       actorUserId,
@@ -368,7 +373,13 @@ const safeNotifyQuoteStatusChanged = async ({
     const next = normalizeQuoteStatus(newStatus, quote) || newStatus;
     if (!next || String(next) === String(prev)) return;
 
-    const recipients = await resolveQuoteRecipients(quote);
+    const recipients = await resolveQuoteRecipients(quote, {
+      includePartner: shouldIncludePartnerInQuoteNotify({
+        previousStatus: prev,
+        newStatus: next,
+        quote,
+      }),
+    });
     await notify({
       eventKey: "QUOTE_STATUS_CHANGED",
       actorUserId,

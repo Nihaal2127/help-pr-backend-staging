@@ -53,6 +53,7 @@ var quoteSchema = new schema(
     total_price: { type: Number, default: 0 },
     minimum_deposit_percent: { type: Number, default: 0 },
     minimum_deposit_amount: { type: Number, default: 0 },
+    /** new = awaiting admin confirm; pending = released to partner. */
     status: { type: String, default: "new", trim: true, lowercase: true },
     from_date: { type: Date, default: null },
     to_date: { type: Date, default: null },

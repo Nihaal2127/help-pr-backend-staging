@@ -318,6 +318,19 @@ const loadSavedPostIds = async (userId, postIds) => {
   return new Set(saves.map((s) => String(s.post_id)));
 };
 
+const loadSaveCountsByPostIds = async (postIds) => {
+  if (!postIds.length) {
+    return new Map();
+  }
+
+  const rows = await PartnerPostSave.aggregate([
+    { $match: { post_id: { $in: postIds.map((id) => new mongoose.Types.ObjectId(String(id))) } } },
+    { $group: { _id: '$post_id', count: { $sum: 1 } } },
+  ]);
+
+  return new Map(rows.map((row) => [String(row._id), Math.max(0, Number(row.count) || 0)]));
+};
+
 const formatOrderServiceLocation = (order) => {
   const addr = order.address_id;
   if (addr && addr._id) {
@@ -497,7 +510,9 @@ const mapPostRecord = (post, options = {}) => {
     categoryById = new Map(),
     serviceById = new Map(),
     orderById = new Map(),
+    saveCountByPostId = new Map(),
     includePartner = true,
+    includeSaveCount = false,
   } = options;
 
   const orderDetail =
@@ -524,6 +539,10 @@ const mapPostRecord = (post, options = {}) => {
     linked: buildLinkedBlock(post, { categoryById, serviceById, orderDetail }),
   };
 
+  if (includeSaveCount) {
+    record.saves_count = saveCountByPostId.get(String(post._id)) ?? 0;
+  }
+
   if (userId) {
     record.is_liked = likedPostIds.has(String(post._id));
     record.is_saved = savedPostIds.has(String(post._id));
@@ -543,7 +562,7 @@ const mapPostRecord = (post, options = {}) => {
 };
 
 const mapPostRecords = async (posts, options = {}) => {
-  const { userId = null, includePartner = true } = options;
+  const { userId = null, includePartner = true, includeSaveCount = false } = options;
 
   if (posts.length === 0) {
     return [];
@@ -552,12 +571,13 @@ const mapPostRecords = async (posts, options = {}) => {
   const postIds = posts.map((p) => p._id);
   const partnerIds = [...new Set(posts.map((p) => String(p.partner_id)).filter(Boolean))];
 
-  const [likedPostIds, savedPostIds, partnerById, labelMaps, orderById] = await Promise.all([
+  const [likedPostIds, savedPostIds, partnerById, labelMaps, orderById, saveCountByPostId] = await Promise.all([
     loadLikedPostIds(userId, postIds),
     loadSavedPostIds(userId, postIds),
     includePartner ? loadPartnerSummaries(partnerIds.map((id) => new mongoose.Types.ObjectId(id))) : Promise.resolve(new Map()),
     loadLinkedLabels(posts),
     loadLinkedOrderDetails(posts),
+    includeSaveCount ? loadSaveCountsByPostIds(postIds) : Promise.resolve(new Map()),
   ]);
 
   return posts.map((post) =>
@@ -569,7 +589,9 @@ const mapPostRecords = async (posts, options = {}) => {
       categoryById: labelMaps.categoryById,
       serviceById: labelMaps.serviceById,
       orderById,
+      saveCountByPostId,
       includePartner,
+      includeSaveCount,
     })
   );
 };

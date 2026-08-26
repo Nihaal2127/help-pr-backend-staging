@@ -12,6 +12,7 @@ const {
   formatQuoteForApi,
   formatQuoteRecords,
   TERMINAL_QUOTE_STATUSES,
+  PARTNER_VISIBLE_QUOTE_STATUSES,
 } = require('../../../enum/quote_status_enum');
 const {
   assertPartnerAssignedToQuote,
@@ -39,12 +40,13 @@ const buildPartnerListFilter = (partnerId, query) => {
   const filter = {
     deleted_at: null,
     partner_id: toObjectId(partnerId),
+    status: { $ne: 'new' },
   };
 
   const statusRaw = query.status;
   if (statusRaw !== undefined && String(statusRaw).trim() !== '') {
     const normalized = normalizeQuoteStatus(String(statusRaw).trim());
-    if (normalized) {
+    if (normalized && PARTNER_VISIBLE_QUOTE_STATUSES.includes(normalized)) {
       filter.status = normalized;
     }
   } else {
@@ -105,6 +107,11 @@ const getPartnerQuoteById = async (partnerId, quoteId) => {
 
     const access = assertPartnerAssignedToQuote(partnerId, quote);
     if (!access.ok) return access;
+
+    const status = resolveQuoteStatus(quote);
+    if (status === 'new' || !PARTNER_VISIBLE_QUOTE_STATUSES.includes(status)) {
+      return fail(403, 'This quote is not available yet.');
+    }
 
     await attachPartnerServiceToQuote(quote);
 

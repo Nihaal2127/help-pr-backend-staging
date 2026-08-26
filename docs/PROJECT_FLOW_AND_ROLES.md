@@ -261,29 +261,43 @@ See [Quote lifecycle](#7-quote-lifecycle) and [Order lifecycle](#8-order-lifecyc
 
 | Status | Meaning |
 |--------|---------|
-| `new` | Created; no partner assigned yet |
-| `pending` | Partner assigned |
-| `accepted` | Terms agreed; ready for conversion |
+| `new` | Awaiting **admin confirm**. Partner may already be selected; they must not see the quote yet. |
+| `pending` | Admin confirmed (or assigned the first partner). Sent to the partner; 1-hour action window starts. |
+| `accepted` | Partner accepted; customer can convert to an order |
 | `success` | **Order created** automatically (`order_id` set on quote) |
 | `failed` | Rejected or cancelled |
+
+Customer mobile create (`POST /api/mobile/user/quotes/create`) is **always** `new`, with or without `partner_id`. Admin create with a partner is `pending` (implicit confirm). Admin create without a partner is `new`.
 
 ### Typical flow
 
 ```text
-1. Back-office creates quote (POST /api/quote/create)
-      → customer (type 4), service, schedule, optional partner/employee/franchise
-2. Assign partner → status becomes pending (auto or via update)
-3. Update quote → accepted
-4. Update quote → success
+1. Customer app creates quote (optional partner_id)
+      → always status: new
+      → partner is not listed or notified
+   or back-office creates quote (POST /api/quote/create)
+      → with partner_id → pending (implicit confirm)
+      → without partner_id → new
+
+2. Admin confirms
+      → PUT status: pending (requires partner_id)
+      or admin assigns the first partner on a new quote (implicit confirm)
+      → partner notified (QUOTE_ASSIGNED), listed, 1-hour window starts
+
+3. Partner accepts → accepted  (or rejects → failed)
+
+4. Customer or admin converts accepted quote → success
       → createOrderFromQuote() runs
       → Order + OrderService created, quote linked
 ```
 
 **Who manages quotes:** Super Admin, Staff, Franchise Admin, Employee (list/detail scoped by franchise via `resolveQuoteListScope`).
 
-**Customer view:** `GET /api/quote/getCustomerQuotes?user_id=<customerId>` (JWT required).
+**Customer view:** `GET /api/quote/getCustomerQuotes?user_id=<customerId>` (JWT required) and `/api/mobile/user/quotes`.
 
-**Conversion rule:** Only **accepted** quotes can move to **success**; pricing must be valid (`services/quote_pricing_service.js`, `services/order_creation_service.js`).
+**Partner view:** `/api/mobile/partner/quotes` — only `pending` and later. Quotes in `new` are hidden until admin confirms.
+
+**Conversion rule:** Only **accepted** quotes can move to **success**; pricing must be valid (`services/quote_pricing_service.js`, `services/order_creation_service.js`). Admin cannot skip from `new` to `accepted`.
 
 ---
 

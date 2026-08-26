@@ -7,6 +7,15 @@ const QUOTE_DASHBOARD_BUCKETS = [...QUOTE_STATUSES];
 
 const TERMINAL_QUOTE_STATUSES = new Set(["success", "failed"]);
 
+/** Statuses a partner may list or open. `new` is admin-only until confirm. */
+const PARTNER_VISIBLE_QUOTE_STATUSES = ["pending", "accepted", "success", "failed"];
+
+const QUOTE_STATUSES_RELEASED_TO_PARTNER = new Set([
+  "pending",
+  "accepted",
+  "success",
+]);
+
 const hasRef = (val) => {
   if (val == null || val === "") return false;
   if (typeof val === "object" && val._id != null) return true;
@@ -65,6 +74,25 @@ const normalizeQuoteStatus = (status, quote = {}) => {
 const resolveQuoteStatus = (quote = {}) =>
   normalizeQuoteStatus(quote.status, quote);
 
+const hasQuoteRef = hasRef;
+
+/** True once admin has released the quote to the partner (`pending`+). */
+const isQuoteReleasedToPartner = (status, quote = {}) =>
+  QUOTE_STATUSES_RELEASED_TO_PARTNER.has(normalizeQuoteStatus(status, quote));
+
+/**
+ * Include the assigned partner on create/status notifications only if they
+ * already had the quote or it is being released now. `new` and `new` → `failed`
+ * must not notify the partner.
+ */
+const shouldIncludePartnerInQuoteNotify = ({
+  previousStatus,
+  newStatus,
+  quote = {},
+} = {}) =>
+  isQuoteReleasedToPartner(previousStatus, quote) ||
+  isQuoteReleasedToPartner(newStatus, quote);
+
 const buildQuoteBucketFilter = (bucket) => {
   const key = bucket === "fail" ? "failed" : String(bucket || "").toLowerCase();
   if (!QUOTE_STATUSES.includes(key)) return null;
@@ -97,7 +125,7 @@ const canTransitionQuoteStatus = (fromStatus, toStatus) => {
   if (TERMINAL_QUOTE_STATUSES.has(from)) return false;
 
   const allowed = {
-    new: ["pending", "accepted", "failed"],
+    new: ["pending", "failed"],
     pending: ["new", "accepted", "failed"],
     accepted: ["success", "failed"],
   };
@@ -148,6 +176,10 @@ module.exports = {
   QUOTE_STATUSES,
   QUOTE_DASHBOARD_BUCKETS,
   TERMINAL_QUOTE_STATUSES,
+  PARTNER_VISIBLE_QUOTE_STATUSES,
+  hasQuoteRef,
+  isQuoteReleasedToPartner,
+  shouldIncludePartnerInQuoteNotify,
   normalizeQuoteStatus,
   resolveQuoteStatus,
   buildQuoteBucketFilter,

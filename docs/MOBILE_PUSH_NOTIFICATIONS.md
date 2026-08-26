@@ -194,7 +194,7 @@ Legend: **✅ Live** · **❌ Gap**
 | # | Trigger | Status | Source |
 |---|---------|--------|--------|
 | Q1 | Quote created | ✅ | `quote_service.js`, `quote_controller.js` |
-| Q2 | Partner assigned (`QUOTE_ASSIGNED`) | ✅ | Mobile customer + admin `quote_controller.js` |
+| Q2 | Admin confirms / first partner assign (`QUOTE_ASSIGNED`) | ✅ | Admin `quote_controller.js` |
 | Q3–Q8 | Status changes / conversion | ✅ | Mobile + admin quote flows |
 
 ### 5.2 Orders

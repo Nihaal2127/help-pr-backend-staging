@@ -114,17 +114,17 @@ For backend architecture and implementation status, see **`docs/MOBILE_PUSH_NOTI
 
 | **Quotes** |
 
-| Q1 | Quote | Customer or admin creates a new quote | ✅ If not creator | ✅ If assigned on quote | New quote | Quote #{quote_id} has been created. | Live |
+| Q1 | Quote | Customer or admin creates a quote | ✅ If not creator | ✅ Only if already `pending` (admin create with partner) | New quote | Quote #{quote_id} has been created. | Live |
 
-| Q2 | Quote | Customer or admin assigns a partner (`new` → `pending`) | ❌ | ✅ Assigned partner | New quote request | Quote #{quote_id} has been assigned to you. Please review. | Live |
+| Q2 | Quote | Admin confirms or assigns first partner (`new` → `pending`) | ❌ | ✅ Assigned partner | New quote request | Quote #{quote_id} has been assigned to you. Please review. | Live |
 
 | Q3 | Quote | Partner accepts quote (`pending` → `accepted`) | ✅ Customer | ✅ Other stakeholders | Quote status update | Quote #{quote_id} status changed to accepted. | Live |
 
 | Q4 | Quote | Partner rejects quote (`pending` → `failed`) | ✅ Customer | ✅ Other stakeholders | Quote status update | Quote #{quote_id} status changed to failed. | Live |
 
-| Q5 | Quote | Customer cancels quote | ❌ | ✅ Partner + staff | Quote status update | Quote #{quote_id} status changed to failed. | Live |
+| Q5 | Quote | Customer cancels quote | ❌ | ✅ Partner + staff, only if already released (`pending`+) | Quote status update | Quote #{quote_id} status changed to failed. | Live |
 
-| Q6 | Quote | Admin updates quote status | ✅ If on quote | ✅ If on quote | Quote status update | Quote #{quote_id} status changed to {status}. | Live |
+| Q6 | Quote | Admin updates quote status | ✅ If on quote | ✅ If already released (`pending`+) | Quote status update | Quote #{quote_id} status changed to {status}. | Live |
 
 | Q7 | Quote | Quote converted to order (admin: `accepted` → `success`) | ✅ Customer | ✅ Partner | Quote status update | Quote #{quote_id} status changed to success. | Live |
 

@@ -12,6 +12,7 @@ const {
 } = require('../../../helper/password_reset_otp');
 const { normalizeUserEmail } = require('../../../utils/user_contact_uniqueness');
 const { fail, okWithMessage } = require('../../../utils/mobile_service_result');
+const { failIfDeletedAccount } = require('./deleted_account_guard');
 
 const GENERIC_FORGOT_PASSWORD_MESSAGE = 'If an account exists, an OTP has been sent.';
 
@@ -28,33 +29,39 @@ const requestForgotPasswordOtp = async ({ email, userType }) => {
   const normalizedEmail = normalizeUserEmail(email);
   const user = await findUserByEmailAndType(normalizedEmail, userType);
 
-  if (user) {
-    const cooldownSince = new Date(Date.now() - FORGOT_PASSWORD_COOLDOWN_MS);
-    const recentOtp = await PasswordResetOtp.findOne({
+  if (!user) {
+    const deletedAccount = await failIfDeletedAccount({ email: normalizedEmail });
+    if (deletedAccount) {
+      return deletedAccount;
+    }
+    return okWithMessage(200, GENERIC_FORGOT_PASSWORD_MESSAGE);
+  }
+
+  const cooldownSince = new Date(Date.now() - FORGOT_PASSWORD_COOLDOWN_MS);
+  const recentOtp = await PasswordResetOtp.findOne({
+    user_id: user._id,
+    verified: false,
+    created_at: { $gt: cooldownSince },
+  }).sort({ created_at: -1 });
+
+  if (!recentOtp) {
+    await PasswordResetOtp.deleteMany({ user_id: user._id });
+
+    const otp = generateOtp();
+    const otpRecord = await PasswordResetOtp.create({
       user_id: user._id,
-      verified: false,
-      created_at: { $gt: cooldownSince },
-    }).sort({ created_at: -1 });
+      otp_hash: hashOtp(otp),
+      expires_at: getOtpExpiryDate(),
+    });
 
-    if (!recentOtp) {
-      await PasswordResetOtp.deleteMany({ user_id: user._id });
+    const delivery = await sendPasswordResetOtpEmail({
+      to: normalizedEmail,
+      otp,
+    });
 
-      const otp = generateOtp();
-      const otpRecord = await PasswordResetOtp.create({
-        user_id: user._id,
-        otp_hash: hashOtp(otp),
-        expires_at: getOtpExpiryDate(),
-      });
-
-      const delivery = await sendPasswordResetOtpEmail({
-        to: normalizedEmail,
-        otp,
-      });
-
-      if (!delivery.ok) {
-        await PasswordResetOtp.deleteOne({ _id: otpRecord._id });
-        return fail(503, 'Unable to send OTP. Please try again later.');
-      }
+    if (!delivery.ok) {
+      await PasswordResetOtp.deleteOne({ _id: otpRecord._id });
+      return fail(503, 'Unable to send OTP. Please try again later.');
     }
   }
 
@@ -66,6 +73,10 @@ const verifyForgotPasswordOtp = async ({ email, otp, userType }) => {
   const user = await findUserByEmailAndType(normalizedEmail, userType);
 
   if (!user) {
+    const deletedAccount = await failIfDeletedAccount({ email: normalizedEmail });
+    if (deletedAccount) {
+      return deletedAccount;
+    }
     return fail(400, 'Invalid OTP.');
   }
 

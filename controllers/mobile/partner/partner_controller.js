@@ -6,6 +6,7 @@ const {
   googleLoginPartner,
   appleLoginPartner,
   logoutPartner,
+  deleteOwnPartnerAccount,
   updatePartner,
 } = require('../../../services/mobile/partner/partner_service');
 const {
@@ -284,6 +285,13 @@ const logout = wrapMobileHandler('mobile partner logout', async (req, res) => {
   });
 });
 
+const deleteAccount = wrapMobileHandler('mobile partner delete account', async (req, res) => {
+  const result = await deleteOwnPartnerAccount({
+    userId: req.user.id,
+  });
+  return sendTopLevelServiceResult(res, result);
+});
+
 module.exports = {
   register,
   login,
@@ -296,4 +304,5 @@ module.exports = {
   resetPassword,
   update,
   logout,
+  deleteAccount,
 };

@@ -4,6 +4,7 @@ const {
   googleLogin,
   appleLogin,
   logoutCustomer,
+  deleteOwnCustomerAccount,
   updateUser,
   listAllPincodes,
 } = require('../../../services/mobile/user/user_service');
@@ -143,6 +144,13 @@ const logoutHandler = wrapMobileHandler('mobile user logout', async (req, res) =
   return sendTopLevelServiceResult(res, result);
 });
 
+const deleteAccountHandler = wrapMobileHandler('mobile user delete account', async (req, res) => {
+  const result = await deleteOwnCustomerAccount({
+    userId: req.user.id,
+  });
+  return sendTopLevelServiceResult(res, result);
+});
+
 module.exports = {
   sendOtpHandler,
   verifyOtpHandler,
@@ -154,4 +162,5 @@ module.exports = {
   updateHandler,
   getPincodesHandler,
   logoutHandler,
+  deleteAccountHandler,
 };

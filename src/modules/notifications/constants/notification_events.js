@@ -389,6 +389,18 @@ const NOTIFICATION_EVENTS = {
       return `${partner} submitted a portfolio post for review${suffix}.`;
     },
   },
+  PARTNER_ACCOUNT_DELETED: {
+    category: "admin",
+    title: () => "Partner account deleted",
+    body: (ctx) =>
+      `Partner ${ctx.partnerName || ""} deleted their account${ctx.franchiseName ? ` (${ctx.franchiseName})` : ""}.`,
+  },
+  CUSTOMER_ACCOUNT_DELETED: {
+    category: "admin",
+    title: () => "Customer account deleted",
+    body: (ctx) =>
+      `Customer ${ctx.customerName || ""} deleted their account.`,
+  },
 };
 
 module.exports = {

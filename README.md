@@ -86,8 +86,12 @@ Typical variables (set in `.env` or Lambda console):
 - `MONGO_URI` — MongoDB connection string
 - `JWT_SECRET` — JWT signing secret
 - `PORT` — Local port (default `5001`)
-- `POST_SHARE_WEB_BASE_URL` — HTTPS base for post share links (default `https://helppr.in/post`) → `https://helppr.in/post/{share_token}`
-- `MOBILE_APP_DEEP_LINK_BASE` — Legacy env name; prefer `POST_SHARE_WEB_BASE_URL` for share URLs. Deep link scheme used by `/post/:token` page is `helppr://post/{token}`
+- `POST_SHARE_WEB_BASE_URL` — HTTPS base for post share links (default `https://staging-app.helppr.in/post`) → `https://staging-app.helppr.in/post/{postId}`
+- `MOBILE_APP_DEEP_LINK_BASE` — Legacy env name; prefer `POST_SHARE_WEB_BASE_URL` for share URLs. Fallback custom scheme on `/post/:postId` is `helppr://post/{postId}`
+- `ANDROID_PACKAGE_NAME` — Android application id for App Links (default `com.helppr`)
+- `ANDROID_SHA256_CERT_FINGERPRINTS` — comma-separated SHA-256 cert fingerprints for `/.well-known/assetlinks.json` (debug + Play App Signing)
+- `IOS_TEAM_ID` — Apple Developer Team ID for `/.well-known/apple-app-site-association`
+- `IOS_BUNDLE_ID` — iOS bundle id (default `com.helppr`)
 - AWS / S3, Razorpay, Firebase, mail — per integration
 
 **WhatsApp OTP (customer mobile login):**

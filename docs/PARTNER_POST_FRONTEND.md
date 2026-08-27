@@ -147,15 +147,35 @@ GET /api/mobile/user/posts/saved?page=1&limit=10
 
 ### 4.6 Deep link (cold start)
 
+Share links use the **post id**:
+
 ```
-GET /api/mobile/user/posts/share/:shareToken
+https://staging-app.helppr.in/post/{postId}
 ```
 
-No auth. Returns `{ post, share_url }` for app handoff / link preview. Full like/report still requires customer login.
+Example: `https://staging-app.helppr.in/post/6a8c358e12b9637dc2cf3b1e`
 
-**Env (server):** `POST_SHARE_WEB_BASE_URL=https://helppr.in/post` → share URLs like `https://helppr.in/post/{share_token}`.
+**If the app is installed** (Android App Links / iOS Universal Links), the OS opens the customer app. Extract `postId` from the path and call:
 
-Opening that HTTPS URL serves `GET /post/:token`, which tries `helppr://post/{token}` then falls back to Play Store / App Store.
+```
+GET /api/mobile/user/posts/{postId}
+Authorization: Bearer <customer_jwt>
+```
+
+Optional query: `franchise_id`.
+
+**If the app is not installed**, `GET /post/{postId}` shows a landing page that falls back to Play Store / App Store.
+
+**Well-known (same domain as the share URL — `staging-app.helppr.in`):**
+
+- Android: `https://staging-app.helppr.in/.well-known/assetlinks.json`
+- iOS: `https://staging-app.helppr.in/.well-known/apple-app-site-association`
+
+**Env (server):** `POST_SHARE_WEB_BASE_URL=https://staging-app.helppr.in/post` → `https://staging-app.helppr.in/post/{postId}`.
+
+Custom-scheme fallback: `helppr://post/{postId}`.
+
+Public token resolver (legacy, no auth) still exists: `GET /api/mobile/user/posts/share/:shareToken`.
 
 ---
 
@@ -175,7 +195,7 @@ Opening that HTTPS URL serves `GET /post/:token`, which tries `helppr://post/{to
   "is_liked": true,
   "is_saved": false,
   "share_token": "abc123...",
-  "share_url": "https://helppr.in/post/abc123...",
+  "share_url": "https://staging-app.helppr.in/post/6a8c358e12b9637dc2cf3b1e",
   "created_at": "2026-06-02T10:00:00.000Z",
   "partner": {
     "_id": "...",
@@ -223,7 +243,7 @@ Requires back-office JWT (`type` 1, 3, 5, or 6).
 | Share sheet | `POST /posts/:id/share` → native share with `share_url` |
 | Report modal | `POST /posts/:id/report` |
 | Partner add work | `POST /partner/posts` multipart |
-| Open shared link | `GET /posts/share/:token` |
+| Open shared link | `GET /posts/{id}` |
 
 ---
 

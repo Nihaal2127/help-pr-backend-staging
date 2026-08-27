@@ -44,15 +44,15 @@ const parseObjectId = (raw, fieldName) => {
 
 const generateShareToken = () => uuidv4().replace(/-/g, '');
 
-const buildShareUrl = (shareToken) => {
-  // HTTPS share links open in WhatsApp/SMS browsers, then deep-link into the app.
-  // Override with POST_SHARE_WEB_BASE_URL if needed (default matches https://helppr.in/post/:token).
+const buildShareUrl = (postId) => {
+  // HTTPS App Link / Universal Link. Flutter extracts post_id from /post/{postId}.
+  // Override with POST_SHARE_WEB_BASE_URL if needed (default https://staging-app.helppr.in/post/:postId).
   const base = String(
     process.env.POST_SHARE_WEB_BASE_URL ||
       process.env.MOBILE_APP_SHARE_WEB_BASE ||
-      'https://helppr.in/post'
+      'https://staging-app.helppr.in/post'
   ).replace(/\/$/, '');
-  return `${base}/${shareToken}`;
+  return `${base}/${postId}`;
 };
 
 const assertPartnerCanPost = async (partnerId) => {
@@ -530,7 +530,7 @@ const mapPostRecord = (post, options = {}) => {
     status: post.status,
     rejection_reason: post.rejection_reason || '',
     share_token: post.share_token,
-    share_url: buildShareUrl(post.share_token),
+    share_url: buildShareUrl(post._id),
     likes_count: post.likes_count ?? 0,
     shares_count: post.shares_count ?? 0,
     reports_count: post.reports_count ?? 0,

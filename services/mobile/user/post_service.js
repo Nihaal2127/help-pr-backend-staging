@@ -204,7 +204,7 @@ const resolvePostByShareToken = async (shareToken) => {
   return ok(200, {
     message: 'Post retrieved successfully.',
     post: mapped[0],
-    share_url: buildShareUrl(token),
+    share_url: buildShareUrl(post._id),
   });
 };
 
@@ -271,7 +271,7 @@ const recordPostShare = async (userId, postId) => {
     data: {
       post_id: postOid,
       share_token: updated.share_token,
-      share_url: buildShareUrl(updated.share_token),
+      share_url: buildShareUrl(postOid),
       shares_count: updated.shares_count ?? post.shares_count + 1,
     },
   });

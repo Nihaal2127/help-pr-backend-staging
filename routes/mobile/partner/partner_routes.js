@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { register, login, sendPartnerOtpHandler, verifyPartnerOtpHandler, googleLogin, appleLogin, forgotPassword, verifyForgotPasswordOtp, resetPassword, update, logout } = require('../../../controllers/mobile/partner/partner_controller');
+const { register, login, sendPartnerOtpHandler, verifyPartnerOtpHandler, googleLogin, appleLogin, forgotPassword, verifyForgotPasswordOtp, resetPassword, update, logout, deleteAccount } = require('../../../controllers/mobile/partner/partner_controller');
 const {
   validateForgotPasswordEmail,
   validateVerifyForgotPasswordOtp,
@@ -54,6 +54,7 @@ router.post(
 );
 router.post('/reset-password', validateResetPassword, resetPassword);
 router.post('/logout', partnerAuthMiddleware, logout);
+router.delete('/delete', partnerAuthMiddleware, requirePartnerAccount, deleteAccount);
 router.get('/home', partnerAuthMiddleware, requirePartnerAccount, getHomeHandler);
 router.get(
   '/ratings',

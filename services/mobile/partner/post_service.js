@@ -190,7 +190,7 @@ const listPartnerPosts = async (partnerId, query) => {
     PartnerPost.find(filter).sort({ created_at: -1 }).skip(skip).limit(limit).lean(),
   ]);
 
-  const records = await mapPostRecords(posts, { includePartner: true });
+  const records = await mapPostRecords(posts, { includePartner: true, includeSaveCount: true });
   const totalPages = Math.ceil(totalItems / limit) || 0;
 
   return ok(200, {

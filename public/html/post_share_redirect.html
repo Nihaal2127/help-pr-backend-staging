@@ -92,27 +92,27 @@
       var FALLBACK_MS = 1800;
 
       var parts = window.location.pathname.split('/').filter(Boolean);
-      var token = '';
+      var postId = '';
       var postIdx = parts.indexOf('post');
       if (postIdx >= 0 && parts[postIdx + 1]) {
-        token = decodeURIComponent(parts[postIdx + 1]).trim();
+        postId = decodeURIComponent(parts[postIdx + 1]).trim();
       }
-      if (!token) {
-        var q = new URLSearchParams(window.location.search).get('token');
-        if (q) token = String(q).trim();
+      if (!postId) {
+        var q = new URLSearchParams(window.location.search);
+        postId = String(q.get('post_id') || q.get('token') || '').trim();
       }
 
-      // Allow only safe token characters in deep links / UI.
-      token = token.replace(/[^a-zA-Z0-9_-]/g, '');
+      // Allow only safe id characters in deep links / UI.
+      postId = postId.replace(/[^a-zA-Z0-9_-]/g, '');
 
       var ua = navigator.userAgent || '';
       var isAndroid = /Android/i.test(ua);
       var isIOS = /iPhone|iPad|iPod/i.test(ua);
       var storeUrl = isIOS ? APP_STORE : PLAY_STORE;
 
-      var deepLink = token ? ('helppr://post/' + encodeURIComponent(token)) : 'helppr://';
-      var intentLink = token
-        ? ('intent://post/' + encodeURIComponent(token) +
+      var deepLink = postId ? ('helppr://post/' + encodeURIComponent(postId)) : 'helppr://';
+      var intentLink = postId
+        ? ('intent://post/' + encodeURIComponent(postId) +
            '#Intent;scheme=helppr;package=com.helppr;S.browser_fallback_url=' +
            encodeURIComponent(PLAY_STORE) + ';end')
         : ('intent://#Intent;scheme=helppr;package=com.helppr;S.browser_fallback_url=' +
@@ -130,7 +130,7 @@
           ? 'Open Play Store'
           : 'Get the App';
 
-      if (!token) {
+      if (!postId) {
         statusEl.textContent = 'Invalid share link. You can still download Helppr.';
         return;
       }

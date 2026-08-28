@@ -105,7 +105,7 @@ const validateScheduleFields = (body, { partial }) => {
   return { ok: true };
 };
 
-/** Omit or send empty partner_id to create a new (unassigned) quote; valid id → pending. */
+/** Omit or send empty partner_id to create an unconfirmed (new) quote. Partner is stored but not notified until admin confirms. */
 const normalizeOptionalPartnerId = (body) => {
   if (body.partner_id === undefined || body.partner_id === null) {
     delete body.partner_id;

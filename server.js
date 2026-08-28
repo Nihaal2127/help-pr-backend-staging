@@ -55,6 +55,10 @@ const appointmentRoutes = require('./routes/appointment_routes');
 const { notificationRoutes } = require('./src/modules/notifications');
 const mobileRoutes = require('./routes/mobile');
 const postShareRedirectRoutes = require('./routes/post_share_redirect_routes');
+const {
+  wellKnownRouter,
+  appleAppSiteAssociationHandler,
+} = require('./routes/well_known_routes');
 const { publicImageUrlsResponseMiddleware } = require('./middleware/public_image_urls_response_middleware');
 const { logPublicImageUrlConfig } = require('./helper/publicImageUrl');
 
@@ -179,7 +183,11 @@ app.use('/api/appointment', appointmentRoutes);
 
 app.use('/api/mobile', mobileRoutes);
 
-// Public post share landing (https://helppr.in/post/:token) — must be before catch-all
+// App Links / Universal Links (must be on the share domain root, e.g. https://staging-app.helppr.in)
+app.use('/.well-known', wellKnownRouter);
+app.get('/apple-app-site-association', appleAppSiteAssociationHandler);
+
+// Public post share landing (https://staging-app.helppr.in/post/:postId) — must be before catch-all
 app.use('/post', postShareRedirectRoutes);
 
 // app.use('/login', loginRoute);

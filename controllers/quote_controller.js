@@ -87,6 +87,7 @@ const {
   resolveQuoteStatus,
   formatQuoteForApi,
   formatQuoteRecords,
+  hasQuoteRef,
 } = require("../enum/quote_status_enum");
 const {
   safeNotifyQuoteCreated,
@@ -271,7 +272,8 @@ const create = async (req, res) => {
       service_id: body.service_id,
       franchise_id: body.franchise_id,
       address_id: body.address_id,
-      status: body.partner_id ? "pending" : "new",
+      // Admin create with a partner is implicit confirm (pending = released to partner).
+      status: hasQuoteRef(body.partner_id) ? "pending" : "new",
       from_date: body.from_date,
       to_date: body.to_date,
       work_hours_per_day: parseFloat(body.work_hours_per_day),
@@ -793,7 +795,8 @@ const update = async (req, res) => {
 
       if (
         currentStatus === "new" &&
-        quote.partner_id &&
+        !hasQuoteRef(previousPartnerId) &&
+        hasQuoteRef(quote.partner_id) &&
         !hasStatusUpdate
       ) {
         historyChanges.push(
@@ -814,10 +817,15 @@ const update = async (req, res) => {
         });
       }
 
-      const effectiveCurrent =
-        hasFieldUpdates && quote.status === "pending" && currentStatus === "new"
-          ? "pending"
-          : currentStatus;
+      if (nextStatus === "pending" && !hasQuoteRef(quote.partner_id)) {
+        return res.status(409).json({
+          success: false,
+          status: 409,
+          message: "Cannot set status to pending without a partner assigned.",
+        });
+      }
+
+      const effectiveCurrent = currentStatus;
 
       if (nextStatus === "success") {
         if (quote.order_id) {
@@ -952,6 +960,14 @@ const update = async (req, res) => {
         );
       }
       historyChanges.push(...statusChanges.filter(Boolean));
+
+      if (
+        currentStatus !== "pending" &&
+        nextStatus === "pending" &&
+        hasQuoteRef(quote.partner_id)
+      ) {
+        notifyQuoteAssigned = true;
+      }
     }
 
     applyQuoteActionDeadline(quote, {
@@ -966,7 +982,9 @@ const update = async (req, res) => {
       const notes =
         hasStatusUpdate && body.status
           ? `Status set to ${normalizeQuoteStatus(body.status, quote)}.`
-          : "";
+          : notifyQuoteAssigned
+            ? "Partner assigned; quote released to partner."
+            : "";
       await appendQuoteHistory(quote, req, eventType, historyChanges, notes);
     }
 

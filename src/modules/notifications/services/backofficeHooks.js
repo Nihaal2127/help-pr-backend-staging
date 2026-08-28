@@ -492,6 +492,66 @@ const safeNotifyBackofficeChatMessage = async ({
   });
 };
 
+const accountDisplayName = (user) =>
+  String(user?.name || user?.user_id || user?.phone_number || user?.email || "").trim();
+
+const safeNotifyBackofficePartnerAccountDeleted = async ({ partner, actorUserId }) => {
+  await runSafe("backoffice.partner_account_deleted", async () => {
+    const franchiseId = partner?.franchise_id || null;
+    const franchiseName = await loadFranchiseName(franchiseId);
+    const recipients = await resolveSuperAdminAndFranchiseRecipients(franchiseId);
+    if (!recipients.length) return;
+
+    const partnerName = accountDisplayName(partner);
+
+    await notifyBackoffice({
+      eventKey: "PARTNER_ACCOUNT_DELETED",
+      actorUserId,
+      recipientUserIds: recipients,
+      context: {
+        partnerName,
+        franchiseName,
+      },
+      entityType: "user",
+      entityId: partner?._id,
+      franchiseId,
+      metadata: {
+        partner_id: partner?._id,
+        partner_user_id: partner?.user_id || "",
+        partner_name: partnerName,
+      },
+      dedupeKeyPrefix: `backoffice.partner.account.deleted:${partner?._id}`,
+    });
+  });
+};
+
+const safeNotifyBackofficeCustomerAccountDeleted = async ({ customer, actorUserId }) => {
+  await runSafe("backoffice.customer_account_deleted", async () => {
+    const recipients = await resolveSuperAdminStaffRecipients();
+    if (!recipients.length) return;
+
+    const customerName = accountDisplayName(customer);
+
+    await notifyBackoffice({
+      eventKey: "CUSTOMER_ACCOUNT_DELETED",
+      actorUserId,
+      recipientUserIds: recipients,
+      context: {
+        customerName,
+      },
+      entityType: "user",
+      entityId: customer?._id,
+      franchiseId: customer?.franchise_id || null,
+      metadata: {
+        customer_id: customer?._id,
+        customer_user_id: customer?.user_id || "",
+        customer_name: customerName,
+      },
+      dedupeKeyPrefix: `backoffice.customer.account.deleted:${customer?._id}`,
+    });
+  });
+};
+
 module.exports = {
   safeNotifyBackofficeCategoryRequested,
   safeNotifyBackofficeServiceRequested,
@@ -507,4 +567,6 @@ module.exports = {
   safeNotifyBackofficeSubscriptionChanged,
   safeNotifyBackofficePartnerPostPending,
   safeNotifyBackofficeChatMessage,
+  safeNotifyBackofficePartnerAccountDeleted,
+  safeNotifyBackofficeCustomerAccountDeleted,
 };

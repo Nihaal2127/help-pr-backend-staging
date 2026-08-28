@@ -15,6 +15,9 @@ const { combineDateAndTime } = require("../../../../utils/order_schedule");
 const { getReminderConfig } = require("../constants/reminder_config");
 const { notify } = require("./notification.service");
 const {
+  resolveSuperAdminAndFranchiseRecipients,
+} = require("../resolvers/backofficeRecipients");
+const {
   DEADLINE_REMINDER_MINUTES,
   getQuoteActionDeadlineMs,
   inferQuoteActionDeadlineAt,
@@ -218,16 +221,19 @@ const runQuoteReminders = async (now = new Date()) => {
         updated_at: { $lte: staleBefore },
         ...newBucket,
       })
-        .select("_id quote_sequence_id user_id franchise_id")
+        .select("_id quote_sequence_id franchise_id")
         .lean()
     : [];
 
   for (const quote of newQuotes) {
-    if (!quote.user_id || quote.partner_id) continue;
+    const recipients = await resolveSuperAdminAndFranchiseRecipients(
+      quote.franchise_id
+    );
+    if (!recipients.length) continue;
     candidates += 1;
     await notify({
       eventKey: "QUOTE_ACTION_REMINDER",
-      recipientUserIds: [quote.user_id],
+      recipientUserIds: recipients,
       context: { quoteSequenceId: quote.quote_sequence_id || "" },
       entityType: "quote",
       entityId: quote._id,
@@ -235,7 +241,7 @@ const runQuoteReminders = async (now = new Date()) => {
       metadata: {
         quote_id: quote._id,
         quote_sequence_id: quote.quote_sequence_id || "",
-        reminder_type: "quote_new_customer",
+        reminder_type: "quote_new_admin",
       },
       dedupeKeyPrefix: `reminder.quote:new:${quote._id}`,
       pushPreference: "reminder",

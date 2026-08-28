@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
-const { QUOTE_STATUSES, normalizeQuoteStatus } = require('../../../enum/quote_status_enum');
+const { normalizeQuoteStatus, PARTNER_VISIBLE_QUOTE_STATUSES } = require('../../../enum/quote_status_enum');
 const { fieldLabel } = require('../../../utils/field_labels');
 
 const sendError = (res, status, message) =>
@@ -36,7 +36,14 @@ const validateListPartnerQuotesQuery = (req, res, next) => {
       return sendError(
         res,
         409,
-        `Invalid ${fieldLabel('status')}. Use one of: ${QUOTE_STATUSES.join(', ')}.`
+        `Invalid ${fieldLabel('status')}. Use one of: ${PARTNER_VISIBLE_QUOTE_STATUSES.join(', ')}.`
+      );
+    }
+    if (!PARTNER_VISIBLE_QUOTE_STATUSES.includes(normalized)) {
+      return sendError(
+        res,
+        409,
+        'New quotes are not visible to partners until admin confirms.'
       );
     }
     req.query.status = normalized;

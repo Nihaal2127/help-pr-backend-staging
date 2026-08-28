@@ -30,7 +30,6 @@ const {
 const {
   safeNotifyQuoteCreated,
   safeNotifyQuoteStatusChanged,
-  safeNotifyQuoteAssigned,
   safeNotifyOrderPaymentReceived,
 } = require('../../../src/modules/notifications/services/domainHooks');
 const {
@@ -216,7 +215,7 @@ const createCustomerQuote = async (customerId, body) => {
       service_id: body.service_id,
       franchise_id: body.franchise_id,
       address_id: body.address_id,
-      status: hasPartner ? 'pending' : 'new',
+      status: 'new',
       from_date: body.from_date,
       to_date: body.to_date,
       work_hours_per_day: parseFloat(body.work_hours_per_day),
@@ -390,7 +389,6 @@ const updateCustomerQuote = async (customerId, quoteId, body) => {
     const previousPartnerId = quote.partner_id;
     const previousValues = applyCustomerQuoteFieldUpdates(quote, body);
     const previousStatus = currentStatus;
-    let assignedPartner = false;
 
     if (quotePricingInputChanged(body)) {
       try {
@@ -420,12 +418,6 @@ const updateCustomerQuote = async (customerId, quoteId, body) => {
       if (change) historyChanges.push(change);
     }
 
-    if (currentStatus === 'new' && quote.partner_id) {
-      historyChanges.push(buildHistoryChange('status', currentStatus, 'pending'));
-      quote.status = 'pending';
-      assignedPartner = true;
-    }
-
     applyQuoteActionDeadline(quote, {
       previousStatus: currentStatus,
       previousPartnerId,
@@ -445,12 +437,7 @@ const updateCustomerQuote = async (customerId, quoteId, body) => {
 
     await quote.save();
 
-    if (assignedPartner) {
-      void safeNotifyQuoteAssigned({
-        quote,
-        actorUserId: customerId,
-      });
-    } else if (quote.status !== previousStatus) {
+    if (quote.status !== previousStatus) {
       void safeNotifyQuoteStatusChanged({
         quote,
         previousStatus,

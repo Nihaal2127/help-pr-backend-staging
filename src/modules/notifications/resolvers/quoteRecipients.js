@@ -15,7 +15,7 @@ const addId = (set, value) => {
 /**
  * Quote notification recipients:
  * - Customer (user_id)
- * - Partner (partner_id) — only when a partner is on the quote
+ * - Partner (partner_id) — only when includePartner is true (released to partner)
  * - Assigned employee (employee_id) — only when set, not all franchise employees
  * - Franchise admin(s) for quote.franchise_id
  * - created_by_id when different from the above
@@ -26,13 +26,16 @@ const resolveQuoteRecipients = async (quote, options = {}) => {
   const {
     includeFranchiseAdmins = true,
     includeAssignedEmployee = true,
+    includePartner = true,
     extraUserIds = [],
   } = options;
 
   const ids = new Set();
 
   addId(ids, quote?.user_id);
-  addId(ids, quote?.partner_id);
+  if (includePartner) {
+    addId(ids, quote?.partner_id);
+  }
   if (includeAssignedEmployee) {
     addId(ids, quote?.employee_id);
   }

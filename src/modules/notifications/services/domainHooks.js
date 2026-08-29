@@ -56,6 +56,9 @@ const collectOrderPartnerUserIds = async (order) => {
 
   const serviceItemIds = order?.service_items || [];
   const objectIds = serviceItemIds
+    .map((item) =>
+      item && typeof item === "object" && item._id != null ? item._id : item
+    )
     .filter((id) => mongoose.Types.ObjectId.isValid(String(id)))
     .map((id) => new mongoose.Types.ObjectId(String(id)));
 
@@ -938,17 +941,19 @@ const safeNotifyOrderReviewReceived = async ({ order, partnerUserId, actorUserId
   });
 };
 
-const safeNotifyOrderInvoiceDownloaded = async ({ order, actorUserId }) => {
+const safeNotifyOrderInvoiceDownloaded = async ({ order }) => {
   await runSafe("order.invoice_downloaded", async () => {
     if (!order?._id) return;
 
+    const recipientUserIds = new Set();
+    addRecipientId(recipientUserIds, order.user_id);
     const partnerUserIds = await collectOrderPartnerUserIds(order);
-    if (!partnerUserIds.length) return;
+    partnerUserIds.forEach((id) => recipientUserIds.add(String(id)));
+    if (!recipientUserIds.size) return;
 
     await notify({
       eventKey: "ORDER_INVOICE_DOWNLOADED",
-      actorUserId,
-      recipientUserIds: partnerUserIds,
+      recipientUserIds: [...recipientUserIds],
       context: { order },
       entityType: "order",
       entityId: order._id,

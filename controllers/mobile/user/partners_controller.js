@@ -31,6 +31,8 @@ const listPartnersHandler = wrapMobileHandler('mobile user partners list', async
 const listSavedPartnersHandler = wrapMobileHandler('mobile user saved partners list', async (req, res) => {
   const result = await listSavedPartnersPaginated(req.user.id, req.query);
   return sendPaginatedListWithNestedData(res, result, (listData) => ({
+    franchise_id: listData.franchise_id,
+    franchise_name: listData.franchise_name,
     partners: listData.partners,
   }));
 });

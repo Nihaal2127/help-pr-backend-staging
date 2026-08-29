@@ -145,16 +145,37 @@ const listSavedPartnersPaginated = async (userId, query) => {
 
     const { page, limit, filters, serviceId, categoryId } = parsed;
 
+    const franchiseIdRaw =
+      query.franchise_id !== undefined && query.franchise_id !== null
+        ? String(query.franchise_id).trim()
+        : '';
+    if (!franchiseIdRaw) {
+      return fail(400, `${fieldLabel('franchise_id')} is required.`);
+    }
+    if (!mongoose.Types.ObjectId.isValid(franchiseIdRaw)) {
+      return fail(400, `${fieldLabel('franchise_id')} must be a valid ObjectId.`);
+    }
+
     const saves = await CustomerSavedPartner.find({
       user_id: new mongoose.Types.ObjectId(String(userId)),
+      franchise_id: new mongoose.Types.ObjectId(franchiseIdRaw),
     })
       .sort({ created_at: -1 })
       .lean();
 
     if (saves.length === 0) {
+      const franchise = await Franchise.findOne({
+        _id: franchiseIdRaw,
+        deleted_at: null,
+      })
+        .select('name')
+        .lean();
+
       return ok(200, {
         message: 'Saved partners fetched successfully.',
         data: {
+          franchise_id: franchiseIdRaw,
+          franchise_name: franchise?.name ?? null,
           partners: [],
           totalItems: 0,
           totalPages: 0,
@@ -229,7 +250,11 @@ const listSavedPartnersPaginated = async (userId, query) => {
 
     return ok(200, {
       message: 'Saved partners fetched successfully.',
-      data: paginated,
+      data: {
+        franchise_id: franchiseIdRaw,
+        franchise_name: franchiseNameById.get(franchiseIdRaw) ?? null,
+        ...paginated,
+      },
     });
   } catch (err) {
     console.error('listSavedPartnersPaginated', err.message);

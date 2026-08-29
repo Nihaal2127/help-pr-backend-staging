@@ -6,6 +6,7 @@ const { embedOrderDetailForeignKeys } = require('../../../utils/list_aggregation
 const { stripAdminDescriptionForPublicApi } = require('../../../utils/admin_description_access');
 const { fail, ok } = require('../../../utils/mobile_service_result');
 const { assertValidCallerObjectId } = require('../shared/order_access_helpers');
+const { safeNotifyOrderInvoiceDownloaded } = require('../../../src/modules/notifications/services/domainHooks');
 const {
   buildOrderListSearchRegex,
   applyOrderManagementStatusFilter,
@@ -175,6 +176,11 @@ const getCustomerOrderInvoice = async (customerId, orderId) => {
 
     const html = buildOrderInvoiceHtml(record, { audience: 'user' });
     const safeId = String(record.unique_id || order._id).replace(/[^\w-]/g, '_');
+
+    void safeNotifyOrderInvoiceDownloaded({
+      order,
+      actorUserId: customerId,
+    });
 
     return ok(200, {
       html,

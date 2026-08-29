@@ -249,6 +249,12 @@ const NOTIFICATION_EVENTS = {
     body: (ctx) =>
       `You received a new review for order #${ctx.order?.unique_id || ""}.`,
   },
+  ORDER_INVOICE_DOWNLOADED: {
+    category: "order",
+    title: () => "Invoice downloaded",
+    body: (ctx) =>
+      `Invoice for order #${ctx.order?.unique_id || ""} was downloaded.`,
+  },
   SUBSCRIPTION_PLAN_CHANGED: {
     category: "subscription",
     title: () => "Subscription update",

@@ -124,6 +124,7 @@ const {
   safeNotifyOrderServiceTimeUpdated,
   safeNotifyOrderServiceCancelled,
   safeNotifyOrderNestedResources,
+  safeNotifyOrderInvoiceDownloaded,
 } = require('../src/modules/notifications/services/domainHooks');
 const { syncOrderChatForOrderRecord } = require('../services/chat_integration');
 const {
@@ -1408,6 +1409,11 @@ const downloadOrderInvoice = async (req, res) => {
 
     const html = buildOrderInvoiceHtml(record);
     const safeId = String(record.unique_id || order._id).replace(/[^\w-]/g, '_');
+
+    void safeNotifyOrderInvoiceDownloaded({
+      order,
+      actorUserId: getCallerId(req),
+    });
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="invoice-${safeId}.html"`);

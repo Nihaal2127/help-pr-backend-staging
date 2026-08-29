@@ -7,6 +7,7 @@ const { stripAdminDescriptionForPublicApi } = require('../../../utils/admin_desc
 const { attachPartnerOrderSummary } = require('../../../utils/partner_order_summary');
 const { fail, ok } = require('../../../utils/mobile_service_result');
 const { assertValidCallerObjectId } = require('../shared/order_access_helpers');
+const { safeNotifyOrderInvoiceDownloaded } = require('../../../src/modules/notifications/services/domainHooks');
 const {
   buildOrderListSearchRegex,
   applyOrderManagementStatusFilter,
@@ -187,6 +188,11 @@ const getPartnerOrderInvoice = async (partnerId, orderId) => {
 
     const html = buildOrderInvoiceHtml(record, { audience: 'partner' });
     const safeId = String(record.unique_id || order._id).replace(/[^\w-]/g, '_');
+
+    void safeNotifyOrderInvoiceDownloaded({
+      order,
+      actorUserId: partnerId,
+    });
 
     return ok(200, {
       html,

@@ -1,9 +1,10 @@
 const mongoose = require('mongoose');
 const CustomerSavedPartner = require('../../../models/customer_saved_partner');
-const Franchise = require('../../../models/franchise');
+const Area = require('../../../models/area');
 const User = require('../../../models/user');
 const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
 const { fieldLabel } = require('../../../utils/field_labels');
+const { resolveFranchiseForArea } = require('./franchise_partner_scope');
 const {
   parsePartnersListQuery,
   paginatePartnerRecords,
@@ -138,6 +139,51 @@ const unsavePartnerForCustomer = async (userId, partnerId) => {
   }
 };
 
+const emptySavedPartnersData = (page, limit, franchiseId, franchiseName) =>
+  ok(200, {
+    message: 'Saved partners fetched successfully.',
+    data: {
+      franchise_id: franchiseId,
+      franchise_name: franchiseName,
+      partners: [],
+      totalItems: 0,
+      totalPages: 0,
+      currentPage: page,
+      limit,
+    },
+  });
+
+const resolveSavedListFranchise = async (userId) => {
+  const customer = await User.findOne({
+    _id: userId,
+    deleted_at: null,
+  })
+    .select('area_id')
+    .lean();
+
+  if (!customer?.area_id) {
+    return { ok: true, franchise: null };
+  }
+
+  const area = await Area.findOne({
+    _id: customer.area_id,
+    deleted_at: null,
+  })
+    .select('_id state_id city_id')
+    .lean();
+
+  if (!area) {
+    return { ok: true, franchise: null };
+  }
+
+  const franchiseResult = await resolveFranchiseForArea(area);
+  if (!franchiseResult.ok) {
+    return { ok: true, franchise: null };
+  }
+
+  return franchiseResult;
+};
+
 const listSavedPartnersPaginated = async (userId, query) => {
   try {
     const parsed = parsePartnersListQuery(query);
@@ -145,94 +191,48 @@ const listSavedPartnersPaginated = async (userId, query) => {
 
     const { page, limit, filters, serviceId, categoryId } = parsed;
 
-    const franchiseIdRaw =
-      query.franchise_id !== undefined && query.franchise_id !== null
-        ? String(query.franchise_id).trim()
-        : '';
-    if (!franchiseIdRaw) {
-      return fail(400, `${fieldLabel('franchise_id')} is required.`);
+    const franchiseCtx = await resolveSavedListFranchise(userId);
+    if (!franchiseCtx.ok) return franchiseCtx;
+    if (!franchiseCtx.franchise) {
+      return emptySavedPartnersData(page, limit, null, null);
     }
-    if (!mongoose.Types.ObjectId.isValid(franchiseIdRaw)) {
-      return fail(400, `${fieldLabel('franchise_id')} must be a valid ObjectId.`);
-    }
+
+    const franchiseId = franchiseCtx.franchise._id;
+    const franchiseName = franchiseCtx.franchise.name ?? null;
 
     const saves = await CustomerSavedPartner.find({
       user_id: new mongoose.Types.ObjectId(String(userId)),
-      franchise_id: new mongoose.Types.ObjectId(franchiseIdRaw),
+      franchise_id: franchiseId,
     })
       .sort({ created_at: -1 })
       .lean();
 
     if (saves.length === 0) {
-      const franchise = await Franchise.findOne({
-        _id: franchiseIdRaw,
-        deleted_at: null,
-      })
-        .select('name')
-        .lean();
-
-      return ok(200, {
-        message: 'Saved partners fetched successfully.',
-        data: {
-          franchise_id: franchiseIdRaw,
-          franchise_name: franchise?.name ?? null,
-          partners: [],
-          totalItems: 0,
-          totalPages: 0,
-          currentPage: page,
-          limit,
-        },
-      });
+      return emptySavedPartnersData(page, limit, franchiseId, franchiseName);
     }
 
     const savedAtByPartnerId = new Map(
       saves.map((row) => [String(row.partner_id), row.created_at])
     );
 
-    const byFranchise = new Map();
-    for (const row of saves) {
-      const franchiseKey = String(row.franchise_id);
-      if (!byFranchise.has(franchiseKey)) {
-        byFranchise.set(franchiseKey, new Set());
-      }
-      byFranchise.get(franchiseKey).add(String(row.partner_id));
-    }
+    const built = await buildFranchisePartnerListRecords(franchiseId, {
+      partnerIdAllowlist: saves.map((row) => row.partner_id),
+      publishedOnly: true,
+    });
+    if (!built.ok) return built;
 
-    const franchiseIds = [...byFranchise.keys()].filter((id) =>
-      mongoose.Types.ObjectId.isValid(id)
-    );
-    const franchiseDocs = await Franchise.find({
-      _id: { $in: franchiseIds.map((id) => new mongoose.Types.ObjectId(id)) },
-      deleted_at: null,
-    })
-      .select('name')
-      .lean();
-    const franchiseNameById = new Map(franchiseDocs.map((f) => [String(f._id), f.name]));
-
-    const merged = [];
-
-    for (const [franchiseKey, partnerIdSet] of byFranchise) {
-      const built = await buildFranchisePartnerListRecords(franchiseKey, {
-        partnerIdAllowlist: [...partnerIdSet],
-        publishedOnly: true,
-      });
-      if (!built.ok) continue;
-      const builtData = built.data || {};
-      const builtRecords = Array.isArray(builtData.records) ? builtData.records : [];
-
-      const franchiseName = franchiseNameById.get(franchiseKey) ?? null;
-
-      for (const record of builtRecords) {
-        const partnerKey = String(record._id);
-        merged.push({
-          ...record,
-          franchise_id: builtData.franchise_id,
-          franchise_name: franchiseName,
-          saved_at: savedAtByPartnerId.get(partnerKey) ?? null,
-          is_saved: true,
-        });
-      }
-    }
+    const builtData = built.data || {};
+    const builtRecords = Array.isArray(builtData.records) ? builtData.records : [];
+    const merged = builtRecords.map((record) => {
+      const partnerKey = String(record._id);
+      return {
+        ...record,
+        franchise_id: builtData.franchise_id,
+        franchise_name: franchiseName,
+        saved_at: savedAtByPartnerId.get(partnerKey) ?? null,
+        is_saved: true,
+      };
+    });
 
     merged.sort((a, b) => {
       const ta = a.saved_at ? new Date(a.saved_at).getTime() : 0;
@@ -251,8 +251,8 @@ const listSavedPartnersPaginated = async (userId, query) => {
     return ok(200, {
       message: 'Saved partners fetched successfully.',
       data: {
-        franchise_id: franchiseIdRaw,
-        franchise_name: franchiseNameById.get(franchiseIdRaw) ?? null,
+        franchise_id: franchiseId,
+        franchise_name: franchiseName,
         ...paginated,
       },
     });

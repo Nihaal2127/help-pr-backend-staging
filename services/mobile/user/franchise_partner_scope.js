@@ -768,6 +768,7 @@ const listPartnersOfferingServiceAcrossFranchises = async (serviceId) => {
 
 module.exports = {
   resolveFranchiseFromLocation,
+  resolveFranchiseForArea,
   resolveFranchiseById,
   loadSubscribedFranchisePartners,
   loadRandomPlatinumPartnerBanners,

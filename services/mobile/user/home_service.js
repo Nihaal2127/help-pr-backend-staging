@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Category = require('../../../models/category');
 const Service = require('../../../models/service');
 const City = require('../../../models/city');
+const User = require('../../../models/user');
 const { resolveFranchiseEffectiveCatalog } = require('../../../utils/catalog_availability_resolver');
 const {
   resolveFranchiseFromLocation,
@@ -178,6 +179,22 @@ const buildResolvedLocation = (franchiseCtx) => ({
   state_id: franchiseCtx.area.state_id,
 });
 
+const persistCustomerSelectedLocation = async (userId, franchiseCtx) => {
+  if (!franchiseCtx?.area?._id) return;
+
+  const setFields = {
+    area_id: franchiseCtx.area._id,
+    city_id: franchiseCtx.area.city_id,
+    state_id: franchiseCtx.area.state_id,
+    updated_at: new Date(),
+  };
+  if (franchiseCtx.location?.pincode) {
+    setFields.pincode = franchiseCtx.location.pincode;
+  }
+
+  await User.updateOne({ _id: userId, deleted_at: null }, { $set: setFields });
+};
+
 const getHomeForLocation = async ({ location, userId }) => {
   try {
     if (!userId || !mongoose.Types.ObjectId.isValid(String(userId))) {
@@ -190,6 +207,8 @@ const getHomeForLocation = async ({ location, userId }) => {
       loadHomeCounts(),
     ]);
     if (!franchiseCtx.ok) return franchiseCtx;
+
+    await persistCustomerSelectedLocation(userId, franchiseCtx);
 
     if (!franchiseCtx.franchise) {
       return ok(200, {

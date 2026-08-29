@@ -389,6 +389,12 @@ const NOTIFICATION_EVENTS = {
       return `${partner} submitted a portfolio post for review${suffix}.`;
     },
   },
+  BACKOFFICE_ORDER_REVIEW_RECEIVED: {
+    category: "admin",
+    title: () => "New partner review",
+    body: (ctx) =>
+      `Customer left a review for ${ctx.partnerName || "a partner"} on order #${ctx.orderUniqueId || ""}${ctx.franchiseName ? ` (${ctx.franchiseName})` : ""}.`,
+  },
   PARTNER_ACCOUNT_DELETED: {
     category: "admin",
     title: () => "Partner account deleted",

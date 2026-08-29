@@ -552,6 +552,49 @@ const safeNotifyBackofficeCustomerAccountDeleted = async ({ customer, actorUserI
   });
 };
 
+const safeNotifyBackofficeOrderReviewReceived = async ({
+  order,
+  partnerUserId,
+  rating,
+  actorUserId,
+}) => {
+  await runSafe("backoffice.order_review_received", async () => {
+    const franchiseId = order?.franchise_id || null;
+    const franchiseName = await loadFranchiseName(franchiseId);
+    const recipients = await resolveSuperAdminAndFranchiseRecipients(franchiseId);
+    if (!recipients.length) return;
+
+    const partner = partnerUserId
+      ? await User.findById(partnerUserId).select("name user_id").lean()
+      : null;
+    const partnerName = String(partner?.name || partner?.user_id || "").trim();
+
+    await notifyBackoffice({
+      eventKey: "BACKOFFICE_ORDER_REVIEW_RECEIVED",
+      actorUserId,
+      recipientUserIds: recipients,
+      context: {
+        orderUniqueId: order?.unique_id || "",
+        partnerName,
+        franchiseName,
+        rating,
+      },
+      entityType: "order",
+      entityId: order?._id,
+      franchiseId,
+      metadata: {
+        order_id: order?._id,
+        order_unique_id: order?.unique_id || "",
+        partner_id: partnerUserId || null,
+        rating: rating ?? null,
+      },
+      dedupeKeyPrefix: order?._id
+        ? `backoffice.order.review:${order._id}:${partnerUserId}`
+        : null,
+    });
+  });
+};
+
 module.exports = {
   safeNotifyBackofficeCategoryRequested,
   safeNotifyBackofficeServiceRequested,
@@ -569,4 +612,5 @@ module.exports = {
   safeNotifyBackofficeChatMessage,
   safeNotifyBackofficePartnerAccountDeleted,
   safeNotifyBackofficeCustomerAccountDeleted,
+  safeNotifyBackofficeOrderReviewReceived,
 };

@@ -179,6 +179,7 @@ const submitOrderReview = async (customerId, orderId, payload = {}) => {
         order,
         partnerUserId: serviceLine.partner_id,
         actorUserId: customerId,
+        rating: serviceLine.rating,
       });
     }
 

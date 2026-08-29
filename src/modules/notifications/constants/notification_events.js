@@ -401,6 +401,12 @@ const NOTIFICATION_EVENTS = {
     body: (ctx) =>
       `Customer ${ctx.customerName || ""} deleted their account.`,
   },
+  BACKOFFICE_ORDER_REVIEW_RECEIVED: {
+    category: "admin",
+    title: () => "New partner review",
+    body: (ctx) =>
+      `Customer left a review for ${ctx.partnerName || "a partner"} on order #${ctx.orderUniqueId || ""}${ctx.franchiseName ? ` (${ctx.franchiseName})` : ""}.`,
+  },
 };
 
 module.exports = {

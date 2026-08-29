@@ -14,6 +14,7 @@ const {
   safeNotifyBackofficeOrderStatusChanged,
   safeNotifyBackofficeOrderPayment,
   safeNotifyBackofficeSubscriptionChanged,
+  safeNotifyBackofficeOrderReviewReceived,
 } = require("./backofficeHooks");
 
 const runSafe = async (label, fn) => {
@@ -849,7 +850,7 @@ const safeNotifyDisputeStatusChanged = async ({
   });
 };
 
-const safeNotifyOrderReviewReceived = async ({ order, partnerUserId, actorUserId }) => {
+const safeNotifyOrderReviewReceived = async ({ order, partnerUserId, actorUserId, rating }) => {
   await runSafe("order.review_received", async () => {
     if (!partnerUserId) return;
 
@@ -863,6 +864,13 @@ const safeNotifyOrderReviewReceived = async ({ order, partnerUserId, actorUserId
       franchiseId: order?.franchise_id,
       metadata: buildOrderMetadata(order),
       dedupeKeyPrefix: order?._id ? `order.review:${order._id}:${partnerUserId}` : null,
+    });
+
+    void safeNotifyBackofficeOrderReviewReceived({
+      order,
+      partnerUserId,
+      rating,
+      actorUserId,
     });
   });
 };

@@ -145,16 +145,43 @@ const listSavedPartnersPaginated = async (userId, query) => {
 
     const { page, limit, filters, serviceId, categoryId } = parsed;
 
-    const saves = await CustomerSavedPartner.find({
+    const franchiseIdRaw =
+      query.franchise_id !== undefined && query.franchise_id !== null
+        ? String(query.franchise_id).trim()
+        : '';
+    if (franchiseIdRaw && !mongoose.Types.ObjectId.isValid(franchiseIdRaw)) {
+      return fail(400, `${fieldLabel('franchise_id')} must be a valid ObjectId.`);
+    }
+
+    const saveFilter = {
       user_id: new mongoose.Types.ObjectId(String(userId)),
-    })
+    };
+    if (franchiseIdRaw) {
+      saveFilter.franchise_id = new mongoose.Types.ObjectId(franchiseIdRaw);
+    }
+
+    const saves = await CustomerSavedPartner.find(saveFilter)
       .sort({ created_at: -1 })
       .lean();
 
     if (saves.length === 0) {
+      let franchiseName = null;
+      if (franchiseIdRaw) {
+        const franchise = await Franchise.findOne({
+          _id: franchiseIdRaw,
+          deleted_at: null,
+        })
+          .select('name')
+          .lean();
+        franchiseName = franchise?.name ?? null;
+      }
+
       return ok(200, {
         message: 'Saved partners fetched successfully.',
         data: {
+          ...(franchiseIdRaw
+            ? { franchise_id: franchiseIdRaw, franchise_name: franchiseName }
+            : {}),
           partners: [],
           totalItems: 0,
           totalPages: 0,
@@ -227,9 +254,18 @@ const listSavedPartnersPaginated = async (userId, query) => {
       limit,
     });
 
+    const franchiseName = franchiseIdRaw
+      ? franchiseNameById.get(franchiseIdRaw) ?? null
+      : null;
+
     return ok(200, {
       message: 'Saved partners fetched successfully.',
-      data: paginated,
+      data: {
+        ...(franchiseIdRaw
+          ? { franchise_id: franchiseIdRaw, franchise_name: franchiseName }
+          : {}),
+        ...paginated,
+      },
     });
   } catch (err) {
     console.error('listSavedPartnersPaginated', err.message);

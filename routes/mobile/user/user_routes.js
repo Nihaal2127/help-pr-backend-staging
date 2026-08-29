@@ -84,7 +84,12 @@ router.get(
   validatePartnersListQuery,
   listPartnersHandler
 );
-router.get('/partners/saved', userAuthMiddleware, listSavedPartnersHandler);
+router.get(
+  '/partners/saved',
+  userAuthMiddleware,
+  validatePartnersListQuery,
+  listSavedPartnersHandler
+);
 router.post(
   '/partners/:partnerId/save',
   userAuthMiddleware,

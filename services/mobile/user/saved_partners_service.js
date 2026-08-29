@@ -149,39 +149,33 @@ const listSavedPartnersPaginated = async (userId, query) => {
       query.franchise_id !== undefined && query.franchise_id !== null
         ? String(query.franchise_id).trim()
         : '';
-    if (franchiseIdRaw && !mongoose.Types.ObjectId.isValid(franchiseIdRaw)) {
+    if (!franchiseIdRaw) {
+      return fail(400, `${fieldLabel('franchise_id')} is required.`);
+    }
+    if (!mongoose.Types.ObjectId.isValid(franchiseIdRaw)) {
       return fail(400, `${fieldLabel('franchise_id')} must be a valid ObjectId.`);
     }
 
-    const saveFilter = {
+    const saves = await CustomerSavedPartner.find({
       user_id: new mongoose.Types.ObjectId(String(userId)),
-    };
-    if (franchiseIdRaw) {
-      saveFilter.franchise_id = new mongoose.Types.ObjectId(franchiseIdRaw);
-    }
-
-    const saves = await CustomerSavedPartner.find(saveFilter)
+      franchise_id: new mongoose.Types.ObjectId(franchiseIdRaw),
+    })
       .sort({ created_at: -1 })
       .lean();
 
     if (saves.length === 0) {
-      let franchiseName = null;
-      if (franchiseIdRaw) {
-        const franchise = await Franchise.findOne({
-          _id: franchiseIdRaw,
-          deleted_at: null,
-        })
-          .select('name')
-          .lean();
-        franchiseName = franchise?.name ?? null;
-      }
+      const franchise = await Franchise.findOne({
+        _id: franchiseIdRaw,
+        deleted_at: null,
+      })
+        .select('name')
+        .lean();
 
       return ok(200, {
         message: 'Saved partners fetched successfully.',
         data: {
-          ...(franchiseIdRaw
-            ? { franchise_id: franchiseIdRaw, franchise_name: franchiseName }
-            : {}),
+          franchise_id: franchiseIdRaw,
+          franchise_name: franchise?.name ?? null,
           partners: [],
           totalItems: 0,
           totalPages: 0,
@@ -254,16 +248,11 @@ const listSavedPartnersPaginated = async (userId, query) => {
       limit,
     });
 
-    const franchiseName = franchiseIdRaw
-      ? franchiseNameById.get(franchiseIdRaw) ?? null
-      : null;
-
     return ok(200, {
       message: 'Saved partners fetched successfully.',
       data: {
-        ...(franchiseIdRaw
-          ? { franchise_id: franchiseIdRaw, franchise_name: franchiseName }
-          : {}),
+        franchise_id: franchiseIdRaw,
+        franchise_name: franchiseNameById.get(franchiseIdRaw) ?? null,
         ...paginated,
       },
     });

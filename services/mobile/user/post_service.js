@@ -25,6 +25,7 @@ const {
   publishedPostFilter,
   findPublishedPostById,
 } = require('../../../services/partner_post_common_service');
+const { safeNotifyPartnerPostLiked } = require('../../../src/modules/notifications/services/domainHooks');
 
 const getVisiblePartnerIds = async (franchiseId) => {
   const franchiseResult = await resolveFranchiseById(franchiseId);
@@ -229,13 +230,22 @@ const togglePostLike = async (userId, postId) => {
     }
     isLiked = false;
   } else {
-    await PartnerPostLike.create({
+    const like = await PartnerPostLike.create({
       post_id: postOid,
       user_id: userOid,
       created_at: new Date(),
     });
     await PartnerPost.updateOne({ _id: postOid }, { $inc: { likes_count: 1 } });
     isLiked = true;
+
+    const customer = await User.findById(userOid).select('name').lean();
+    void safeNotifyPartnerPostLiked({
+      post,
+      partnerUserId: post.partner_id,
+      customerName: customer?.name || '',
+      likeId: like._id,
+      actorUserId: userOid,
+    });
   }
 
   const updated = await PartnerPost.findById(postOid).select('likes_count').lean();

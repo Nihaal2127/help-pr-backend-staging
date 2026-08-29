@@ -197,6 +197,18 @@ const NOTIFICATION_EVENTS = {
       return "Your portfolio post was removed from the platform.";
     },
   },
+  PARTNER_POST_LIKED: {
+    category: "system",
+    title: () => "New like on your post",
+    body: (ctx) => {
+      const who = String(ctx.customerName || "A customer").trim();
+      const preview = String(ctx.postDescription || "").trim();
+      if (preview) {
+        return `${who} liked your post "${preview}".`;
+      }
+      return `${who} liked your post.`;
+    },
+  },
   ORDER_ADDITIONAL_CHARGE_UPDATED: {
     category: "order",
     title: () => "Additional charge updated",
@@ -292,6 +304,14 @@ const NOTIFICATION_EVENTS = {
       ctx.planName
         ? `Your "${ctx.planName}" subscription expires soon. Renew to continue receiving jobs.`
         : "Your subscription plan expires soon. Renew to continue receiving jobs.",
+  },
+  SUBSCRIPTION_ENDED_REMINDER: {
+    category: "reminder",
+    title: () => "Subscription ended",
+    body: (ctx) =>
+      ctx.planName
+        ? `Your "${ctx.planName}" subscription has ended. Subscribe to continue receiving jobs.`
+        : "Your subscription has ended. Subscribe to continue receiving jobs.",
   },
   CATEGORY_REQUEST_SUBMITTED: {
     category: "admin",

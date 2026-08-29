@@ -302,6 +302,74 @@ const runSubscriptionReminders = async (now = new Date()) => {
   };
 };
 
+const runSubscriptionEndedReminders = async (now = new Date()) => {
+  let candidates = 0;
+  let notified = 0;
+
+  const liveSubscriptions = await PartnerSubscription.find({
+    deleted_at: null,
+    status: "active",
+    $or: [{ expires_at: null }, { expires_at: { $gt: now } }],
+  })
+    .select("partner_id")
+    .lean();
+
+  const livePartnerIds = new Set(
+    liveSubscriptions.map((row) => String(row.partner_id)).filter(Boolean)
+  );
+
+  const expiredSubscriptions = await PartnerSubscription.find({
+    deleted_at: null,
+    status: { $in: ["active", "expired"] },
+    expires_at: { $ne: null, $lte: now },
+  })
+    .populate("subscription_plan_id", "plan_name")
+    .select("_id partner_id expires_at subscription_plan_id")
+    .sort({ expires_at: -1 })
+    .lean();
+
+  const seenPartnerIds = new Set();
+
+  for (const subscription of expiredSubscriptions) {
+    const partnerId = subscription.partner_id
+      ? String(subscription.partner_id)
+      : "";
+    if (!partnerId || livePartnerIds.has(partnerId) || seenPartnerIds.has(partnerId)) {
+      continue;
+    }
+    seenPartnerIds.add(partnerId);
+    candidates += 1;
+
+    const plan =
+      subscription.subscription_plan_id &&
+      typeof subscription.subscription_plan_id === "object"
+        ? subscription.subscription_plan_id
+        : null;
+    const planName = plan?.plan_name || "";
+
+    await notify({
+      eventKey: "SUBSCRIPTION_ENDED_REMINDER",
+      recipientUserIds: [subscription.partner_id],
+      context: { planName, expiresAt: subscription.expires_at },
+      entityType: "subscription",
+      entityId: subscription._id,
+      metadata: {
+        subscription_id: subscription._id,
+        expires_at: subscription.expires_at,
+        reminder_type: "subscription_ended",
+      },
+      dedupeKeyPrefix: `reminder.subscription.ended:${subscription._id}`,
+      pushPreference: "reminder",
+    });
+    notified += 1;
+  }
+
+  return {
+    subscriptionEndedReminderCandidates: candidates,
+    subscriptionEndedRemindersSent: notified,
+  };
+};
+
 const runQuoteDeadlineReminders = async (now = new Date()) => {
   const maxBucketMinutes = DEADLINE_REMINDER_MINUTES[0];
   const horizon = new Date(now.getTime() + maxBucketMinutes * 60 * 1000);
@@ -401,10 +469,11 @@ const runQuoteDeadlineReminders = async (now = new Date()) => {
 
 const runAllReminders = async () => {
   const now = new Date();
-  const [service, quote, subscription, quoteDeadline] = await Promise.all([
+  const [service, quote, subscription, subscriptionEnded, quoteDeadline] = await Promise.all([
     runServiceReminders(now),
     runQuoteReminders(now),
     runSubscriptionReminders(now),
+    runSubscriptionEndedReminders(now),
     runQuoteDeadlineReminders(now),
   ]);
 
@@ -415,6 +484,7 @@ const runAllReminders = async () => {
     ...service,
     ...quote,
     ...subscription,
+    ...subscriptionEnded,
     ...quoteDeadline,
   };
 };
@@ -423,6 +493,7 @@ module.exports = {
   runServiceReminders,
   runQuoteReminders,
   runSubscriptionReminders,
+  runSubscriptionEndedReminders,
   runQuoteDeadlineReminders,
   runAllReminders,
 };

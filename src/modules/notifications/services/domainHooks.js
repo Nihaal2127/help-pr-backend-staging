@@ -671,6 +671,39 @@ const safeNotifyPartnerPostModerated = async ({
   });
 };
 
+const safeNotifyPartnerPostLiked = async ({
+  post,
+  partnerUserId,
+  customerName,
+  likeId,
+  actorUserId,
+}) => {
+  await runSafe("partner.post_liked", async () => {
+    if (!partnerUserId) return;
+    if (String(partnerUserId) === String(actorUserId)) return;
+
+    const postDescription = truncatePostDescription(post?.description);
+
+    await notify({
+      eventKey: "PARTNER_POST_LIKED",
+      actorUserId,
+      recipientUserIds: [partnerUserId],
+      context: { post, postDescription, customerName },
+      entityType: "partner_post",
+      entityId: post?._id,
+      franchiseId: post?.franchise_id || null,
+      metadata: {
+        post_id: post?._id || null,
+        like_id: likeId || null,
+        customer_name: customerName || "",
+      },
+      dedupeKeyPrefix: likeId
+        ? `partner.post.liked:${likeId}`
+        : `partner.post.liked:${post?._id}:${actorUserId}`,
+    });
+  });
+};
+
 const safeNotifyPartnerVerificationUpdated = async ({
   partnerUserId,
   verificationStatus,
@@ -1027,6 +1060,7 @@ module.exports = {
   safeNotifyQuoteAssigned,
   safeNotifyPartnerPostReviewed,
   safeNotifyPartnerPostModerated,
+  safeNotifyPartnerPostLiked,
   safeNotifyPartnerVerificationUpdated,
   safeNotifyOrderAdditionalChargeUpdated,
   safeNotifyOrderAdditionalChargeRemoved,

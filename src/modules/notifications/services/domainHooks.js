@@ -959,7 +959,6 @@ const safeNotifyOrderInvoiceDownloaded = async ({ order }) => {
       entityId: order._id,
       franchiseId: order.franchise_id,
       metadata: buildOrderMetadata(order),
-      dedupeKeyPrefix: `order.invoice.downloaded:${order._id}`,
     });
   });
 };

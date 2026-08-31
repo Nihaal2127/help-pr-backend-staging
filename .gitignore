@@ -6,6 +6,10 @@ node_modules/
 .env.*
 !.env.example
 
+# Apple In-App Purchase private key (never commit)
+*.p8
+resources/apple/*.p8
+
 # Firebase service account (private key)
 resources/adminsdk.json
 resources/adminsdk-customer.json
@@ -21,6 +25,9 @@ npm-debug.log*
 uploads/
 temp/
 tmp/
+
+# Local MongoDB dumps (may contain PII)
+db-dump/
 
 # Test / coverage
 coverage/

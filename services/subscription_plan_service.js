@@ -5,6 +5,7 @@ const PLAN_NAMES = SubscriptionPlan.PLAN_NAMES;
 const DURATION_TYPES = SubscriptionPlan.DURATION_TYPES;
 const { applyPagination, applyDropDownFilter } = require('../utils/pagination');
 const { parseBoolean } = require('../utils/parser');
+const { appleProductIdForPlanName } = require('../constants/apple_iap');
 
 const parseObjectId = (raw, fieldName = 'id') => {
     if (raw instanceof mongoose.Types.ObjectId) {
@@ -344,9 +345,13 @@ const listSubscriptionPlansForDropdown = async (query) => {
         const sort = { priority: 1, created_at: -1 };
 
         const { data: rows } = await applyDropDownFilter(SubscriptionPlan, filter, sort);
+        const records = (rows || []).map((row) => ({
+            ...row,
+            apple_product_id: appleProductIdForPlanName(row.plan_name),
+        }));
         return ok(200, {
             message: 'Subscription plan list fetched successfully.',
-            records: rows,
+            records,
         });
     } catch (err) {
         console.log('listSubscriptionPlansForDropdown', err.message);

@@ -8,6 +8,7 @@ const PAYMENT_METHODS = [
     'wallet_and_cash',
     'online',
     'wallet_and_online',
+    'apple',
 ];
 const PAYMENT_STATUSES = ['not_required', 'pending', 'completed', 'failed'];
 const CHANGE_STATUSES = ['pending', 'completed', 'cancelled', 'expired'];
@@ -54,6 +55,10 @@ const partnerSubscriptionChangeSchema = new mongoose.Schema(
             enum: PAYMENT_STATUSES,
             default: 'not_required',
         },
+        apple_product_id: { type: String, default: null, trim: true },
+        apple_transaction_id: { type: String, default: null, trim: true },
+        apple_original_transaction_id: { type: String, default: null, trim: true },
+        apple_environment: { type: String, default: null, trim: true },
         razorpay_payment_link_id: {
             type: String,
             default: null,

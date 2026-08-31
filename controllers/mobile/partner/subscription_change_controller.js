@@ -1,4 +1,5 @@
 const subscriptionChangeService = require('../../../services/mobile/partner/subscription_change_service');
+const appleIapSubscriptionService = require('../../../services/mobile/partner/apple_iap_subscription_service');
 const {
   getCallerId,
   wrapMobileHandler,
@@ -39,10 +40,34 @@ const listHistory = wrapMobileHandler('mobile partner subscription history', asy
   return sendServiceResult(res, result);
 });
 
+const verifyApplePurchase = wrapMobileHandler(
+  'mobile partner apple iap verify',
+  async (req, res) => {
+    const result = await appleIapSubscriptionService.verifyApplePurchase(
+      getCallerId(req),
+      req.body
+    );
+    return sendServiceResult(res, result);
+  }
+);
+
+const restoreApplePurchase = wrapMobileHandler(
+  'mobile partner apple iap restore',
+  async (req, res) => {
+    const result = await appleIapSubscriptionService.restoreApplePurchase(
+      getCallerId(req),
+      req.body
+    );
+    return sendServiceResult(res, result);
+  }
+);
+
 module.exports = {
   getSummary,
   previewChange,
   applyChange,
   listHistory,
   getChangePaymentStatus,
+  verifyApplePurchase,
+  restoreApplePurchase,
 };

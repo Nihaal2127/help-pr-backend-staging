@@ -22,6 +22,7 @@ const {
 } = require('../../../src/modules/payments/services/gatewayPayment.service');
 
 const { USER_TYPE_PARTNER } = require('../../../constants/user_types');
+const { appleProductIdForPlanName } = require('../../../constants/apple_iap');
 /** Pending rows without a Razorpay link id (orphaned initiation). */
 const PENDING_ORPHAN_EXPIRY_MS = 5 * 60 * 1000;
 /** Online payment pending rows expire after this (Razorpay link validity window). */
@@ -296,6 +297,11 @@ const releaseStalePendingChanges = async (partnerId, session = null) => {
         applied_at: null,
         $or: [
             {
+                payment_method: 'apple',
+                created_at: { $lt: onlineCutoff },
+            },
+            {
+                payment_method: { $ne: 'apple' },
                 $or: [{ razorpay_payment_link_id: null }, { razorpay_payment_link_id: '' }],
                 created_at: { $lt: orphanCutoff },
             },
@@ -414,6 +420,15 @@ const tryResumeOrClearPendingOnlineChange = async ({
 
     if (!pending) {
         return { action: 'none' };
+    }
+
+    if (pending.payment_method === 'apple') {
+        return {
+            action: 'blocked',
+            message:
+                'An App Store subscription change is in progress. Complete it in the App Store or wait for it to expire.',
+            details: { change_id: pending._id, payment_method: 'apple' },
+        };
     }
 
     if (!pending.razorpay_payment_link_id) {
@@ -637,6 +652,7 @@ const formatPlanSummary = (plan) => {
         duration: plan.duration,
         duration_type: plan.duration_type,
         priority: plan.priority,
+        apple_product_id: appleProductIdForPlanName(plan.plan_name),
     };
 };
 
@@ -654,6 +670,7 @@ const formatChangeRecord = (row) => ({
     cash_amount: row.cash_amount,
     wallet_credit: row.wallet_credit,
     payment_method: row.payment_method,
+    apple_product_id: row.apple_product_id || null,
     status: row.status,
     applied_at: row.applied_at,
     created_at: row.created_at,
@@ -748,6 +765,11 @@ const getSubscriptionSummary = async (partnerId) => {
                     started_at: subscription.started_at,
                     expires_at: subscription.expires_at,
                     status: subscription.status,
+                    billing_source: subscription.billing_source || null,
+                    apple_product_id: subscription.apple_product_id || null,
+                    apple_original_transaction_id:
+                        subscription.apple_original_transaction_id || null,
+                    apple_auto_renew_status: subscription.apple_auto_renew_status,
                     plan: formatPlanSummary(plan),
                 },
                 wallet_balance: walletBalance,
@@ -1505,7 +1527,11 @@ const getChangePaymentStatus = async (partnerId, changeId) => {
         }
 
         let syncResult = null;
-        if (change.status === 'pending' && change.razorpay_payment_link_id) {
+        if (
+            change.status === 'pending' &&
+            change.payment_method !== 'apple' &&
+            change.razorpay_payment_link_id
+        ) {
             syncResult = await syncPendingOnlineChangePayment(change._id, pPartner.oid);
         }
 
@@ -1524,7 +1550,11 @@ const getChangePaymentStatus = async (partnerId, changeId) => {
 
         let gatewayPayment = null;
         let paymentUrl = null;
-        if (latestChange.status === 'pending' && latestChange.razorpay_payment_link_id) {
+        if (
+            latestChange.status === 'pending' &&
+            latestChange.payment_method !== 'apple' &&
+            latestChange.razorpay_payment_link_id
+        ) {
             try {
                 const link = await fetchPaymentLink(latestChange.razorpay_payment_link_id);
                 if (RAZORPAY_LINK_RESUMABLE.has(link.status) && link.short_url) {
@@ -1567,7 +1597,11 @@ const getChangePaymentStatus = async (partnerId, changeId) => {
                     )
                 ),
                 razorpay_payment_link_id: latestChange.razorpay_payment_link_id,
-                payment_url: paymentUrl,
+                payment_url: latestChange.payment_method === 'apple' ? null : paymentUrl,
+                apple_product_id: latestChange.apple_product_id || null,
+                apple_transaction_id: latestChange.apple_transaction_id || null,
+                apple_original_transaction_id:
+                    latestChange.apple_original_transaction_id || null,
                 applied_at: latestChange.applied_at,
                 target_plan: formatPlanSummary(latestChange.to_plan_id),
                 wallet_balance: walletBalance,
@@ -1593,6 +1627,11 @@ const getChangePaymentStatus = async (partnerId, changeId) => {
 const applyChange = async (partnerId, body) => {
     try {
         const { target_plan_id, wallet_amount = 0, cash_amount = 0, online_amount = 0 } = body;
+        const paymentMethod = String(body.payment_method || '').trim().toLowerCase();
+        if (paymentMethod === 'apple') {
+            const appleIapSubscriptionService = require('./apple_iap_subscription_service');
+            return appleIapSubscriptionService.initiateAppleChange(partnerId, body);
+        }
 
         const ctx = await buildChangeContext(partnerId, target_plan_id);
         if (!ctx.ok) return ctx;

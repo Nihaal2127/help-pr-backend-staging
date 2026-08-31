@@ -48,13 +48,58 @@ const validateApplyChangeBody = (req, res, next) => {
     const onlineParsed = parseNonNegativeAmount(req.body.online_amount, 'online_amount');
     if (!onlineParsed.ok) return sendError(res, 400, onlineParsed.message);
 
+    const paymentMethod = String(req.body.payment_method || '').trim().toLowerCase();
+    if (paymentMethod === 'apple') {
+        if (walletParsed.value > 0 || cashParsed.value > 0 || onlineParsed.value > 0) {
+            return sendError(
+                res,
+                400,
+                'Do not mix wallet, cash, or online amounts with App Store payment.'
+            );
+        }
+        if (req.body.apple_product_id !== undefined && req.body.apple_product_id !== null) {
+            req.body.apple_product_id = String(req.body.apple_product_id).trim();
+        }
+        req.body.payment_method = 'apple';
+    }
+
     req.body.wallet_amount = walletParsed.value;
     req.body.cash_amount = cashParsed.value;
     req.body.online_amount = onlineParsed.value;
     next();
 };
 
+const validateAppleVerifyBody = (req, res, next) => {
+    const signed = req.body?.signed_transaction_info || req.body?.signedTransactionInfo;
+    const transactionId = req.body?.transaction_id || req.body?.transactionId;
+    if ((!signed || String(signed).trim() === '') && (!transactionId || String(transactionId).trim() === '')) {
+        return sendError(res, 400, `${fieldLabel('signed_transaction_info')} is required.`);
+    }
+    if (req.body?.change_id) {
+        if (!OBJECT_ID_HEX_24.test(String(req.body.change_id).trim())) {
+            return sendError(res, 400, `${fieldLabel('change_id')} must be a valid ObjectId.`);
+        }
+    }
+    if (req.body?.target_plan_id) {
+        if (!OBJECT_ID_HEX_24.test(String(req.body.target_plan_id).trim())) {
+            return sendError(res, 400, `${fieldLabel('target_plan_id')} must be a valid ObjectId.`);
+        }
+    }
+    next();
+};
+
+const validateAppleRestoreBody = (req, res, next) => {
+    const signed = req.body?.signed_transaction_info || req.body?.signedTransactionInfo;
+    const transactionId = req.body?.transaction_id || req.body?.transactionId;
+    if ((!signed || String(signed).trim() === '') && (!transactionId || String(transactionId).trim() === '')) {
+        return sendError(res, 400, `${fieldLabel('signed_transaction_info')} is required.`);
+    }
+    next();
+};
+
 module.exports = {
     validateTargetPlanId,
     validateApplyChangeBody,
+    validateAppleVerifyBody,
+    validateAppleRestoreBody,
 };

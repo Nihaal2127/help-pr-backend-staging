@@ -134,6 +134,8 @@ const FIELD_LABELS = {
     id_token: 'ID token',
     legacy_service_name: 'Legacy service name',
     keep_existing_images: 'Existing images',
+    bunny_video_id: 'Video',
+    media_type: 'Media type',
     partner_documents: 'Partner documents',
     min_price: 'Minimum price',
     max_price: 'Maximum price',

@@ -78,6 +78,7 @@ Partners **cannot** set `order_status` directly. They only move `partner_work_st
 
 5. POST /api/mobile/partner/orders/:orderId/complete
        → Upload 1–4 proof images; optionally publish to customer feed
+          (images or one video via bunny_video_id)
 ```
 
 **Feed post is optional** at step 4 (`publish_as_post=false` by default). The partner can also create a post later via **`POST /api/mobile/partner/posts`** (see `PARTNER_POST_FRONTEND.md`).
@@ -251,11 +252,12 @@ Content-Type: multipart/form-data
 
 | Field | Required | Notes |
 |-------|----------|-------|
-| `images` | **Yes** | **1–4** JPEG/PNG files — proof of service |
+| `images` | **Yes** | **1–4** JPEG/PNG files — proof of service (stored on the order) |
 | `publish_as_post` | No | `true` \| `false` — default **`false`** |
 | `description` | If posting | Max 500 chars; **required when** `publish_as_post=true` |
 | `post_description` | No | Alias for `description` |
 | `work_completion_description` | No | Alias for `description` (stored on order) |
+| `bunny_video_id` | If video feed post | From `POST /api/mobile/partner/posts/video-upload-session` after TUS upload. Proof images are still required on the **order**; the **feed post** uses this video instead of those photos. |
 
 **Preconditions (server-enforced):**
 
@@ -278,6 +280,17 @@ images:           [photo1.jpg, photo2.jpg]
 publish_as_post:  true
 description:      Before/after kitchen deep clean for order #ORD-123
 ```
+
+**Example — complete + publish a video to the customer feed:**
+
+```
+images:           [photo1.jpg, photo2.jpg]   (order proof, still required)
+publish_as_post:  true
+description:      Before/after kitchen deep clean for order #ORD-123
+bunny_video_id:   657bb740-a71b-4529-a012-528021c31a92
+```
+
+Trim the clip to ≤ 60s, call `POST /api/mobile/partner/posts/video-upload-session`, TUS-upload to Bunny, then pass `bunny_video_id` here.
 
 **200 response:**
 

@@ -336,6 +336,18 @@ GET /api/mobile/partner/posts/order-options?page=1&limit=10
 
 ---
 
+### 2.1b Create video upload session
+
+```
+POST /api/mobile/partner/posts/video-upload-session
+```
+
+**Body:** none. Returns a TUS ticket (`signature`, `tus_headers`). The Stream API key is **not** in the response. Ticket TTL is 1 hour. Max duration is 60 seconds (enforced after encoding).
+
+Then `POST /posts` with `bunny_video_id` and no `images`.
+
+---
+
 ### 2.2 Create post (submitted for approval)
 
 ```
@@ -351,7 +363,8 @@ Content-Type: multipart/form-data
 | `legacy_service_name` | If `post_type=legacy_work` | Min 3 chars |
 | `category_id` | No | Legacy work only |
 | `service_id` | No | Legacy work only |
-| `images` | Yes | 1–4 image files (JPEG/PNG) |
+| `images` | If image post | 1–4 image files (JPEG/PNG) |
+| `bunny_video_id` | If video post | From `POST /posts/video-upload-session` after TUS upload. Do not send `images`. |
 
 **201 response:**
 
@@ -365,6 +378,7 @@ Content-Type: multipart/form-data
     "status": "pending",
     "rejection_reason": "",
     "description": "Kitchen renovation completed.",
+    "media_type": "image",
     "image_urls": ["partner_post/uuid_file.jpg"],
     "...": "full post object"
   }
@@ -427,6 +441,7 @@ Content-Type: multipart/form-data
 | `description` | string | Cannot be empty if sent; no character limit |
 | `keep_existing_images` | string (JSON array) | URLs to keep, e.g. `["partner_post/uuid1.jpg"]` |
 | `images` | file[] | New image files. Max 4 new files per request |
+| `bunny_video_id` | string | Replace media with a video (from a new upload session). Do not send with `images`. |
 
 **Image rules:**
 

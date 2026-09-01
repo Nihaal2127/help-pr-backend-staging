@@ -2483,7 +2483,7 @@
                     "complete"
                   ]
                 },
-                "description": "**POST /api/mobile/partner/orders/:orderId/complete**\n\n- **Auth:** Bearer partner\n- **Multipart:** 1–4 `images` (proof of service)\n- **Preconditions:**\n  - `partner_work_status` = `in-progress` (call **Start work** first)\n  - Customer fully paid (`user_payment_status` = `paid`)\n- Sets `partner_work_status` and `order_status` to `completed`\n- Saves `work_proof_image_urls`, `work_completed_at`\n- Optional `publish_as_post=true` + `description` creates linked `partner_post` for user feed\n\n**409** if customer has not paid in full | **200:** `record`, optional `post`"
+                "description": "**POST /api/mobile/partner/orders/:orderId/complete**\n\n- **Auth:** Bearer partner\n- **Multipart:** 0–4 `images` and/or `bunny_video_id` (at least one). Images stored as order proof; video used for the feed post when `publish_as_post=true`.\n- **Preconditions:**\n  - `partner_work_status` = `in-progress` (call **Start work** first)\n  - Customer fully paid (`user_payment_status` = `paid`)\n- Sets `partner_work_status` and `order_status` to `completed`\n- Saves `work_proof_image_urls`, `work_completed_at`\n- Optional `publish_as_post=true` + `description` creates linked `partner_post` for user feed\n\n**409** if customer has not paid in full | **200:** `record`, optional `post`"
               },
               "response": []
             }

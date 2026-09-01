@@ -20,6 +20,7 @@ const {
   getBunnyVideoLengthSeconds,
   isBunnyVideoFinished,
   isBunnyVideoFailed,
+  isPlayableWebhookStatus,
   BUNNY_WEBHOOK_STATUS_FINISHED,
   BUNNY_WEBHOOK_STATUS_RESOLUTION_FINISHED,
   BUNNY_WEBHOOK_STATUS_FAILED,
@@ -62,12 +63,58 @@ const applyFailedVideo = (videoId, reason) => ({
   failure_reason: reason || 'Video processing failed.',
 });
 
+const pickVideoAfterResolve = (resolved, session, videoId) => {
+  if (
+    resolved.video.status === VIDEO_STATUS_PROCESSING &&
+    isPlayableWebhookStatus(session?.last_webhook_status)
+  ) {
+    return applyReadyPlayback(videoId, resolved.video.duration_seconds);
+  }
+  return resolved.video;
+};
+
+const refreshSessionTicket = async (session) => {
+  const ticket = createTusUploadTicket(session.bunny_video_id, VIDEO_UPLOAD_SESSION_TTL_SECONDS);
+  session.expires_at = new Date(ticket.expiration_time * 1000);
+  await session.save();
+  return ticket;
+};
+
 const createVideoUploadSession = async (partnerId) => {
   const partnerResult = await assertPartnerCanPost(partnerId);
   if (!partnerResult.ok) return partnerResult;
 
   if (!isBunnyStreamConfigured()) {
     return fail(503, 'Video uploads are not configured.');
+  }
+
+  const partnerOid = partnerResult.data.partnerOid;
+  const existing = await PartnerPostVideoSession.findOne({
+    partner_id: partnerOid,
+    consumed_post_id: null,
+  }).sort({ created_at: -1 });
+
+  if (existing) {
+    try {
+      const bunnyVideo = await getBunnyVideo(existing.bunny_video_id);
+      if (isBunnyVideoFailed(bunnyVideo)) {
+        await deleteBunnyVideo(existing.bunny_video_id);
+        await PartnerPostVideoSession.deleteOne({ _id: existing._id });
+      } else {
+        const ticket = await refreshSessionTicket(existing);
+        return ok(200, {
+          message: 'Video upload session created.',
+          session: ticket,
+        });
+      }
+    } catch (error) {
+      console.error('reuseVideoUploadSession', existing.bunny_video_id, error.response?.data || error.message);
+      const ticket = await refreshSessionTicket(existing);
+      return ok(200, {
+        message: 'Video upload session created.',
+        session: ticket,
+      });
+    }
   }
 
   let createdGuid = null;
@@ -78,7 +125,7 @@ const createVideoUploadSession = async (partnerId) => {
     const expiresAt = new Date(ticket.expiration_time * 1000);
 
     await PartnerPostVideoSession.create({
-      partner_id: partnerResult.data.partnerOid,
+      partner_id: partnerOid,
       bunny_video_id: createdGuid,
       expires_at: expiresAt,
       consumed_post_id: null,
@@ -109,8 +156,7 @@ const consumeVideoSession = async (partnerId, bunnyVideoId, postId) => {
     {
       partner_id: partnerId,
       bunny_video_id: videoId,
-      consumed_post_id: null,
-      expires_at: { $gt: new Date() },
+      $or: [{ consumed_post_id: null }, { consumed_post_id: postId }],
     },
     { $set: { consumed_post_id: postId, consumed_at: new Date() } },
     { new: true }
@@ -167,7 +213,11 @@ const attachVideoToNewPost = async (partnerId, bunnyVideoId, post) => {
     return fail(400, TOO_LONG_MESSAGE);
   }
 
-  post.video = resolved.video;
+  post.video = pickVideoAfterResolve(
+    resolved,
+    consumed.data.session,
+    parseBunnyVideoId(bunnyVideoId)
+  );
   post.media_type = POST_MEDIA_TYPE_VIDEO;
   post.image_urls = [];
   post.updated_at = new Date();
@@ -189,7 +239,11 @@ const replacePostVideo = async (partnerId, post, bunnyVideoId) => {
 
   post.media_type = POST_MEDIA_TYPE_VIDEO;
   post.image_urls = [];
-  post.video = resolved.video;
+  post.video = pickVideoAfterResolve(
+    resolved,
+    consumed.data.session,
+    parseBunnyVideoId(bunnyVideoId)
+  );
   post.updated_at = new Date();
   await post.save();
 
@@ -223,10 +277,14 @@ const postNeedsVideoSync = (post) =>
 const syncPostVideoFromBunny = async (post) => {
   if (!postNeedsVideoSync(post)) return post;
 
-  const resolved = await resolveVideoFieldsFromBunny(post.video.bunny_video_id);
+  const videoId = post.video.bunny_video_id;
+  const [resolved, session] = await Promise.all([
+    resolveVideoFieldsFromBunny(videoId),
+    PartnerPostVideoSession.findOne({ bunny_video_id: videoId }).lean(),
+  ]);
   const next = resolved.overDuration
-    ? applyFailedVideo(post.video.bunny_video_id, TOO_LONG_MESSAGE)
-    : resolved.video;
+    ? applyFailedVideo(videoId, TOO_LONG_MESSAGE)
+    : pickVideoAfterResolve(resolved, session, videoId);
 
   if (next.status === post.video.status && (next.hls_url || '') === (post.video.hls_url || '')) {
     return post;
@@ -247,13 +305,31 @@ const syncPostsVideosFromBunny = async (posts = []) => {
   return posts;
 };
 
+const parseWebhookVideoId = (payload) =>
+  parseBunnyVideoId(payload?.VideoGuid || payload?.videoGuid || payload?.guid);
+
+const parseWebhookStatus = (payload) => {
+  const raw = payload?.Status ?? payload?.status;
+  const status = Number(raw);
+  return Number.isFinite(status) ? status : null;
+};
+
 const applyWebhookStatusToPost = async (payload) => {
-  const videoId = parseBunnyVideoId(payload?.VideoGuid);
+  const videoId = parseWebhookVideoId(payload);
   if (!videoId) {
     return { ok: true, ignored: true };
   }
 
-  const status = Number(payload?.Status);
+  const status = parseWebhookStatus(payload);
+  if (status == null) {
+    return { ok: true, ignored: true };
+  }
+
+  await PartnerPostVideoSession.updateOne(
+    { bunny_video_id: videoId },
+    { $set: { last_webhook_status: status, last_webhook_at: new Date() } }
+  );
+
   const post = await PartnerPost.findOne({
     'video.bunny_video_id': videoId,
     deleted_at: null,
@@ -282,7 +358,10 @@ const applyWebhookStatusToPost = async (payload) => {
     return { ok: true, ignored: false };
   }
 
-  post.video = resolved.video;
+  post.video =
+    resolved.video.status === VIDEO_STATUS_READY
+      ? resolved.video
+      : applyReadyPlayback(videoId, resolved.video.duration_seconds);
   post.updated_at = new Date();
   await post.save();
   return { ok: true, ignored: false };

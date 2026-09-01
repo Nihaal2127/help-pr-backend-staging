@@ -15,6 +15,8 @@ const partnerPostVideoSessionSchema = new mongoose.Schema(
       ref: 'partner_post',
     },
     consumed_at: { type: Date, default: null },
+    last_webhook_status: { type: Number, default: null },
+    last_webhook_at: { type: Date, default: null },
     created_at: { type: Date, default: Date.now },
   },
   { timestamps: false }

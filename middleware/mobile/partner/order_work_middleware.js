@@ -1,5 +1,5 @@
 const { normalizePartnerWorkStatus } = require('../../../enum/partner_work_status_enum');
-const { MIN_IMAGES, MAX_IMAGES } = require('../../../services/partner_post_common_service');
+const { inspectCompleteOrderMedia } = require('../../../services/mobile/partner/complete_order_media');
 const { fieldLabel } = require('../../../utils/field_labels');
 
 const sendError = (res, status, message) =>
@@ -23,13 +23,9 @@ const validateUpdateWorkStatusBody = (req, res, next) => {
 };
 
 const validateCompleteOrderWorkBody = (req, res, next) => {
-  const files = req.files || [];
-  if (files.length < MIN_IMAGES || files.length > MAX_IMAGES) {
-    return sendError(
-      res,
-      400,
-      `Provide between ${MIN_IMAGES} and ${MAX_IMAGES} proof images.`
-    );
+  const inspected = inspectCompleteOrderMedia(req.files || [], req.body);
+  if (inspected.error) {
+    return sendError(res, 400, inspected.error);
   }
 
   next();

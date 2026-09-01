@@ -22,14 +22,12 @@ const { embedOrderDetailForeignKeys } = require('../../../utils/list_aggregation
 const { stripAdminDescriptionForPublicApi } = require('../../../utils/admin_description_access');
 const { attachPartnerOrderSummary } = require('../../../utils/partner_order_summary');
 const {
-  MIN_IMAGES,
-  MAX_IMAGES,
   MAX_DESCRIPTION_LENGTH,
   assertOrderPostLinkPreconditions,
   createOrderPostFromUrls,
 } = require('../../partner_post_common_service');
 const { createOrderPostFromVideo } = require('../../partner_post_video_service');
-const { parseBunnyVideoId } = require('../../../enum/post_media_enum');
+const { inspectCompleteOrderMedia } = require('./complete_order_media');
 
 const { fail, ok } = require('../../../utils/mobile_service_result');
 const {
@@ -119,10 +117,11 @@ const updatePartnerWorkStatus = async (partnerId, orderId, body) => {
 
 const completePartnerOrderWork = async (partnerId, orderId, body, files) => {
   try {
-    const imageFiles = Array.isArray(files) ? files : [];
-    if (imageFiles.length < MIN_IMAGES || imageFiles.length > MAX_IMAGES) {
-      return fail(400, `Provide between ${MIN_IMAGES} and ${MAX_IMAGES} proof images.`);
+    const media = inspectCompleteOrderMedia(files, body);
+    if (media.error) {
+      return fail(400, media.error);
     }
+    const { imageFiles, bunnyVideoId } = media;
 
     const loaded = await loadPartnerOrder(partnerId, orderId);
     if (!loaded.ok) return loaded;
@@ -183,7 +182,7 @@ const completePartnerOrderWork = async (partnerId, orderId, body, files) => {
       if (!postPrecheck.ok) return postPrecheck;
     }
 
-    const imageUrls = await uploadWorkProofImages(imageFiles);
+    const imageUrls = imageFiles.length ? await uploadWorkProofImages(imageFiles) : [];
     const now = new Date();
 
     order.work_proof_image_urls = imageUrls;
@@ -214,7 +213,6 @@ const completePartnerOrderWork = async (partnerId, orderId, body, files) => {
     let post = null;
     let postError = null;
     if (publishAsPost) {
-      const bunnyVideoId = parseBunnyVideoId(body?.bunny_video_id);
       const postResult = bunnyVideoId
         ? await createOrderPostFromVideo(partnerId, order._id, bunnyVideoId, description)
         : await createOrderPostFromUrls(partnerId, order._id, imageUrls, description);

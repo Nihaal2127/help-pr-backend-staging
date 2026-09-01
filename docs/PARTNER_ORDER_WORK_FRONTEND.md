@@ -1,6 +1,6 @@
 # Partner order work — frontend integration guide
 
-This document describes how the **partner mobile app** starts work on an assigned order, completes it with proof photos, and **optionally** publishes the job to the **customer feed** (partner post).
+This document describes how the **partner mobile app** starts work on an assigned order, completes it with proof (photos and/or one video), and **optionally** publishes the job to the **customer feed** (partner post).
 
 Share with mobile (Flutter) developers together with:
 
@@ -52,7 +52,7 @@ Partner taps "Start work"
   order_status         = in-progress   (unchanged)
   partner_work_status  = in-progress
 
-Partner taps "Complete" (customer fully paid + proof photos)
+Partner taps "Complete" (customer fully paid + proof images and/or video)
   order_status         = completed
   partner_work_status  = completed
 ```
@@ -77,8 +77,8 @@ Partners **cannot** set `order_status` directly. They only move `partner_work_st
        → Wait until user_payment_status === "paid"
 
 5. POST /api/mobile/partner/orders/:orderId/complete
-       → Upload 1–4 proof images; optionally publish to customer feed
-          (images or one video via bunny_video_id)
+       → Upload 1–4 proof images, one video (`bunny_video_id`), or both;
+          optionally publish to customer feed
 ```
 
 **Feed post is optional** at step 4 (`publish_as_post=false` by default). The partner can also create a post later via **`POST /api/mobile/partner/posts`** (see `PARTNER_POST_FRONTEND.md`).
@@ -93,8 +93,8 @@ Use these fields from order detail (`GET /orders/:orderId`):
 |----------------------|------------------------|----------------|---------------------|
 | `pending` | any | `in-progress` | **Start work** button |
 | `in-progress` | not `paid` | `in-progress` | “Waiting for customer payment” — disable **Complete** |
-| `in-progress` | `paid` | `in-progress` | **Complete job** — photo picker + optional “Share to feed” toggle |
-| `completed` | `paid` | `completed` | Done — show `work_proof_image_urls`, link to post if any |
+| `in-progress` | `paid` | `in-progress` | **Complete job** — photo picker and/or video + optional “Share to feed” toggle |
+| `completed` | `paid` | `completed` | Done — show `work_proof_image_urls` (may be empty for video-only), link to post if any |
 
 Use **`partner_summary`** for all partner money UI (on **GET order detail**, **start work**, **complete**, and `order.partner_summary` after additional-charge CRUD). Do **not** show `total_price` as partner earnings.
 
@@ -160,7 +160,7 @@ GET /api/mobile/partner/orders/:orderId
 |-------|------|-------|
 | `partner_work_status` | string | `pending` \| `in-progress` \| `completed` |
 | `partner_work_status_info` | array | Timeline: `status`, `updated_at`, `updated_by_id`, `actor_role` |
-| `work_proof_image_urls` | string[] | Proof photos after completion |
+| `work_proof_image_urls` | string[] | Proof photos after completion (empty if video-only) |
 | `work_completion_description` | string | Optional notes from complete request |
 | `work_completed_at` | ISO date | When partner completed |
 | `partner_post_id` | string \| null | Linked feed post if created |
@@ -252,12 +252,16 @@ Content-Type: multipart/form-data
 
 | Field | Required | Notes |
 |-------|----------|-------|
-| `images` | **Yes** | **1–4** JPEG/PNG files — proof of service (stored on the order) |
+| `images` | One of images / video / both | **0–4** JPEG/PNG files. Stored on the order as `work_proof_image_urls`. Omit entirely for video-only. |
+| `bunny_video_id` | One of images / video / both | From `POST /api/mobile/partner/posts/video-upload-session` after TUS upload. Required when there are no `images`. |
 | `publish_as_post` | No | `true` \| `false` — default **`false`** |
 | `description` | If posting | Max 500 chars; **required when** `publish_as_post=true` |
 | `post_description` | No | Alias for `description` |
 | `work_completion_description` | No | Alias for `description` (stored on order) |
-| `bunny_video_id` | If video feed post | From `POST /api/mobile/partner/posts/video-upload-session` after TUS upload. Proof images are still required on the **order**; the **feed post** uses this video instead of those photos. |
+
+Send **at least one** of: 1–4 `images`, or `bunny_video_id`, or both. Completing with neither is **400**.
+
+If `publish_as_post=true`, the **feed post** is still one type: **video** when `bunny_video_id` is present, otherwise **images**. Mix does **not** put photos and video on the same post — photos stay on the order as proof, video goes to the feed.
 
 **Preconditions (server-enforced):**
 
@@ -265,7 +269,7 @@ Content-Type: multipart/form-data
 2. Customer fully paid: `user_payment_status` = `paid` (net paid ≥ `total_price`)
 3. `order_status` = `in-progress`
 
-**Example — complete only (no feed post):**
+**Example — images only (no feed post):**
 
 ```
 images:           [photo1.jpg, photo2.jpg]
@@ -273,7 +277,7 @@ publish_as_post:  false
 description:      Kitchen deep clean done.   (optional)
 ```
 
-**Example — complete + publish to customer feed:**
+**Example — images only + publish to customer feed:**
 
 ```
 images:           [photo1.jpg, photo2.jpg]
@@ -281,16 +285,24 @@ publish_as_post:  true
 description:      Before/after kitchen deep clean for order #ORD-123
 ```
 
-**Example — complete + publish a video to the customer feed:**
+**Example — video only + publish to customer feed:**
 
 ```
-images:           [photo1.jpg, photo2.jpg]   (order proof, still required)
 publish_as_post:  true
 description:      Before/after kitchen deep clean for order #ORD-123
 bunny_video_id:   657bb740-a71b-4529-a012-528021c31a92
 ```
 
-Trim the clip to ≤ 60s, call `POST /api/mobile/partner/posts/video-upload-session`, TUS-upload to Bunny, then pass `bunny_video_id` here.
+**Example — mix (proof photos on the order + video on the feed):**
+
+```
+images:           [photo1.jpg, photo2.jpg]
+publish_as_post:  true
+description:      Before/after kitchen deep clean for order #ORD-123
+bunny_video_id:   657bb740-a71b-4529-a012-528021c31a92
+```
+
+Trim the clip to ≤ 60s, call `POST /api/mobile/partner/posts/video-upload-session`, TUS-upload to Bunny, then pass `bunny_video_id` here. Do not attach the video file on `/complete`.
 
 **200 response:**
 
@@ -318,7 +330,7 @@ Trim the clip to ≤ 60s, call `POST /api/mobile/partner/posts/video-upload-sess
 
 | Status | When |
 |--------|------|
-| `400` | Wrong image count; missing `description` when `publish_as_post=true` |
+| `400` | No images and no `bunny_video_id`; more than 4 images; missing `description` when `publish_as_post=true` |
 | `404` | Order not found |
 | `409` | Customer not fully paid; work not started; order already completed/cancelled |
 
@@ -338,7 +350,7 @@ Example payment error (`409`):
 
 ### Option A — On complete (recommended UX)
 
-Set `publish_as_post=true` on **`POST .../complete`**. Same proof images are reused for the feed post. One API call.
+Set `publish_as_post=true` on **`POST .../complete`**. One API call. The feed post uses the video when `bunny_video_id` is sent, otherwise the proof images.
 
 ### Option B — After complete
 
@@ -361,8 +373,8 @@ See **`docs/PARTNER_POST_FRONTEND.md`** for full post / feed / like / share APIs
 
 Use `multipart/form-data`:
 
-- Field name for files: **`images`** (repeat for each file, same as existing Posts API)
-- Text fields: `publish_as_post`, `description`
+- Field name for files: **`images`** (optional; 0–4 files, same as existing Posts API)
+- Text fields: `publish_as_post`, `description`, `bunny_video_id` (when posting a video)
 
 ### Polling payment status
 

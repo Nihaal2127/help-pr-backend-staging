@@ -637,6 +637,25 @@ const safeNotifyQuoteAssigned = async ({ quote, actorUserId }) => {
       },
       dedupeKeyPrefix: `quote.assigned:${quote._id}`,
     });
+
+    if (!quote.user_id) return;
+
+    await notify({
+      eventKey: "QUOTE_STATUS_CHANGED",
+      actorUserId,
+      recipientUserIds: [quote.user_id],
+      context: { quote, previousStatus: "new", newStatus: "pending" },
+      entityType: "quote",
+      entityId: quote._id,
+      franchiseId: quote.franchise_id,
+      metadata: {
+        quote_id: quote._id,
+        quote_sequence_id: quote.quote_sequence_id,
+        previousStatus: "new",
+        newStatus: "pending",
+      },
+      dedupeKeyPrefix: `quote.status:${quote._id}:pending`,
+    });
   });
 };
 

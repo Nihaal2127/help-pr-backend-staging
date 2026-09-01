@@ -27,6 +27,7 @@ const {
   mapPostRecords,
   parseRejectionReason,
 } = require('./partner_post_common_service');
+const { syncPostsVideosFromBunny } = require('./partner_post_video_service');
 
 const MAX_ADMIN_LIMIT = 100;
 
@@ -250,6 +251,8 @@ const listAllPosts = async (req, query) => {
     PartnerPost.countDocuments(filter),
     PartnerPost.find(filter).sort({ created_at: -1 }).skip(skip).limit(limit).lean(),
   ]);
+
+  await syncPostsVideosFromBunny(posts);
 
   const records = await mapPostRecords(posts, { includePartner: true });
   const totalPages = Math.ceil(totalItems / limit) || 0;

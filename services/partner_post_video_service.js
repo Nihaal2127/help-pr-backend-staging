@@ -135,17 +135,16 @@ const resolveVideoFieldsFromBunny = async (bunnyVideoId) => {
       return { video: applyFailedVideo(videoId, 'Video processing failed.'), overDuration: false };
     }
 
-    const length = getBunnyVideoLengthSeconds(bunnyVideo);
-    if (length > MAX_VIDEO_DURATION_SECONDS) {
-      await deleteBunnyVideo(videoId);
-      return {
-        video: applyFailedVideo(videoId, TOO_LONG_MESSAGE),
-        overDuration: true,
-      };
-    }
-
-    if (isBunnyVideoFinished(bunnyVideo) && length > 0) {
-      return { video: applyReadyPlayback(videoId, length), overDuration: false };
+    if (isBunnyVideoFinished(bunnyVideo)) {
+      const length = getBunnyVideoLengthSeconds(bunnyVideo);
+      if (length > MAX_VIDEO_DURATION_SECONDS) {
+        await deleteBunnyVideo(videoId);
+        return {
+          video: applyFailedVideo(videoId, TOO_LONG_MESSAGE),
+          overDuration: true,
+        };
+      }
+      return { video: applyReadyPlayback(videoId, length || null), overDuration: false };
     }
 
     return { video: buildProcessingVideo(videoId), overDuration: false };
@@ -214,6 +213,38 @@ const deleteStoredPostVideo = async (post) => {
   const videoId = post?.video?.bunny_video_id;
   if (!videoId) return;
   await deleteBunnyVideo(videoId);
+};
+
+const postNeedsVideoSync = (post) =>
+  post?.media_type === POST_MEDIA_TYPE_VIDEO &&
+  post.video?.status === VIDEO_STATUS_PROCESSING &&
+  Boolean(parseBunnyVideoId(post.video?.bunny_video_id));
+
+const syncPostVideoFromBunny = async (post) => {
+  if (!postNeedsVideoSync(post)) return post;
+
+  const resolved = await resolveVideoFieldsFromBunny(post.video.bunny_video_id);
+  const next = resolved.overDuration
+    ? applyFailedVideo(post.video.bunny_video_id, TOO_LONG_MESSAGE)
+    : resolved.video;
+
+  if (next.status === post.video.status && (next.hls_url || '') === (post.video.hls_url || '')) {
+    return post;
+  }
+
+  await PartnerPost.updateOne(
+    { _id: post._id },
+    { $set: { video: next, updated_at: new Date() } }
+  );
+  post.video = next;
+  return post;
+};
+
+const syncPostsVideosFromBunny = async (posts = []) => {
+  const targets = posts.filter(postNeedsVideoSync);
+  if (targets.length === 0) return posts;
+  await Promise.all(targets.map((post) => syncPostVideoFromBunny(post)));
+  return posts;
 };
 
 const applyWebhookStatusToPost = async (payload) => {
@@ -317,6 +348,7 @@ module.exports = {
   clearPostVideo,
   deleteStoredPostVideo,
   applyWebhookStatusToPost,
+  syncPostsVideosFromBunny,
   createOrderPostFromVideo,
   TOO_LONG_MESSAGE,
 };

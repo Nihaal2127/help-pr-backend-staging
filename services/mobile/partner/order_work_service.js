@@ -28,6 +28,8 @@ const {
   assertOrderPostLinkPreconditions,
   createOrderPostFromUrls,
 } = require('../../partner_post_common_service');
+const { createOrderPostFromVideo } = require('../../partner_post_video_service');
+const { parseBunnyVideoId } = require('../../../enum/post_media_enum');
 
 const { fail, ok } = require('../../../utils/mobile_service_result');
 const {
@@ -212,12 +214,10 @@ const completePartnerOrderWork = async (partnerId, orderId, body, files) => {
     let post = null;
     let postError = null;
     if (publishAsPost) {
-      const postResult = await createOrderPostFromUrls(
-        partnerId,
-        order._id,
-        imageUrls,
-        description
-      );
+      const bunnyVideoId = parseBunnyVideoId(body?.bunny_video_id);
+      const postResult = bunnyVideoId
+        ? await createOrderPostFromVideo(partnerId, order._id, bunnyVideoId, description)
+        : await createOrderPostFromUrls(partnerId, order._id, imageUrls, description);
       if (!postResult.ok) {
         postError = postResult.message;
       } else {

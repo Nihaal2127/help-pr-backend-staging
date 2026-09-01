@@ -13,6 +13,11 @@ const { fieldLabel } = require('../utils/field_labels');
 const { USER_TYPE_PARTNER } = require('../constants/user_types');
 const { POST_TYPE_ORDER, POST_TYPE_LEGACY_WORK } = require('../enum/post_type_enum');
 const { POST_STATUS_PENDING, POST_STATUS_PUBLISHED } = require('../enum/post_report_reason_enum');
+const {
+  POST_MEDIA_TYPE_IMAGE,
+  POST_MEDIA_TYPE_VIDEO,
+  VIDEO_STATUS_READY,
+} = require('../enum/post_media_enum');
 const { ORDER_STATUS_COMPLETED } = require('../enum/order_status_enum');
 const { safeNotifyBackofficePartnerPostPending } = require('../src/modules/notifications/services/backofficeHooks');
 
@@ -240,6 +245,7 @@ const createOrderPostFromUrls = async (partnerId, orderId, imageUrls, descriptio
     service_id: orderLink.data.service_id,
     legacy_service_name: '',
     description: descParsed.text,
+    media_type: POST_MEDIA_TYPE_IMAGE,
     image_urls: urls,
     status: POST_STATUS_PENDING,
     share_token: generateShareToken(),
@@ -501,6 +507,20 @@ const buildLinkedBlock = (post, { categoryById, serviceById, orderDetail = null 
   return null;
 };
 
+const mapPostVideo = (post) => {
+  if (post.media_type !== POST_MEDIA_TYPE_VIDEO || !post.video || !post.video.bunny_video_id) {
+    return null;
+  }
+  return {
+    bunny_video_id: post.video.bunny_video_id,
+    hls_url: post.video.hls_url || '',
+    thumbnail_url: post.video.thumbnail_url || '',
+    duration_seconds: post.video.duration_seconds ?? null,
+    status: post.video.status || '',
+    failure_reason: post.video.failure_reason || '',
+  };
+};
+
 const mapPostRecord = (post, options = {}) => {
   const {
     userId = null,
@@ -526,7 +546,9 @@ const mapPostRecord = (post, options = {}) => {
     franchise_id: post.franchise_id,
     post_type: post.post_type,
     description: post.description,
-    image_urls: post.image_urls || [],
+    media_type: post.media_type === POST_MEDIA_TYPE_VIDEO ? POST_MEDIA_TYPE_VIDEO : POST_MEDIA_TYPE_IMAGE,
+    image_urls: post.media_type === POST_MEDIA_TYPE_VIDEO ? [] : post.image_urls || [],
+    video: mapPostVideo(post),
     status: post.status,
     rejection_reason: post.rejection_reason || '',
     share_token: post.share_token,
@@ -596,9 +618,17 @@ const mapPostRecords = async (posts, options = {}) => {
   );
 };
 
+const customerVisibleMediaFilter = () => ({
+  $or: [
+    { media_type: { $ne: POST_MEDIA_TYPE_VIDEO } },
+    { media_type: POST_MEDIA_TYPE_VIDEO, 'video.status': VIDEO_STATUS_READY },
+  ],
+});
+
 const publishedPostFilter = (extra = {}) => ({
   status: POST_STATUS_PUBLISHED,
   deleted_at: null,
+  ...customerVisibleMediaFilter(),
   ...extra,
 });
 
@@ -637,8 +667,8 @@ const normalizePartnerObjectIds = (partnerIds = []) => {
  * Batch engagement totals keyed by partner id string.
  * Uses denormalized likes_count / shares_count on each post so totals match
  * summing the values shown on post cards. images_count is the total number of
- * images on those same posts (1–4 per post). video_count is always 0 until
- * video posts are implemented.
+ * images on those same posts (1–4 per post). video_count is the number of
+ * video posts (one video per post).
  *
  * @param {Array<string|import('mongoose').Types.ObjectId>} partnerIds
  * @param {{ publishedOnly?: boolean }} [options]
@@ -659,6 +689,7 @@ const getPartnersEngagementCountsByPartnerIds = async (
   };
   if (publishedOnly) {
     postMatch.status = POST_STATUS_PUBLISHED;
+    Object.assign(postMatch, customerVisibleMediaFilter());
   }
 
   const savePostMatch = {
@@ -667,6 +698,10 @@ const getPartnersEngagementCountsByPartnerIds = async (
   };
   if (publishedOnly) {
     savePostMatch['post.status'] = POST_STATUS_PUBLISHED;
+    savePostMatch.$or = [
+      { 'post.media_type': { $ne: POST_MEDIA_TYPE_VIDEO } },
+      { 'post.media_type': POST_MEDIA_TYPE_VIDEO, 'post.video.status': VIDEO_STATUS_READY },
+    ];
   }
 
   const [postAgg, savesAgg] = await Promise.all([
@@ -683,6 +718,11 @@ const getPartnersEngagementCountsByPartnerIds = async (
                 { $size: '$image_urls' },
                 0,
               ],
+            },
+          },
+          video_count: {
+            $sum: {
+              $cond: [{ $eq: ['$media_type', POST_MEDIA_TYPE_VIDEO] }, 1, 0],
             },
           },
           likes_count: { $sum: { $ifNull: ['$likes_count', 0] } },
@@ -716,7 +756,7 @@ const getPartnersEngagementCountsByPartnerIds = async (
       ...current,
       posts_count: Math.max(0, Number(row.posts_count) || 0),
       images_count: Math.max(0, Number(row.images_count) || 0),
-      video_count: 0,
+      video_count: Math.max(0, Number(row.video_count) || 0),
       likes_count: Math.max(0, Number(row.likes_count) || 0),
       shares_count: Math.max(0, Number(row.shares_count) || 0),
     });

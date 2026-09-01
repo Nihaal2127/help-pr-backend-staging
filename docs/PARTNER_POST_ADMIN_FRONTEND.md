@@ -71,6 +71,8 @@ All `/api/partner-post/*` routes require `authMiddleware` + `requireBackoffice`.
 
 Image URLs in `image_urls` are CDN-prefixed by the global response middleware in production (same as mobile post APIs).
 
+Posts may be **images** (`media_type: "image"`) or **one video** (`media_type: "video"`). For video posts, inspect `video.status` (`processing` / `ready` / `failed`) and play `video.hls_url` when `ready`. Customer feed hides video posts until they are both `published` and `ready`.
+
 ---
 
 ## 3. Status values
@@ -80,7 +82,7 @@ Image URLs in `image_urls` are CDN-prefixed by the global response middleware in
 | Status | Meaning | Customer visibility |
 |--------|---------|-------------------|
 | `pending` | Awaiting admin approval (default on create) | Hidden |
-| `published` | Approved / live | Visible in feed, profile, detail, share |
+| `published` | Approved / live | Visible in feed, profile, detail, share (video posts also need `video.status === ready`) |
 | `rejected` | Admin rejected (`rejection_reason` set) | Hidden |
 | `hidden` | Temporarily hidden by admin | Hidden from customers |
 | `removed` | Taken down by admin | Hidden from customers |
@@ -260,6 +262,8 @@ GET /api/partner-post/getAll?page=1&limit=10&status=&partner_id=665a1b2c3d4e5f67
   "post_type": "order",
   "description": "Kitchen renovation completed last week.",
   "image_urls": ["https://cdn.example.com/partner_post/uuid_file.jpg"],
+  "media_type": "image",
+  "video": null,
   "status": "published",
   "share_token": "abc123...",
   "share_url": "helppr://post/abc123...",

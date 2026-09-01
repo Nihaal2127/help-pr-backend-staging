@@ -10,6 +10,17 @@ const { POST_STATUS_PENDING, POST_STATUS_REJECTED } = require('../../../enum/pos
 const { ORDER_STATUS_COMPLETED } = require('../../../enum/order_status_enum');
 const { fieldLabel } = require('../../../utils/field_labels');
 const {
+  POST_MEDIA_TYPE_IMAGE,
+  POST_MEDIA_TYPE_VIDEO,
+  parseBunnyVideoId,
+} = require('../../../enum/post_media_enum');
+const {
+  attachVideoToNewPost,
+  replacePostVideo,
+  clearPostVideo,
+  deleteStoredPostVideo,
+} = require('../../partner_post_video_service');
+const {
   fail,
   ok,
   DEFAULT_PAGE,
@@ -101,7 +112,14 @@ const createPartnerPost = async (partnerId, body, files) => {
   if (!descParsed.ok) return fail(400, descParsed.message);
 
   const imageFiles = Array.isArray(files) ? files : [];
-  if (imageFiles.length < MIN_IMAGES || imageFiles.length > MAX_IMAGES) {
+  const bunnyVideoId = parseBunnyVideoId(body.bunny_video_id);
+  const isVideoPost = Boolean(bunnyVideoId);
+
+  if (isVideoPost && imageFiles.length > 0) {
+    return fail(400, 'A post can have 1–4 images or 1 video, not both.');
+  }
+
+  if (!isVideoPost && (imageFiles.length < MIN_IMAGES || imageFiles.length > MAX_IMAGES)) {
     return fail(400, `Provide between ${MIN_IMAGES} and ${MAX_IMAGES} images.`);
   }
 
@@ -140,7 +158,11 @@ const createPartnerPost = async (partnerId, body, files) => {
     serviceOid = refs.data.serviceOid;
   }
 
-  const imageUrls = await uploadPostImages(imageFiles);
+  let imageUrls = [];
+  if (!isVideoPost) {
+    imageUrls = await uploadPostImages(imageFiles);
+  }
+
   const now = new Date();
 
   const post = await PartnerPost.create({
@@ -152,6 +174,7 @@ const createPartnerPost = async (partnerId, body, files) => {
     service_id: serviceOid,
     legacy_service_name: legacyServiceName,
     description: descParsed.text,
+    media_type: isVideoPost ? POST_MEDIA_TYPE_VIDEO : POST_MEDIA_TYPE_IMAGE,
     image_urls: imageUrls,
     status: POST_STATUS_PENDING,
     share_token: generateShareToken(),
@@ -162,6 +185,11 @@ const createPartnerPost = async (partnerId, body, files) => {
     updated_at: now,
     deleted_at: null,
   });
+
+  if (isVideoPost) {
+    const attached = await attachVideoToNewPost(partnerOid, bunnyVideoId, post);
+    if (!attached.ok) return attached;
+  }
 
   await safeNotifyBackofficePartnerPostPending({
     post: post.toObject(),
@@ -318,37 +346,17 @@ const updatePartnerPost = async (partnerId, postId, body, files) => {
   }
 
   const imageFiles = Array.isArray(files) ? files : [];
+  const bunnyVideoId = parseBunnyVideoId(body.bunny_video_id);
   const keepExistingRaw = body.keep_existing_images;
-  let keepExisting = [];
+  const keepSpecified =
+    keepExistingRaw !== undefined &&
+    keepExistingRaw !== null &&
+    (Array.isArray(keepExistingRaw) || String(keepExistingRaw).trim() !== '');
+  const wantsImageUpdate = imageFiles.length > 0 || keepSpecified;
 
-  if (keepExistingRaw !== undefined && keepExistingRaw !== null && String(keepExistingRaw).trim() !== '') {
-    try {
-      const parsedKeep =
-        typeof keepExistingRaw === 'string' ? JSON.parse(keepExistingRaw) : keepExistingRaw;
-      if (!Array.isArray(parsedKeep)) {
-        return fail(400, `${fieldLabel('keep_existing_images')} must be a JSON array of image URLs to retain.`);
-      }
-      keepExisting = parsedKeep.map((u) => String(u).trim()).filter(Boolean);
-    } catch {
-      return fail(400, `${fieldLabel('keep_existing_images')} must be valid JSON.`);
-    }
-  } else if (imageFiles.length > 0) {
-    keepExisting = [];
-  } else {
-    keepExisting = [...(post.image_urls || [])];
+  if (bunnyVideoId && wantsImageUpdate) {
+    return fail(400, 'A post can have 1–4 images or 1 video, not both.');
   }
-
-  const finalImages = [...keepExisting];
-  if (imageFiles.length > 0) {
-    const uploaded = await uploadPostImages(imageFiles);
-    finalImages.push(...uploaded);
-  }
-
-  if (finalImages.length < MIN_IMAGES || finalImages.length > MAX_IMAGES) {
-    return fail(400, `Post must have between ${MIN_IMAGES} and ${MAX_IMAGES} images.`);
-  }
-
-  updates.image_urls = finalImages;
 
   const wasRejected = post.status === POST_STATUS_REJECTED;
   if (wasRejected) {
@@ -356,8 +364,51 @@ const updatePartnerPost = async (partnerId, postId, body, files) => {
     updates.rejection_reason = '';
   }
 
-  Object.assign(post, updates);
-  await post.save();
+  if (bunnyVideoId) {
+    Object.assign(post, updates);
+    const replaced = await replacePostVideo(partnerResult.data.partnerOid, post, bunnyVideoId);
+    if (!replaced.ok) return replaced;
+  } else if (wantsImageUpdate) {
+    let keepExisting = [];
+
+    if (keepSpecified) {
+      try {
+        const parsedKeep =
+          typeof keepExistingRaw === 'string' ? JSON.parse(keepExistingRaw) : keepExistingRaw;
+        if (!Array.isArray(parsedKeep)) {
+          return fail(400, `${fieldLabel('keep_existing_images')} must be a JSON array of image URLs to retain.`);
+        }
+        keepExisting = parsedKeep.map((u) => String(u).trim()).filter(Boolean);
+      } catch {
+        return fail(400, `${fieldLabel('keep_existing_images')} must be valid JSON.`);
+      }
+    } else if (imageFiles.length > 0) {
+      keepExisting = [];
+    }
+
+    const finalImages = [...keepExisting];
+    if (imageFiles.length > 0) {
+      const uploaded = await uploadPostImages(imageFiles);
+      finalImages.push(...uploaded);
+    }
+
+    if (finalImages.length < MIN_IMAGES || finalImages.length > MAX_IMAGES) {
+      return fail(400, `Post must have between ${MIN_IMAGES} and ${MAX_IMAGES} images.`);
+    }
+
+    if (post.media_type === POST_MEDIA_TYPE_VIDEO) {
+      await clearPostVideo(post);
+    }
+
+    updates.media_type = POST_MEDIA_TYPE_IMAGE;
+    updates.image_urls = finalImages;
+    Object.assign(post, updates);
+    post.set('video', undefined);
+    await post.save();
+  } else {
+    Object.assign(post, updates);
+    await post.save();
+  }
 
   if (wasRejected) {
     await safeNotifyBackofficePartnerPostPending({
@@ -390,6 +441,7 @@ const deletePartnerPost = async (partnerId, postId) => {
   post.deleted_at = new Date();
   post.updated_at = new Date();
   await post.save();
+  await deleteStoredPostVideo(post);
 
   return ok(200, { message: 'Post deleted successfully.' });
 };

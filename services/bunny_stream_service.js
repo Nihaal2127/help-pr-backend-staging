@@ -171,7 +171,16 @@ const getBunnyVideoLengthSeconds = (bunnyVideo) => {
   return Number.isFinite(length) ? length : 0;
 };
 
-const isBunnyVideoFinished = (bunnyVideo) => Number(bunnyVideo?.status) === BUNNY_VIDEO_STATUS_FINISHED;
+const isBunnyVideoFinished = (bunnyVideo) => {
+  const status = Number(bunnyVideo?.status);
+  const progress = Number(bunnyVideo?.encodeProgress);
+  const resolutions = String(bunnyVideo?.availableResolutions || '').trim();
+  return (
+    status === BUNNY_VIDEO_STATUS_FINISHED ||
+    progress >= 100 ||
+    (resolutions.length > 0 && getBunnyVideoLengthSeconds(bunnyVideo) > 0)
+  );
+};
 
 const isBunnyVideoFailed = (bunnyVideo) => {
   const status = Number(bunnyVideo?.status);

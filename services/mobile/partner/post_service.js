@@ -19,6 +19,7 @@ const {
   replacePostVideo,
   clearPostVideo,
   deleteStoredPostVideo,
+  syncPostsVideosFromBunny,
 } = require('../../partner_post_video_service');
 const {
   fail,
@@ -218,6 +219,8 @@ const listPartnerPosts = async (partnerId, query) => {
     PartnerPost.find(filter).sort({ created_at: -1 }).skip(skip).limit(limit).lean(),
   ]);
 
+  await syncPostsVideosFromBunny(posts);
+
   const records = await mapPostRecords(posts, { includePartner: true, includeSaveCount: true });
   const totalPages = Math.ceil(totalItems / limit) || 0;
 
@@ -315,6 +318,8 @@ const getPartnerPostById = async (partnerId, postId) => {
   if (!post) {
     return fail(404, 'Post not found.');
   }
+
+  await syncPostsVideosFromBunny([post]);
 
   const mapped = await mapPostRecords([post], { includePartner: true });
   return ok(200, { message: 'Post retrieved successfully.', post: mapped[0] });

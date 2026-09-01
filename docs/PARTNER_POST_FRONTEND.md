@@ -1,6 +1,6 @@
 # Partner posts — frontend integration guide
 
-This document describes the **partner portfolio / post** APIs in `help-pr-backend-staging`. Partners publish work samples (1–4 images + short description) linked to a **completed order** or **legacy pre-app work**. Customers browse a franchise feed and partner profile gallery, and can **like**, **share** (deep link), and **report** posts.
+This document describes the **partner portfolio / post** APIs in `help-pr-backend-staging`. Partners publish work samples (**1–4 images** *or* **1 video** ≤ 60s, plus a short description) linked to a **completed order** or **legacy pre-app work**. Customers browse a franchise feed and partner profile gallery, and can **like**, **share** (deep link), and **report** posts.
 
 Postman: **`postman/Help-PR-Mobile-APIs.postman_collection.json`** — folders **Partner → Posts** and **User → Posts**.
 
@@ -40,8 +40,8 @@ List endpoints include pagination fields at the top level.
 
 | `post_type` | When to use | Required fields |
 |-------------|-------------|-----------------|
-| `order` | Work from a completed in-app order | `order_id`, `description`, 1–4 `images` |
-| `legacy_work` | Work done before joining the app | `legacy_service_name` (min 3 chars), `description`, 1–4 `images` |
+| `order` | Work from a completed in-app order | `order_id`, `description`, **either** 1–4 `images` **or** 1 `bunny_video_id` |
+| `legacy_work` | Work done before joining the app | `legacy_service_name` (min 3 chars), `description`, **either** 1–4 `images` **or** 1 `bunny_video_id` |
 
 Optional on `legacy_work`: `category_id`, `service_id` to tag catalog services.
 
@@ -59,7 +59,11 @@ GET /api/mobile/partner/posts/order-options?page=1&limit=10
 
 Returns completed orders for the logged-in partner. Each row includes `already_linked: true` if that order already has a post.
 
-### 3.2 Create post (multipart)
+### 3.2 Create post
+
+A post is **either images or one video**. Never both.
+
+#### Images (multipart, unchanged)
 
 ```
 POST /api/mobile/partner/posts
@@ -78,16 +82,61 @@ Content-Type: multipart/form-data
 
 **403** if partner is not verified (`verification_status` ≠ 2).
 
+#### Video (trim on device, then TUS to Bunny)
+
+The Bunny Stream **API key is never sent to the app**. Flutter asks this backend for a short-lived TUS ticket, uploads the file **directly to Bunny**, then creates the post with `bunny_video_id`.
+
+1. Trim/export on device to **≤ 60 seconds**.
+2. `POST /api/mobile/partner/posts/video-upload-session` (JSON, partner JWT).
+
+```json
+{
+  "success": true,
+  "status": 200,
+  "message": "Video upload session created.",
+  "data": {
+    "bunny_video_id": "657bb740-a71b-4529-a012-528021c31a92",
+    "library_id": "123456",
+    "tus_endpoint": "https://video.bunnycdn.com/tusupload",
+    "expiration_time": 1750000000,
+    "signature": "hex...",
+    "max_duration_seconds": 60,
+    "tus_headers": {
+      "AuthorizationSignature": "hex...",
+      "AuthorizationExpire": "1750000000",
+      "VideoId": "657bb740-a71b-4529-a012-528021c31a92",
+      "LibraryId": "123456"
+    }
+  }
+}
+```
+
+Pass `tus_headers` as TUS request headers. Do **not** send `AccessKey`. Ticket expires in 1 hour.
+
+3. After TUS upload, create the post:
+
+```
+POST /api/mobile/partner/posts
+```
+
+JSON or multipart. Required: same `post_type` / `description` / `order_id` (or `legacy_service_name`) plus `bunny_video_id`. **No `images` files.**
+
+`video.status` starts as `processing`. Play `video.hls_url` only when `video.status === "ready"`. Server rejects videos longer than 60s after Bunny encoding.
+
 ### 3.3 Manage own posts
 
 | Method | Path | Purpose |
 |--------|------|---------|
 | `GET` | `/posts` | Paginated list of own posts |
 | `GET` | `/posts/:postId` | Single post |
-| `PUT` | `/posts/:postId` | Update description and/or images |
-| `DELETE` | `/posts/:postId` | Soft delete |
+| `PUT` | `/posts/:postId` | Update description and/or media |
+| `DELETE` | `/posts/:postId` | Soft delete (also deletes the Bunny video) |
 
 **Update images:** send `keep_existing_images` as JSON array of URLs to retain, plus new `images` files. Final count must stay 1–4.
+
+**Update / replace video:** send a new `bunny_video_id` from a fresh upload session (no `images`). Switching image ↔ video is a full replace.
+
+Customer feed, profile gallery, detail, like, save, and share only include **published** posts. Video posts also require `video.status === "ready"`. Partner own list still shows `processing` / `failed`.
 
 ---
 
@@ -99,7 +148,7 @@ Content-Type: multipart/form-data
 GET /api/mobile/user/posts/feed?franchise_id={{franchiseId}}&page=1&limit=10
 ```
 
-Returns published posts from subscribed, verified partners in the franchise. Each item includes `partner`, `linked`, counts, `is_liked`, and `share_url`.
+Returns published posts from subscribed, verified partners in the franchise. Video posts appear only after Bunny encoding finishes (`video.status === "ready"`). Each item includes `partner`, `linked`, `media_type`, `image_urls`, `video`, counts, `is_liked`, and `share_url`.
 
 Run **Home** first to obtain `franchise_id`.
 
@@ -188,7 +237,9 @@ Public token resolver (legacy, no auth) still exists: `GET /api/mobile/user/post
   "franchise_id": "...",
   "post_type": "order",
   "description": "Kitchen renovation completed last week.",
+  "media_type": "image",
   "image_urls": ["partner_post/uuid_file.jpg"],
+  "video": null,
   "likes_count": 12,
   "shares_count": 3,
   "reports_count": 0,
@@ -212,7 +263,26 @@ Public token resolver (legacy, no auth) still exists: `GET /api/mobile/user/post
 
 For `legacy_work`, `linked` includes `legacy_service_name` instead of `order_id`.
 
-Image URLs are CDN-prefixed by the global response middleware in production.
+Image URLs are CDN-prefixed by the global response middleware in production. Video `hls_url` / `thumbnail_url` are already absolute Bunny URLs.
+
+**Video post example (`media_type: "video"`):**
+
+```json
+{
+  "media_type": "video",
+  "image_urls": [],
+  "video": {
+    "bunny_video_id": "657bb740-a71b-4529-a012-528021c31a92",
+    "hls_url": "https://vz-xxxxxx.b-cdn.net/657bb740-a71b-4529-a012-528021c31a92/playlist.m3u8",
+    "thumbnail_url": "https://vz-xxxxxx.b-cdn.net/657bb740-a71b-4529-a012-528021c31a92/thumbnail.jpg",
+    "duration_seconds": 42,
+    "status": "ready",
+    "failure_reason": ""
+  }
+}
+```
+
+`video.status`: `processing` | `ready` | `failed`. Play HLS with Chewie / `video_player` only when `ready`.
 
 ---
 

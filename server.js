@@ -92,6 +92,7 @@ const {
   handleWhatsAppWebhookVerify,
   handleWhatsAppWebhookEvent,
 } = require('./controllers/whatsapp_webhook_controller');
+const { handleBunnyStreamWebhook } = require('./controllers/bunny_stream_webhook_controller');
 app.post(
     '/api/razorpay/razorpayWebhook',
     express.raw({ type: 'application/json' }),
@@ -107,6 +108,11 @@ app.post(
     '/api/whatsapp/webhook',
     express.raw({ type: 'application/json' }),
     handleWhatsAppWebhookEvent
+);
+app.post(
+    '/api/webhooks/bunny-stream',
+    express.raw({ type: 'application/json' }),
+    handleBunnyStreamWebhook
 );
 
 // Middleware

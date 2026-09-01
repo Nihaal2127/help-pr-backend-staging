@@ -6,12 +6,24 @@ const {
   updatePartnerPost,
   deletePartnerPost,
 } = require('../../../services/mobile/partner/post_service');
+const { createVideoUploadSession } = require('../../../services/partner_post_video_service');
 const {
   wrapMobileHandler,
   sendServiceError,
   sendPaginatedListWithNestedData,
   sendStatusPayloadResult,
 } = require('../../../utils/mobile_controller_helpers');
+
+const createVideoUploadSessionHandler = wrapMobileHandler(
+  'mobile partner video upload session',
+  async (req, res) => {
+    const result = await createVideoUploadSession(req.user.id);
+    return sendStatusPayloadResult(res, result, (r) => ({
+      message: r.data.message,
+      data: r.data.session,
+    }));
+  }
+);
 
 const createPostHandler = wrapMobileHandler('mobile partner create post', async (req, res) => {
   const result = await createPartnerPost(req.user.id, req.body, req.files);
@@ -74,6 +86,7 @@ const deletePostHandler = wrapMobileHandler('mobile partner delete post', async 
 });
 
 module.exports = {
+  createVideoUploadSessionHandler,
   createPostHandler,
   listPostsHandler,
   listOrderOptionsHandler,

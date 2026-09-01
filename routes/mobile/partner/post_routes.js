@@ -8,6 +8,7 @@ const {
   validateUpdatePostBody,
 } = require('../../../middleware/mobile/partner/post_middleware');
 const {
+  createVideoUploadSessionHandler,
   createPostHandler,
   listPostsHandler,
   listOrderOptionsHandler,
@@ -23,6 +24,7 @@ const postImagesUpload = wrapMulterUpload(uploadImages.array('images', 4));
 router.use(partnerAuthMiddleware, requirePartnerAccount);
 
 router.get('/posts/order-options', listOrderOptionsHandler);
+router.post('/posts/video-upload-session', createVideoUploadSessionHandler);
 router.post('/posts', postImagesUpload, validateCreatePostBody, createPostHandler);
 router.get('/posts', listPostsHandler);
 router.get('/posts/:postId', validatePostIdParam, getPostHandler);

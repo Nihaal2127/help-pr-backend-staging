@@ -202,6 +202,8 @@ const listReports = async (req, query) => {
             description: post.description,
             status: post.status,
             image_urls: post.image_urls,
+            media_type: post.media_type || 'image',
+            video: post.video || null,
             partner: partner
               ? { _id: partner._id, name: partner.name, profile_url: partner.profile_url }
               : null,

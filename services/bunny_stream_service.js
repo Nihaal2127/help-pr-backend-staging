@@ -10,9 +10,12 @@ const BUNNY_WEBHOOK_STATUS_RESOLUTION_FINISHED = 4;
 const BUNNY_WEBHOOK_STATUS_FAILED = 5;
 const BUNNY_WEBHOOK_STATUS_PRESIGNED_UPLOAD_FAILED = 8;
 
+const BUNNY_VIDEO_STATUS_TRANSCODING = 3;
 const BUNNY_VIDEO_STATUS_FINISHED = 4;
 const BUNNY_VIDEO_STATUS_ERROR = 5;
 const BUNNY_VIDEO_STATUS_UPLOAD_FAILED = 6;
+const BUNNY_VIDEO_STATUS_JIT_SEGMENTING = 7;
+const BUNNY_VIDEO_STATUS_JIT_PLAYLISTS_CREATED = 8;
 
 const getLibraryId = () => String(process.env.BUNNY_STREAM_LIBRARY_ID || '').trim();
 const getApiKey = () => String(process.env.BUNNY_STREAM_API_KEY || '').trim();
@@ -171,15 +174,35 @@ const getBunnyVideoLengthSeconds = (bunnyVideo) => {
   return Number.isFinite(length) ? length : 0;
 };
 
+const isPlayableWebhookStatus = (status) => {
+  const value = Number(status);
+  return (
+    value === BUNNY_WEBHOOK_STATUS_FINISHED ||
+    value === BUNNY_WEBHOOK_STATUS_RESOLUTION_FINISHED
+  );
+};
+
 const isBunnyVideoFinished = (bunnyVideo) => {
   const status = Number(bunnyVideo?.status);
   const progress = Number(bunnyVideo?.encodeProgress);
   const resolutions = String(bunnyVideo?.availableResolutions || '').trim();
-  return (
+  const length = getBunnyVideoLengthSeconds(bunnyVideo);
+  if (
     status === BUNNY_VIDEO_STATUS_FINISHED ||
-    progress >= 100 ||
-    (resolutions.length > 0 && getBunnyVideoLengthSeconds(bunnyVideo) > 0)
-  );
+    status === BUNNY_VIDEO_STATUS_JIT_PLAYLISTS_CREATED
+  ) {
+    return true;
+  }
+  if (progress >= 100) return true;
+  if (
+    resolutions.length > 0 &&
+    (length > 0 ||
+      status === BUNNY_VIDEO_STATUS_TRANSCODING ||
+      status === BUNNY_VIDEO_STATUS_JIT_SEGMENTING)
+  ) {
+    return true;
+  }
+  return false;
 };
 
 const isBunnyVideoFailed = (bunnyVideo) => {
@@ -194,6 +217,7 @@ module.exports = {
   BUNNY_WEBHOOK_STATUS_FAILED,
   BUNNY_WEBHOOK_STATUS_PRESIGNED_UPLOAD_FAILED,
   BUNNY_VIDEO_STATUS_FINISHED,
+  isPlayableWebhookStatus,
   isBunnyStreamConfigured,
   buildPlaybackUrls,
   createBunnyVideo,

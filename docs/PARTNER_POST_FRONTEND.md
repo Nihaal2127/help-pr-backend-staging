@@ -111,7 +111,7 @@ The Bunny Stream **API key is never sent to the app**. Flutter asks this backend
 }
 ```
 
-Pass `tus_headers` as TUS request headers. Do **not** send `AccessKey`. Ticket expires in 1 hour.
+Pass `tus_headers` as TUS request headers. Do **not** send `AccessKey`. The TUS ticket is valid for 1 hour. Calling this endpoint again **reuses the same in-flight `bunny_video_id`** (refreshes the ticket) until that video is attached to a post. After TUS upload, you can still create the post / complete the order even if that 1-hour ticket has expired.
 
 3. After TUS upload, create the post:
 

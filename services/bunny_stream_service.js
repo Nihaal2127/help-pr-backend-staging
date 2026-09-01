@@ -10,6 +10,7 @@ const BUNNY_WEBHOOK_STATUS_RESOLUTION_FINISHED = 4;
 const BUNNY_WEBHOOK_STATUS_FAILED = 5;
 const BUNNY_WEBHOOK_STATUS_PRESIGNED_UPLOAD_FAILED = 8;
 
+const BUNNY_VIDEO_STATUS_CREATED = 0;
 const BUNNY_VIDEO_STATUS_TRANSCODING = 3;
 const BUNNY_VIDEO_STATUS_FINISHED = 4;
 const BUNNY_VIDEO_STATUS_ERROR = 5;
@@ -205,6 +206,9 @@ const isBunnyVideoFinished = (bunnyVideo) => {
   return false;
 };
 
+const isBunnyVideoReusableForTus = (bunnyVideo) =>
+  Number(bunnyVideo?.status) === BUNNY_VIDEO_STATUS_CREATED;
+
 const isBunnyVideoFailed = (bunnyVideo) => {
   const status = Number(bunnyVideo?.status);
   return status === BUNNY_VIDEO_STATUS_ERROR || status === BUNNY_VIDEO_STATUS_UPLOAD_FAILED;
@@ -229,5 +233,6 @@ module.exports = {
   getBunnyVideoLengthSeconds,
   isBunnyVideoFinished,
   isBunnyVideoFailed,
+  isBunnyVideoReusableForTus,
   MAX_VIDEO_DURATION_SECONDS,
 };

@@ -20,6 +20,7 @@ const {
   getBunnyVideoLengthSeconds,
   isBunnyVideoFinished,
   isBunnyVideoFailed,
+  isBunnyVideoReusableForTus,
   isPlayableWebhookStatus,
   BUNNY_WEBHOOK_STATUS_FINISHED,
   BUNNY_WEBHOOK_STATUS_RESOLUTION_FINISHED,
@@ -100,7 +101,7 @@ const createVideoUploadSession = async (partnerId) => {
       if (isBunnyVideoFailed(bunnyVideo)) {
         await deleteBunnyVideo(existing.bunny_video_id);
         await PartnerPostVideoSession.deleteOne({ _id: existing._id });
-      } else {
+      } else if (isBunnyVideoReusableForTus(bunnyVideo)) {
         const ticket = await refreshSessionTicket(existing);
         return ok(200, {
           message: 'Video upload session created.',
@@ -109,11 +110,6 @@ const createVideoUploadSession = async (partnerId) => {
       }
     } catch (error) {
       console.error('reuseVideoUploadSession', existing.bunny_video_id, error.response?.data || error.message);
-      const ticket = await refreshSessionTicket(existing);
-      return ok(200, {
-        message: 'Video upload session created.',
-        session: ticket,
-      });
     }
   }
 

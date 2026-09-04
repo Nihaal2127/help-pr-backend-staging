@@ -414,10 +414,38 @@ const safeNotifyQuoteStatusChanged = async ({
         quote,
       }),
     });
+
+    const customerId = quote.user_id ? String(quote.user_id) : "";
+    const isAccepted = next === "accepted";
+
+    if (isAccepted && customerId) {
+      await notify({
+        eventKey: "QUOTE_ACCEPTED",
+        actorUserId,
+        recipientUserIds: [quote.user_id],
+        context: { quote, previousStatus: prev, newStatus: next },
+        entityType: "quote",
+        entityId: quote._id,
+        franchiseId: quote.franchise_id,
+        metadata: {
+          quote_id: quote._id,
+          quote_sequence_id: quote.quote_sequence_id,
+          previousStatus: prev,
+          newStatus: next,
+        },
+        dedupeKeyPrefix: `quote.accepted:${quote._id}`,
+      });
+    }
+
+    const remainingRecipients =
+      isAccepted && customerId
+        ? recipients.filter((id) => String(id) !== customerId)
+        : recipients;
+
     await notify({
       eventKey: "QUOTE_STATUS_CHANGED",
       actorUserId,
-      recipientUserIds: recipients,
+      recipientUserIds: remainingRecipients,
       context: { quote, previousStatus: prev, newStatus: next },
       entityType: "quote",
       entityId: quote._id,
@@ -636,25 +664,6 @@ const safeNotifyQuoteAssigned = async ({ quote, actorUserId }) => {
         partner_id: quote.partner_id,
       },
       dedupeKeyPrefix: `quote.assigned:${quote._id}`,
-    });
-
-    if (!quote.user_id) return;
-
-    await notify({
-      eventKey: "QUOTE_STATUS_CHANGED",
-      actorUserId,
-      recipientUserIds: [quote.user_id],
-      context: { quote, previousStatus: "new", newStatus: "pending" },
-      entityType: "quote",
-      entityId: quote._id,
-      franchiseId: quote.franchise_id,
-      metadata: {
-        quote_id: quote._id,
-        quote_sequence_id: quote.quote_sequence_id,
-        previousStatus: "new",
-        newStatus: "pending",
-      },
-      dedupeKeyPrefix: `quote.status:${quote._id}:pending`,
     });
   });
 };

@@ -92,6 +92,12 @@ const NOTIFICATION_EVENTS = {
     body: (ctx) =>
       `Quote #${ctx.quote?.quote_sequence_id || ""} status changed to ${ctx.newStatus || ctx.quote?.status}.`,
   },
+  QUOTE_ACCEPTED: {
+    category: "quote",
+    title: () => "Quote status update",
+    body: (ctx) =>
+      `Quote #${ctx.quote?.quote_sequence_id || ""} received - proceed to pay`,
+  },
   SUBSCRIPTION_ASSIGNED: {
     category: "subscription",
     title: () => "Subscription assigned",
@@ -138,7 +144,7 @@ const NOTIFICATION_EVENTS = {
     category: "quote",
     title: () => "New quote request",
     body: (ctx) =>
-      `Quote #${ctx.quote?.quote_sequence_id || ""} has been assigned to you. Please review.`,
+      `Quote #${ctx.quote?.quote_sequence_id || ""} received—please accept.`,
   },
   PARTNER_VERIFICATION_APPROVED: {
     category: "system",

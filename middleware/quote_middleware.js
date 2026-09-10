@@ -79,13 +79,13 @@ const canEditQuoteDescription = async (quote, callerId) => {
     return true;
   }
 
-  const isFranchiseAdmin =
-    callerType === USER_TYPE_ADMIN &&
+  const isFranchiseAdminOrEmployee =
+    (callerType === USER_TYPE_ADMIN || callerType === USER_TYPE_EMPLOYEE) &&
     caller.franchise_id &&
     quote.franchise_id &&
     String(caller.franchise_id) === String(quote.franchise_id);
 
-  return Boolean(isFranchiseAdmin);
+  return Boolean(isFranchiseAdminOrEmployee);
 };
 
 const verifyUserType = async (userId, expectedType, label) => {

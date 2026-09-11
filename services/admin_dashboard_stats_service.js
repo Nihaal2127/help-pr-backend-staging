@@ -131,6 +131,10 @@ const resolveDashboardFranchiseScope = async (req) => {
     return ok({ franchiseOid });
 };
 
+/** Same franchise filter Super Admin uses when a franchise is selected (no legacy $or). */
+const dashboardEntityFilter = (franchiseOid, scopeFilter = {}) =>
+    franchiseOid ? { franchise_id: franchiseOid } : scopeFilter;
+
 const buildScopedOrderIdFilter = async (scopeFilter = {}) => {
     const ids = await Order.find({ deleted_at: null, ...scopeFilter }).distinct('_id');
     if (ids.length === 0) {
@@ -196,7 +200,11 @@ const buildQuoteDashboardCounts = async (req, franchiseOid, dateFilter) => {
         return scopeResult;
     }
 
-    const baseFilter = { deleted_at: null, ...scopeResult.filter, ...dateFilter };
+    const baseFilter = {
+        deleted_at: null,
+        ...dashboardEntityFilter(franchiseOid, scopeResult.filter),
+        ...dateFilter,
+    };
 
     const [requestsReceived, pendingCount, acceptedCount, completed, cancelled] =
         await Promise.all([
@@ -224,7 +232,11 @@ const buildOrderDashboardCounts = async (req, franchiseOid, dateFilter) => {
         return scopeResult;
     }
 
-    const baseFilter = { deleted_at: null, ...scopeResult.filter, ...dateFilter };
+    const baseFilter = {
+        deleted_at: null,
+        ...dashboardEntityFilter(franchiseOid, scopeResult.filter),
+        ...dateFilter,
+    };
 
     const [inProgress, completed, cancelled] = await Promise.all([
         Order.countDocuments({
@@ -272,7 +284,8 @@ const buildPaymentDashboardTotals = async (
         return scopeResult;
     }
 
-    const scopedOrderFilter = await buildScopedOrderIdFilter(scopeResult.filter);
+    const scopeFilter = dashboardEntityFilter(franchiseOid, scopeResult.filter);
+    const scopedOrderFilter = await buildScopedOrderIdFilter(scopeFilter);
 
     const paymentPipeline = [
         {
@@ -364,7 +377,7 @@ const buildPaymentDashboardTotals = async (
         {
             $match: {
                 deleted_at: null,
-                ...scopeResult.filter,
+                ...scopeFilter,
                 ...orderDateFilter,
                 _id: { $nin: orderIdsWithCustomerPayments },
                 $or: [

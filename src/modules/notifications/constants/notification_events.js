@@ -349,6 +349,12 @@ const NOTIFICATION_EVENTS = {
     body: (ctx) =>
       `Partner ${ctx.partnerName || ""} is waiting for verification${ctx.franchiseName ? ` (${ctx.franchiseName})` : ""}.`,
   },
+  BACKOFFICE_PARTNER_VERIFICATION_UPDATED: {
+    category: "admin",
+    title: () => "Partner verification update",
+    body: (ctx) =>
+      `Partner ${ctx.partnerName || ""} was ${ctx.statusLabel || "updated"}${ctx.franchiseName ? ` (${ctx.franchiseName})` : ""}.`,
+  },
   EMPLOYEE_ADDED: {
     category: "admin",
     title: () => "New employee added",

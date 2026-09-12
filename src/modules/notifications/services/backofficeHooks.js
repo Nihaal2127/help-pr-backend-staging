@@ -1,6 +1,10 @@
 const { notify } = require("./notification.service");
 const User = require("../../../../models/user");
 const {
+  USER_TYPE_ADMIN,
+  USER_TYPE_SUPER_ADMIN,
+} = require("../../../../constants/user_types");
+const {
   resolveSuperAdminStaffRecipients,
   resolveFranchiseBackofficeRecipients,
   resolveFranchiseIdFromUserId,
@@ -152,6 +156,73 @@ const safeNotifyBackofficePartnerPending = async ({ partner, actorUserId }) => {
         verification_status: partner?.verification_status,
       },
       dedupeKeyPrefix: `backoffice.partner.pending:${partner?._id}`,
+    });
+  });
+};
+
+const safeNotifyBackofficePartnerVerificationUpdated = async ({
+  partnerUserId,
+  verificationStatus,
+  actorUserId,
+}) => {
+  await runSafe("backoffice.partner_verification_updated", async () => {
+    const status = Number(verificationStatus);
+    if (![2, 3].includes(status)) return;
+
+    const partner = await User.findById(partnerUserId)
+      .select("name user_id franchise_id")
+      .lean();
+    if (!partner) return;
+
+    const franchiseId = partner.franchise_id || null;
+    const franchiseName = await loadFranchiseName(franchiseId);
+
+    const [superAdmins, franchiseAdmins] = await Promise.all([
+      User.find({
+        type: USER_TYPE_SUPER_ADMIN,
+        deleted_at: null,
+        is_active: true,
+      })
+        .select("_id")
+        .lean(),
+      franchiseId
+        ? User.find({
+            franchise_id: franchiseId,
+            type: USER_TYPE_ADMIN,
+            deleted_at: null,
+            is_active: true,
+          })
+            .select("_id")
+            .lean()
+        : Promise.resolve([]),
+    ]);
+
+    const recipients = uniqueRecipientIds([
+      ...superAdmins.map((user) => user._id),
+      ...franchiseAdmins.map((user) => user._id),
+    ]);
+    if (!recipients.length) return;
+
+    const statusLabel = status === 2 ? "approved" : "rejected";
+
+    await notifyBackoffice({
+      eventKey: "BACKOFFICE_PARTNER_VERIFICATION_UPDATED",
+      actorUserId,
+      recipientUserIds: recipients,
+      context: {
+        partnerName: partner.name || partner.user_id || "",
+        franchiseName,
+        statusLabel,
+      },
+      entityType: "user",
+      entityId: partner._id,
+      franchiseId,
+      metadata: {
+        partner_id: partner._id,
+        partner_user_id: partner.user_id || "",
+        verification_status: status,
+      },
+      dedupeKeyPrefix: `backoffice.partner.verification:${partner._id}:${status}`,
     });
   });
 };
@@ -600,6 +671,7 @@ module.exports = {
   safeNotifyBackofficeServiceRequested,
   safeNotifyBackofficeCatalogReviewed,
   safeNotifyBackofficePartnerPending,
+  safeNotifyBackofficePartnerVerificationUpdated,
   safeNotifyBackofficeEmployeeAdded,
   safeNotifyBackofficeExpenseCreated,
   safeNotifyBackofficeQuoteCreated,

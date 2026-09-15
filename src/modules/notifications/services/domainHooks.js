@@ -318,8 +318,8 @@ const safeNotifyOrderPaymentReceived = async ({
     }
 
     const stakeholderRecipients = excludeUserId(
-      await resolveOrderRecipients(order),
-      payerUserId
+      excludeUserId(await resolveOrderRecipients(order), payerUserId),
+      payerType === "partner" ? order.user_id : null
     );
     if (stakeholderRecipients.length) {
       await notify({

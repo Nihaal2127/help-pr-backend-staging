@@ -156,6 +156,49 @@ const safeNotifyBackofficePartnerPending = async ({ partner, actorUserId }) => {
   });
 };
 
+const safeNotifyBackofficePartnerVerificationUpdated = async ({
+  partnerUserId,
+  verificationStatus,
+  actorUserId,
+}) => {
+  await runSafe("backoffice.partner_verification_updated", async () => {
+    const status = Number(verificationStatus);
+    if (![2, 3].includes(status)) return;
+
+    const partner = await User.findById(partnerUserId)
+      .select("name user_id franchise_id")
+      .lean();
+    if (!partner) return;
+
+    const franchiseId = partner.franchise_id || null;
+    const franchiseName = await loadFranchiseName(franchiseId);
+    const recipients = await resolveSuperAdminAndFranchiseRecipients(franchiseId);
+    if (!recipients.length) return;
+
+    const statusLabel = status === 2 ? "approved" : "rejected";
+
+    await notifyBackoffice({
+      eventKey: "BACKOFFICE_PARTNER_VERIFICATION_UPDATED",
+      actorUserId,
+      recipientUserIds: recipients,
+      context: {
+        partnerName: partner.name || partner.user_id || "",
+        franchiseName,
+        statusLabel,
+      },
+      entityType: "user",
+      entityId: partner._id,
+      franchiseId,
+      metadata: {
+        partner_id: partner._id,
+        partner_user_id: partner.user_id || "",
+        verification_status: status,
+      },
+      dedupeKeyPrefix: `backoffice.partner.verification:${partner._id}:${status}`,
+    });
+  });
+};
+
 const safeNotifyBackofficeEmployeeAdded = async ({ employee, actorUserId }) => {
   await runSafe("backoffice.employee_added", async () => {
     const franchiseId = employee?.franchise_id || null;
@@ -600,6 +643,7 @@ module.exports = {
   safeNotifyBackofficeServiceRequested,
   safeNotifyBackofficeCatalogReviewed,
   safeNotifyBackofficePartnerPending,
+  safeNotifyBackofficePartnerVerificationUpdated,
   safeNotifyBackofficeEmployeeAdded,
   safeNotifyBackofficeExpenseCreated,
   safeNotifyBackofficeQuoteCreated,

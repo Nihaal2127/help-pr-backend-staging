@@ -1,10 +1,6 @@
 const { notify } = require("./notification.service");
 const User = require("../../../../models/user");
 const {
-  USER_TYPE_ADMIN,
-  USER_TYPE_SUPER_ADMIN,
-} = require("../../../../constants/user_types");
-const {
   resolveSuperAdminStaffRecipients,
   resolveFranchiseBackofficeRecipients,
   resolveFranchiseIdFromUserId,
@@ -176,31 +172,7 @@ const safeNotifyBackofficePartnerVerificationUpdated = async ({
 
     const franchiseId = partner.franchise_id || null;
     const franchiseName = await loadFranchiseName(franchiseId);
-
-    const [superAdmins, franchiseAdmins] = await Promise.all([
-      User.find({
-        type: USER_TYPE_SUPER_ADMIN,
-        deleted_at: null,
-        is_active: true,
-      })
-        .select("_id")
-        .lean(),
-      franchiseId
-        ? User.find({
-            franchise_id: franchiseId,
-            type: USER_TYPE_ADMIN,
-            deleted_at: null,
-            is_active: true,
-          })
-            .select("_id")
-            .lean()
-        : Promise.resolve([]),
-    ]);
-
-    const recipients = uniqueRecipientIds([
-      ...superAdmins.map((user) => user._id),
-      ...franchiseAdmins.map((user) => user._id),
-    ]);
+    const recipients = await resolveSuperAdminAndFranchiseRecipients(franchiseId);
     if (!recipients.length) return;
 
     const statusLabel = status === 2 ? "approved" : "rejected";

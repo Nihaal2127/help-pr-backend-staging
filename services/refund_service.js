@@ -311,7 +311,7 @@ const listRefunds = async (query, scopeFilter = {}) => {
         });
     } catch (err) {
         console.error('listRefunds', err.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -505,7 +505,7 @@ const listEligibleOrders = async (query, scopeFilter = {}) => {
         });
     } catch (err) {
         console.error('listEligibleOrders', err.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -527,7 +527,7 @@ const getRefundById = async (refundId) => {
         });
     } catch (err) {
         console.error('getRefundById', err.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -753,7 +753,7 @@ const createRefund = async (body, createdById = null) => {
         });
     } catch (err) {
         console.error('createRefund', err.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 

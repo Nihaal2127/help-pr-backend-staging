@@ -111,7 +111,7 @@ const getAll = async (req, res) => {
     res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
     });
   }
 };
@@ -135,7 +135,7 @@ const createOld = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.'
+      message: 'Technical issue. Please try again..'
     });
   }
 };
@@ -198,7 +198,7 @@ const createNew = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
       error: error.message
     });
   }
@@ -291,7 +291,7 @@ const create = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
       error: error.message
     });
   }
@@ -335,7 +335,7 @@ const updateStatus = async (req, res) => {
     res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.'
+      message: 'Technical issue. Please try again..'
     });
   }
 };
@@ -381,7 +381,7 @@ const deleteState = async (req, res) => {
     res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.'
+      message: 'Technical issue. Please try again..'
     });
   }
 };
@@ -457,7 +457,7 @@ const getDropDown = async (req, res) => {
     res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
     });
   }
 };
@@ -567,7 +567,7 @@ const getMyServices = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
     });
   }
 };
@@ -644,7 +644,7 @@ const getAvailableServices = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
     });
   }
 };
@@ -721,7 +721,7 @@ const getAvailableFranchiseCategories = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
     });
   }
 };
@@ -851,7 +851,7 @@ const getAvailableFranchiseServices = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
     });
   }
 };
@@ -1036,7 +1036,7 @@ const addMyServices = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
       error: err.message,
     });
   }
@@ -1112,7 +1112,7 @@ const updateMyService = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
     });
   }
 };
@@ -1166,7 +1166,7 @@ const toggleMyServiceStatus = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
     });
   }
 };
@@ -1283,7 +1283,7 @@ const getFranchiseCategoryServicesIntersection = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
     });
   }
 };

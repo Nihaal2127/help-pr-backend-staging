@@ -159,7 +159,7 @@ const getPartnerOrderRatingsForAdmin = async (partnerIdRaw, query = {}) => {
     });
   } catch (err) {
     console.error('getPartnerOrderRatingsForAdmin', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 

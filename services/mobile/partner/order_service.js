@@ -120,7 +120,7 @@ const listPartnerOrders = async (partnerId, query = {}) => {
     });
   } catch (err) {
     console.error('mobile partner list orders', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -157,7 +157,7 @@ const getPartnerOrderById = async (partnerId, orderId) => {
     });
   } catch (err) {
     console.error('mobile partner get order details', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -200,7 +200,7 @@ const getPartnerOrderInvoice = async (partnerId, orderId) => {
     });
   } catch (err) {
     console.error('mobile partner get order invoice', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 

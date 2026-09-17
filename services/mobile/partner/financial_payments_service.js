@@ -21,7 +21,7 @@ const listFinancialPayments = async (partnerId, query = {}) => {
     );
   } catch (err) {
     console.error('listFinancialPayments', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -35,7 +35,7 @@ const getFinancialPaymentById = async (partnerId, orderId) => {
     return getPartnerFinancialOrderPaymentById(partnerResult.data.partnerOid, orderId);
   } catch (err) {
     console.error('getFinancialPaymentById', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 

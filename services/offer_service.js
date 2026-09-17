@@ -191,7 +191,7 @@ const listOffers = async (query) => {
         });
     } catch (err) {
         console.log('listOffers', err.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -255,7 +255,7 @@ const createOffer = async (body) => {
         const validationMessage = formatValidationError(error);
         if (validationMessage) return fail(400, validationMessage);
         console.error('createOffer', error.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -325,7 +325,7 @@ const updateOffer = async (id, body) => {
         const validationMessage = formatValidationError(error);
         if (validationMessage) return fail(400, validationMessage);
         console.error('updateOffer', error.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -339,7 +339,7 @@ const getOfferById = async (id) => {
         return ok(200, { message: 'Offer fetched successfully', record });
     } catch (error) {
         console.error('getOfferById', error);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -358,7 +358,7 @@ const softDeleteOffer = async (id) => {
         return ok(200, { message: 'Offer deleted successfully' });
     } catch (error) {
         console.error('softDeleteOffer', error);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 

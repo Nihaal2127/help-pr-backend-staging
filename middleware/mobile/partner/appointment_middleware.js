@@ -24,7 +24,7 @@ const validateAppointmentIdParam = (req, res, next) => {
     return sendError(res, 400, "Invalid appointment id.");
   } catch (err) {
     console.error("validateAppointmentIdParam (partner):", err.message);
-    return sendError(res, 500, "Internal server error.");
+    return sendError(res, 500, "Technical issue. Please try again..");
   }
 };
 
@@ -40,7 +40,7 @@ const validateOrderIdParam = (req, res, next) => {
     next();
   } catch (err) {
     console.error("validateOrderIdParam (partner appointment):", err.message);
-    return sendError(res, 500, "Internal server error.");
+    return sendError(res, 500, "Technical issue. Please try again..");
   }
 };
 

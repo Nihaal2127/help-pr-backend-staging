@@ -229,7 +229,7 @@ const validateUpdateQuoteBody = (req, res, next) => {
         }
         next();
       })
-      .catch(() => sendError(res, 500, 'Internal server error.'));
+      .catch(() => sendError(res, 500, 'Technical issue. Please try again..'));
     return;
   }
 

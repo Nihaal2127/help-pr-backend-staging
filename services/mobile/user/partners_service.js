@@ -334,7 +334,7 @@ const listFranchisePartnersPaginated = async (query, options = {}) => {
         franchise_id: String(franchiseCtx.franchise._id),
         records_type: typeof builtData.records,
       });
-      return fail(500, 'Internal server error.');
+      return fail(500, 'Technical issue. Please try again..');
     }
 
     const paginated = paginatePartnerRecords(builtData.records, {
@@ -359,7 +359,7 @@ const listFranchisePartnersPaginated = async (query, options = {}) => {
       stack: err?.stack,
       query,
     });
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -505,7 +505,7 @@ const getPartnerProfileForCustomer = async (partnerId, franchiseId, userId = nul
     });
   } catch (err) {
     console.error('getPartnerProfileForCustomer', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 

@@ -166,7 +166,7 @@ const listPartnerMyServices = async (partnerId) => {
     });
   } catch (err) {
     console.error('listPartnerMyServices', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -265,7 +265,7 @@ const updatePartnerMyServices = async (partnerId, servicesInput) => {
     return listPartnerMyServices(partnerId);
   } catch (err) {
     console.error('updatePartnerMyServices', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -310,7 +310,7 @@ const updateOnePartnerServiceStatus = async (partnerId, partnerServiceId, isActi
     });
   } catch (err) {
     console.error('updateOnePartnerServiceStatus', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -380,7 +380,7 @@ const updateBulkPartnerServiceStatus = async (partnerId, updatesInput) => {
     });
   } catch (err) {
     console.error('updateBulkPartnerServiceStatus', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 

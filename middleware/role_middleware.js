@@ -40,7 +40,7 @@ const requireSuperAdminOrStaff = async (req, res, next) => {
         return res.status(500).json({
             success: false,
             status: 500,
-            message: 'Internal server error.',
+            message: 'Technical issue. Please try again..',
         });
     }
 };
@@ -90,7 +90,7 @@ const requireFranchiseDropDownAccess = async (req, res, next) => {
         return res.status(500).json({
             success: false,
             status: 500,
-            message: 'Internal server error.',
+            message: 'Technical issue. Please try again..',
         });
     }
 };
@@ -132,7 +132,7 @@ const requireSuperAdminStaffFranchiseAdminEmployee = async (req, res, next) => {
         return res.status(500).json({
             success: false,
             status: 500,
-            message: 'Internal server error.',
+            message: 'Technical issue. Please try again..',
         });
     }
 };
@@ -188,7 +188,7 @@ const requireFranchiseRelatedCatalogAccess = async (req, res, next) => {
         return res.status(500).json({
             success: false,
             status: 500,
-            message: 'Internal server error.',
+            message: 'Technical issue. Please try again..',
         });
     }
 };
@@ -212,7 +212,7 @@ const requireAdmin = async (req, res, next) => {
         return res.status(500).json({
             success: false,
             status: 500,
-            message: 'Internal server error.',
+            message: 'Technical issue. Please try again..',
         });
     }
 };
@@ -236,7 +236,7 @@ const requireSuperAdmin = async (req, res, next) => {
         return res.status(500).json({
             success: false,
             status: 500,
-            message: 'Internal server error.',
+            message: 'Technical issue. Please try again..',
         });
     }
 };
@@ -260,7 +260,7 @@ const requirePartner = async (req, res, next) => {
         return res.status(500).json({
             success: false,
             status: 500,
-            message: 'Internal server error.',
+            message: 'Technical issue. Please try again..',
         });
     }
 };
@@ -293,7 +293,7 @@ const requireBackoffice = async (req, res, next) => {
         return res.status(500).json({
             success: false,
             status: 500,
-            message: 'Internal server error.',
+            message: 'Technical issue. Please try again..',
         });
     }
 };

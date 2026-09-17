@@ -327,7 +327,7 @@ const listFranchises = async (query) => {
         });
     } catch (err) {
         console.log('listFranchises', err.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -409,7 +409,7 @@ const createFranchise = async (body) => {
         return ok(200, { message: 'Franchise created successfully.', record: saved });
     } catch (error) {
         console.error('createFranchise', error.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -513,7 +513,7 @@ const updateFranchise = async (id, body) => {
         return ok(200, { message: 'Franchise updated successfully', record: updated });
     } catch (error) {
         console.error('updateFranchise', error.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -524,7 +524,7 @@ const getFranchiseById = async (id) => {
         return ok(200, { message: 'Franchise fetched successfully', record });
     } catch (error) {
         console.error('getFranchiseById', error);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -539,7 +539,7 @@ const softDeleteFranchise = async (id) => {
         return ok(200, { message: 'Franchise deleted successfully' });
     } catch (error) {
         console.error('softDeleteFranchise', error);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -620,7 +620,7 @@ const importFranchises = async (records) => {
         });
     } catch (error) {
         console.log('importFranchises', error.message);
-        return fail(500, 'Internal server error.', { error: error.message });
+        return fail(500, 'Technical issue. Please try again..', { error: error.message });
     }
 };
 
@@ -694,7 +694,7 @@ const listFranchisesForDropdown = async (query, userId) => {
         });
     } catch (err) {
         console.log('listFranchisesForDropdown', err.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -1067,7 +1067,7 @@ const getFranchiseRelatedCatalog = async (franchiseIdRaw) => {
         });
     } catch (err) {
         console.error('getFranchiseRelatedCatalog', err.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 

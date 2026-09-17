@@ -492,7 +492,7 @@ Mark a customer report as handled. Does not modify the post.
 | **403** | Partner or customer token | `Access denied.` |
 | **404** | Post not found / soft-deleted | `Post not found.` |
 | **404** | Report not found | `Report not found.` |
-| **500** | Server error | `Internal server error.` |
+| **500** | Server error | `Technical issue. Please try again..` |
 
 Error envelope:
 

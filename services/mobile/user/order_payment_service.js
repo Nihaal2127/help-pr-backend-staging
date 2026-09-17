@@ -117,7 +117,7 @@ const listAllCustomerOrderPayments = async (customerId, query = {}) => {
     });
   } catch (err) {
     console.error('mobile user list all order payments', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -140,7 +140,7 @@ const listCustomerOrderPayments = async (customerId, orderId) => {
     });
   } catch (err) {
     console.error('mobile user list order payments', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -220,7 +220,7 @@ const createCustomerOrderPayment = async (customerId, orderId, body) => {
     });
   } catch (err) {
     console.error('mobile user create order payment', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -274,7 +274,7 @@ const updateCustomerOrderPayment = async (customerId, orderId, paymentId, body) 
     });
   } catch (err) {
     console.error('mobile user update order payment', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -295,7 +295,7 @@ const deleteCustomerOrderPayment = async (customerId, orderId, paymentId) => {
     });
   } catch (err) {
     console.error('mobile user delete order payment', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -383,7 +383,7 @@ const getCustomerOrderPaymentStatus = async (customerId, orderId, paymentId) => 
     });
   } catch (err) {
     console.error('mobile user get order payment status', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 

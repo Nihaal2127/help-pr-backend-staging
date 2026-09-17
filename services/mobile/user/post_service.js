@@ -361,7 +361,7 @@ const listLikedPosts = async (userId, query) => {
     });
   } catch (err) {
     console.error('listLikedPosts', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -375,7 +375,7 @@ const listSavedPosts = async (userId, query) => {
     });
   } catch (err) {
     console.error('listSavedPosts', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -428,7 +428,7 @@ const savePostForCustomer = async (userId, postId) => {
       });
     }
     console.error('savePostForCustomer', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -457,7 +457,7 @@ const unsavePostForCustomer = async (userId, postId) => {
     });
   } catch (err) {
     console.error('unsavePostForCustomer', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 

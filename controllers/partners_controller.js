@@ -46,7 +46,7 @@ const getPartnersCountsHandler = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
     });
   }
 };
@@ -88,7 +88,7 @@ const listPartnersHandler = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
     });
   }
 };
@@ -137,7 +137,7 @@ const getPartnerProfileHandler = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
     });
   }
 };
@@ -187,7 +187,7 @@ const getPartnerRatingsHandler = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
     });
   }
 };

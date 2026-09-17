@@ -111,7 +111,7 @@ const updatePartnerWorkStatus = async (partnerId, orderId, body) => {
     });
   } catch (err) {
     console.error('mobile partner update work status', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -240,7 +240,7 @@ const completePartnerOrderWork = async (partnerId, orderId, body, files) => {
     });
   } catch (err) {
     console.error('mobile partner complete order work', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 

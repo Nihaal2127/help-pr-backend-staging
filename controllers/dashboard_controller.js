@@ -152,7 +152,7 @@ const getDashboardDataOld = async (req, res) => {
         return res.status(500).json({
             success: false,
             status: 500,
-            error: 'Internal Server Error'
+            error: 'Technical issue. Please try again.'
         });
     }
 };
@@ -321,7 +321,7 @@ const getDashboardData = async (req, res) => {
         return res.status(500).json({
             success: false,
             status: 500,
-            error: 'Internal Server Error'
+            error: 'Technical issue. Please try again.'
         });
     }
 };
@@ -348,7 +348,7 @@ const getAdminDashboardStats = async (req, res) => {
         return res.status(500).json({
             success: false,
             status: 500,
-            error: 'Internal Server Error',
+            error: 'Technical issue. Please try again.',
         });
     }
 };

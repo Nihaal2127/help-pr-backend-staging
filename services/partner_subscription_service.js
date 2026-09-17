@@ -481,7 +481,7 @@ const listPartnerSubscriptions = async (query, req = null) => {
         });
     } catch (err) {
         console.log('listPartnerSubscriptions', err.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -601,7 +601,7 @@ const createPartnerSubscription = async (body, assignedByUserId, req = null) => 
         });
     } catch (error) {
         console.error('createPartnerSubscription', error.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -693,7 +693,7 @@ const updatePartnerSubscription = async (id, body, req = null) => {
         return ok(200, { message: 'Partner subscription updated successfully', record: populated });
     } catch (error) {
         console.error('updatePartnerSubscription', error.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -717,7 +717,7 @@ const getPartnerSubscriptionById = async (id, req = null) => {
         return ok(200, { message: 'Partner subscription fetched successfully', record });
     } catch (error) {
         console.error('getPartnerSubscriptionById', error);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -740,7 +740,7 @@ const softDeletePartnerSubscription = async (id, req = null) => {
         return ok(200, { message: 'Partner subscription deleted successfully' });
     } catch (error) {
         console.error('softDeletePartnerSubscription', error);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -827,7 +827,7 @@ const importPartnerSubscriptions = async (records, assignedByUserId, req = null)
         });
     } catch (error) {
         console.log('importPartnerSubscriptions', error.message);
-        return fail(500, 'Internal server error.', { error: error.message });
+        return fail(500, 'Technical issue. Please try again..', { error: error.message });
     }
 };
 
@@ -865,7 +865,7 @@ const getMySubscription = async (partnerUserId) => {
         });
     } catch (error) {
         console.error('getMySubscription', error);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -952,7 +952,7 @@ const assignDefaultBasicPlanIfMissing = async (partnerId, options = {}) => {
         });
     } catch (error) {
         console.error('assignDefaultBasicPlanIfMissing', error.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 

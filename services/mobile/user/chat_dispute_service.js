@@ -18,7 +18,7 @@ const raiseDispute = async (customerId, body) => {
     });
   } catch (error) {
     console.error("raiseDispute:", error.message);
-    return fail(500, "Internal server error.");
+    return fail(500, "Technical issue. Please try again..");
   }
 };
 
@@ -41,7 +41,7 @@ const listDisputes = async (customerId, query) => {
     });
   } catch (error) {
     console.error("listDisputes:", error.message);
-    return fail(500, "Internal server error.");
+    return fail(500, "Technical issue. Please try again..");
   }
 };
 
@@ -57,7 +57,7 @@ const getDispute = async (req, disputeId) => {
     });
   } catch (error) {
     console.error("getDispute:", error.message);
-    return fail(500, "Internal server error.");
+    return fail(500, "Technical issue. Please try again..");
   }
 };
 
@@ -79,7 +79,7 @@ const startSupportChat = async (authorizationHeader, body) => {
     });
   } catch (error) {
     console.error("startSupportChat:", error.message);
-    return fail(500, "Internal server error.");
+    return fail(500, "Technical issue. Please try again..");
   }
 };
 

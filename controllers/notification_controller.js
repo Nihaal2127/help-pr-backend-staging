@@ -40,7 +40,7 @@ const listHandler = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: "Internal server error.",
+      message: "Technical issue. Please try again..",
     });
   }
 };
@@ -75,7 +75,7 @@ const unreadCountHandler = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: "Internal server error.",
+      message: "Technical issue. Please try again..",
     });
   }
 };
@@ -111,7 +111,7 @@ const markReadHandler = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: "Internal server error.",
+      message: "Technical issue. Please try again..",
     });
   }
 };
@@ -140,7 +140,7 @@ const markAllReadHandler = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: "Internal server error.",
+      message: "Technical issue. Please try again..",
     });
   }
 };
@@ -167,7 +167,7 @@ const deliveryLogsHandler = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: "Internal server error.",
+      message: "Technical issue. Please try again..",
     });
   }
 };

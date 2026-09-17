@@ -299,7 +299,7 @@ const listAreas = async (query, authUser) => {
         });
     } catch (err) {
         console.log('listAreas', err.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -335,7 +335,7 @@ const createArea = async (body) => {
         return ok(200, { message: 'Area created successfully.', record });
     } catch (error) {
         console.error('createArea', error.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -392,7 +392,7 @@ const updateArea = async (id, body) => {
         return ok(200, { message: 'Area updated successfully', record });
     } catch (error) {
         console.error('updateArea', error.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -405,7 +405,7 @@ const getAreaById = async (id) => {
         return ok(200, { message: 'Area fetched successfully', record });
     } catch (error) {
         console.error('getAreaById', error);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -420,7 +420,7 @@ const softDeleteArea = async (id) => {
         return ok(200, { message: 'Area deleted successfully' });
     } catch (error) {
         console.error('softDeleteArea', error);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -490,7 +490,7 @@ const importAreas = async (records) => {
         });
     } catch (error) {
         console.log('importAreas', error.message);
-        return fail(500, 'Internal server error.', { error: error.message });
+        return fail(500, 'Technical issue. Please try again..', { error: error.message });
     }
 };
 
@@ -584,7 +584,7 @@ const listAreasForDropdown = async (query) => {
         });
     } catch (err) {
         console.log('listAreasForDropdown', err.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 

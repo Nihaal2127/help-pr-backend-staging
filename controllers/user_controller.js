@@ -1094,7 +1094,7 @@ const changePassword = async (req, res) => {
     res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
       error: err.message,
     });
   }
@@ -1178,7 +1178,7 @@ const getAllOld = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.'
+      message: 'Technical issue. Please try again..'
     });
   }
 };
@@ -1470,7 +1470,7 @@ const getAll = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.'
+      message: 'Technical issue. Please try again..'
     });
   }
 };
@@ -1642,7 +1642,7 @@ const getVerificationAll = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.'
+      message: 'Technical issue. Please try again..'
     });
   }
 };
@@ -2017,7 +2017,7 @@ const create = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.'
+      message: 'Technical issue. Please try again..'
     });
   }
 };
@@ -2526,7 +2526,7 @@ const update = async (req, res) => {
     res.status(status).json({
       success: false,
       status,
-      message: status === 500 ? 'Internal server error.' : String(error.message || 'Internal server error.'),
+      message: status === 500 ? 'Technical issue. Please try again..' : String(error.message || 'Technical issue. Please try again..'),
     });
   }
 };
@@ -2664,7 +2664,7 @@ const getById = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.'
+      message: 'Technical issue. Please try again..'
     });
   }
 };
@@ -2704,7 +2704,7 @@ const deleteUser = async (req, res) => {
     res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.'
+      message: 'Technical issue. Please try again..'
     });
   }
 };
@@ -2743,7 +2743,7 @@ const getDropDown = async (req, res) => {
     res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
       error: err.message
     });
   }
@@ -2795,7 +2795,7 @@ const getPartnerDropDownOld = async (req, res) => {
     res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
       error: err.message,
     });
   }
@@ -2864,7 +2864,7 @@ const getPartnerDropDown = async (req, res) => {
     res.status(500).json({
       success: false,
       status: 500,
-      message: "Internal server error.",
+      message: "Technical issue. Please try again..",
       error: err.message,
     });
   }

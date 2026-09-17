@@ -28,7 +28,7 @@ const validateAppointmentIdParam = (req, res, next) => {
     return sendError(res, 400, "Invalid appointment id.");
   } catch (err) {
     console.error("validateAppointmentIdParam:", err.message);
-    return sendError(res, 500, "Internal server error.");
+    return sendError(res, 500, "Technical issue. Please try again..");
   }
 };
 
@@ -50,7 +50,7 @@ const validateOrderIdParam = (req, res, next) => {
     return sendError(res, 400, "Invalid order id.");
   } catch (err) {
     console.error("validateOrderIdParam:", err.message);
-    return sendError(res, 500, "Internal server error.");
+    return sendError(res, 500, "Technical issue. Please try again..");
   }
 };
 
@@ -86,7 +86,7 @@ const validateCreateAppointmentBody = (req, res, next) => {
     next();
   } catch (err) {
     console.error("validateCreateAppointmentBody:", err.message);
-    return sendError(res, 500, "Internal server error.");
+    return sendError(res, 500, "Technical issue. Please try again..");
   }
 };
 
@@ -128,7 +128,7 @@ const validateUpdateAppointmentBody = (req, res, next) => {
     next();
   } catch (err) {
     console.error("validateUpdateAppointmentBody:", err.message);
-    return sendError(res, 500, "Internal server error.");
+    return sendError(res, 500, "Technical issue. Please try again..");
   }
 };
 

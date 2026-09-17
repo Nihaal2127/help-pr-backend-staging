@@ -315,7 +315,7 @@ const createAppointmentForOrder = async (req, body, { partnerId } = {}) => {
     return { ok: true, record: appointment };
   } catch (err) {
     console.error("createAppointmentForOrder:", err.message);
-    return { ok: false, status: 500, message: "Internal server error." };
+    return { ok: false, status: 500, message: "Technical issue. Please try again.." };
   }
 };
 
@@ -404,7 +404,7 @@ const updateAppointmentById = async (req, id, body, { partnerId } = {}) => {
     return { ok: true, record: appointment };
   } catch (err) {
     console.error("updateAppointmentById:", err.message);
-    return { ok: false, status: 500, message: "Internal server error." };
+    return { ok: false, status: 500, message: "Technical issue. Please try again.." };
   }
 };
 
@@ -426,7 +426,7 @@ const softDeleteAppointmentById = async (req, id, { partnerId } = {}) => {
     return { ok: true };
   } catch (err) {
     console.error("softDeleteAppointmentById:", err.message);
-    return { ok: false, status: 500, message: "Internal server error." };
+    return { ok: false, status: 500, message: "Technical issue. Please try again.." };
   }
 };
 
@@ -531,7 +531,7 @@ const listAppointments = async (query, { req, partnerId } = {}) => {
     };
   } catch (err) {
     console.error("listAppointments:", err.message);
-    return { ok: false, status: 500, message: "Internal server error." };
+    return { ok: false, status: 500, message: "Technical issue. Please try again.." };
   }
 };
 
@@ -554,7 +554,7 @@ const getAppointmentById = async (id, { req, partnerId } = {}) => {
     };
   } catch (err) {
     console.error("getAppointmentById:", err.message);
-    return { ok: false, status: 500, message: "Internal server error." };
+    return { ok: false, status: 500, message: "Technical issue. Please try again.." };
   }
 };
 
@@ -586,7 +586,7 @@ const getAppointmentsByOrder = async (orderId, { req, partnerId } = {}) => {
     };
   } catch (err) {
     console.error("getAppointmentsByOrder:", err.message);
-    return { ok: false, status: 500, message: "Internal server error." };
+    return { ok: false, status: 500, message: "Technical issue. Please try again.." };
   }
 };
 

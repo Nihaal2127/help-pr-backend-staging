@@ -197,7 +197,7 @@ const submitOrderReview = async (customerId, orderId, payload = {}) => {
     });
   } catch (error) {
     console.error("mobile user submit order review", error.message);
-    return fail(500, "Internal server error.");
+    return fail(500, "Technical issue. Please try again..");
   }
 };
 

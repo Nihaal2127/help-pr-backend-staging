@@ -21,12 +21,12 @@ const sendInternalError = (res, logLabel, error) => {
   return res.status(500).json({
     success: false,
     status: 500,
-    message: 'Internal server error.',
+    message: 'Technical issue. Please try again..',
   });
 };
 
 const wrapMobileHandler = (logLabel, handler, options = {}) => async (req, res) => {
-  const errorMessage = options.errorMessage || 'Internal server error.';
+  const errorMessage = options.errorMessage || 'Technical issue. Please try again..';
   try {
     return await handler(req, res);
   } catch (error) {

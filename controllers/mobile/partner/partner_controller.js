@@ -66,7 +66,7 @@ const register = async (req, res) => {
     const payload = {
       success: false,
       status,
-      message: status === 409 ? error.message : 'Internal server error.',
+      message: status === 409 ? error.message : 'Technical issue. Please try again..',
     };
     if (status === 500) {
       payload.debug = {
@@ -262,7 +262,7 @@ const update = async (req, res) => {
     return res.status(status).json({
       success: false,
       status,
-      message: status === 500 ? 'Internal server error.' : String(error.message),
+      message: status === 500 ? 'Technical issue. Please try again..' : String(error.message),
     });
   }
 };

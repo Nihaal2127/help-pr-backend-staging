@@ -327,7 +327,7 @@ const create = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: "Internal server error.",
+      message: "Technical issue. Please try again..",
       error: error.message,
     });
   }
@@ -441,7 +441,7 @@ const getAll = async (req, res) => {
     res.status(500).json({
       success: false,
       status: 500,
-      message: "Internal server error.",
+      message: "Technical issue. Please try again..",
       error: err.message,
     });
   }
@@ -488,7 +488,7 @@ const getQuoteCounts = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: "Internal server error.",
+      message: "Technical issue. Please try again..",
       error: error.message,
     });
   }
@@ -545,7 +545,7 @@ const getById = async (req, res) => {
     res.status(500).json({
       success: false,
       status: 500,
-      message: "Internal server error.",
+      message: "Technical issue. Please try again..",
     });
   }
 };
@@ -638,7 +638,7 @@ const getCustomerQuotes = async (req, res) => {
     res.status(500).json({
       success: false,
       status: 500,
-      message: "Internal server error.",
+      message: "Technical issue. Please try again..",
       error: err.message,
     });
   }
@@ -1031,7 +1031,7 @@ const update = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: "Internal server error.",
+      message: "Technical issue. Please try again..",
       error: error.message,
     });
   }
@@ -1078,7 +1078,7 @@ const deleteQuote = async (req, res) => {
     res.status(500).json({
       success: false,
       status: 500,
-      message: "Internal server error.",
+      message: "Technical issue. Please try again..",
     });
   }
 };

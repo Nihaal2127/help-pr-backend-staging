@@ -1114,7 +1114,7 @@ const getCountData = async (req, res) => {
         return res.status(500).json({
             success: false,
             status: 500,
-            error: 'Internal Server Error'
+            error: 'Technical issue. Please try again.'
         });
     }
 };
@@ -1579,7 +1579,7 @@ const getPartnerServiceCount = async (req, res) => {
         });
     } catch (error) {
         console.error("Error fetching partner service count:", error);
-        return res.status(500).json({ error: "Internal server error" });
+        return res.status(500).json({ error: "Technical issue. Please try again." });
     }
 };
 
@@ -1604,7 +1604,7 @@ const getHomeCount = async (req, res) => {
         return res.status(500).json({
             success: false,
             status: 500,
-            message: 'Internal server error.',
+            message: 'Technical issue. Please try again..',
         });
     }
 };

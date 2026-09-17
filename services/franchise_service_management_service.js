@@ -608,7 +608,7 @@ const list = async (query, userId) => {
         });
     } catch (error) {
         console.error('[franchiseService.list] failed', error?.message, error?.stack);
-        return fail(500, 'Internal server error.', {
+        return fail(500, 'Technical issue. Please try again..', {
             error: error?.message || String(error),
         });
     }
@@ -640,7 +640,7 @@ const create = async (body) => {
         });
     } catch (error) {
         console.error('franchiseService.create', error.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -689,7 +689,7 @@ const getById = async (id, userId, query = {}) => {
         });
     } catch (error) {
         console.error('franchiseService.getById', error.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -867,7 +867,7 @@ const update = async (id, body, userId) => {
         });
     } catch (error) {
         console.error('franchiseService.update', error.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 

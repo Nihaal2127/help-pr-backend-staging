@@ -137,7 +137,7 @@ const getMyCategories = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
     });
   }
 };
@@ -228,7 +228,7 @@ const getAll = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
     });
   }
 };
@@ -310,7 +310,7 @@ const getFranchiseActiveCategories = async (req, res) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
     });
   }
 };

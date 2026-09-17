@@ -91,7 +91,7 @@ const listPartnerBankAccounts = async (partnerId, { search } = {}) => {
     });
   } catch (err) {
     console.error('listPartnerBankAccounts', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -155,7 +155,7 @@ const createPartnerBankAccount = async (partnerId, body) => {
     });
   } catch (err) {
     console.error('createPartnerBankAccount', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -262,7 +262,7 @@ const updatePartnerBankAccount = async (partnerId, accountId, body) => {
     });
   } catch (err) {
     console.error('updatePartnerBankAccount', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -290,7 +290,7 @@ const setPartnerBankAccountPrimary = async (partnerId, accountId) => {
     });
   } catch (err) {
     console.error('setPartnerBankAccountPrimary', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -325,7 +325,7 @@ const deletePartnerBankAccount = async (partnerId, accountId) => {
     });
   } catch (err) {
     console.error('deletePartnerBankAccount', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 

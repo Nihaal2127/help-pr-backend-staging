@@ -541,7 +541,7 @@ const initiateAppleChange = async (partnerId, body = {}) => {
             return fail(err.status, err.message, err.details ? { details: err.details } : {});
         }
         console.error('initiateAppleChange', err.message, err.stack || '');
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -680,7 +680,7 @@ const verifyApplePurchase = async (partnerId, body = {}) => {
             return fail(err.status, err.message, err.details ? { details: err.details } : {});
         }
         console.error('verifyApplePurchase', err.message, err.stack || '');
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -738,7 +738,7 @@ const restoreApplePurchase = async (partnerId, body = {}) => {
             return fail(err.status, err.message, err.details ? { details: err.details } : {});
         }
         console.error('restoreApplePurchase', err.message, err.stack || '');
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 

@@ -86,7 +86,7 @@ const listSubscriptionPlans = async (query) => {
         });
     } catch (err) {
         console.log('listSubscriptionPlans', err.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -129,7 +129,7 @@ const createSubscriptionPlan = async (body) => {
         return ok(200, { message: 'Subscription plan created successfully.', record: saved });
     } catch (error) {
         console.error('createSubscriptionPlan', error.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -191,7 +191,7 @@ const updateSubscriptionPlan = async (id, body) => {
         return ok(200, { message: 'Subscription plan updated successfully', record: updated });
     } catch (error) {
         console.error('updateSubscriptionPlan', error.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -205,7 +205,7 @@ const getSubscriptionPlanById = async (id) => {
         return ok(200, { message: 'Subscription plan fetched successfully', record });
     } catch (error) {
         console.error('getSubscriptionPlanById', error);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -223,7 +223,7 @@ const softDeleteSubscriptionPlan = async (id) => {
         return ok(200, { message: 'Subscription plan deleted successfully' });
     } catch (error) {
         console.error('softDeleteSubscriptionPlan', error);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -312,7 +312,7 @@ const importSubscriptionPlans = async (records) => {
         });
     } catch (error) {
         console.log('importSubscriptionPlans', error.message);
-        return fail(500, 'Internal server error.', { error: error.message });
+        return fail(500, 'Technical issue. Please try again..', { error: error.message });
     }
 };
 
@@ -327,7 +327,7 @@ const listAllSubscriptionPlans = async () => {
         });
     } catch (err) {
         console.log('listAllSubscriptionPlans', err.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -355,7 +355,7 @@ const listSubscriptionPlansForDropdown = async (query) => {
         });
     } catch (err) {
         console.log('listSubscriptionPlansForDropdown', err.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 

@@ -49,7 +49,7 @@ const ensureFranchiseNameUniqueMiddleware = async (req, res, next) => {
         return res.status(500).json({
             success: false,
             status: 500,
-            message: 'Internal server error.',
+            message: 'Technical issue. Please try again..',
         });
     }
 };
@@ -81,7 +81,7 @@ const ensureFranchiseNameUniqueOnUpdateMiddleware = async (req, res, next) => {
         return res.status(500).json({
             success: false,
             status: 500,
-            message: 'Internal server error.',
+            message: 'Technical issue. Please try again..',
         });
     }
 };

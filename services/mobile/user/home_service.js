@@ -269,7 +269,7 @@ const getHomeForLocation = async ({ location, userId }) => {
     });
   } catch (err) {
     console.error('mobile user home', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 

@@ -171,7 +171,7 @@ const getPartnerRatingsSummary = async (partnerId, query = {}) => {
     });
   } catch (err) {
     console.error("getPartnerRatingsSummary", err.message);
-    return fail(500, "Internal server error.");
+    return fail(500, "Technical issue. Please try again..");
   }
 };
 
@@ -187,7 +187,7 @@ const listPartnerServiceRatingsForCustomer = async (partnerId, query = {}) => {
     });
   } catch (err) {
     console.error("listPartnerServiceRatingsForCustomer", err.message);
-    return fail(500, "Internal server error.");
+    return fail(500, "Technical issue. Please try again..");
   }
 };
 

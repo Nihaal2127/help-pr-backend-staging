@@ -779,7 +779,7 @@ const getSubscriptionSummary = async (partnerId) => {
         });
     } catch (err) {
         console.error('getSubscriptionSummary', err.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -813,7 +813,7 @@ const previewChange = async (partnerId, targetPlanId) => {
         });
     } catch (err) {
         console.error('previewChange', err.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -858,7 +858,7 @@ const listChangeHistory = async (partnerId, query = {}) => {
         });
     } catch (err) {
         console.error('listChangeHistory', err.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -1620,7 +1620,7 @@ const getChangePaymentStatus = async (partnerId, changeId) => {
         });
     } catch (err) {
         console.error('getChangePaymentStatus', err.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -1805,7 +1805,7 @@ const applyChange = async (partnerId, body) => {
             );
         }
         console.error('applyChange', err.message, err.stack || '');
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 

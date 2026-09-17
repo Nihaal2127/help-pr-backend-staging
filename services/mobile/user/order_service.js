@@ -110,7 +110,7 @@ const listCustomerOrders = async (customerId, query = {}) => {
     });
   } catch (err) {
     console.error('mobile user list orders', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -145,7 +145,7 @@ const getCustomerOrderById = async (customerId, orderId) => {
     });
   } catch (err) {
     console.error('mobile user get order details', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -188,7 +188,7 @@ const getCustomerOrderInvoice = async (customerId, orderId) => {
     });
   } catch (err) {
     console.error('mobile user get order invoice', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 

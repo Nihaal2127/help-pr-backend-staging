@@ -27,7 +27,7 @@ const getPartnerHome = async (partnerId) => {
     });
   } catch (err) {
     console.error('mobile partner home', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 

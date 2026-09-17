@@ -70,7 +70,7 @@ const listStatesForPartner = async () => {
     });
   } catch (err) {
     console.error('listStatesForPartner', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -113,7 +113,7 @@ const listCitiesForPartner = async ({ stateOids = [] } = {}) => {
     });
   } catch (err) {
     console.error('listCitiesForPartner', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -166,7 +166,7 @@ const listAreasForPartner = async ({ cityOids = [], stateOids = [] } = {}) => {
     });
   } catch (err) {
     console.error('listAreasForPartner', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -195,7 +195,7 @@ const listPincodesForPartner = async ({ areaOids = [] } = {}) => {
     });
   } catch (err) {
     console.error('listPincodesForPartner', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 

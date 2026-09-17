@@ -256,7 +256,7 @@ const createCustomerQuote = async (customerId, body) => {
     });
   } catch (err) {
     console.error('mobile user create quote', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -302,7 +302,7 @@ const listCustomerQuotes = async (customerId, query) => {
     });
   } catch (err) {
     console.error('mobile user list quotes', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -331,7 +331,7 @@ const getCustomerQuoteById = async (customerId, quoteId) => {
     });
   } catch (err) {
     console.error('mobile user get quote', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -457,7 +457,7 @@ const updateCustomerQuote = async (customerId, quoteId, body) => {
     });
   } catch (err) {
     console.error('mobile user update quote', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -541,7 +541,7 @@ const cancelCustomerQuote = async (customerId, quoteId, body) => {
     });
   } catch (err) {
     console.error('mobile user cancel quote', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -712,7 +712,7 @@ const convertCustomerQuoteToOrder = async (customerId, quoteId, body) => {
     });
   } catch (err) {
     console.error('mobile user convert quote', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -833,7 +833,7 @@ const getCustomerQuoteDepositPaymentStatus = async (customerId, quoteId, payment
     });
   } catch (err) {
     console.error('mobile user get quote deposit payment status', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 

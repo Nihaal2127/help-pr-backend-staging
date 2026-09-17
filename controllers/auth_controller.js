@@ -86,7 +86,7 @@ const login = async (req, res) => {
     res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
       error: err.message,
     });
   }
@@ -128,7 +128,7 @@ const forgotPassword = async (req, res) => {
     res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
       error: err.message,
     });
   }
@@ -178,7 +178,7 @@ const logout = async (req, res) => {
     res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
     });
   }
 };

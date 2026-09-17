@@ -59,7 +59,7 @@ const listPartnerOrderAdditionalCharges = async (partnerId, orderId) => {
     });
   } catch (err) {
     console.error('mobile partner list order additional charges', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -87,7 +87,7 @@ const createPartnerOrderAdditionalCharge = async (partnerId, orderId, body) => {
     });
   } catch (err) {
     console.error('mobile partner create order additional charge', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -135,7 +135,7 @@ const updatePartnerOrderAdditionalCharge = async (partnerId, orderId, chargeId, 
     });
   } catch (err) {
     console.error('mobile partner update order additional charge', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -154,7 +154,7 @@ const deletePartnerOrderAdditionalCharge = async (partnerId, orderId, chargeId) 
     });
   } catch (err) {
     console.error('mobile partner delete order additional charge', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 

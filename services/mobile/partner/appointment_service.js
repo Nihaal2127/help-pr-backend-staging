@@ -27,7 +27,7 @@ const listPartnerAppointments = async (partnerId, query) => {
     });
   } catch (err) {
     console.error("listPartnerAppointments:", err.message);
-    return fail(500, "Internal server error.");
+    return fail(500, "Technical issue. Please try again..");
   }
 };
 
@@ -43,7 +43,7 @@ const getPartnerAppointmentById = async (partnerId, appointmentId) => {
     });
   } catch (err) {
     console.error("getPartnerAppointmentById:", err.message);
-    return fail(500, "Internal server error.");
+    return fail(500, "Technical issue. Please try again..");
   }
 };
 
@@ -61,7 +61,7 @@ const getPartnerAppointmentsByOrder = async (partnerId, orderId) => {
     });
   } catch (err) {
     console.error("getPartnerAppointmentsByOrder:", err.message);
-    return fail(500, "Internal server error.");
+    return fail(500, "Technical issue. Please try again..");
   }
 };
 
@@ -77,7 +77,7 @@ const createPartnerAppointment = async (partnerId, body) => {
     });
   } catch (err) {
     console.error("createPartnerAppointment:", err.message);
-    return fail(500, "Internal server error.");
+    return fail(500, "Technical issue. Please try again..");
   }
 };
 
@@ -93,7 +93,7 @@ const updatePartnerAppointment = async (partnerId, appointmentId, body) => {
     });
   } catch (err) {
     console.error("updatePartnerAppointment:", err.message);
-    return fail(500, "Internal server error.");
+    return fail(500, "Technical issue. Please try again..");
   }
 };
 
@@ -108,7 +108,7 @@ const deletePartnerAppointment = async (partnerId, appointmentId) => {
     });
   } catch (err) {
     console.error("deletePartnerAppointment:", err.message);
-    return fail(500, "Internal server error.");
+    return fail(500, "Technical issue. Please try again..");
   }
 };
 

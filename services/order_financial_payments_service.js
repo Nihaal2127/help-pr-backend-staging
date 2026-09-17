@@ -494,7 +494,7 @@ const listFinancialOrderPayments = async (req) => {
         });
     } catch (err) {
         console.error('listFinancialOrderPayments', err);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -544,7 +544,7 @@ const getFinancialOrderPaymentById = async (req, orderId) => {
         });
     } catch (err) {
         console.error('getFinancialOrderPaymentById', err);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -737,7 +737,7 @@ const listPartnerFinancialOrderPayments = async (partnerOid, query = {}, searchR
         });
     } catch (err) {
         console.error('listPartnerFinancialOrderPayments', err);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -802,7 +802,7 @@ const getPartnerFinancialOrderPaymentById = async (partnerOid, orderId) => {
         });
     } catch (err) {
         console.error('getPartnerFinancialOrderPaymentById', err);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 

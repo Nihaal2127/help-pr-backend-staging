@@ -87,7 +87,7 @@ const listPartnerQuotes = async (partnerId, query) => {
     });
   } catch (err) {
     console.error('mobile partner list quotes', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -121,7 +121,7 @@ const getPartnerQuoteById = async (partnerId, quoteId) => {
     });
   } catch (err) {
     console.error('mobile partner get quote', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -242,7 +242,7 @@ const updatePartnerQuoteStatus = async (partnerId, quoteId, body) => {
     });
   } catch (err) {
     console.error('mobile partner update quote status', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 

@@ -124,7 +124,7 @@ const listAllFranchisesPartnersPaginated = async (query) => {
     });
   } catch (err) {
     console.error('listAllFranchisesPartnersPaginated', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -183,7 +183,7 @@ const collectPartnersBrowseRecords = async (scopeResult, queryFranchiseId) => {
       return ok(200, { records });
     } catch (err) {
       console.error('collectAllFranchisesPartnerBrowseRecords', err.message);
-      return fail(500, 'Internal server error.');
+      return fail(500, 'Technical issue. Please try again..');
     }
   }
 
@@ -210,7 +210,7 @@ const getPartnersBrowseCounts = async (scopeResult, query = {}) => {
     });
   } catch (err) {
     console.error('getPartnersBrowseCounts', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 

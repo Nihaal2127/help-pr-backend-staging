@@ -87,7 +87,7 @@ const listAddresses = async (customerId, { search } = {}) => {
     });
   } catch (err) {
     console.error('mobile user list addresses', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -117,7 +117,7 @@ const createAddress = async (customerId, body) => {
     });
   } catch (err) {
     console.error('mobile user create address', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -168,7 +168,7 @@ const updateAddress = async (customerId, addressId, body) => {
     });
   } catch (err) {
     console.error('mobile user update address', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -189,7 +189,7 @@ const deleteAddress = async (customerId, addressId) => {
     });
   } catch (err) {
     console.error('mobile user delete address', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 

@@ -18,10 +18,10 @@ const handleError = (error, res) => {
       });
     }
   
-    // Generic internal server error
+    // Generic Technical issue. Please try again.
     return res.status(500).json({
       success: false,
-      message: 'Internal Server Error',
+      message: 'Technical issue. Please try again.',
       details: error.message,
     });
   };

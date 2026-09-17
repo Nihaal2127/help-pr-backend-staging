@@ -1320,7 +1320,7 @@ const partnerRegisterMiddleware = async (req, res, next) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
       debug: {
         step: 'middleware_duplicate_check',
         error: err.message,
@@ -1340,7 +1340,7 @@ const partnerRegisterMiddleware = async (req, res, next) => {
     return res.status(500).json({
       success: false,
       status: 500,
-      message: 'Internal server error.',
+      message: 'Technical issue. Please try again..',
       debug: {
         step: 'middleware_unhandled',
         error: err.message,
@@ -1661,7 +1661,7 @@ const runPartnerUpdateIdentityChecks = async (req, res) => {
         return res.status(500).json({
           success: false,
           status: 500,
-          message: 'Internal server error.',
+          message: 'Technical issue. Please try again..',
         });
       }
     }
@@ -1710,7 +1710,7 @@ const createPartnerUpdateMiddleware = (section) => {
       return res.status(500).json({
         success: false,
         status: 500,
-        message: 'Internal server error.',
+        message: 'Technical issue. Please try again..',
       });
     }
 
@@ -1753,7 +1753,7 @@ const createPartnerUpdateMiddleware = (section) => {
       return res.status(500).json({
         success: false,
         status: 500,
-        message: 'Internal server error.',
+        message: 'Technical issue. Please try again..',
       });
     }
 

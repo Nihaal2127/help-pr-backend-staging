@@ -540,7 +540,7 @@ const listAllPincodes = async ({ search } = {}) => {
     return okWithMessage(200, 'Pincode list fetched successfully.', { data });
   } catch (err) {
     console.error('listAllPincodes', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 

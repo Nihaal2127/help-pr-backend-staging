@@ -513,7 +513,7 @@ const list = async (query, userId) => {
         });
     } catch (error) {
         console.error('franchiseCategory.list', error.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -543,7 +543,7 @@ const create = async (body) => {
         });
     } catch (error) {
         console.error('franchiseCategory.create', error.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -595,7 +595,7 @@ const getById = async (id, userId, query = {}) => {
         });
     } catch (error) {
         console.error('franchiseCategory.getById', error.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -750,7 +750,7 @@ const update = async (id, body, userId) => {
         });
     } catch (error) {
         console.error('franchiseCategory.update', error.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 

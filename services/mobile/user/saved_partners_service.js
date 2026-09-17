@@ -106,7 +106,7 @@ const savePartnerForCustomer = async (userId, partnerId) => {
       });
     }
     console.error('savePartnerForCustomer', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -135,7 +135,7 @@ const unsavePartnerForCustomer = async (userId, partnerId) => {
     });
   } catch (err) {
     console.error('unsavePartnerForCustomer', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 
@@ -258,7 +258,7 @@ const listSavedPartnersPaginated = async (userId, query) => {
     });
   } catch (err) {
     console.error('listSavedPartnersPaginated', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 

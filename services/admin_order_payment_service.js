@@ -268,7 +268,7 @@ const getAdminOrderPaymentStatus = async (paymentId) => {
     });
   } catch (err) {
     console.error('admin get order payment status', err.message);
-    return fail(500, 'Internal server error.');
+    return fail(500, 'Technical issue. Please try again..');
   }
 };
 

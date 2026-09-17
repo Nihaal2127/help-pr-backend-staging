@@ -277,7 +277,7 @@ const listPartnerPayouts = async (query, scopeFilter = {}) => {
         });
     } catch (err) {
         console.error('listPartnerPayouts', err.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -327,7 +327,7 @@ const listPartnersForDropdown = async (query, scopeFilter = {}) => {
         });
     } catch (err) {
         console.error('listPartnersForDropdown', err.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -429,7 +429,7 @@ const createPartnerPayout = async (body) => {
         });
     } catch (err) {
         console.error('createPartnerPayout', err.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -531,7 +531,7 @@ const getPartnerWalletLedger = async (query) => {
         });
     } catch (err) {
         console.error('getPartnerWalletLedger', err.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 

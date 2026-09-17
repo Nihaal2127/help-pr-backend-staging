@@ -181,7 +181,7 @@ const getWalletSummary = async (partnerId, query = {}) => {
         });
     } catch (err) {
         console.error('getWalletSummary', err.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 
@@ -234,7 +234,7 @@ const listWalletTransactions = async (partnerId, query = {}) => {
         });
     } catch (err) {
         console.error('listWalletTransactions', err.message);
-        return fail(500, 'Internal server error.');
+        return fail(500, 'Technical issue. Please try again..');
     }
 };
 

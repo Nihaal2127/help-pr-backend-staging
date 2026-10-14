@@ -692,6 +692,7 @@ const createUserMiddleware = async (req, res, next) => {
   parseBooleanField(req, "is_active");
   parseBooleanField(req, "is_blocked");
   parseBooleanField(req, "is_business");
+  parseJSONField(req, "service_cities");
   parseBooleanField(req, "chat");
   parseJSONField(req, "accessible_screens");
   parsePartnerCatalogFields(req);
@@ -1120,6 +1121,7 @@ const updateUserMiddleware = async (req, res, next) => {
   parseBooleanField(req, "is_active");
   parseBooleanField(req, "is_blocked");
   parseBooleanField(req, "is_business");
+  parseJSONField(req, "service_cities");
   parseBooleanField(req, "chat");
   parseJSONField(req, "accessible_screens");
   parsePartnerCatalogFields(req);

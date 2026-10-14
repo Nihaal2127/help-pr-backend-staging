@@ -16,6 +16,10 @@ var userSchema = new schema(
     address: { type: String, trim: true, default: null },
     state_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: 'state' },
     city_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: 'city' },
+    service_cities: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'city' }],
+      default: [],
+    },
     area_id: { type: mongoose.Schema.Types.ObjectId, default: null, ref: 'area' },
     pincode: { type: String, trim: true, default: null },
     date_of_birth: { type: Date, default: null },

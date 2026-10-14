@@ -4169,6 +4169,233 @@
       ]
     },
     {
+      "name": "12a — Partner service cities (dashboard)",
+      "description": "Test `service_cities` on the dashboard partner APIs only.\n\n**Setup**\n1. Set `baseUrl` (default `http://localhost:5001`).\n2. Run **00 — Auth → Login** so `token` / `accessToken` is a back-office JWT (franchise admin, employee, super admin, or staff).\n3. Set `franchiseId`, `stateId`, `cityId` (home city), `areaId`, `subscription_plan_id`.\n4. Set `serviceCityId` and `serviceCityId2` to two city ids that belong to that franchise. They can be the same as `cityId`.\n5. If create returns 409, change `email` and `phone_number` in the create body and send again.\n\n**Order**\n1. Create partner with service cities\n2. Get partner (saved list)\n3. Update service cities (replace list)\n4. Get partner (new list)\n5. Update without service_cities (list stays)\n6. Clear service cities\n7. Get partner (empty list)\n\n`city_id` is the partner home city. `service_cities` is the extra list of cities where they offer services.",
+      "item": [
+        {
+          "name": "1. Create partner with service cities",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test('status 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('service_cities has 2 ids', function () {",
+                  "  pm.expect(j.record.service_cities).to.be.an('array').with.lengthOf(2);",
+                  "});",
+                  "if (j.record && j.record._id) {",
+                  "  pm.collectionVariables.set('partnerId', String(j.record._id));",
+                  "  pm.collectionVariables.set('userId', String(j.record._id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Service Cities Partner\",\n  \"email\": \"partner.cities+{{$timestamp}}@example.com\",\n  \"phone_number\": \"+91{{$timestamp}}\",\n  \"password\": \"Test@1234\",\n  \"confirm_password\": \"Test@1234\",\n  \"type\": 2,\n  \"is_from_web\": true,\n  \"is_active\": true,\n  \"is_business\": false,\n  \"date_of_birth\": \"1995-01-15\",\n  \"gender\": \"male\",\n  \"experience\": \"3 years\",\n  \"address\": \"12 Test Street\",\n  \"state_id\": \"{{stateId}}\",\n  \"city_id\": \"{{cityId}}\",\n  \"area_id\": \"{{areaId}}\",\n  \"pincode\": \"500001\",\n  \"franchise_id\": \"{{franchiseId}}\",\n  \"service_cities\": [\"{{serviceCityId}}\", \"{{serviceCityId2}}\"],\n  \"subscription_plan_id\": \"{{subscription_plan_id}}\",\n  \"subscription_start_date\": \"2026-01-01\",\n  \"subscription_end_date\": \"2026-12-31\",\n  \"bank_name\": \"Test Bank\",\n  \"branch_name\": \"Main Branch\",\n  \"ifsc_code\": \"TEST0001234\",\n  \"account_name\": \"Service Cities Partner\",\n  \"account_number\": \"9988{{$timestamp}}\",\n  \"profile_url\": \"https://example.com/profile.png\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/user/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "create"]
+            },
+            "description": "POST /api/user/create. Partner (`type` 2). `service_cities` is an array of city ObjectIds. The test script stores `record._id` in `partnerId` and `userId`."
+          }
+        },
+        {
+          "name": "2. Get partner",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test('status 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('record includes service_cities', function () {",
+                  "  pm.expect(j.record.service_cities).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/get/{{partnerId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "get", "{{partnerId}}"]
+            },
+            "description": "GET /api/user/get/:id. Dashboard read. `record.service_cities` is the stored city id list."
+          }
+        },
+        {
+          "name": "3. Update service cities (replace list)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test('status 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('service_cities replaced', function () {",
+                  "  pm.expect(j.record.service_cities).to.be.an('array').with.lengthOf(2);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"service_cities\": [\"{{serviceCityId2}}\", \"{{serviceCityId3}}\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/user/update/{{partnerId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "update", "{{partnerId}}"]
+            },
+            "description": "PUT /api/user/update/:id. Replaces the stored list. Set `serviceCityId3` before sending, or reuse `serviceCityId`."
+          }
+        },
+        {
+          "name": "4. Update without service_cities (list stays)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('service_cities still present', function () {",
+                  "  pm.expect(j.record.service_cities).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"experience\": \"4 years\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/user/update/{{partnerId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "update", "{{partnerId}}"]
+            },
+            "description": "Omits `service_cities`. The previous city list must stay unchanged. Compare `record.service_cities` with the get from step 2 after the replace."
+          }
+        },
+        {
+          "name": "5. Clear service cities",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test('status 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('service_cities cleared', function () {",
+                  "  pm.expect(j.record.service_cities).to.eql([]);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"service_cities\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/user/update/{{partnerId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "update", "{{partnerId}}"]
+            },
+            "description": "Sends an empty array. The stored list is cleared."
+          }
+        }
+      ]
+    },
+    {
       "name": "12 — User",
       "description": "**/api/user** — 19 request(s). Duplicates merged across source collections.",
       "item": [
@@ -25803,6 +26030,24 @@
     {
       "key": "partner_id",
       "value": ""
+    },
+    {
+      "key": "serviceCityId",
+      "value": "",
+      "type": "string",
+      "description": "First franchise city id for partner service_cities"
+    },
+    {
+      "key": "serviceCityId2",
+      "value": "",
+      "type": "string",
+      "description": "Second franchise city id for partner service_cities"
+    },
+    {
+      "key": "serviceCityId3",
+      "value": "",
+      "type": "string",
+      "description": "Replacement city id used by the service_cities update request"
     },
     {
       "key": "subscription_plan_id",
